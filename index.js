@@ -25,9 +25,10 @@ useGeographic();
 var i, j;
 var cnti, cntj;
 
-var namespace = ''
+//var namespace = ''
 //var namespace = 'ddb11cdf-54bd-4255-b4f3-7d64a8991cd3';
-var geoServiceKey = '';
+//var geoServiceKey = '';
+var geoServiceKey = 'your key';
 
 
 const cntInit = 3;
@@ -834,7 +835,29 @@ function getVmGeoAcc(publicIP, i1, i2) {
 
 
 
+function changeColorStatus(status){
+  if (status.includes("Partial")){
+    return 'magenta';
+  } else if (status.includes("Running")){
+    return 'yellow';
+  } else if (status.includes("Suspending")){
+    return 'blue';
+  } else if (status.includes("Creating")){
+    return 'orange';
+  } else {
+    return 'red';
+  }
+}
 
+function changeSizeStatus(status){
+  if (status.includes("Partial")){
+    return 5;
+  } else if (!status.includes("Running")){
+    return 5;
+  } else {
+    return 3;
+  }
+}
 
 
 
@@ -915,14 +938,14 @@ tileLayer.on('postrender', function (event) {
 
       text: new Text({
         text: mcisName[i],
-        scale: 2.5,
+        scale: changeSizeStatus(mcisName[i]),
         offsetY: 50,
         stroke: new Stroke({
           color: 'black',
           width: 0.5
         }),
         fill: new Fill({
-          color: 'yellow'
+          color: changeColorStatus(mcisName[i])
         })
       }),
 
