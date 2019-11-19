@@ -25,8 +25,9 @@ useGeographic();
 var i, j;
 var cnti, cntj;
 
-var namespace = 'ddb11cdf-54bd-4255-b4f3-7d64a8991cd3';
-var geoServiceKey = 'your key';
+var namespace = ''
+//var namespace = 'ddb11cdf-54bd-4255-b4f3-7d64a8991cd3';
+var geoServiceKey = '';
 
 //var n = 1000;
 var geometries = new Array();
@@ -53,21 +54,16 @@ for (var i = 0; i < 1; ++i) {
 
   lon = -60;
   lat = -60;
-  /*
+  
   testPoints.push([lon, lat]);
   testPoints.push([lon -20, lat - 5]);
   testPoints.push([lon - 10, lat + 10]);
   testPoints.push([lon + 25, lat]);
   testPoints.push([lon + 40, lat + 20]);
-  */
+  
   //testPoints.push([lon, lat] );
 
-  testPoints.push([115.61564673810201,22.414752947445184]);
-testPoints.push([-94.47187329358441,36.79301829126722]);
-testPoints.push([-96.41308062412418,37.17550025581713]);
-testPoints.push([-95.85902073890506,37.44759329266193]);
-testPoints.push([103.89963816223336,0.5924258477794202]);
-testPoints.push([-106.56228971074451,57.2254328875782]);
+
 
 
   console.log("testPoints : " + testPoints);
@@ -700,7 +696,10 @@ function getMcis() {
 
 
           //getVmGeoHttpSync(item.vm[j].publicIP);
-          getVmGeo(item.vm[j].publicIP, cnt, j);
+
+          //getVmGeo(item.vm[j].publicIP, cnt, j);
+          getVmGeoAcc(item.vm[j].publicIP, cnt, j);
+
           //mcisGeo[i1][i2] = [obj.geo.longitude, obj.geo.latitude];
 
           var ipIndex = -1;
@@ -871,3 +870,53 @@ function getVmGeo(publicIP, i1, i2) {
 
 
 
+
+function getVmGeoAcc(publicIP, i1, i2) {
+
+  var http = require('http');
+
+ var Options = {
+  //hostname: 'cors-anywhere.herokuapp.com/api.ipgeolocation.io',
+  //http://api.ipstack.com/129.254.175.187?access_key=[geoServiceKey]&format=1
+  hostname: 'cors-anywhere.herokuapp.com/api.ipstack.com',
+  //port: 1323,
+  path: '/'+ publicIP + '?access_key='+geoServiceKey+'&format=1',
+  method: 'GET',
+  headers: {
+    //'access_key': geoServiceKey,
+    //'format': '1',
+    //'Referer': 'https://ipgeolocation.io/',
+    //'Sec-Fetch-Mode': 'no-cors'
+  }
+};
+
+  function handleResponse(response) {
+    var serverData = '';
+    response.on('data', function (chunk) {
+      serverData += chunk;
+    });
+    response.on('end', function () {
+      console.log("received server data:");
+      //console.log(serverData);
+      var obj = JSON.parse(serverData);
+
+      var ipFlag = 0;
+      for (let ipStr of ipMap) {
+        if (publicIP == ipStr) {
+          ipFlag = 1;
+        }
+      }
+      if (ipFlag == 0) {
+        ipMap.push(publicIP);
+        geoMap.push([obj.longitude + 2 * Math.random() - 2 * Math.random(), obj.latitude + 2 * Math.random() - 2 * Math.random()]);
+      }
+
+
+    });
+
+  }
+  http.request(Options, function (response) {
+    handleResponse(response);
+    //return lonlat
+  }).end();
+}
