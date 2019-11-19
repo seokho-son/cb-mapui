@@ -53,13 +53,21 @@ for (var i = 0; i < 1; ++i) {
 
   lon = -60;
   lat = -60;
+  /*
   testPoints.push([lon, lat]);
   testPoints.push([lon -20, lat - 5]);
   testPoints.push([lon - 10, lat + 10]);
   testPoints.push([lon + 25, lat]);
   testPoints.push([lon + 40, lat + 20]);
+  */
   //testPoints.push([lon, lat] );
 
+  testPoints.push([115.61564673810201,22.414752947445184]);
+testPoints.push([-94.47187329358441,36.79301829126722]);
+testPoints.push([-96.41308062412418,37.17550025581713]);
+testPoints.push([-95.85902073890506,37.44759329266193]);
+testPoints.push([103.89963816223336,0.5924258477794202]);
+testPoints.push([-106.56228971074451,57.2254328875782]);
 
 
   console.log("testPoints : " + testPoints);
@@ -712,6 +720,7 @@ function getMcis() {
         if (validateNum == item.vm.length) {
           console.log("Found all GEOs validateNum : " + validateNum)
 
+          vmGeo = convexHull(vmGeo);
 
           for (j = 0; j < vmGeo.length; j++) {
 
