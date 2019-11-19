@@ -29,6 +29,10 @@ var namespace = ''
 //var namespace = 'ddb11cdf-54bd-4255-b4f3-7d64a8991cd3';
 var geoServiceKey = '';
 
+
+const cntInit = 3;
+var cnt = cntInit;
+
 //var n = 1000;
 var geometries = new Array();
 var geometriesPoints = new Array();
@@ -46,7 +50,7 @@ var mcisGeo2 = [];
 //mcisGeo2.push([-180, -90]);
 
 
-for (var i = 0; i < 1; ++i) {
+for (var i = 0; i < cntInit; ++i) {
   var lon = 300 * Math.random() - 180;
   var lat = 100 * Math.random() - 90;
 
@@ -54,23 +58,49 @@ for (var i = 0; i < 1; ++i) {
 
   lon = -60;
   lat = -60;
-  
-  testPoints.push([lon, lat]);
-  testPoints.push([lon -20, lat - 5]);
-  testPoints.push([lon - 10, lat + 10]);
-  testPoints.push([lon + 25, lat]);
-  testPoints.push([lon + 40, lat + 20]);
+
+  if(i==0){
+    /*
+    testPoints.push([127,37]);
+    testPoints.push([127.4, 36.4]);
+    testPoints.push([126.7, 34.7]);
+    testPoints.push([129, 35.1]);
+    testPoints.push([128.9, 37.9]);
+*/
+
+    testPoints.push([-42,-19]);
+    testPoints.push([-44, -17]);
+    testPoints.push([28, -27]);
+    testPoints.push([29, -25]);
+    testPoints.push([52, 23]);
+    mcisName[i] = "[MCIS-01] " + "Running"
+  }
+  if(i==1){
+    testPoints.push([-3,42]);
+    testPoints.push([2, 49]);
+    testPoints.push([14, 52]);
+    testPoints.push([22, 51]);
+    testPoints.push([23, 48]);
+    testPoints.push([13, 46]);
+    testPoints.push([7, 45]);
+    mcisName[i] = "[MCIS-02] " + "Running"
+  }
+  if(i==2){
+    testPoints.push([-121,45]);
+    testPoints.push([-100, 46]);
+    testPoints.push([-80, 35]);
+    testPoints.push([-117, 34]);
+    testPoints.push([-73, 49]);
+    mcisName[i] = "[MCIS-03] " + "Running"
+  }
   
   //testPoints.push([lon, lat] );
 
-
-
-
-  console.log("testPoints : " + testPoints);
+  //console.log("testPoints : " + testPoints);
 
   //geometries[i] = new Polygon([[[lon, lat], [lon+5, lat+5], [lon-5, lat-5], [lon, lat]]]);
   //geometriesPoints[i] = new MultiPoint([[[lon, lat], [lon+5, lat+5], [lon-5, lat-5], [lon, lat]]]);
-  mcisName[i] = "TestPolyGon"
+  
   mcisGeo[i] = new Polygon([[[lon, lat], [lon + 5, lat + 5], [lon - 5, lat - 5], [lon, lat]]]);
   geometriesPoints[i] = new MultiPoint([testPoints]);
 
@@ -78,6 +108,28 @@ for (var i = 0; i < 1; ++i) {
   testPoints = convexHull(testPoints);
   testPoints.push(testPoints[0]);
   geometries[i] = new Polygon([testPoints]);
+
+}
+
+//initDemoPoly();
+
+function initDemoPoly(){
+  var testPoints = [];
+  
+  testPoints.push([127,37]);
+  testPoints.push([127.1, 36]);
+  testPoints.push([126.7, 34]);
+  testPoints.push([129, 35.1]);
+  testPoints.push([128, 37]);
+
+  mcisName[cnt] = "Test"
+  geometriesPoints[cnt] = new MultiPoint([testPoints]);
+
+  testPoints = convexHull(testPoints);
+  testPoints.push(testPoints[0]);
+  geometries[cnt] = new Polygon([testPoints]);
+
+  cnt++;
 
 }
 
@@ -124,17 +176,17 @@ var alpha = 0.5;
 var cororList = [
   [0, 176, 244, alpha],
   [200, 10, 10, alpha],
+  [210, 210, 10, alpha],
+  [2, 210, 6, alpha],
   [0, 162, 194, alpha],
   [38, 63, 143, alpha],
   [58, 58, 58, alpha],
   [81, 45, 23, alpha],
-  [2, 110, 76, alpha],
   [225, 136, 65, alpha],
   [106, 34, 134, alpha],
   [255, 162, 191, alpha],
   [239, 45, 53, alpha],
   [255, 255, 255, alpha],
-  [255, 255, 0, alpha],
   [154, 135, 199, alpha]
 ];
 
@@ -142,17 +194,17 @@ alpha = 1;
 var cororLineList = [
   [0, 176, 244, alpha],
   [200, 10, 10, alpha],
+  [210, 210, 10, alpha],
+  [2, 210, 6, alpha],
   [0, 162, 194, alpha],
   [38, 63, 143, alpha],
   [58, 58, 58, alpha],
   [81, 45, 23, alpha],
-  [2, 110, 76, alpha],
   [225, 136, 65, alpha],
   [106, 34, 134, alpha],
   [255, 162, 191, alpha],
   [239, 45, 53, alpha],
   [255, 255, 255, alpha],
-  [255, 255, 0, alpha],
   [154, 135, 199, alpha]
 ];
 
@@ -178,7 +230,8 @@ function createStyle(src) {
       anchor: [0.5, 0.5],
       crossOrigin: 'anonymous',
       src: src,
-      imgSize: [50, 50]
+      imgSize: [50, 50],
+      scale: 0.1
     }))
   });
 }
@@ -226,7 +279,10 @@ var iconStyle03 = new Style({
     crossOrigin: 'anonymous',
     src: 'img/icon3.png',
     opacity: 0.90,
-    imgSize: [50, 50]
+    //anchor: [0.5, 46],
+    //anchorXUnits: 'fraction',
+    //anchorYUnits: 'pixels',
+    scale: 0.6
   }))
 });
 
@@ -312,7 +368,7 @@ coordinatesToX.push([1]);
 var coordinatesToY = [];
 coordinatesToY.push([1]);
 
-var cnt = 1;
+
 function makeTria(ip1, ip2, ip3) {
   changePoints(ip1, ip2);
   changePoints(ip2, ip3);
@@ -348,9 +404,9 @@ function makePoly(){
 
 function makePolyArray(vmPoints) {
 
-  for (i = 0; i < vmPoints.length; i++) {
-    coordinates.push(vmPoints[i]);
-  }
+  //for (i = 0; i < vmPoints.length; i++) {
+    //coordinates.push(vmPoints[i]);
+  //}
 
   var resourcePoints = [];
 
@@ -468,163 +524,7 @@ for (i = 0; i < coordinatesFromX.length; ++i) {
 
 
 
-tileLayer.on('postrender', function (event) {
-
-  //event.frameState = event.frameState / 10;
-  //console.log("event.frameState");
-  //console.log(event.frameState);
-
-
-
-
-  var vectorContext = getVectorContext(event);
-  var frameState = event.frameState;
-  var theta = 2 * Math.PI * frameState.time / omegaTheta;
-
-
-  /*
-  coordinates = [];
-  //var x = 0;
-  //var y = 0;
-
-  for (i = 0; i < n; ++i) {
-    var t = theta + 2 * Math.PI * i / n;
-    var x = (R + r) * Math.cos(t) + p * Math.cos((R + r) * t / r);
-    var y = (R + r) * Math.sin(t) + p * Math.sin((R + r) * t / r);
-    // x = n * i *100 + 2e6;
-    // y = n * i + 1e6;
-
-    var lon = 360 * Math.random() - 180;
-    var lat = 180 * Math.random() - 90;
-
-    //coordinates.push([x, y]);
-    coordinates.push([lon, lat]);
-    //console.log(x);
-    //console.log(y);
-    
-  }
-  */
-  //changePoints()
-
-
-  //vectorContext.drawGeometry(new MultiPoint(coordinates));
-
-
-  //vectorContext.drawGeometry(new MultiPoint(coordinates));
-  //vectorContext.drawGeometry(new MultiPoint(coordinates));
-
-  /*
-  for( i=0; i<coordinates.length; ++i){
-    var polys = new Polygon([[ coordinates[Math.floor(Math.random()*(coordinates.length-1))], coordinates[Math.floor(Math.random()*(coordinates.length-1))], coordinates[Math.floor(Math.random()*(coordinates.length-1))], coordinates[Math.floor(Math.random()*(coordinates.length-1))] ]]);
-    vectorContext.setStyle(polyStyle);
-    vectorContext.drawGeometry(polys);
-  }
-*/
-  //console.log( geometries );
-  for (i = 0; i < geometries.length; ++i) {
-
-
-    var polyStyle = new Style({
-      /*  image: new Icon({
-          anchor: [0.5, 46],
-          anchorXUnits: 'fraction',
-          anchorYUnits: 'pixels',
-          opacity: 0.95,
-          src: 'data/icon.png'
-        }),
-        */
-      image: new Icon(({
-        //anchor: [0.5, 0.5],
-        crossOrigin: 'anonymous',
-        src: 'img/icon2.png',
-        opacity: 0.60,
-        imgSize: [50, 50]
-      })),
-
-      text: new Text({
-        text: mcisName[i],
-        scale: 2,
-        offsetY: 50,
-        stroke: new Stroke({
-          color: 'black',
-          width: 1
-        }),
-        fill: new Fill({
-          color: 'yellow'
-        })
-      }),
-
-
-      stroke: new Stroke({
-        width: 1,
-        color: cororLineList[i % cororList.length]
-      }),
-      fill: new Fill({
-        color: cororList[i % cororList.length]
-      })
-    });
-
-    vectorContext.setStyle(polyStyle);
-
-
-    vectorContext.drawGeometry(geometries[i]);
-
-    vectorContext.setStyle(iconStyle03);
-    vectorContext.drawGeometry(geometriesPoints[i]);
-
-
-    vectorContext.drawGeometry(mcisGeo[i]);
-  }
-
-  //vectorContext.setStyle(imageStyle);
-
-  //console.log(imgPath);
-
-  //vectorContext.setStyle(iconStyle01);
-
-  //vectorContext.drawGeometry(new MultiPoint(coordinates));
-
-  /*
-  vectorContext.setStyle(lineStyle);
-  for (i = 0; i < coordinatesFromX.length; ++i) {
-    //console.log(coordinatesFrom[i])
-    //console.log(coordinatesTo[i])
-    //vectorContext.drawGeometry(new LineString([coordinatesFrom[i], coordinatesTo[i] ]));
-    var xFrom = coordinatesFromX[i]
-    var yFrom = coordinatesFromY[i]
-    var xTo = coordinatesToX[i]
-    var yTo = coordinatesToY[i]
-    for (j=1; j < n; ++j){
-
-      var goX = xFrom + (xTo - xFrom)/j
-      var goY = (yTo - yFrom)/(xTo - xFrom)*(goX-xFrom)+yFrom
-      //console.log(goX)
-      //console.log(goY)
-      vectorContext.setStyle(headOuterImageStyle);
-      vectorContext.drawGeometry(new Point([goX*100,goY*100]));
-    }
-  }
-  */
-
-
-  //var headPoint = new Point(coordinates[coordinates.length - 1]);
-
-  //vectorContext.setStyle(headOuterImageStyle);
-  //vectorContext.drawGeometry(headPoint);
-
-  //vectorContext.setStyle(headInnerImageStyle);
-  //vectorContext.drawGeometry(headPoint);
-
-
-  //var headPoly = new Polygon([[[-1e6, -2e6], [-2e6, 1e6], [-1e6, 3e6]]]);
-  //vectorContext.setStyle(imageStyle);
-  //vectorContext.drawGeometry(headPoly);
-
-  map.render();
-
-});
-
-setInterval(() => console.log(getMcis()), 5000);
+setInterval(() => console.log(getMcis()), 2000);
 
 /*
 var geoip2 = require('geoip-lite');
@@ -653,8 +553,8 @@ function getMcis() {
       serverData += chunk;
     });
     response.on('end', function () {
-      console.log("received server data:");
-      console.log(serverData);
+      console.log("[Get MCIS list from CB-Tumblebug API]");
+      //console.log(serverData);
       var obj = JSON.parse(serverData);
 
       //console.log( obj.mcis[0].vm[0].publicIP );
@@ -662,18 +562,19 @@ function getMcis() {
       //getGeoIp()
 
       //초기화
-      cnt = 1;
+      cnt = cntInit;
       //geometries.length = 0;
 
-      console.log("obj.mcis.length = " + obj.mcis.length);
+      //console.log("obj.mcis.length = " + obj.mcis.length);
 
       //console.log( obj.mcis[0].status );
       //console.log( obj.mcis[1].status );
 
       //for (i = 0; i < obj.mcis.length; i++) {
+      if ( obj.mcis != null ){
       for (let item of obj.mcis) {
-        console.log("Index:[" + "]obj.mcis[i].name = " + item.name);
-        console.log(item.status);
+       // console.log("Index:[" + "]obj.mcis[i].name = " + item.name);
+        //console.log(item.status);
 
         //mcisGeo[i] = new Array();
 
@@ -682,7 +583,7 @@ function getMcis() {
         var validateNum = 0;
         for (j = 0; j < item.vm.length; j++) {
           //console.log( obj.mcis[i].vm[j].name );
-          console.log(item.vm[j].publicIP);
+          //console.log(item.vm[j].publicIP);
           //console.log( obj.mcis[i].vm[j].status );
 
 
@@ -698,7 +599,7 @@ function getMcis() {
           //getVmGeoHttpSync(item.vm[j].publicIP);
 
           //getVmGeo(item.vm[j].publicIP, cnt, j);
-          getVmGeoAcc(item.vm[j].publicIP, cnt, j);
+          
 
           //mcisGeo[i1][i2] = [obj.geo.longitude, obj.geo.latitude];
 
@@ -710,8 +611,14 @@ function getMcis() {
             }
 
           }
+
+          if (ipIndex == -1) {
+            //console.log("geoMap[ipIndex] : " + geoMap[ipIndex])
+            getVmGeoAcc(item.vm[j].publicIP, cnt, j);
+          }
+
           if (ipIndex != -1) {
-            console.log("geoMap[ipIndex] : " + geoMap[ipIndex])
+            //console.log("geoMap[ipIndex] : " + geoMap[ipIndex])
             vmGeo.push(geoMap[ipIndex])
             validateNum++;
           }
@@ -745,6 +652,7 @@ function getMcis() {
 
 
       }
+    }
 
     });
   }
@@ -896,7 +804,7 @@ function getVmGeoAcc(publicIP, i1, i2) {
       serverData += chunk;
     });
     response.on('end', function () {
-      console.log("received server data:");
+      console.log("[Lookup IP for Geographical location]");
       //console.log(serverData);
       var obj = JSON.parse(serverData);
 
@@ -908,7 +816,7 @@ function getVmGeoAcc(publicIP, i1, i2) {
       }
       if (ipFlag == 0) {
         ipMap.push(publicIP);
-        geoMap.push([obj.longitude + 2 * Math.random() - 2 * Math.random(), obj.latitude + 2 * Math.random() - 2 * Math.random()]);
+        geoMap.push([obj.longitude + 1 * Math.random() - 1 * Math.random(), obj.latitude + 1 * Math.random() - 1 * Math.random()]);
       }
 
 
@@ -920,3 +828,170 @@ function getVmGeoAcc(publicIP, i1, i2) {
     //return lonlat
   }).end();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+tileLayer.on('postrender', function (event) {
+
+  //event.frameState = event.frameState / 10;
+  //console.log("event.frameState");
+  //console.log(event.frameState);
+
+
+
+
+  var vectorContext = getVectorContext(event);
+  var frameState = event.frameState;
+  var theta = 2 * Math.PI * frameState.time / omegaTheta;
+
+
+  /*
+  coordinates = [];
+  //var x = 0;
+  //var y = 0;
+
+  for (i = 0; i < n; ++i) {
+    var t = theta + 2 * Math.PI * i / n;
+    var x = (R + r) * Math.cos(t) + p * Math.cos((R + r) * t / r);
+    var y = (R + r) * Math.sin(t) + p * Math.sin((R + r) * t / r);
+    // x = n * i *100 + 2e6;
+    // y = n * i + 1e6;
+
+    var lon = 360 * Math.random() - 180;
+    var lat = 180 * Math.random() - 90;
+
+    //coordinates.push([x, y]);
+    coordinates.push([lon, lat]);
+    //console.log(x);
+    //console.log(y);
+    
+  }
+  */
+  //changePoints()
+
+
+  //vectorContext.drawGeometry(new MultiPoint(coordinates));
+
+
+  //vectorContext.drawGeometry(new MultiPoint(coordinates));
+  //vectorContext.drawGeometry(new MultiPoint(coordinates));
+
+  /*
+  for( i=0; i<coordinates.length; ++i){
+    var polys = new Polygon([[ coordinates[Math.floor(Math.random()*(coordinates.length-1))], coordinates[Math.floor(Math.random()*(coordinates.length-1))], coordinates[Math.floor(Math.random()*(coordinates.length-1))], coordinates[Math.floor(Math.random()*(coordinates.length-1))] ]]);
+    vectorContext.setStyle(polyStyle);
+    vectorContext.drawGeometry(polys);
+  }
+*/
+  //console.log( geometries );
+  for (i = 0; i < geometries.length; ++i) {
+
+
+    var polyStyle = new Style({
+      /*  image: new Icon({
+          anchor: [0.5, 46],
+          anchorXUnits: 'fraction',
+          anchorYUnits: 'pixels',
+          opacity: 0.95,
+          src: 'data/icon.png'
+        }),
+        */
+      image: new Icon(({
+        //anchor: [0.5, 0.5],
+        crossOrigin: 'anonymous',
+        src: 'img/icon2.png',
+        opacity: 0.60,
+        imgSize: [50, 50]
+      })),
+
+      text: new Text({
+        text: mcisName[i],
+        scale: 2.5,
+        offsetY: 50,
+        stroke: new Stroke({
+          color: 'black',
+          width: 0.5
+        }),
+        fill: new Fill({
+          color: 'yellow'
+        })
+      }),
+
+
+      stroke: new Stroke({
+        width: 1,
+        color: cororLineList[i % cororList.length]
+      }),
+      fill: new Fill({
+        color: cororList[i % cororList.length]
+      })
+    });
+
+    vectorContext.setStyle(polyStyle);
+
+
+    vectorContext.drawGeometry(geometries[i]);
+
+    vectorContext.setStyle(iconStyle03);
+    vectorContext.drawGeometry(geometriesPoints[i]);
+
+
+    vectorContext.drawGeometry(mcisGeo[i]);
+  }
+
+  //vectorContext.setStyle(imageStyle);
+
+  //console.log(imgPath);
+
+  //vectorContext.setStyle(iconStyle01);
+
+  //vectorContext.drawGeometry(new MultiPoint(coordinates));
+
+  /*
+  vectorContext.setStyle(lineStyle);
+  for (i = 0; i < coordinatesFromX.length; ++i) {
+    //console.log(coordinatesFrom[i])
+    //console.log(coordinatesTo[i])
+    //vectorContext.drawGeometry(new LineString([coordinatesFrom[i], coordinatesTo[i] ]));
+    var xFrom = coordinatesFromX[i]
+    var yFrom = coordinatesFromY[i]
+    var xTo = coordinatesToX[i]
+    var yTo = coordinatesToY[i]
+    for (j=1; j < n; ++j){
+
+      var goX = xFrom + (xTo - xFrom)/j
+      var goY = (yTo - yFrom)/(xTo - xFrom)*(goX-xFrom)+yFrom
+      //console.log(goX)
+      //console.log(goY)
+      vectorContext.setStyle(headOuterImageStyle);
+      vectorContext.drawGeometry(new Point([goX*100,goY*100]));
+    }
+  }
+  */
+
+
+  //var headPoint = new Point(coordinates[coordinates.length - 1]);
+
+  //vectorContext.setStyle(headOuterImageStyle);
+  //vectorContext.drawGeometry(headPoint);
+
+  //vectorContext.setStyle(headInnerImageStyle);
+  //vectorContext.drawGeometry(headPoint);
+
+
+  //var headPoly = new Polygon([[[-1e6, -2e6], [-2e6, 1e6], [-1e6, 3e6]]]);
+  //vectorContext.setStyle(imageStyle);
+  //vectorContext.drawGeometry(headPoly);
+
+  map.render();
+
+});
