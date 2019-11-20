@@ -157,6 +157,8 @@ var ipList = [
   "2.23.224.0"
 ];
 
+
+
 var ipTmpList = [
   "54.153.187.176",
   "3.106.158.182",
@@ -165,12 +167,19 @@ var ipTmpList = [
   "13.238.135.53"
 ];
 
+var geoTmpCnt = 0;
 var geoTmpList = [
-  [123.775136, -15.274398],
-  [133.775136, -24.274398],
-  [153.775136, -25.274398],
-  [33.775136, -45.274398],
-  [-95.712891, 37.09024]
+  [-80, 50],    //a-central-1    캐나다(중부) Montreal
+  [-119, 37],   //us-west-1    미국 서부(캘리포니아 북부 지역) 
+  [-81, 35],    //us-east-1    미국 동부(버지니아 북부) 
+  [127, 37.5],  //ap-northeast-2 아시아 태평양(서울)
+  [73.5, 19],   //ap-south-1 아시아 태평양(뭄바이)
+  [103.5, 2],   //ap-southeast-1 아시아 태평양(싱가포르)
+  [140, 36],    //ap-northeast-1 아시아 태평양(도쿄)
+  [114.2, 22.2],//East Asia (location: Hong Kong)
+  [113, -32],   //호주 서부
+  [151, -33.7], //ap-southeast-2 아시아 태평양(시드니)
+  [0, 51.5]     //런던
 ];
 
 var alpha = 0.5;
@@ -615,7 +624,13 @@ function getMcis() {
 
           if (ipIndex == -1) {
             //console.log("geoMap[ipIndex] : " + geoMap[ipIndex])
-            getVmGeoAcc(item.vm[j].publicIP, cnt, j);
+
+            //get VM Geo location from 3rd service
+            //getVmGeoAcc(item.vm[j].publicIP);
+
+            //get VM Geo location from Static data
+            getVmGeoStatic(item.vm[j].publicIP);
+
           }
 
           if (ipIndex != -1) {
@@ -780,7 +795,7 @@ function getVmGeo(publicIP, i1, i2) {
 
 
 
-function getVmGeoAcc(publicIP, i1, i2) {
+function getVmGeoAcc(publicIP) {
 
   var http = require('http');
 
@@ -817,7 +832,19 @@ function getVmGeoAcc(publicIP, i1, i2) {
       }
       if (ipFlag == 0) {
         ipMap.push(publicIP);
-        geoMap.push([obj.longitude + 1 * Math.random() - 1 * Math.random(), obj.latitude + 1 * Math.random() - 1 * Math.random()]);
+        var longitude = obj.longitude +  Math.random() -  Math.random();
+        var latitude = obj.latitude +  Math.random() -  Math.random();
+        if (obj.longitude == null || obj.longitude == "" || obj.latitude == null || obj.latitude == ""){
+
+          longitude = geoTmpList[geoTmpCnt][0] +  Math.random() -  Math.random();
+          latitude = geoTmpList[geoTmpCnt][1] +  Math.random() -  Math.random();
+          geoTmpCnt++;
+          if(geoTmpCnt == geoTmpList.length){
+            geoTmpCnt = 0;
+          }
+        }
+
+        geoMap.push([longitude,latitude]);
       }
 
 
@@ -832,6 +859,18 @@ function getVmGeoAcc(publicIP, i1, i2) {
 
 
 
+function getVmGeoStatic(publicIP) {
+
+  longitude = geoTmpList[geoTmpCnt][0] +  Math.random() -  Math.random();
+  latitude = geoTmpList[geoTmpCnt][1] +  Math.random() -  Math.random();
+  geoTmpCnt++;
+  if(geoTmpCnt == geoTmpList.length){
+    geoTmpCnt = 0;
+  }
+  ipMap.push(publicIP);
+  geoMap.push([longitude,latitude]);
+
+}
 
 
 
