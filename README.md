@@ -16,11 +16,13 @@ To run this project, follow the following instruction.
 Check the instruction from Openlayers.
 https://openlayers.org/en/latest/doc/tutorials/bundle.html
 
+```
 npm init
 
 npm install ol
 
 npm install --save-dev parcel-bundler
+```
 
 ### 환경 설정 (소스 코드에서 수정)
 
