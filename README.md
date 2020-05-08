@@ -73,7 +73,7 @@ index.js 는 Openlayers를 기반으로,
 
 - MCIS에 포함된 VM들의 퍼블릭 IP의 기하학적 위치(longitude, latitude) 를 조회하여, 각 VM의 위치를 룩업함.
   - 이때, IP의 기하학적 위치는 외부 서비스(api.ipstack.com 등) : function getVmGeoAcc(publicIP) 로 룩업하거나,
-- 이때, IP의 기하학적 위치는 맵을 임의로 지정(static code)하여 : function getVmGeoStatic(publicIP) 로 룩업할 수 있다. (현재 코드는 해당 방식으로 지정되어 있음)
+  - 이때, IP의 기하학적 위치는 맵을 임의로 지정(static code)하여 : function getVmGeoStatic(publicIP) 로 룩업할 수 있다. (현재 코드는 해당 방식으로 지정되어 있음)
 
 - MCIS의 VM들의 위치를 모두 알게되면, 이를 하나의 연결된 도형으로 만들기 위해서 convexHull 로 정렬하여, Polygon 객체로 저장한다.
 
