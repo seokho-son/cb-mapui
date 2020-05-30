@@ -26,12 +26,12 @@ var i, j;
 var cnti, cntj;
 
 //var namespace = ''
-//var namespace = 'ddb11cdf-54bd-4255-b4f3-7d64a8991cd3';
+var namespace = 'NS-01';
 //var geoServiceKey = '';
 var geoServiceKey = 'your key';
 
 
-const cntInit = 3;
+const cntInit = 2;
 var cnt = cntInit;
 
 //var n = 1000;
@@ -70,29 +70,27 @@ for (var i = 0; i < cntInit; ++i) {
 */
 
     testPoints.push([-42,-19]);
-    testPoints.push([-44, -17]);
-    testPoints.push([28, -27]);
+    testPoints.push([-44, -11]);
+    testPoints.push([27, -29]);
     testPoints.push([29, -25]);
-    testPoints.push([52, 23]);
-    mcisName[i] = "[MCIS-01] " + "Running"
+    mcisName[i] = "[M1] " + "Running-(4/4)"
   }
   if(i==1){
-    testPoints.push([-3,42]);
+    testPoints.push([-121,45]);
+    testPoints.push([-100, 46]);
+    testPoints.push([-80, 35]);
+    testPoints.push([-117, 34]);
+    mcisName[i] = "[M2] " + "Running-(4/4)"
+
+  }
+  if(i==2){
     testPoints.push([2, 49]);
     testPoints.push([14, 52]);
     testPoints.push([22, 51]);
     testPoints.push([23, 48]);
     testPoints.push([13, 46]);
     testPoints.push([7, 45]);
-    mcisName[i] = "[MCIS-02] " + "Running"
-  }
-  if(i==2){
-    testPoints.push([-121,45]);
-    testPoints.push([-100, 46]);
-    testPoints.push([-80, 35]);
-    testPoints.push([-117, 34]);
-    testPoints.push([-73, 49]);
-    mcisName[i] = "[MCIS-03] " + "Running"
+    mcisName[i] = "[M3] " + "Running-(6/6)"
   }
   
   //testPoints.push([lon, lat] );
@@ -534,7 +532,7 @@ for (i = 0; i < coordinatesFromX.length; ++i) {
 
 
 
-setInterval(() => console.log(getMcis()), 2000);
+setInterval(() => console.log(getMcis()), 1000);
 
 /*
 var geoip2 = require('geoip-lite');
@@ -553,7 +551,7 @@ function getMcis() {
   var mcisOptions = {
     hostname: 'localhost',
     port: 1323,
-    path: '/ns/' + namespace + '/mcis',
+    path: '/tumblebug/ns/' + namespace + '/mcis?option=status',
     method: 'GET'
   };
 
@@ -583,8 +581,8 @@ function getMcis() {
       //for (i = 0; i < obj.mcis.length; i++) {
       if ( obj.mcis != null ){
       for (let item of obj.mcis) {
-       // console.log("Index:[" + "]obj.mcis[i].name = " + item.name);
-        //console.log(item.status);
+        //console.log("Index:[" + "]obj.mcis[i].name = " + item.name);
+        console.log(item.status);
 
         //mcisGeo[i] = new Array();
 
@@ -612,7 +610,7 @@ function getMcis() {
           
 
           //mcisGeo[i1][i2] = [obj.geo.longitude, obj.geo.latitude];
-
+          /*
           var ipIndex = -1;
           for (var index in ipMap) {
             //console.log("[ipMap[index]] : " + ipMap[index] + "[index] : " + index)
@@ -629,7 +627,9 @@ function getMcis() {
             //getVmGeoAcc(item.vm[j].publicIP);
 
             //get VM Geo location from Static data
-            getVmGeoStatic(item.vm[j].publicIP);
+            //getVmGeoStatic(item.vm[j].publicIP);
+            console.log("vm[j].longitude[" + item.vm[j].location.longitude + "]," + " vm[j].latitude[" + item.vm[j].location.latitude + "]");
+            getVmGeoInfo(item.vm[j].location.longitude, item.vm[j].location.latitude)
 
           }
 
@@ -638,6 +638,12 @@ function getMcis() {
             vmGeo.push(geoMap[ipIndex])
             validateNum++;
           }
+          */
+          //console.log("vm[j].longitude[" + item.vm[j].location.longitude + "]," + " vm[j].latitude[" + item.vm[j].location.latitude + "]");
+          //getVmGeoInfo(item.vm[j].location.longitude, item.vm[j].location.latitude)
+          vmGeo.push([(item.vm[j].location.longitude*1) + Math.random()*0.1, (item.vm[j].location.latitude*1) + Math.random()*0.1 ])
+          validateNum++;
+
         }
         if (validateNum == item.vm.length) {
           console.log("Found all GEOs validateNum : " + validateNum)
@@ -646,7 +652,7 @@ function getMcis() {
 
           for (j = 0; j < vmGeo.length; j++) {
 
-            console.log("vmGeo[" + j + "] is" + vmGeo[j]);
+            //console.log("vmGeo[" + j + "] is" + vmGeo[j]);
 
           }
           //mcisGeo2.push(vmGeo);
@@ -656,7 +662,7 @@ function getMcis() {
 
           mcisName[cnt] = "[" + item.name + "] " + item.status
 
-          //console.log("vmGeo is" + mcisGeo[i][j]);
+          console.log("item.status is" + item.status);
 
           makePolyArray(vmGeo);
 
@@ -872,6 +878,19 @@ function getVmGeoStatic(publicIP) {
 
 }
 
+function getVmGeoInfo(lon,lat) {
+
+  var longitude = Number(lon) +  Math.random() -  Math.random();
+  var latitude = Number(lat) +  Math.random() -  Math.random();
+  geoTmpCnt++;
+  if(geoTmpCnt == geoTmpList.length){
+    geoTmpCnt = 0;
+  }
+  //ipMap.push(publicIP);
+  geoMap.push([longitude,latitude]);
+
+}
+
 
 
 function changeColorStatus(status){
@@ -890,9 +909,9 @@ function changeColorStatus(status){
 
 function changeSizeStatus(status){
   if (status.includes("Partial")){
-    return 5;
+    return 3;
   } else if (!status.includes("Running")){
-    return 5;
+    return 3;
   } else {
     return 3;
   }
