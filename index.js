@@ -547,12 +547,19 @@ map.addLayer(iconLayer);
 
 function getMcis() {
 
+  var username = "default";
+  var password = "default";
+  var auth = "Basic " + new Buffer(username + ":" + password).toString("base64");
+
   var http = require('http');
   var mcisOptions = {
     hostname: 'localhost',
     port: 1323,
     path: '/tumblebug/ns/' + namespace + '/mcis?option=status',
-    method: 'GET'
+    method: 'GET',
+    headers: {
+      "Authorization" : auth
+    }
   };
 
   function handleResponse(response) {
