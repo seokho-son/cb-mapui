@@ -26,12 +26,12 @@ var i, j;
 var cnti, cntj;
 
 //var namespace = ''
-var namespace = 'NS-01';
+var namespace = 'ns-01';
 //var geoServiceKey = '';
 var geoServiceKey = 'your key';
 
 
-const cntInit = 2;
+const cntInit = 0;
 var cnt = cntInit;
 
 //var n = 1000;
@@ -182,10 +182,10 @@ var geoTmpList = [
 
 var alpha = 0.5;
 var cororList = [
+  [153, 255, 51, alpha],
+  [210, 210, 10, alpha],
   [0, 176, 244, alpha],
   [200, 10, 10, alpha],
-  [210, 210, 10, alpha],
-  [2, 210, 6, alpha],
   [0, 162, 194, alpha],
   [38, 63, 143, alpha],
   [58, 58, 58, alpha],
@@ -200,10 +200,10 @@ var cororList = [
 
 alpha = 1;
 var cororLineList = [
+  [0, 255, 0, alpha],
+  [210, 210, 10, alpha],
   [0, 176, 244, alpha],
   [200, 10, 10, alpha],
-  [210, 210, 10, alpha],
-  [2, 210, 6, alpha],
   [0, 162, 194, alpha],
   [38, 63, 143, alpha],
   [58, 58, 58, alpha],
@@ -358,7 +358,7 @@ var headOuterImageStyle = new Style({
 });
 
 var n = 400;
-var omegaTheta = 300000; // Rotation period in ms
+var omegaTheta = 600000; // Rotation period in ms
 var R = 7;
 var r = 2;
 var p = 2;
@@ -410,6 +410,23 @@ function makePoly(){
 }
 */
 
+function makePolyDot(vmPoints) {
+
+  //for (i = 0; i < vmPoints.length; i++) {
+    //coordinates.push(vmPoints[i]);
+  //}
+
+  var resourcePoints = [];
+
+  for (i = 0; i < vmPoints.length; i++) {
+    resourcePoints.push(vmPoints[i]);
+  }
+
+  geometriesPoints[cnt] = new MultiPoint(resourcePoints);
+
+  //cnt++;
+}
+
 function makePolyArray(vmPoints) {
 
   //for (i = 0; i < vmPoints.length; i++) {
@@ -421,7 +438,8 @@ function makePolyArray(vmPoints) {
   for (i = 0; i < vmPoints.length; i++) {
     resourcePoints.push(vmPoints[i]);
   }
-  geometriesPoints[cnt] = new MultiPoint(resourcePoints);
+
+  //geometriesPoints[cnt] = new MultiPoint(resourcePoints);
 
   resourcePoints.push(vmPoints[0]);
 
@@ -532,7 +550,7 @@ for (i = 0; i < coordinatesFromX.length; ++i) {
 
 
 
-setInterval(() => console.log(getMcis()), 1000);
+setInterval(() => console.log(getMcis()), 10000);
 
 /*
 var geoip2 = require('geoip-lite');
@@ -587,9 +605,10 @@ function getMcis() {
 
       //for (i = 0; i < obj.mcis.length; i++) {
       if ( obj.mcis != null ){
+        console.log(obj.mcis);
       for (let item of obj.mcis) {
         //console.log("Index:[" + "]obj.mcis[i].name = " + item.name);
-        console.log(item.status);
+        console.log(item);
 
         //mcisGeo[i] = new Array();
 
@@ -648,18 +667,27 @@ function getMcis() {
           */
           //console.log("vm[j].longitude[" + item.vm[j].location.longitude + "]," + " vm[j].latitude[" + item.vm[j].location.latitude + "]");
           //getVmGeoInfo(item.vm[j].location.longitude, item.vm[j].location.latitude)
-          vmGeo.push([(item.vm[j].location.longitude*1) + Math.random()*0.1, (item.vm[j].location.latitude*1) + Math.random()*0.1 ])
+          vmGeo.push([(item.vm[j].location.longitude*1) + Math.random()*6, (item.vm[j].location.latitude*1) + Math.random()*0.01 ])
           validateNum++;
 
+        }
+        if (item.vm.length == 1){
+          // handling if there is only one vm so that we can not draw geometry
+          vmGeo.pop()
+          vmGeo.push([(item.vm[0].location.longitude*1) + Math.random()*0.01, (item.vm[0].location.latitude*1) + Math.random()*0.01 ])
+          vmGeo.push([(item.vm[0].location.longitude*1) + Math.random()*0.01, (item.vm[0].location.latitude*1) + Math.random()*0.01 ])
+          vmGeo.push([(item.vm[0].location.longitude*1) + Math.random()*0.01, (item.vm[0].location.latitude*1) + Math.random()*0.01 ])
         }
         if (validateNum == item.vm.length) {
           console.log("Found all GEOs validateNum : " + validateNum)
 
+          //make dots without convexHull
+          makePolyDot(vmGeo)
           vmGeo = convexHull(vmGeo);
 
           for (j = 0; j < vmGeo.length; j++) {
 
-            //console.log("vmGeo[" + j + "] is" + vmGeo[j]);
+            console.log("vmGeo[" + j + "] is" + vmGeo[j]);
 
           }
           //mcisGeo2.push(vmGeo);
@@ -671,6 +699,7 @@ function getMcis() {
 
           console.log("item.status is" + item.status);
 
+          //make poly with convexHull
           makePolyArray(vmGeo);
 
 
