@@ -939,7 +939,7 @@ function changeColorStatus(status){
   if (status.includes("Partial")){
     return 'orange';
   } else if (status.includes("Running")){
-    return 'blue';
+    return 'bleu';
   } else if (status.includes("Suspending")){
     return 'black';
   } else if (status.includes("Creating")){
@@ -952,27 +952,36 @@ function changeColorStatus(status){
 }
 
 function changeSizeStatus(status){
-  if (status.includes("-best")){
-    return 4.0;
-  } else if (status.includes("-df")){
+  if (status.includes("-df")){
     return 0.4;
   } else if (status.includes("-ws")){
     return 0.4;
   } else if (status.includes("Partial")){
-    return 2.5;
+    return 2.4;
   } else if (status.includes("Running")){
-    return 2.9;
+    return 3.0;
   } else if (status.includes("Suspending")){
     return 2.5;
   } else if (status.includes("Creating")){
-    return 3.2;
+    return 2.9;
   } else if (status.includes("Terminated")){
     return 2.5;
   } else {
-    return 2.0;
+    return 1.0;
   }
 }
 
+function changeSizeByName(status){
+  if (status.includes("-best")){
+    return 3.5;
+  } else if (status.includes("-df")){
+    return 0.4;
+  } else if (status.includes("-ws")){
+    return 0.4;
+  } else {
+    return 2.8;
+  }
+}
 
 
 
@@ -1063,11 +1072,11 @@ tileLayer.on('postrender', function (event) {
 
       text: new Text({
         text: mcisName[i],
-        scale: (changeSizeStatus(mcisName[i]+mcisStatus[i]) + 0.8 ),
-        offsetY: 50,
+        scale: (changeSizeByName(mcisName[i]+mcisStatus[i]) + 0.8 ),
+        offsetY: 60,
         stroke: new Stroke({
           color: 'black',
-          width: 0.5
+          width: 0.4
         }),
         fill: new Fill({
           color: 'black' //changeColorStatus(mcisStatus[i])
@@ -1083,10 +1092,10 @@ tileLayer.on('postrender', function (event) {
       text: new Text({
         text: mcisStatus[i],
         scale: changeSizeStatus(mcisName[i]+mcisStatus[i]),
-        offsetY: 100,
+        offsetY: 110,
         stroke: new Stroke({
-          color: 'black',
-          width: 0.5
+          color: 'blue',
+          width: 0.3
         }),
         fill: new Fill({
           color: changeColorStatus(mcisStatus[i])
