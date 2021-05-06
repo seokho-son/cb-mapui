@@ -38,6 +38,7 @@ var cnt = cntInit;
 var geometries = new Array();
 var geometriesPoints = new Array();
 var mcisName = new Array();
+var mcisStatus = new Array();
 var mcisGeo = new Array();
 
 var ipMap = [];
@@ -74,6 +75,8 @@ for (var i = 0; i < cntInit; ++i) {
     testPoints.push([27, -29]);
     testPoints.push([29, -25]);
     mcisName[i] = "[M1] " + "Running-(4/4)"
+    mcisStatus[i] = "Running-(4/4)"
+    
   }
   if(i==1){
     testPoints.push([-121,45]);
@@ -81,7 +84,7 @@ for (var i = 0; i < cntInit; ++i) {
     testPoints.push([-80, 35]);
     testPoints.push([-117, 34]);
     mcisName[i] = "[M2] " + "Running-(4/4)"
-
+    mcisStatus[i] = "Running-(4/4)"
   }
   if(i==2){
     testPoints.push([2, 49]);
@@ -91,6 +94,7 @@ for (var i = 0; i < cntInit; ++i) {
     testPoints.push([13, 46]);
     testPoints.push([7, 45]);
     mcisName[i] = "[M3] " + "Running-(6/6)"
+    mcisStatus[i] = "Running-(6/6)"
   }
   
   //testPoints.push([lon, lat] );
@@ -121,7 +125,8 @@ function initDemoPoly(){
   testPoints.push([129, 35.1]);
   testPoints.push([128, 37]);
 
-  mcisName[cnt] = "Test"
+  mcisName[cnt] = "[Test] " + "Running-(6/6)"
+  mcisStatus[cnt] = "Running-(6/6)"
   geometriesPoints[cnt] = new MultiPoint([testPoints]);
 
   testPoints = convexHull(testPoints);
@@ -180,7 +185,7 @@ var geoTmpList = [
   [0, 51.5]     //런던
 ];
 
-var alpha = 0.5;
+var alpha = 0.3;
 var cororList = [
   [153, 255, 51, alpha],
   [210, 210, 10, alpha],
@@ -198,7 +203,7 @@ var cororList = [
   [154, 135, 199, alpha]
 ];
 
-alpha = 1;
+alpha = 0.6;
 var cororLineList = [
   [0, 255, 0, alpha],
   [210, 210, 10, alpha],
@@ -550,7 +555,7 @@ for (i = 0; i < coordinatesFromX.length; ++i) {
 
 
 
-setInterval(() => console.log(getMcis()), 10000);
+setInterval(() => console.log(getMcis()), 5000);
 
 /*
 var geoip2 = require('geoip-lite');
@@ -571,7 +576,7 @@ function getMcis() {
 
   var http = require('http');
   var mcisOptions = {
-    hostname: 'localhost',
+    hostname: '129.254.175.187',
     port: 1323,
     path: '/tumblebug/ns/' + namespace + '/mcis?option=status',
     method: 'GET',
@@ -667,7 +672,7 @@ function getMcis() {
           */
           //console.log("vm[j].longitude[" + item.vm[j].location.longitude + "]," + " vm[j].latitude[" + item.vm[j].location.latitude + "]");
           //getVmGeoInfo(item.vm[j].location.longitude, item.vm[j].location.latitude)
-          vmGeo.push([(item.vm[j].location.longitude*1) + Math.random()*6, (item.vm[j].location.latitude*1) + Math.random()*0.01 ])
+          vmGeo.push([(item.vm[j].location.longitude*1) + (Math.round(Math.random()) * 2 - 1) * Math.random()*1, (item.vm[j].location.latitude*1) + (Math.round(Math.random()) * 2 - 1) * Math.random()*1 ])
           validateNum++;
 
         }
@@ -695,7 +700,8 @@ function getMcis() {
 
           //makePoly5( [-15.712891, 47.09024], [-25.712891, 12.09024], [25.712891, 32.09024],[-25.712891, 31.09024], [-15.712891, 47.09024]);
 
-          mcisName[cnt] = "[" + item.name + "] " + item.status
+          mcisName[cnt] = "[" + item.name + "]"
+          mcisStatus[cnt] = item.status
 
           console.log("item.status is" + item.status);
 
@@ -928,31 +934,54 @@ function getVmGeoInfo(lon,lat) {
 }
 
 
-
+// magenta black blue orange yellow red grey green
 function changeColorStatus(status){
   if (status.includes("Partial")){
-    return 'magenta';
-  } else if (status.includes("Running")){
-    return 'yellow';
-  } else if (status.includes("Suspending")){
-    return 'blue';
-  } else if (status.includes("Creating")){
     return 'orange';
-  } else {
+  } else if (status.includes("Running")){
+    return 'bleu';
+  } else if (status.includes("Suspending")){
+    return 'black';
+  } else if (status.includes("Creating")){
+    return 'yellow';
+  } else if (status.includes("Terminated")){
     return 'red';
+  } else {
+    return 'grey';
   }
 }
 
 function changeSizeStatus(status){
-  if (status.includes("Partial")){
-    return 3;
-  } else if (!status.includes("Running")){
-    return 3;
+  if (status.includes("-df")){
+    return 0.4;
+  } else if (status.includes("-ws")){
+    return 0.4;
+  } else if (status.includes("Partial")){
+    return 2.4;
+  } else if (status.includes("Running")){
+    return 3.0;
+  } else if (status.includes("Suspending")){
+    return 2.5;
+  } else if (status.includes("Creating")){
+    return 2.9;
+  } else if (status.includes("Terminated")){
+    return 2.5;
   } else {
-    return 3;
+    return 1.0;
   }
 }
 
+function changeSizeByName(status){
+  if (status.includes("-best")){
+    return 3.5;
+  } else if (status.includes("-df")){
+    return 0.4;
+  } else if (status.includes("-ws")){
+    return 0.4;
+  } else {
+    return 2.8;
+  }
+}
 
 
 
@@ -1010,8 +1039,7 @@ tileLayer.on('postrender', function (event) {
   }
 */
   //console.log( geometries );
-  for (i = 0; i < geometries.length; ++i) {
-
+  for (i = geometries.length -1; i >= 0; --i) {
 
     var polyStyle = new Style({
       /*  image: new Icon({
@@ -1030,20 +1058,6 @@ tileLayer.on('postrender', function (event) {
         imgSize: [50, 50]
       })),
 
-      text: new Text({
-        text: mcisName[i],
-        scale: changeSizeStatus(mcisName[i]),
-        offsetY: 50,
-        stroke: new Stroke({
-          color: 'black',
-          width: 0.5
-        }),
-        fill: new Fill({
-          color: changeColorStatus(mcisName[i])
-        })
-      }),
-
-
       stroke: new Stroke({
         width: 1,
         color: cororLineList[i % cororList.length]
@@ -1053,16 +1067,57 @@ tileLayer.on('postrender', function (event) {
       })
     });
 
+    // MCIS text style
+    var polyNameTextStyle = new Style({
+
+      text: new Text({
+        text: mcisName[i],
+        scale: (changeSizeByName(mcisName[i]+mcisStatus[i]) + 0.8 ),
+        offsetY: 60,
+        stroke: new Stroke({
+          color: 'black',
+          width: 0.4
+        }),
+        fill: new Fill({
+          color: 'black' //changeColorStatus(mcisStatus[i])
+        })
+      }),
+
+    });
+
+    // MCIS text style
+    var polyStatusTextStyle = new Style({
+
+      // MCIS status text style
+      text: new Text({
+        text: mcisStatus[i],
+        scale: changeSizeStatus(mcisName[i]+mcisStatus[i]),
+        offsetY: 110,
+        stroke: new Stroke({
+          color: 'blue',
+          width: 0.3
+        }),
+        fill: new Fill({
+          color: changeColorStatus(mcisStatus[i])
+        })
+      }),
+
+    });
+
+
+
     vectorContext.setStyle(polyStyle);
-
-
+    //vectorContext.drawGeometry(mcisGeo[i]);
     vectorContext.drawGeometry(geometries[i]);
 
     vectorContext.setStyle(iconStyle03);
     vectorContext.drawGeometry(geometriesPoints[i]);
 
+    vectorContext.setStyle(polyNameTextStyle);
+    vectorContext.drawGeometry(geometries[i]);
 
-    vectorContext.drawGeometry(mcisGeo[i]);
+    vectorContext.setStyle(polyStatusTextStyle);
+    vectorContext.drawGeometry(geometries[i]);
   }
 
   //vectorContext.setStyle(imageStyle);
