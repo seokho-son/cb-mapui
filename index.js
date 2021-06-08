@@ -12,9 +12,17 @@ import Feature from 'ol/Feature';
 import { TileJSON, Vector as VectorSource } from 'ol/source';
 import { Icon } from 'ol/style';
 import { useGeographic } from 'ol/proj';
-/*
 
-*/
+// popup overlay
+import Overlay from 'ol/Overlay';
+import {toLonLat} from 'ol/proj';
+import {toStringHDMS} from 'ol/coordinate';
+
+// mouse postion
+import MousePosition from 'ol/control/MousePosition';
+import {createStringXY} from 'ol/coordinate';
+import {defaults as defaultControls} from 'ol/control';
+
 
 //var express = require('express');
 //var app = express();
@@ -48,8 +56,86 @@ var geoMap = [];
 //  mcisGeo[i] = new Array();
 //}
 
+
+
+var tileLayer = new TileLayer({
+  source: new OSM()
+});
+
+/*
+ * Create the map.
+ */
+var map = new Map({
+  layers: [tileLayer],
+  target: 'map',
+  view: new View({
+    center: [0, 0],
+    zoom: 2
+  }),
+  //projection: 'EPSG:4326'
+});
+
+
+
+// Display Icon for Cloud locations
+// npm i -s csv-parser
+const http = require("http");
+const csv = require("csv-parser");
+
+const csvPath = "https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/master/assets/cloudlocation.csv";
+const cloudLocation = [];
+var cspPointsAzure = [];
+var cspPointsAws = [];
+var cspPointsGcp = [];
+var cspPointsAlibaba = [];
+var cspPointsCloudit = [];
+var geoCspPointsAzure = new Array();
+var geoCspPointsAws = new Array();
+var geoCspPointsGcp = new Array();
+var geoCspPointsAlibaba = new Array();
+var geoCspPointsCloudit = new Array();
+
+
+http.get(csvPath,
+  (response) => {
+    response
+      .pipe(csv())
+      .on("data", (chunk) => cloudLocation.push(chunk))
+      .on("end", () => {
+        console.log(cloudLocation);
+        for (var i = 0; i < cloudLocation.length; ++i) {
+          // title: CloudType, ID,        DisplayName, Latitude, Longitude
+          // ex:    azure,     eastasia,  East Asia,   22.2670,  114.1880
+          console.log(cloudLocation[i]["CloudType"])
+          if (cloudLocation[i]["CloudType"] == "azure") {
+            cspPointsAzure.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
+          }
+          if (cloudLocation[i]["CloudType"] == "aws") {
+            cspPointsAws.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
+          }
+          if (cloudLocation[i]["CloudType"] == "gcp") {
+            cspPointsGcp.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
+          }
+          if (cloudLocation[i]["CloudType"] == "alibaba") {
+            cspPointsAlibaba.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
+          }
+          if (cloudLocation[i]["CloudType"] == "cloudit") {
+            cspPointsCloudit.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
+          }
+        }
+        geoCspPointsAzure[0] = new MultiPoint([cspPointsAzure]);
+        geoCspPointsAws[0] = new MultiPoint([cspPointsAws]);
+        geoCspPointsGcp[0] = new MultiPoint([cspPointsGcp]);
+        geoCspPointsAlibaba[0] = new MultiPoint([cspPointsAlibaba]);
+        geoCspPointsCloudit[0] = new MultiPoint([cspPointsCloudit]);
+      });
+  }
+);
+  
+
 var mcisGeo2 = [];
 //mcisGeo2.push([-180, -90]);
+
 
 
 for (var i = 0; i < cntInit; ++i) {
@@ -222,10 +308,6 @@ var cororLineList = [
 ];
 
 
-var tileLayer = new TileLayer({
-  source: new OSM()
-});
-
 var polygonFeature = new Feature(
   new Polygon([[[10, -3], [-5, 2], [-1, 1]]])
 );
@@ -255,7 +337,7 @@ import Vector from 'ol/source/Vector.js';
 var vectorSource = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
 var iconFeature = new Feature(pnt);
 
-iconFeature.set('style', createStyle('img/icon3.png'));
+iconFeature.set('style', createStyle('img/icon.png'));
 iconFeature.set('index', '001');
 
 vectorSource.addFeature(iconFeature);
@@ -290,14 +372,126 @@ var iconStyle03 = new Style({
   image: new Icon(({
     //anchor: [0.5, 0.5],
     crossOrigin: 'anonymous',
-    src: 'img/icon3.png',
-    opacity: 0.90,
+    src: 'img/icon.png',
+    opacity: 1.0,
     //anchor: [0.5, 46],
     //anchorXUnits: 'fraction',
     //anchorYUnits: 'pixels',
-    scale: 0.6
+    scale: 0.7
   }))
 });
+
+// CSP location icon styles
+
+var vectorSource2 = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var iconFeature2 = new Feature(pnt);
+iconFeature2.set('style', createStyle('img/ht-azure.png'));
+iconFeature2.set('index', '001');
+vectorSource2.addFeature(iconFeature2);
+var iconLayer2 = new VectorLayer({
+  style: function (feature) {
+    return feature.get('style');
+  },
+  source: vectorSource2
+})
+
+var iconStyleAzure = new Style({
+  image: new Icon(({
+    //anchor: [0.5, 0.5],
+    crossOrigin: 'anonymous',
+    src: 'img/ht-azure.png',
+    opacity: 1.0,
+    //anchor: [0.5, 46],
+    //anchorXUnits: 'fraction',
+    //anchorYUnits: 'pixels',
+    scale: 0.9
+  }))
+});
+
+var vectorSource3 = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var iconFeature3 = new Feature(pnt);
+iconFeature3.set('style', createStyle('img/ht-aws.png'));
+iconFeature3.set('index', '001');
+vectorSource3.addFeature(iconFeature3);
+var iconLayer3 = new VectorLayer({
+  style: function (feature) {
+    return feature.get('style');
+  },
+  source: vectorSource3
+})
+
+var iconStyleAws = new Style({
+  image: new Icon(({
+    crossOrigin: 'anonymous',
+    src: 'img/ht-aws.png',
+    opacity: 1.0,
+    scale: 0.9
+  }))
+});
+
+var vectorSource4 = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var iconFeature4 = new Feature(pnt);
+iconFeature4.set('style', createStyle('img/ht-gcp.png'));
+iconFeature4.set('index', '001');
+vectorSource4.addFeature(iconFeature4);
+var iconLayer4 = new VectorLayer({
+  style: function (feature) {
+    return feature.get('style');
+  },
+  source: vectorSource4
+})
+
+var iconStyleGcp = new Style({
+  image: new Icon(({
+    crossOrigin: 'anonymous',
+    src: 'img/ht-gcp.png',
+    opacity: 1.0,
+    scale: 0.9
+  }))
+});
+
+var vectorSource5 = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var iconFeature5 = new Feature(pnt);
+iconFeature5.set('style', createStyle('img/ht-alibaba.png'));
+iconFeature5.set('index', '001');
+vectorSource5.addFeature(iconFeature5);
+var iconLayer5 = new VectorLayer({
+  style: function (feature) {
+    return feature.get('style');
+  },
+  source: vectorSource5
+})
+
+var iconStyleAlibaba = new Style({
+  image: new Icon(({
+    crossOrigin: 'anonymous',
+    src: 'img/ht-alibaba.png',
+    opacity: 1.0,
+    scale: 0.9
+  }))
+});
+
+var vectorSource6 = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var iconFeature6 = new Feature(pnt);
+iconFeature6.set('style', createStyle('img/ht-cloudit.png'));
+iconFeature6.set('index', '001');
+vectorSource6.addFeature(iconFeature6);
+var iconLayer6 = new VectorLayer({
+  style: function (feature) {
+    return feature.get('style');
+  },
+  source: vectorSource6
+})
+
+var iconStyleCloudit = new Style({
+  image: new Icon(({
+    crossOrigin: 'anonymous',
+    src: 'img/ht-cloudit.png',
+    opacity: 1.0,
+    scale: 0.9
+  }))
+});
+
 
 
 var vectorLayer = new VectorLayer({
@@ -322,15 +516,6 @@ var vectorLayer = new VectorLayer({
   })
 });
 
-var map = new Map({
-  layers: [tileLayer],
-  target: 'map',
-  view: new View({
-    center: [0, 0],
-    zoom: 2
-  }),
-  //projection: 'EPSG:4326'
-});
 
 var imageStyle = new Style({
   image: new CircleStyle({
@@ -361,6 +546,56 @@ var headOuterImageStyle = new Style({
     fill: new Fill({ color: 'black' })
   })
 });
+
+
+// magenta black blue orange yellow red grey green
+function changeColorStatus(status){
+  if (status.includes("Partial")){
+    return 'orange';
+  } else if (status.includes("Running")){
+    return 'bleu';
+  } else if (status.includes("Suspending")){
+    return 'black';
+  } else if (status.includes("Creating")){
+    return 'yellow';
+  } else if (status.includes("Terminated")){
+    return 'red';
+  } else {
+    return 'grey';
+  }
+}
+
+function changeSizeStatus(status){
+  if (status.includes("-df")){
+    return 0.4;
+  } else if (status.includes("-ws")){
+    return 0.4;
+  } else if (status.includes("Partial")){
+    return 2.4;
+  } else if (status.includes("Running")){
+    return 3.0;
+  } else if (status.includes("Suspending")){
+    return 2.5;
+  } else if (status.includes("Creating")){
+    return 2.9;
+  } else if (status.includes("Terminated")){
+    return 2.5;
+  } else {
+    return 1.0;
+  }
+}
+
+function changeSizeByName(status){
+  if (status.includes("-best")){
+    return 3.5;
+  } else if (status.includes("-df")){
+    return 0.4;
+  } else if (status.includes("-ws")){
+    return 0.4;
+  } else {
+    return 2.8;
+  }
+}
 
 var n = 400;
 var omegaTheta = 600000; // Rotation period in ms
@@ -565,6 +800,13 @@ var geo2 = geoip2.lookup(ip2);
 console.log(geo2);
 }
 */
+// CSP icon layer
+map.addLayer(iconLayer2);
+map.addLayer(iconLayer3);
+map.addLayer(iconLayer4);
+map.addLayer(iconLayer5);
+map.addLayer(iconLayer6);
+
 map.addLayer(iconLayer);
 
 
@@ -726,6 +968,222 @@ function getMcis() {
   }).end();
 
 }
+
+
+
+
+
+tileLayer.on('postrender', function (event) {
+
+  //event.frameState = event.frameState / 10;
+  //console.log("event.frameState");
+  //console.log(event.frameState);
+
+
+
+
+  var vectorContext = getVectorContext(event);
+  var frameState = event.frameState;
+  var theta = 2 * Math.PI * frameState.time / omegaTheta;
+
+
+  /*
+  coordinates = [];
+  //var x = 0;
+  //var y = 0;
+
+  for (i = 0; i < n; ++i) {
+    var t = theta + 2 * Math.PI * i / n;
+    var x = (R + r) * Math.cos(t) + p * Math.cos((R + r) * t / r);
+    var y = (R + r) * Math.sin(t) + p * Math.sin((R + r) * t / r);
+    // x = n * i *100 + 2e6;
+    // y = n * i + 1e6;
+
+    var lon = 360 * Math.random() - 180;
+    var lat = 180 * Math.random() - 90;
+
+    //coordinates.push([x, y]);
+    coordinates.push([lon, lat]);
+    //console.log(x);
+    //console.log(y);
+    
+  }
+  */
+  //changePoints()
+
+
+  //vectorContext.drawGeometry(new MultiPoint(coordinates));
+
+
+  //vectorContext.drawGeometry(new MultiPoint(coordinates));
+  //vectorContext.drawGeometry(new MultiPoint(coordinates));
+
+  /*
+  for( i=0; i<coordinates.length; ++i){
+    var polys = new Polygon([[ coordinates[Math.floor(Math.random()*(coordinates.length-1))], coordinates[Math.floor(Math.random()*(coordinates.length-1))], coordinates[Math.floor(Math.random()*(coordinates.length-1))], coordinates[Math.floor(Math.random()*(coordinates.length-1))] ]]);
+    vectorContext.setStyle(polyStyle);
+    vectorContext.drawGeometry(polys);
+  }
+*/
+    // Draw CSP location first
+    if (Array.isArray(geoCspPointsCloudit) && geoCspPointsCloudit.length) {
+      // array exists and is not empty
+
+    vectorContext.setStyle(iconStyleAzure);
+    vectorContext.drawGeometry(geoCspPointsAzure[0]);
+    vectorContext.setStyle(iconStyleAws);
+    vectorContext.drawGeometry(geoCspPointsAws[0]);
+    vectorContext.setStyle(iconStyleGcp);
+    vectorContext.drawGeometry(geoCspPointsGcp[0]);
+    vectorContext.setStyle(iconStyleAlibaba);
+    vectorContext.drawGeometry(geoCspPointsAlibaba[0]);
+    vectorContext.setStyle(iconStyleCloudit);
+    vectorContext.drawGeometry(geoCspPointsCloudit[0]);
+  }
+
+  //console.log( geometries );
+  for (i = geometries.length -1; i >= 0; --i) {
+
+    var polyStyle = new Style({
+      /*  image: new Icon({
+          anchor: [0.5, 46],
+          anchorXUnits: 'fraction',
+          anchorYUnits: 'pixels',
+          opacity: 0.95,
+          src: 'data/icon.png'
+        }),
+        */
+      image: new Icon(({
+        //anchor: [0.5, 0.5],
+        crossOrigin: 'anonymous',
+        src: 'img/icon2.png',
+        opacity: 0.60,
+        imgSize: [50, 50]
+      })),
+
+      stroke: new Stroke({
+        width: 1,
+        color: cororLineList[i % cororList.length]
+      }),
+      fill: new Fill({
+        color: cororList[i % cororList.length]
+      })
+    });
+
+    // MCIS text style
+    var polyNameTextStyle = new Style({
+
+      text: new Text({
+        text: mcisName[i],
+        scale: (changeSizeByName(mcisName[i]+mcisStatus[i]) + 0.8 ),
+        offsetY: 60,
+        stroke: new Stroke({
+          color: 'black',
+          width: 0.4
+        }),
+        fill: new Fill({
+          color: 'black' //changeColorStatus(mcisStatus[i])
+        })
+      }),
+
+    });
+
+    // MCIS text style
+    var polyStatusTextStyle = new Style({
+
+      // MCIS status text style
+      text: new Text({
+        text: mcisStatus[i],
+        scale: changeSizeStatus(mcisName[i]+mcisStatus[i]),
+        offsetY: 110,
+        stroke: new Stroke({
+          color: 'blue',
+          width: 0.3
+        }),
+        fill: new Fill({
+          color: changeColorStatus(mcisStatus[i])
+        })
+      }),
+
+    });
+
+
+
+    vectorContext.setStyle(polyStyle);
+    //vectorContext.drawGeometry(mcisGeo[i]);
+    vectorContext.drawGeometry(geometries[i]);
+
+    vectorContext.setStyle(iconStyle03);
+    vectorContext.drawGeometry(geometriesPoints[i]);
+
+    vectorContext.setStyle(polyNameTextStyle);
+    vectorContext.drawGeometry(geometries[i]);
+
+    vectorContext.setStyle(polyStatusTextStyle);
+    vectorContext.drawGeometry(geometries[i]);
+  }
+
+  //vectorContext.setStyle(imageStyle);
+
+  //console.log(imgPath);
+
+  //vectorContext.setStyle(iconStyle01);
+
+  //vectorContext.drawGeometry(new MultiPoint(coordinates));
+
+  /*
+  vectorContext.setStyle(lineStyle);
+  for (i = 0; i < coordinatesFromX.length; ++i) {
+    //console.log(coordinatesFrom[i])
+    //console.log(coordinatesTo[i])
+    //vectorContext.drawGeometry(new LineString([coordinatesFrom[i], coordinatesTo[i] ]));
+    var xFrom = coordinatesFromX[i]
+    var yFrom = coordinatesFromY[i]
+    var xTo = coordinatesToX[i]
+    var yTo = coordinatesToY[i]
+    for (j=1; j < n; ++j){
+
+      var goX = xFrom + (xTo - xFrom)/j
+      var goY = (yTo - yFrom)/(xTo - xFrom)*(goX-xFrom)+yFrom
+      //console.log(goX)
+      //console.log(goY)
+      vectorContext.setStyle(headOuterImageStyle);
+      vectorContext.drawGeometry(new Point([goX*100,goY*100]));
+    }
+  }
+  */
+
+
+  //var headPoint = new Point(coordinates[coordinates.length - 1]);
+
+  //vectorContext.setStyle(headOuterImageStyle);
+  //vectorContext.drawGeometry(headPoint);
+
+  //vectorContext.setStyle(headInnerImageStyle);
+  //vectorContext.drawGeometry(headPoint);
+
+
+  //var headPoly = new Polygon([[[-1e6, -2e6], [-2e6, 1e6], [-1e6, 3e6]]]);
+  //vectorContext.setStyle(imageStyle);
+  //vectorContext.drawGeometry(headPoly);
+
+  map.render();
+
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 function getVmGeoTmp(publicIP) {
   for (i = 0; i < ipTmpList.length; i++) {
@@ -932,238 +1390,3 @@ function getVmGeoInfo(lon,lat) {
   geoMap.push([longitude,latitude]);
 
 }
-
-
-// magenta black blue orange yellow red grey green
-function changeColorStatus(status){
-  if (status.includes("Partial")){
-    return 'orange';
-  } else if (status.includes("Running")){
-    return 'bleu';
-  } else if (status.includes("Suspending")){
-    return 'black';
-  } else if (status.includes("Creating")){
-    return 'yellow';
-  } else if (status.includes("Terminated")){
-    return 'red';
-  } else {
-    return 'grey';
-  }
-}
-
-function changeSizeStatus(status){
-  if (status.includes("-df")){
-    return 0.4;
-  } else if (status.includes("-ws")){
-    return 0.4;
-  } else if (status.includes("Partial")){
-    return 2.4;
-  } else if (status.includes("Running")){
-    return 3.0;
-  } else if (status.includes("Suspending")){
-    return 2.5;
-  } else if (status.includes("Creating")){
-    return 2.9;
-  } else if (status.includes("Terminated")){
-    return 2.5;
-  } else {
-    return 1.0;
-  }
-}
-
-function changeSizeByName(status){
-  if (status.includes("-best")){
-    return 3.5;
-  } else if (status.includes("-df")){
-    return 0.4;
-  } else if (status.includes("-ws")){
-    return 0.4;
-  } else {
-    return 2.8;
-  }
-}
-
-
-
-
-tileLayer.on('postrender', function (event) {
-
-  //event.frameState = event.frameState / 10;
-  //console.log("event.frameState");
-  //console.log(event.frameState);
-
-
-
-
-  var vectorContext = getVectorContext(event);
-  var frameState = event.frameState;
-  var theta = 2 * Math.PI * frameState.time / omegaTheta;
-
-
-  /*
-  coordinates = [];
-  //var x = 0;
-  //var y = 0;
-
-  for (i = 0; i < n; ++i) {
-    var t = theta + 2 * Math.PI * i / n;
-    var x = (R + r) * Math.cos(t) + p * Math.cos((R + r) * t / r);
-    var y = (R + r) * Math.sin(t) + p * Math.sin((R + r) * t / r);
-    // x = n * i *100 + 2e6;
-    // y = n * i + 1e6;
-
-    var lon = 360 * Math.random() - 180;
-    var lat = 180 * Math.random() - 90;
-
-    //coordinates.push([x, y]);
-    coordinates.push([lon, lat]);
-    //console.log(x);
-    //console.log(y);
-    
-  }
-  */
-  //changePoints()
-
-
-  //vectorContext.drawGeometry(new MultiPoint(coordinates));
-
-
-  //vectorContext.drawGeometry(new MultiPoint(coordinates));
-  //vectorContext.drawGeometry(new MultiPoint(coordinates));
-
-  /*
-  for( i=0; i<coordinates.length; ++i){
-    var polys = new Polygon([[ coordinates[Math.floor(Math.random()*(coordinates.length-1))], coordinates[Math.floor(Math.random()*(coordinates.length-1))], coordinates[Math.floor(Math.random()*(coordinates.length-1))], coordinates[Math.floor(Math.random()*(coordinates.length-1))] ]]);
-    vectorContext.setStyle(polyStyle);
-    vectorContext.drawGeometry(polys);
-  }
-*/
-  //console.log( geometries );
-  for (i = geometries.length -1; i >= 0; --i) {
-
-    var polyStyle = new Style({
-      /*  image: new Icon({
-          anchor: [0.5, 46],
-          anchorXUnits: 'fraction',
-          anchorYUnits: 'pixels',
-          opacity: 0.95,
-          src: 'data/icon.png'
-        }),
-        */
-      image: new Icon(({
-        //anchor: [0.5, 0.5],
-        crossOrigin: 'anonymous',
-        src: 'img/icon2.png',
-        opacity: 0.60,
-        imgSize: [50, 50]
-      })),
-
-      stroke: new Stroke({
-        width: 1,
-        color: cororLineList[i % cororList.length]
-      }),
-      fill: new Fill({
-        color: cororList[i % cororList.length]
-      })
-    });
-
-    // MCIS text style
-    var polyNameTextStyle = new Style({
-
-      text: new Text({
-        text: mcisName[i],
-        scale: (changeSizeByName(mcisName[i]+mcisStatus[i]) + 0.8 ),
-        offsetY: 60,
-        stroke: new Stroke({
-          color: 'black',
-          width: 0.4
-        }),
-        fill: new Fill({
-          color: 'black' //changeColorStatus(mcisStatus[i])
-        })
-      }),
-
-    });
-
-    // MCIS text style
-    var polyStatusTextStyle = new Style({
-
-      // MCIS status text style
-      text: new Text({
-        text: mcisStatus[i],
-        scale: changeSizeStatus(mcisName[i]+mcisStatus[i]),
-        offsetY: 110,
-        stroke: new Stroke({
-          color: 'blue',
-          width: 0.3
-        }),
-        fill: new Fill({
-          color: changeColorStatus(mcisStatus[i])
-        })
-      }),
-
-    });
-
-
-
-    vectorContext.setStyle(polyStyle);
-    //vectorContext.drawGeometry(mcisGeo[i]);
-    vectorContext.drawGeometry(geometries[i]);
-
-    vectorContext.setStyle(iconStyle03);
-    vectorContext.drawGeometry(geometriesPoints[i]);
-
-    vectorContext.setStyle(polyNameTextStyle);
-    vectorContext.drawGeometry(geometries[i]);
-
-    vectorContext.setStyle(polyStatusTextStyle);
-    vectorContext.drawGeometry(geometries[i]);
-  }
-
-  //vectorContext.setStyle(imageStyle);
-
-  //console.log(imgPath);
-
-  //vectorContext.setStyle(iconStyle01);
-
-  //vectorContext.drawGeometry(new MultiPoint(coordinates));
-
-  /*
-  vectorContext.setStyle(lineStyle);
-  for (i = 0; i < coordinatesFromX.length; ++i) {
-    //console.log(coordinatesFrom[i])
-    //console.log(coordinatesTo[i])
-    //vectorContext.drawGeometry(new LineString([coordinatesFrom[i], coordinatesTo[i] ]));
-    var xFrom = coordinatesFromX[i]
-    var yFrom = coordinatesFromY[i]
-    var xTo = coordinatesToX[i]
-    var yTo = coordinatesToY[i]
-    for (j=1; j < n; ++j){
-
-      var goX = xFrom + (xTo - xFrom)/j
-      var goY = (yTo - yFrom)/(xTo - xFrom)*(goX-xFrom)+yFrom
-      //console.log(goX)
-      //console.log(goY)
-      vectorContext.setStyle(headOuterImageStyle);
-      vectorContext.drawGeometry(new Point([goX*100,goY*100]));
-    }
-  }
-  */
-
-
-  //var headPoint = new Point(coordinates[coordinates.length - 1]);
-
-  //vectorContext.setStyle(headOuterImageStyle);
-  //vectorContext.drawGeometry(headPoint);
-
-  //vectorContext.setStyle(headInnerImageStyle);
-  //vectorContext.drawGeometry(headPoint);
-
-
-  //var headPoly = new Polygon([[[-1e6, -2e6], [-2e6, 1e6], [-1e6, 3e6]]]);
-  //vectorContext.setStyle(imageStyle);
-  //vectorContext.drawGeometry(headPoly);
-
-  map.render();
-
-});
