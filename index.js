@@ -34,7 +34,7 @@ var i, j;
 var cnti, cntj;
 
 //var namespace = ''
-var namespace = 'tb01';
+
 //var geoServiceKey = '';
 var geoServiceKey = 'your key';
 
@@ -791,8 +791,8 @@ for (i = 0; i < coordinatesFromX.length; ++i) {
 }
 
 
-
-setInterval(() => console.log(getMcis()), 5000);
+var refreshInterval = 5;
+setTimeout(() => console.log(getMcis()), refreshInterval*1000);
 
 /*
 var geoip2 = require('geoip-lite');
@@ -811,17 +811,30 @@ map.addLayer(iconLayer6);
 
 map.addLayer(iconLayer);
 
+function isNormalInteger(str) {
+  var n = Math.floor(Number(str));
+  return n !== Infinity && String(n) === str && n > 0;
+}
 
 function getMcis() {
+  
+  var hostname = document.getElementById("hostname").value;
+  var port = document.getElementById("port").value;
 
-  var username = "default";
-  var password = "default";
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
   var auth = "Basic " + new Buffer(username + ":" + password).toString("base64");
 
+  var namespace = document.getElementById("namespace").value;
+
+  refreshInterval = document.getElementById("refreshInterval").value;
+  var filteredRefreshInterval = isNormalInteger(refreshInterval) ? refreshInterval : 5;
+  setTimeout(() => console.log(getMcis()), filteredRefreshInterval*1000);
+    
   var http = require('http');
   var mcisOptions = {
-    hostname: '129.254.175.187',
-    port: 1323,
+    hostname: hostname,
+    port: port,
     path: '/tumblebug/ns/' + namespace + '/mcis?option=status',
     method: 'GET',
     headers: {
