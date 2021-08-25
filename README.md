@@ -3,46 +3,63 @@ A MapUI Client for CB-Tumblebug (display multi-cloud infra service)
 
 Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
 
-[NOTE] This project is temporal and unstable, used only for demonstation purpose. (lots of static codes)
+[NOTE] This project is temporal and unstable, used only for demonstation purpose. 
 - This project uses Openlayers. You need to know this includes temporal codes which are not readable.
 
 ## cb-mapui 설치 및 실행 방법
 
 ### Prerequisite
 
-To run this project, follow the following instruction.
+ - npm, node.js
 
-Check the instruction from Openlayers.
-https://openlayers.org/en/latest/doc/tutorials/bundle.html
+ - ol, parcel
 
-```
-npm install ol
+  Check the instruction from Openlayers.
+  https://openlayers.org/en/latest/doc/tutorials/bundle.html
 
-npm install --save-dev parcel-bundler
-```
+  ```
+  npm install ol
+  npm install --save-dev parcel-bundler
+  ```
 
-### 환경 설정 (소스 코드에서 수정)
-
-Change following inforamtion according to your environment.
-
-```
-var namespace = 'ddb11cdf-54bd-4255-b4f3-7d64a8991cd3'; (This is namespace for CB-Tumblebug project)
-
-var geoServiceKey = 'your key';
-// IP to GeoLocation map external service
-```
+  (필요에 따라 설치, buffer, http)
+  ```
+  npm install buffer --save
+  npm install http --save
+  ```
 
 ### 빌드 및 실행
 
-```
-npm run build
+ - 빌드
+  ```
+  npm run build
+  ```
 
-# You need to check image file for icon is available in dist/img/icon3.png
+ - 서버 실행
 
-npm start
+  ```
+  $ npm start
 
-# Access to http://localhost:1324/
-```
+  Server running at http://localhost:1324
+  ✨ Built in 6.32s
+
+  # Access to http://x.x.x.x:1324/ (ex: http://localhost:1324/)
+  ```
+
+ - 서버 접속
+
+  웹브라우저를 통해 http://x.x.x.x:1324 (ex: http://localhost:1324) 접속 
+
+  ![image](https://user-images.githubusercontent.com/5966944/130864303-a45becd5-c681-4d1f-a02e-593b3fb77279.png)
+
+ - TextBox에 환경 변수 설정
+   - TB IP/hostname: 서버 주소
+     - 기본값: `cb-tumblebug` 
+     - 예: `localhost`, `192.168.1.6`, `cb-tumblebug`
+   - TB Port: 기본값은 `1323`, 사용자가 상황에 따라 `31323` 등으로 변경하여 사용 가능
+   - TB Username, Password: CB-Tumblebug REST API (BasicAuth) 호출에 필요한 Username 및 Password 
+   - TB namespace: cb-mapui에 표시할 namespace를 지정
+   - Refresh interval: 기본값은 5 (단위: 초)며, 정상적인 양의 정수를 입력했을 때에만 유효
 
 
 ## cb-mapui 동작 방식
