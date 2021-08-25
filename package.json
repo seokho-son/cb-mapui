@@ -5,7 +5,8 @@
     "ol": "^6.6.1"
   },
   "devDependencies": {
-    "parcel": "^2.0.0-rc.0"
+    "parcel": "^2.0.0-rc.0",
+    "parcel-bundler": "^1.12.5"
   },
   "scripts": {
     "start": "parcel -p 1324 index.html",
