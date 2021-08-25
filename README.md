@@ -3,7 +3,7 @@ A MapUI Client for CB-Tumblebug (display multi-cloud infra service)
 
 Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
 
-[NOTE] This project is tempoal and unstable, used only for demonstation purpose. (lots of static codes)
+[NOTE] This project is temporal and unstable, used only for demonstation purpose. (lots of static codes)
 - This project uses Openlayers. You need to know this includes temporal codes which are not readable.
 
 ## cb-mapui 설치 및 실행 방법
@@ -16,8 +16,6 @@ Check the instruction from Openlayers.
 https://openlayers.org/en/latest/doc/tutorials/bundle.html
 
 ```
-npm init
-
 npm install ol
 
 npm install --save-dev parcel-bundler
@@ -43,7 +41,7 @@ npm run build
 
 npm start
 
-# Access to http://localhost:1234/
+# Access to http://localhost:1324/
 ```
 
 
