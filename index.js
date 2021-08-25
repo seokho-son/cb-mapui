@@ -34,7 +34,7 @@ var i, j;
 var cnti, cntj;
 
 //var namespace = ''
-var namespace = 'ns-01';
+var namespace = 'tb01';
 //var geoServiceKey = '';
 var geoServiceKey = 'your key';
 
@@ -575,6 +575,8 @@ function changeSizeStatus(status){
   } else if (status.includes("Running")){
     return 3.0;
   } else if (status.includes("Suspending")){
+    return 2.5;
+  } else if (status.includes("Suspended")){
     return 2.5;
   } else if (status.includes("Creating")){
     return 2.9;
