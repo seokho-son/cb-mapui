@@ -816,6 +816,60 @@ function isNormalInteger(str) {
   return n !== Infinity && String(n) === str && n > 0;
 }
 
+function controlMCIS(action) {
+  var hostname = document.getElementById("hostname").value;
+  var port = document.getElementById("port").value;
+
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
+  var auth = "Basic " + new Buffer(username + ":" + password).toString("base64");
+
+  var namespace = document.getElementById("namespace").value;
+  var mcisid = document.getElementById("mcisid").value;
+
+  var http = require('http');
+  var mcisOptions = {
+    hostname: hostname,
+    port: port,
+    path: '/tumblebug/ns/' + namespace + '/control/mcis/' + mcisid + '?action=' + action,
+    method: 'GET',
+    headers: {
+      "Authorization" : auth
+    }
+  };
+
+  switch(action) {
+    case 'refine':
+    case 'suspend':
+    case 'resume':
+    case 'reboot':
+    case 'terminate':
+      break;
+    default:
+      console.log(`The actions ${action} is not supported. Supported actions: refine, suspend, resume, reboot, terminate.`);
+      return
+  }
+
+  function handleResponse(response) {
+    var serverData = '';
+    response.on('data', function (chunk) {
+      serverData += chunk;
+    });
+    response.on('end', function () {
+      console.log("[Control MCIS]");
+      var obj = JSON.parse(serverData);
+      if ( obj.message != null ){
+        console.log(obj.message);
+      }
+    });
+  }
+
+  http.request(mcisOptions, function (response) {
+    handleResponse(response);
+  }).end();
+}
+window.controlMCIS = controlMCIS;
+
 function getMcis() {
   
   var hostname = document.getElementById("hostname").value;

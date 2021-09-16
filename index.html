@@ -16,16 +16,23 @@
     </style>
   </head>
   <body>
-    TB IP/hostname: <input type=text id=hostname name=hostname value="cb-tumblebug"> 
-    TB Port: <input type=text id=port name=port value="1323"> 
+    TB IP/hostname: <input type=text id=hostname name=hostname value="cb-tumblebug">
+    TB Port: <input type=text id=port name=port value="1323">
     <br>
-    TB Username: <input type=text id=username name=username value="default"> 
-    TB Password: <input type=text id=password name=password value="default"> 
+    TB Username: <input type=text id=username name=username value="default">
+    TB Password: <input type=text id=password name=password value="default">
     <br>
-    TB namespace: <input type=text id=namespace name=namespace value="tb01"> 
+    TB namespace: <input type=text id=namespace name=namespace value="tb01">
     <br>
-    Refresh interval: <input type=text id=refreshInterval name=refreshInterval value="5"> 
+    Refresh interval: <input type=text id=refreshInterval name=refreshInterval value="5">
     <input type=button value="Clear map" onClick="window.location.reload()">
+    <br>
+    TB MCIS ID: <input type=text id=mcisid name=mcisid value="mcis01"> 
+    <input type=button value="Refine" onClick="controlMCIS('refine');"> 
+    <input type=button value="Suspend" onClick="controlMCIS('suspend');"> 
+    <input type=button value="Resume" onClick="controlMCIS('resume');"> 
+    <input type=button value="Reboot" onClick="controlMCIS('reboot');"> 
+    <input type=button value="Terminate" onClick="controlMCIS('terminate');"> 
     <br>
     <div id="map" class="map"><div id="popup"></div></div>
     <script type="module" src="index.js"></script>
