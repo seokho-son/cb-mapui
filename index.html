@@ -1,40 +1,64 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <title>Cloud-Barista Tumblebug Map Client</title>
-    <!-- The line below is only needed for old environments like Internet Explorer and Android 4.x -->
-    <script src="https://cdn.polyfill.io/v2/polyfill.min.js?features=requestAnimationFrame,Element.prototype.classList,URL"></script>
-    <script src="https://code.jquery.com/jquery-2.2.3.min.js"></script>
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
-    <style>
-      .map {
-        width: 100%;
-        height:1200px;
-        /* height:800px; */
-      }
-    </style>
-  </head>
-  <body>
-    TB IP/hostname: <input type=text id=hostname name=hostname value="cb-tumblebug">
-    TB Port: <input type=text id=port name=port value="1323">
-    <br>
-    TB Username: <input type=text id=username name=username value="default">
-    TB Password: <input type=text id=password name=password value="default">
-    <br>
-    TB namespace: <input type=text id=namespace name=namespace value="tb01">
-    <br>
-    Refresh interval: <input type=text id=refreshInterval name=refreshInterval value="5">
-    <input type=button value="Clear map" onClick="window.location.reload()">
-    <br>
-    TB MCIS ID: <input type=text id=mcisid name=mcisid value="mcis01"> 
-    <input type=button value="Refine" onClick="controlMCIS('refine');"> 
-    <input type=button value="Suspend" onClick="controlMCIS('suspend');"> 
-    <input type=button value="Resume" onClick="controlMCIS('resume');"> 
-    <input type=button value="Reboot" onClick="controlMCIS('reboot');"> 
-    <input type=button value="Terminate" onClick="controlMCIS('terminate');"> 
-    <br>
-    <div id="map" class="map"><div id="popup"></div></div>
-    <script type="module" src="index.js"></script>
-  </body>
+
+<head>
+  <title>Cloud-Barista Tumblebug Map Client</title>
+  <!-- The line below is only needed for old environments like Internet Explorer and Android 4.x -->
+  <script
+    src="https://cdn.polyfill.io/v2/polyfill.min.js?features=requestAnimationFrame,Element.prototype.classList,URL"></script>
+  <script src="https://code.jquery.com/jquery-2.2.3.min.js"></script>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+  <style>
+    .map {
+      width: 100%;
+      height: 1200px;
+      /* height:800px; */
+    }
+  </style>
+</head>
+
+<body>
+  <table>
+    <tbody>
+      <tr>
+        <td> &nbsp;&nbsp;TB IP/hostname:&nbsp;&nbsp;</td>
+        <td><input type=text id=hostname name=hostname value="localhost" style="text-align:center; width:120px"></td>
+        <td> &nbsp;&nbsp;TB Port:&nbsp;&nbsp;</td>
+        <td><input type=text id=port name=port value="1323" style="text-align:center; width:120px"> </td>
+        <td> &nbsp;&nbsp;Username:&nbsp;&nbsp;</td>
+        <td><input type=text id=username name=username value="default" style="text-align:center; width:120px"></td>
+        <td> &nbsp;&nbsp;Password:&nbsp;&nbsp;</td>
+        <td><input type=password id=password name=password value="default" style="text-align:center; width:120px"></td>
+      </tr>
+      <tr>
+        <td> &nbsp;&nbsp;TB NS ID:&nbsp;&nbsp;</td>
+        <td> <input type=text id=namespace name=namespace value="tb01" style="text-align:center; width:120px"></td>
+        <td> &nbsp;&nbsp;TB MCIS ID:&nbsp;&nbsp;</td>
+        <td> <input type=text id=mcisid name=mcisid value="mcis01" style="text-align:center; width:120px"> </td>
+        <td> </td>
+        <td> </td>
+        <td> &nbsp;&nbsp;Refresh interval:&nbsp;&nbsp;</td>
+        <td> <input type=text id=refreshInterval name=refreshInterval value="10" style="text-align:center; width:120px">
+      </tr>
+    </tbody>
+  </table>
+  <br>
+  &nbsp;&nbsp;MCIS Control:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <input type=button value="Refine" onClick="controlMCIS('refine');" style="text-align:center; width:120px">
+  <input type=button value="Suspend" onClick="controlMCIS('suspend');" style="text-align:center; width:120px">
+  <input type=button value="Resume" onClick="controlMCIS('resume');" style="text-align:center; width:120px">
+  <input type=button value="Reboot" onClick="controlMCIS('reboot');" style="text-align:center; width:120px">
+  <input type=button value="Terminate" onClick="controlMCIS('terminate');" style="text-align:center; width:120px">
+  &nbsp;&nbsp;View:&nbsp;&nbsp;
+  <input type=button value="Clear map" onClick="window.location.reload()" style="text-align:center; width:120px">
+  <br>
+
+
+  <div id="map" class="map">
+    <div id="popup"></div>
+  </div>
+  <script type="module" src="index.js"></script>
+</body>
+
 </html>
