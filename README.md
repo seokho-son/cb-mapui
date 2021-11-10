@@ -10,23 +10,29 @@ Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
 
 ### Prerequisite
 
- - npm, node.js
+ - npm, Node.js
+   - https://github.com/nodesource/distributions의 Node.js **v14.x** 설치 (아래 설치 명령어 예시 참조)
+     ```code
+     # Using Ubuntu
+     curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -
+     sudo apt-get install -y nodejs
+     ```
 
  - ol, parcel
 
-  Check the instruction from Openlayers.
-  https://openlayers.org/en/latest/doc/tutorials/bundle.html
+     Check the instruction from Openlayers.
+     https://openlayers.org/en/latest/doc/tutorials/bundle.html
 
-  ```
-  npm install ol
-  npm install --save-dev parcel-bundler
-  ```
+     ```
+     npm install ol
+     npm install --save-dev parcel-bundler
+     ```
 
-  (필요에 따라 설치, buffer, http)
-  ```
-  npm install buffer --save
-  npm install http --save
-  ```
+     (필요에 따라 설치, buffer, http)
+     ```
+     npm install buffer --save
+     npm install http --save
+     ```
 
 ### 빌드 및 실행
 
