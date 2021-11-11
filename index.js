@@ -23,6 +23,7 @@ import MousePosition from 'ol/control/MousePosition';
 import {createStringXY} from 'ol/coordinate';
 import {defaults as defaultControls} from 'ol/control';
 
+const axios = require('axios')
 
 //var express = require('express');
 //var app = express();
@@ -75,7 +76,11 @@ var map = new Map({
   //projection: 'EPSG:4326'
 });
 
-
+map.on('singleclick', function (event) {
+  const coord = event.coordinate;
+  document.getElementById('latitude').value = coord[1];
+  document.getElementById('longitude').value = coord[0];  
+});
 
 // Display Icon for Cloud locations
 // npm i -s csv-parser
@@ -816,7 +821,137 @@ function isNormalInteger(str) {
   return n !== Infinity && String(n) === str && n > 0;
 }
 
+function createMcisDynamically() {
+  var hostname = document.getElementById("hostname").value;
+  var port = document.getElementById("port").value;
+
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
+  var auth = "Basic " + new Buffer(username + ":" + password).toString("base64");
+
+  var namespace = document.getElementById("namespace").value;
+  var mcisid = document.getElementById("mcisid").value;
+
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcisDynamic`
+
+  var randomString = Math.random().toString(36).substr(2,5);
+  
+  var struct = {
+    description: "Made via cb-mapui",
+    installMonAgent: "no",
+    label: "cb-mapui",
+    name: "mapui-" + `${randomString}`,
+    vm: [
+      {
+        commonImage: "ubuntu18.04",
+        commonSpec: document.getElementById("recommendedSpec").value,
+        description: "mapui",
+        label: "DynamicVM",
+        vmGroupSize: "1"
+      }
+    ]
+  }
+
+  var jsonBody = JSON.stringify(struct);
+
+  axios({
+    method: 'post',
+    url: url,
+    headers: { 'Content-Type': 'application/json' },
+    data: jsonBody,
+    auth: {
+      username: `${username}`,
+      password: `${password}`
+    }
+    
+  })
+    .then((res)=>{
+      console.log(res); // for debug
+      });
+}
+window.createMcisDynamically = createMcisDynamically;
+
+function getRecommendedSpec() {
+  var hostname = document.getElementById("hostname").value;
+  var port = document.getElementById("port").value;
+
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
+  // var auth = "Basic " + new Buffer(username + ":" + password).toString("base64");
+
+  // var namespace = document.getElementById("namespace").value;
+  // var mcisid = document.getElementById("mcisid").value;
+
+  var latitude = document.getElementById("latitude").value;
+  var longitude = document.getElementById("longitude").value;
+
+  var url = `http://${hostname}:${port}/tumblebug/ns/common/testRecommendVm`
+
+  var struct = {
+    filter: {
+      policy: [
+        {
+          condition: [
+            {
+              operand: "1",
+              operator: "<="
+            }
+          ],
+          metric: "cpu"
+        }
+      ]
+    },
+    limit: "5",
+    priority: {
+      policy: [
+        {
+          metric: "location",
+          parameter: [
+            {
+              key: "coordinateClose",
+              val: [
+                `${latitude}/${longitude}`
+              ]
+            }
+          ],
+          weight: "0.3"
+        }
+      ]
+    }
+  }
+
+  var jsonBody = JSON.stringify(struct);
+
+  axios({
+    method: 'post',
+    url: url,
+    headers: { 'Content-Type': 'application/json' },
+    data: jsonBody,
+    auth: {
+      username: `${username}`,
+      password: `${password}`
+    }
+    
+  })
+    .then((res)=>{
+      document.getElementById('recommendedSpec').value = res.data[0].id;
+      });
+}
+window.getRecommendedSpec = getRecommendedSpec;
+
 function controlMCIS(action) {
+  switch(action) {
+    case 'refine':
+    case 'suspend':
+    case 'resume':
+    case 'reboot':
+    case 'terminate':
+      break;
+    default:
+      console.log(`The actions ${action} is not supported. Supported actions: refine, suspend, resume, reboot, terminate.`);
+      return
+  }
+
   var hostname = document.getElementById("hostname").value;
   var port = document.getElementById("port").value;
 
@@ -837,18 +972,6 @@ function controlMCIS(action) {
       "Authorization" : auth
     }
   };
-
-  switch(action) {
-    case 'refine':
-    case 'suspend':
-    case 'resume':
-    case 'reboot':
-    case 'terminate':
-      break;
-    default:
-      console.log(`The actions ${action} is not supported. Supported actions: refine, suspend, resume, reboot, terminate.`);
-      return
-  }
 
   function handleResponse(response) {
     var serverData = '';
@@ -895,6 +1018,21 @@ function getMcis() {
       "Authorization" : auth
     }
   };
+
+  // Init select-options
+  function removeOptions(selectElement) {
+    var i, L = selectElement.options.length - 1;
+    for(i = L; i >= 0; i--) {
+      selectElement.remove(i);
+    }
+  }
+
+  removeOptions(document.getElementById('mcisid'));
+
+  var defaultOption = document.createElement("option");
+  defaultOption.value = 'mcis01';
+  defaultOption.text = 'mcis01';
+  document.getElementById('mcisid').appendChild(defaultOption);
 
   function handleResponse(response) {
     var serverData = '';
@@ -1019,6 +1157,10 @@ function getMcis() {
           //make poly with convexHull
           makePolyArray(vmGeo);
 
+          var option = document.createElement("option");
+          option.value = item.name;
+          option.text = item.name;
+          document.getElementById('mcisid').appendChild(option);
 
           cnt++;
 
