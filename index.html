@@ -9,6 +9,17 @@
   <script src="https://code.jquery.com/jquery-2.2.3.min.js"></script>
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
   <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+  <script>
+    function clearInputForms(action) {
+      document.getElementById('latitude').value = '';
+      document.getElementById('longitude').value = '';
+      document.getElementById('recommendedSpec').value = '';
+    }
+
+    window.onload = function() {
+      clearInputForms();
+    }
+  </script>
   <style>
     .map {
       width: 100%;
@@ -35,7 +46,10 @@
         <td> &nbsp;&nbsp;TB NS ID:&nbsp;&nbsp;</td>
         <td> <input type=text id=namespace name=namespace value="ns01" style="text-align:center; width:120px"></td>
         <td> &nbsp;&nbsp;TB MCIS ID:&nbsp;&nbsp;</td>
-        <td> <input type=text id=mcisid name=mcisid value="mcis01" style="text-align:center; width:120px"> </td>
+        <!-- <td> <input type="text" id="mcisid" name="mcisid" value="mcis01" style="text-align:center; width:120px"> </td> -->
+        <td> <select id="mcisid" name="mcisid">
+          <option value="mcis01">mcis01</option>
+        </select> </td>
         <td> </td>
         <td> </td>
         <td> &nbsp;&nbsp;Refresh interval:&nbsp;&nbsp;</td>
@@ -53,7 +67,15 @@
   &nbsp;&nbsp;View:&nbsp;&nbsp;
   <input type=button value="Clear map" onClick="window.location.reload()" style="text-align:center; width:120px">
   <br>
-
+  <br>
+  <input type=button value="Clear input forms" onClick="clearInputForms();" style="text-align:center; width:180px">
+  <br>
+  Latitude: <input type=text id=latitude name=latitude  value="" style="text-align:center; width:120px"> 
+  Longitude: <input type=text id=longitude name=longitude  value="" style="text-align:center; width:120px"> 
+  <input type=button value="Get Recommended Spec" onClick="getRecommendedSpec();" style="text-align:center; width:180px">
+  <br>
+  Recommended spec: <input type=text id=recommendedSpec name=recommendedSpec  value="" style="text-align:center; width:180px"> 
+  <input type=button value="Create MCIS dynamically" onClick="createMcisDynamically();" style="text-align:center; width:180px">
 
   <div id="map" class="map">
     <div id="popup"></div>
