@@ -76,10 +76,32 @@ var map = new Map({
   //projection: 'EPSG:4326'
 });
 
+function clearCoordinates() {
+  document.getElementById("latLonInputPairArea").innerHTML = '';
+  latLonInputPairIdx = 0;
+  recommendedSpecList = [];
+}
+window.clearCoordinates = clearCoordinates;
+
+function writeLatLonInputPair(idx, lat, lon) {
+  var recommendedSpec = getRecommendedSpec(idx, lat, lon);
+  var latf = lat.toFixed(4);
+  var lonf = lon.toFixed(4);
+
+  document.getElementById("latLonInputPairArea").innerHTML += 
+  `VM ${idx+1}: (${latf}, ${lonf}) / `
+}
+
+var latLonInputPairIdx = 0;
+var recommendedSpecList = new Array();
+
 map.on('singleclick', function (event) {
   const coord = event.coordinate;
-  document.getElementById('latitude').value = coord[1];
-  document.getElementById('longitude').value = coord[0];  
+  // document.getElementById('latitude').value = coord[1];
+  // document.getElementById('longitude').value = coord[0];
+
+  writeLatLonInputPair(latLonInputPairIdx, coord[1], coord[0])
+  latLonInputPairIdx++;
 });
 
 // Display Icon for Cloud locations
@@ -821,7 +843,22 @@ function isNormalInteger(str) {
   return n !== Infinity && String(n) === str && n > 0;
 }
 
-function createMcisDynamically() {
+var createMcisReqTmplt = {
+  description: "Made via cb-mapui",
+  installMonAgent: "no",
+  label: "cb-mapui",
+  name: "mcis",
+  vm: []
+}
+
+var createMcisReqVmTmplt = {
+  commonImage: "ubuntu18.04",
+  commonSpec: "",
+  description: "mapui",
+  label: "DynamicVM",
+}
+
+function createMcis() {
   var hostname = document.getElementById("hostname").value;
   var port = document.getElementById("port").value;
 
@@ -830,29 +867,17 @@ function createMcisDynamically() {
   var auth = "Basic " + new Buffer(username + ":" + password).toString("base64");
 
   var namespace = document.getElementById("namespace").value;
-  var mcisid = document.getElementById("mcisid").value;
+  // var mcisid = document.getElementById("mcisid").value;
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcisDynamic`
 
   var randomString = Math.random().toString(36).substr(2,5);
   
-  var struct = {
-    description: "Made via cb-mapui",
-    installMonAgent: "no",
-    label: "cb-mapui",
-    name: "mapui-" + `${randomString}`,
-    vm: [
-      {
-        commonImage: "ubuntu18.04",
-        commonSpec: document.getElementById("recommendedSpec").value,
-        description: "mapui",
-        label: "DynamicVM",
-        vmGroupSize: "1"
-      }
-    ]
-  }
+  var createMcisReq = createMcisReqTmplt;
+  createMcisReq.name = "mcis-" + `${randomString}`;
+  createMcisReq.vm = recommendedSpecList;
 
-  var jsonBody = JSON.stringify(struct);
+  var jsonBody = JSON.stringify(createMcisReq);
 
   axios({
     method: 'post',
@@ -865,13 +890,14 @@ function createMcisDynamically() {
     }
     
   })
-    .then((res)=>{
-      console.log(res); // for debug
-      });
+  .then((res)=>{
+    console.log(res); // for debug
+  });
 }
-window.createMcisDynamically = createMcisDynamically;
+window.createMcis = createMcis;
 
-function getRecommendedSpec() {
+function getRecommendedSpec(idx, latitude, longitude) {
+  
   var hostname = document.getElementById("hostname").value;
   var port = document.getElementById("port").value;
 
@@ -882,9 +908,9 @@ function getRecommendedSpec() {
   // var namespace = document.getElementById("namespace").value;
   // var mcisid = document.getElementById("mcisid").value;
 
-  var latitude = document.getElementById("latitude").value;
-  var longitude = document.getElementById("longitude").value;
-
+  // var latitude = document.getElementById("latitude").value;
+  // var longitude = document.getElementById("longitude").value;
+  
   var url = `http://${hostname}:${port}/tumblebug/ns/common/testRecommendVm`
 
   var struct = {
@@ -933,11 +959,43 @@ function getRecommendedSpec() {
     }
     
   })
-    .then((res)=>{
-      document.getElementById('recommendedSpec').value = res.data[0].id;
-      });
+  .then((res)=>{
+    document.getElementById("latLonInputPairArea").innerHTML += `${res.data[0].id}<br>`;
+
+    var createMcisReqVm = $.extend( {}, createMcisReqVmTmplt );
+    createMcisReqVm.commonSpec = res.data[0].id;
+    recommendedSpecList.push(createMcisReqVm);
+  });
 }
 window.getRecommendedSpec = getRecommendedSpec;
+
+function deleteMCIS() {
+  var hostname = document.getElementById("hostname").value;
+  var port = document.getElementById("port").value;
+
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
+  var auth = "Basic " + new Buffer(username + ":" + password).toString("base64");
+
+  var namespace = document.getElementById("namespace").value;
+  var mcisid = document.getElementById("mcisid").value;
+
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=terminate`
+
+  axios({
+    method: 'delete',
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`
+    }
+    
+  })
+  .then((res)=>{
+    console.log(res); // for debug
+  });
+}
+window.deleteMCIS = deleteMCIS;
 
 function controlMCIS(action) {
   switch(action) {
@@ -993,6 +1051,51 @@ function controlMCIS(action) {
 }
 window.controlMCIS = controlMCIS;
 
+function updateMcisList() {
+  // Clear options in 'select'
+  var selectElement = document.getElementById('mcisid');
+  var i, L = selectElement.options.length - 1;
+  for(i = L; i >= 0; i--) {
+    selectElement.remove(i);
+  }
+
+  var hostname = document.getElementById("hostname").value;
+  var port = document.getElementById("port").value;
+
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
+  var auth = "Basic " + new Buffer(username + ":" + password).toString("base64");
+
+  var namespace = document.getElementById("namespace").value;
+
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis?option=status`
+
+  axios({
+    method: 'get',
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`
+    }
+    
+  })
+  .then((res)=>{
+    if ( res.data.mcis != null ){
+      for (let item of res.data.mcis) {
+        var option = document.createElement("option");
+        option.value = item.name;
+        option.text = item.name;
+        document.getElementById('mcisid').appendChild(option);
+      }
+    }
+  });
+}
+window.updateMcisList = updateMcisList;
+
+window.onload = function() {
+  updateMcisList();
+}
+
 function getMcis() {
   
   var hostname = document.getElementById("hostname").value;
@@ -1018,21 +1121,6 @@ function getMcis() {
       "Authorization" : auth
     }
   };
-
-  // Init select-options
-  function removeOptions(selectElement) {
-    var i, L = selectElement.options.length - 1;
-    for(i = L; i >= 0; i--) {
-      selectElement.remove(i);
-    }
-  }
-
-  removeOptions(document.getElementById('mcisid'));
-
-  var defaultOption = document.createElement("option");
-  defaultOption.value = 'mcis01';
-  defaultOption.text = 'mcis01';
-  document.getElementById('mcisid').appendChild(defaultOption);
 
   function handleResponse(response) {
     var serverData = '';
@@ -1156,11 +1244,6 @@ function getMcis() {
 
           //make poly with convexHull
           makePolyArray(vmGeo);
-
-          var option = document.createElement("option");
-          option.value = item.name;
-          option.text = item.name;
-          document.getElementById('mcisid').appendChild(option);
 
           cnt++;
 
