@@ -16,7 +16,7 @@
     "build": "parcel build --public-url . index.html"
   },
   "description": "A MapUI Client for CB-Tumblebug (display multi-cloud infra service)",
-  "version": "0.4.2",
+  "version": "0.4.6",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cloud-barista/cb-mapui.git"
