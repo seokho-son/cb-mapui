@@ -95,7 +95,7 @@ function clearCoordinates() {
 window.clearCoordinates = clearCoordinates;
 
 function writeLatLonInputPair(idx, lat, lon) {
-  // var recommendedSpec = getRecommendedSpec(idx, lat, lon);
+  var recommendedSpec = getRecommendedSpec(idx, lat, lon);
   var latf = lat.toFixed(4);
   var lonf = lon.toFixed(4);
 
@@ -1019,8 +1019,7 @@ function deleteMCIS() {
     messageTextArea.value = JSON.stringify(res.data);
     updateMcisList();
     
-    getMcis();
-    // drawMCIS();
+    //map.render();
   });
 }
 window.deleteMCIS = deleteMCIS;
