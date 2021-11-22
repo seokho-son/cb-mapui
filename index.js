@@ -80,22 +80,9 @@ var map = new Map({
 
 // fucntion for clear map.
 function clearMap() {
-  var hostname = document.getElementById("hostname").value;
-  var port = document.getElementById("port").value;
-  var username = document.getElementById("username").value;
-  var password = document.getElementById("password").value;
-  var namespace = document.getElementById("namespace").value;
-  var refresh = document.getElementById("refreshInterval").value;
-  
-  window.location.reload()
 
-  // fill elements with data before reload
-  document.getElementById("hostname").value = String(hostname);
-  document.getElementById("port").value = port;
-  document.getElementById("username").value = username;
-  document.getElementById("password").value = password;
-  document.getElementById("namespace").value = namespace;
-  document.getElementById("refreshInterval").value = refresh;
+  geometries = [];
+  map.render();
 }
 window.clearMap = clearMap;
 
@@ -108,7 +95,7 @@ function clearCoordinates() {
 window.clearCoordinates = clearCoordinates;
 
 function writeLatLonInputPair(idx, lat, lon) {
-  var recommendedSpec = getRecommendedSpec(idx, lat, lon);
+  // var recommendedSpec = getRecommendedSpec(idx, lat, lon);
   var latf = lat.toFixed(4);
   var lonf = lon.toFixed(4);
 
@@ -1031,7 +1018,9 @@ function deleteMCIS() {
     console.log(res); // for debug
     messageTextArea.value = JSON.stringify(res.data);
     updateMcisList();
-    //map.render();
+    
+    getMcis();
+    // drawMCIS();
   });
 }
 window.deleteMCIS = deleteMCIS;
@@ -1305,10 +1294,7 @@ function getMcis() {
 }
 
 
-
-
-
-tileLayer.on('postrender', function (event) {
+function drawMCIS(event) {
 
   //event.frameState = event.frameState / 10;
   //console.log("event.frameState");
@@ -1503,6 +1489,11 @@ tileLayer.on('postrender', function (event) {
   //vectorContext.drawGeometry(headPoly);
 
   map.render();
+}
+
+
+tileLayer.on('postrender', function (event) {
+  drawMCIS(event);
 
 });
 
