@@ -25,7 +25,6 @@ Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
 
      ```
      npm install ol
-     npm install --save-dev parcel-bundler
      ```
 
      (필요에 따라 설치, buffer, http)
