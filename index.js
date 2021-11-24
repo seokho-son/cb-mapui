@@ -91,6 +91,8 @@ function clearCoordinates() {
   messageTextArea.value = '';
   latLonInputPairIdx = 0;
   recommendedSpecList = [];
+  cspPointsCircle = [];
+  geoCspPointsCircle = [];
 }
 window.clearCoordinates = clearCoordinates;
 
@@ -132,11 +134,13 @@ var cspPointsAws = [];
 var cspPointsGcp = [];
 var cspPointsAlibaba = [];
 var cspPointsCloudit = [];
+var cspPointsCircle = [];
 var geoCspPointsAzure = new Array();
 var geoCspPointsAws = new Array();
 var geoCspPointsGcp = new Array();
 var geoCspPointsAlibaba = new Array();
 var geoCspPointsCloudit = new Array();
+var geoCspPointsCircle = new Array();
 
 
 http.get(csvPath,
@@ -421,6 +425,19 @@ var iconStyle03 = new Style({
     //anchorXUnits: 'fraction',
     //anchorYUnits: 'pixels',
     scale: 0.7
+  }))
+});
+
+var iconStyleCircle = new Style({
+  image: new Icon(({
+    //anchor: [0.5, 0.5],
+    crossOrigin: 'anonymous',
+    src: 'img/circle.png',
+    opacity: 1.0,
+    //anchor: [0.5, 46],
+    //anchorXUnits: 'fraction',
+    //anchorYUnits: 'pixels',
+    scale: 0.9
   }))
 });
 
@@ -986,9 +1003,60 @@ function getRecommendedSpec(idx, latitude, longitude) {
     var createMcisReqVm = $.extend( {}, createMcisReqVmTmplt );
     createMcisReqVm.commonSpec = res.data[0].id;
     recommendedSpecList.push(createMcisReqVm);
+
+    addRegionMarker(res.data[0].id);
   });
 }
 window.getRecommendedSpec = getRecommendedSpec;
+
+function addRegionMarker(spec) {
+  var hostname = document.getElementById("hostname").value;
+  var port = document.getElementById("port").value;
+
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
+
+  var url = `http://${hostname}:${port}/tumblebug/ns/common/resources/spec/${spec}`
+
+  axios({
+    method: 'get',
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`
+    }
+    
+  })
+  .then((res)=>{
+    console.log("in addRegionMarker(); "); // for debug
+    console.log(res)
+
+    var connConfig = res.data.connectionName;
+    console.log(connConfig)
+
+    url = `http://${hostname}:${port}/tumblebug/connConfig/${connConfig}`
+
+    axios({
+      method: 'get',
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`
+      }
+      
+    })
+    .then((res2)=>{
+      console.log("res2: "); // for debug
+      // console.log(res2)
+      console.log(res2.data.Location.latitude)
+      console.log(res2.data.Location.longitude)
+
+      cspPointsCircle.push([res2.data.Location.latitude, res2.data.Location.longitude])
+      // geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+    });
+  });
+}
+window.addRegionMarker = addRegionMarker;
 
 function deleteMCIS() {
   messageTextArea.value = "Deleting MCIS";
@@ -1365,7 +1433,7 @@ function drawMCIS(event) {
   }
 */
     // Draw CSP location first
-    if (Array.isArray(geoCspPointsCloudit) && geoCspPointsCloudit.length) {
+  if (Array.isArray(geoCspPointsCloudit) && geoCspPointsCloudit.length) {
       // array exists and is not empty
 
     vectorContext.setStyle(iconStyleAzure);
@@ -1378,6 +1446,12 @@ function drawMCIS(event) {
     vectorContext.drawGeometry(geoCspPointsAlibaba[0]);
     vectorContext.setStyle(iconStyleCloudit);
     vectorContext.drawGeometry(geoCspPointsCloudit[0]);
+  }
+
+  if (cspPointsCircle.length > 0) {
+    geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+    vectorContext.setStyle(iconStyleCircle);
+    vectorContext.drawGeometry(geoCspPointsCircle[0]);
   }
 
   //console.log( geometries );
