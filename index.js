@@ -428,15 +428,27 @@ var iconStyle03 = new Style({
   }))
 });
 
+
+// CSP location Circle icon style
+
+var vectorSource1 = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var iconFeature1 = new Feature(pnt);
+iconFeature1.set('style', createStyle('img/circle.png'));
+iconFeature1.set('index', '001');
+vectorSource1.addFeature(iconFeature1);
+var iconLayer1 = new VectorLayer({
+  style: function (feature) {
+    return feature.get('style');
+  },
+  source: vectorSource1
+})
+
+
 var iconStyleCircle = new Style({
   image: new Icon(({
-    //anchor: [0.5, 0.5],
     crossOrigin: 'anonymous',
     src: 'img/circle.png',
     opacity: 1.0,
-    //anchor: [0.5, 46],
-    //anchorXUnits: 'fraction',
-    //anchorYUnits: 'pixels',
     scale: 0.9
   }))
 });
@@ -553,6 +565,16 @@ var iconStyleCloudit = new Style({
 });
 
 
+// Icon layers
+map.addLayer(iconLayer1);
+map.addLayer(iconLayer2);
+map.addLayer(iconLayer3);
+map.addLayer(iconLayer4);
+map.addLayer(iconLayer5);
+map.addLayer(iconLayer6);
+map.addLayer(iconLayer);
+
+
 
 var vectorLayer = new VectorLayer({
   source: new VectorSource({
@@ -606,6 +628,8 @@ var headOuterImageStyle = new Style({
     fill: new Fill({ color: 'black' })
   })
 });
+
+
 
 
 // magenta black blue orange yellow red grey green
@@ -854,22 +878,7 @@ for (i = 0; i < coordinatesFromX.length; ++i) {
 var refreshInterval = 5;
 setTimeout(() => console.log(getMcis()), refreshInterval*1000);
 
-/*
-var geoip2 = require('geoip-lite');
-function getGeoIp(){
-  var ip2 = "52.64.97.11";
-var geo2 = geoip2.lookup(ip2);
-console.log(geo2);
-}
-*/
-// CSP icon layer
-map.addLayer(iconLayer2);
-map.addLayer(iconLayer3);
-map.addLayer(iconLayer4);
-map.addLayer(iconLayer5);
-map.addLayer(iconLayer6);
 
-map.addLayer(iconLayer);
 
 function isNormalInteger(str) {
   var n = Math.floor(Number(str));
@@ -1046,13 +1055,11 @@ function addRegionMarker(spec) {
       
     })
     .then((res2)=>{
-      console.log("res2: "); // for debug
-      // console.log(res2)
-      console.log(res2.data.Location.latitude)
-      console.log(res2.data.Location.longitude)
+      console.log("Best cloud location: [" + res2.data.Location.latitude + "," +res2.data.Location.longitude+"]"); // for debug
 
-      cspPointsCircle.push([res2.data.Location.latitude, res2.data.Location.longitude])
-      // geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+      // push order [longitute, latitude]
+      cspPointsCircle.push([res2.data.Location.longitude, res2.data.Location.latitude])
+       geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
     });
   });
 }
@@ -1446,12 +1453,7 @@ function drawMCIS(event) {
     vectorContext.drawGeometry(geoCspPointsAlibaba[0]);
     vectorContext.setStyle(iconStyleCloudit);
     vectorContext.drawGeometry(geoCspPointsCloudit[0]);
-  }
 
-  if (cspPointsCircle.length > 0) {
-    geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
-    vectorContext.setStyle(iconStyleCircle);
-    vectorContext.drawGeometry(geoCspPointsCircle[0]);
   }
 
   //console.log( geometries );
@@ -1520,8 +1522,6 @@ function drawMCIS(event) {
 
     });
 
-
-
     vectorContext.setStyle(polyStyle);
     //vectorContext.drawGeometry(mcisGeo[i]);
     vectorContext.drawGeometry(geometries[i]);
@@ -1534,6 +1534,13 @@ function drawMCIS(event) {
 
     vectorContext.setStyle(polyStatusTextStyle);
     vectorContext.drawGeometry(geometries[i]);
+  }
+
+  if (cspPointsCircle.length) {
+    //console.log("cspPointsCircle.length:" +cspPointsCircle.length + "cspPointsCircle["+cspPointsCircle+"]")
+    //geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+    vectorContext.setStyle(iconStyleCircle);
+    vectorContext.drawGeometry(geoCspPointsCircle[0]);
   }
 
   //vectorContext.setStyle(imageStyle);
