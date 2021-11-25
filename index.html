@@ -43,7 +43,7 @@
           <input type=button value="Reload" onClick="updateMcisList();" style="text-align:center; width:120px">
         </td>
         <td> </td>
-        <td> </td>
+        <td> Display Regions <input type="checkbox" id="displayOn" onClick="displayCSPListOn();" name="displayOn" value="on"> </td>
         <td> &nbsp;&nbsp;Refresh interval:&nbsp;&nbsp;</td>
         <td> <input type=text id=refreshInterval name=refreshInterval value="10" style="text-align:center; width:120px"> </td>
       </tr>
@@ -67,7 +67,7 @@
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
   Display:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <input type=button value="Clear request" onClick="clearCoordinates();" style="text-align:center; width:120px">
+  <input type=button value="Clear request" onClick="clearCircle('clearText');" style="text-align:center; width:120px">
   <input type=button value="Clear map" onClick="clearMap()" style="text-align:center; width:120px">
   <br>
   <table>

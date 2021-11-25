@@ -54,6 +54,7 @@ var ipMap = [];
 var geoMap = [];
 
 var messageTextArea = document.getElementById("message");
+var cspListDisplayEnabled = document.getElementById("displayOn");
 
 //for (i = 0; i < n; ++i) {
 //  mcisGeo[i] = new Array();
@@ -80,21 +81,23 @@ var map = new Map({
 
 // fucntion for clear map.
 function clearMap() {
-
+  messageTextArea.value = '';
   geometries = [];
   map.render();
 }
 window.clearMap = clearMap;
 
-function clearCoordinates() {
+function clearCircle(option) {
   //document.getElementById("latLonInputPairArea").innerHTML = '';
-  messageTextArea.value = '';
+  if (option == "clearText"){
+    messageTextArea.value = '';
+  }
   latLonInputPairIdx = 0;
   recommendedSpecList = [];
   cspPointsCircle = [];
   geoCspPointsCircle = [];
 }
-window.clearCoordinates = clearCoordinates;
+window.clearCircle = clearCircle;
 
 function writeLatLonInputPair(idx, lat, lon) {
   var recommendedSpec = getRecommendedSpec(idx, lat, lon);
@@ -142,43 +145,56 @@ var geoCspPointsAlibaba = new Array();
 var geoCspPointsCloudit = new Array();
 var geoCspPointsCircle = new Array();
 
+function displayCSPListOn() {
 
-http.get(csvPath,
-  (response) => {
-    response
-      .pipe(csv())
-      .on("data", (chunk) => cloudLocation.push(chunk))
-      .on("end", () => {
-        console.log(cloudLocation);
-        for (var i = 0; i < cloudLocation.length; ++i) {
-          // title: CloudType, ID,        DisplayName, Latitude, Longitude
-          // ex:    azure,     eastasia,  East Asia,   22.2670,  114.1880
-          console.log(cloudLocation[i]["CloudType"])
-          if (cloudLocation[i]["CloudType"] == "azure") {
-            cspPointsAzure.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
-          }
-          if (cloudLocation[i]["CloudType"] == "aws") {
-            cspPointsAws.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
-          }
-          if (cloudLocation[i]["CloudType"] == "gcp") {
-            cspPointsGcp.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
-          }
-          if (cloudLocation[i]["CloudType"] == "alibaba") {
-            cspPointsAlibaba.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
-          }
-          if (cloudLocation[i]["CloudType"] == "cloudit") {
-            cspPointsCloudit.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
-          }
-        }
-        geoCspPointsAzure[0] = new MultiPoint([cspPointsAzure]);
-        geoCspPointsAws[0] = new MultiPoint([cspPointsAws]);
-        geoCspPointsGcp[0] = new MultiPoint([cspPointsGcp]);
-        geoCspPointsAlibaba[0] = new MultiPoint([cspPointsAlibaba]);
-        geoCspPointsCloudit[0] = new MultiPoint([cspPointsCloudit]);
-      });
+  if (cspListDisplayEnabled.checked){
+    http.get(csvPath,
+      (response) => {
+        response
+          .pipe(csv())
+          .on("data", (chunk) => cloudLocation.push(chunk))
+          .on("end", () => {
+            console.log(cloudLocation);
+            for (var i = 0; i < cloudLocation.length; ++i) {
+              // title: CloudType, ID,        DisplayName, Latitude, Longitude
+              // ex:    azure,     eastasia,  East Asia,   22.2670,  114.1880
+              console.log(cloudLocation[i]["CloudType"])
+              if (cloudLocation[i]["CloudType"] == "azure") {
+                cspPointsAzure.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
+              }
+              if (cloudLocation[i]["CloudType"] == "aws") {
+                cspPointsAws.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
+              }
+              if (cloudLocation[i]["CloudType"] == "gcp") {
+                cspPointsGcp.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
+              }
+              if (cloudLocation[i]["CloudType"] == "alibaba") {
+                cspPointsAlibaba.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
+              }
+              if (cloudLocation[i]["CloudType"] == "cloudit") {
+                cspPointsCloudit.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
+              }
+            }
+            
+          });
+      }
+    );  
+  } else {
+    cspPointsAzure = [];
+    cspPointsAws = [];
+    cspPointsGcp = [];
+    cspPointsAlibaba = [];
+    cspPointsCloudit = [];
   }
-);
-  
+  geoCspPointsAzure[0] = new MultiPoint([cspPointsAzure]);
+  geoCspPointsAws[0] = new MultiPoint([cspPointsAws]);
+  geoCspPointsGcp[0] = new MultiPoint([cspPointsGcp]);
+  geoCspPointsAlibaba[0] = new MultiPoint([cspPointsAlibaba]);
+  geoCspPointsCloudit[0] = new MultiPoint([cspPointsCloudit]);
+}
+window.displayCSPListOn = displayCSPListOn;
+
+
 
 var mcisGeo2 = [];
 //mcisGeo2.push([-180, -90]);
@@ -877,6 +893,194 @@ for (i = 0; i < coordinatesFromX.length; ++i) {
 
 var refreshInterval = 5;
 setTimeout(() => console.log(getMcis()), refreshInterval*1000);
+setTimeout(() => console.log(getConnection()), refreshInterval*1000);
+
+
+function getMcis() {
+  
+  var hostname = document.getElementById("hostname").value;
+  var port = document.getElementById("port").value;
+
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
+  var auth = "Basic " + new Buffer(username + ":" + password).toString("base64");
+
+  var namespace = document.getElementById("namespace").value;
+
+  refreshInterval = document.getElementById("refreshInterval").value;
+  var filteredRefreshInterval = isNormalInteger(refreshInterval) ? refreshInterval : 5;
+  setTimeout(() => console.log(getMcis()), filteredRefreshInterval*1000);
+    
+  var http = require('http');
+  var mcisOptions = {
+    hostname: hostname,
+    port: port,
+    path: '/tumblebug/ns/' + namespace + '/mcis?option=status',
+    method: 'GET',
+    headers: {
+      "Authorization" : auth
+    }
+  };
+
+  function handleResponse(response) {
+    var serverData = '';
+    response.on('data', function (chunk) {
+      serverData += chunk;
+    });
+    response.on('end', function () {
+      console.log("[Get MCIS list from CB-Tumblebug API]");
+      //console.log(serverData);
+      var obj = JSON.parse(serverData);
+
+      //console.log( obj.mcis[0].vm[0].publicIP );
+      //var publicIP = obj.mcis[0].vm[0].publicIP
+      //getGeoIp()
+
+      //초기화
+      cnt = cntInit;
+      //geometries.length = 0;
+
+      //console.log("obj.mcis.length = " + obj.mcis.length);
+
+      //console.log( obj.mcis[0].status );
+      //console.log( obj.mcis[1].status );
+
+      //for (i = 0; i < obj.mcis.length; i++) {
+      if ( obj.mcis != null ){
+        console.log(obj.mcis);
+      for (let item of obj.mcis) {
+        //console.log("Index:[" + "]obj.mcis[i].name = " + item.name);
+        console.log(item);
+
+        //mcisGeo[i] = new Array();
+
+        var vmGeo = [];
+
+        var validateNum = 0;
+        for (j = 0; j < item.vm.length; j++) {
+
+          vmGeo.push([(item.vm[j].location.longitude*1) + (Math.round(Math.random()) * 2 - 1) * Math.random()*1, (item.vm[j].location.latitude*1) + (Math.round(Math.random()) * 2 - 1) * Math.random()*1 ])
+          validateNum++;
+
+        }
+        if (item.vm.length == 1){
+          // handling if there is only one vm so that we can not draw geometry
+          vmGeo.pop()
+          vmGeo.push([(item.vm[0].location.longitude*1) + Math.random()*0.01, (item.vm[0].location.latitude*1) + Math.random()*0.01 ])
+          vmGeo.push([(item.vm[0].location.longitude*1) + Math.random()*0.01, (item.vm[0].location.latitude*1) + Math.random()*0.01 ])
+          vmGeo.push([(item.vm[0].location.longitude*1) + Math.random()*0.01, (item.vm[0].location.latitude*1) + Math.random()*0.01 ])
+        }
+        if (validateNum == item.vm.length) {
+          console.log("Found all GEOs validateNum : " + validateNum)
+
+          //make dots without convexHull
+          makePolyDot(vmGeo)
+          vmGeo = convexHull(vmGeo);
+
+          for (j = 0; j < vmGeo.length; j++) {
+
+            console.log("vmGeo[" + j + "] is" + vmGeo[j]);
+
+          }
+          //mcisGeo2.push(vmGeo);
+          //makePoly4( vmGeo[0], vmGeo[1],[-95.712891, 37.09024], vmGeo[0]);
+
+          //makePoly5( [-15.712891, 47.09024], [-25.712891, 12.09024], [25.712891, 32.09024],[-25.712891, 31.09024], [-15.712891, 47.09024]);
+
+          mcisName[cnt] = "[" + item.name + "]"
+          mcisStatus[cnt] = item.status
+
+          console.log("item.status is" + item.status);
+
+          //make poly with convexHull
+          makePolyArray(vmGeo);
+
+          cnt++;
+        }
+      }
+    }
+    });
+  }
+  http.request(mcisOptions, function (response) {
+    handleResponse(response);
+  }).end();
+}
+
+// Get list of cloud connections
+function getConnection() {
+  
+  var hostname = document.getElementById("hostname").value;
+  var port = document.getElementById("port").value;
+
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
+  var auth = "Basic " + new Buffer(username + ":" + password).toString("base64");
+
+  refreshInterval = document.getElementById("refreshInterval").value;
+  var filteredRefreshInterval = isNormalInteger(refreshInterval) ? refreshInterval : 5;
+  setTimeout(() => console.log(getConnection()), filteredRefreshInterval*1000);
+    
+  var http = require('http');
+  var mcisOptions = {
+    hostname: hostname,
+    port: port,
+    path: '/tumblebug/connConfig',
+    method: 'GET',
+    headers: {
+      "Authorization" : auth
+    }
+  };
+
+  function handleResponse(response) {
+    var serverData = '';
+    response.on('data', function (chunk) {
+      serverData += chunk;
+    });
+    response.on('end', function () {
+      console.log("[Get Connection list from CB-Tumblebug API]");
+      //console.log(serverData);
+      var obj = JSON.parse(serverData);
+
+      if ( obj.connectionconfig != null ){
+
+            for (var i = 0; i < obj.connectionconfig.length; ++i) {
+              // title: CloudType, ID,        DisplayName, Latitude, Longitude
+              // ex:    azure,     eastasia,  East Asia,   22.2670,  114.1880
+              providerName = obj.connectionconfig[i].ProviderName.toLowerCase()
+              longitude = obj.connectionconfig[i].Location.longitude
+              latitude = obj.connectionconfig[i].Location.latitude
+
+              if (providerName == "azure") {
+                cspPointsAzure.push([longitude, latitude]);
+              }
+              if (providerName == "aws") {
+                cspPointsAws.push([longitude, latitude]);
+              }
+              if (providerName == "gcp") {
+                cspPointsGcp.push([longitude, latitude]);
+              }
+              if (providerName == "alibaba") {
+                cspPointsAlibaba.push([longitude, latitude]);
+              }
+              if (providerName == "cloudit") {
+                cspPointsCloudit.push([longitude, latitude]);
+              }
+
+            }
+
+            geoCspPointsAzure[0] = new MultiPoint([cspPointsAzure]);
+            geoCspPointsAws[0] = new MultiPoint([cspPointsAws]);
+            geoCspPointsGcp[0] = new MultiPoint([cspPointsGcp]);
+            geoCspPointsAlibaba[0] = new MultiPoint([cspPointsAlibaba]);
+            geoCspPointsCloudit[0] = new MultiPoint([cspPointsCloudit]);
+    }
+    });
+  }
+  http.request(mcisOptions, function (response) {
+    handleResponse(response);
+  }).end();
+}
+
 
 
 
@@ -938,6 +1142,7 @@ function createMcis() {
     console.log(res); // for debug
     messageTextArea.value = JSON.stringify(res.data);
     updateMcisList();
+    clearCircle("none")
   });
 }
 window.createMcis = createMcis;
@@ -1219,173 +1424,8 @@ window.onload = function() {
   updateMcisList();
 }
 
-function getMcis() {
-  
-  var hostname = document.getElementById("hostname").value;
-  var port = document.getElementById("port").value;
 
-  var username = document.getElementById("username").value;
-  var password = document.getElementById("password").value;
-  var auth = "Basic " + new Buffer(username + ":" + password).toString("base64");
-
-  var namespace = document.getElementById("namespace").value;
-
-  refreshInterval = document.getElementById("refreshInterval").value;
-  var filteredRefreshInterval = isNormalInteger(refreshInterval) ? refreshInterval : 5;
-  setTimeout(() => console.log(getMcis()), filteredRefreshInterval*1000);
-    
-  var http = require('http');
-  var mcisOptions = {
-    hostname: hostname,
-    port: port,
-    path: '/tumblebug/ns/' + namespace + '/mcis?option=status',
-    method: 'GET',
-    headers: {
-      "Authorization" : auth
-    }
-  };
-
-  function handleResponse(response) {
-    var serverData = '';
-    response.on('data', function (chunk) {
-      serverData += chunk;
-    });
-    response.on('end', function () {
-      console.log("[Get MCIS list from CB-Tumblebug API]");
-      //console.log(serverData);
-      var obj = JSON.parse(serverData);
-
-      //console.log( obj.mcis[0].vm[0].publicIP );
-      //var publicIP = obj.mcis[0].vm[0].publicIP
-      //getGeoIp()
-
-      //초기화
-      cnt = cntInit;
-      //geometries.length = 0;
-
-      //console.log("obj.mcis.length = " + obj.mcis.length);
-
-      //console.log( obj.mcis[0].status );
-      //console.log( obj.mcis[1].status );
-
-      //for (i = 0; i < obj.mcis.length; i++) {
-      if ( obj.mcis != null ){
-        console.log(obj.mcis);
-      for (let item of obj.mcis) {
-        //console.log("Index:[" + "]obj.mcis[i].name = " + item.name);
-        console.log(item);
-
-        //mcisGeo[i] = new Array();
-
-        var vmGeo = [];
-
-        var validateNum = 0;
-        for (j = 0; j < item.vm.length; j++) {
-          //console.log( obj.mcis[i].vm[j].name );
-          //console.log(item.vm[j].publicIP);
-          //console.log( obj.mcis[i].vm[j].status );
-
-
-
-          //getIpLookup( obj.mcis[i].vm[j].publicIP, 1 ) //1들어가면 1번글로벌 변수에 변수처리 필요함
-          //getVmGeo(obj.mcis[i].vm[j].publicIP, i, j)
-          //mcisGeo[i][j] = getVmGeoTmp( obj.mcis[i].vm[j].publicIP );
-
-
-          //vmGeo.push( getVmGeoTmp( item.vm[j].publicIP ) );
-
-
-          //getVmGeoHttpSync(item.vm[j].publicIP);
-
-          //getVmGeo(item.vm[j].publicIP, cnt, j);
-          
-
-          //mcisGeo[i1][i2] = [obj.geo.longitude, obj.geo.latitude];
-          /*
-          var ipIndex = -1;
-          for (var index in ipMap) {
-            //console.log("[ipMap[index]] : " + ipMap[index] + "[index] : " + index)
-            if (ipMap[index] == item.vm[j].publicIP) {
-              ipIndex = index;
-            }
-
-          }
-
-          if (ipIndex == -1) {
-            //console.log("geoMap[ipIndex] : " + geoMap[ipIndex])
-
-            //get VM Geo location from 3rd service
-            //getVmGeoAcc(item.vm[j].publicIP);
-
-            //get VM Geo location from Static data
-            //getVmGeoStatic(item.vm[j].publicIP);
-            console.log("vm[j].longitude[" + item.vm[j].location.longitude + "]," + " vm[j].latitude[" + item.vm[j].location.latitude + "]");
-            getVmGeoInfo(item.vm[j].location.longitude, item.vm[j].location.latitude)
-
-          }
-
-          if (ipIndex != -1) {
-            //console.log("geoMap[ipIndex] : " + geoMap[ipIndex])
-            vmGeo.push(geoMap[ipIndex])
-            validateNum++;
-          }
-          */
-          //console.log("vm[j].longitude[" + item.vm[j].location.longitude + "]," + " vm[j].latitude[" + item.vm[j].location.latitude + "]");
-          //getVmGeoInfo(item.vm[j].location.longitude, item.vm[j].location.latitude)
-          vmGeo.push([(item.vm[j].location.longitude*1) + (Math.round(Math.random()) * 2 - 1) * Math.random()*1, (item.vm[j].location.latitude*1) + (Math.round(Math.random()) * 2 - 1) * Math.random()*1 ])
-          validateNum++;
-
-        }
-        if (item.vm.length == 1){
-          // handling if there is only one vm so that we can not draw geometry
-          vmGeo.pop()
-          vmGeo.push([(item.vm[0].location.longitude*1) + Math.random()*0.01, (item.vm[0].location.latitude*1) + Math.random()*0.01 ])
-          vmGeo.push([(item.vm[0].location.longitude*1) + Math.random()*0.01, (item.vm[0].location.latitude*1) + Math.random()*0.01 ])
-          vmGeo.push([(item.vm[0].location.longitude*1) + Math.random()*0.01, (item.vm[0].location.latitude*1) + Math.random()*0.01 ])
-        }
-        if (validateNum == item.vm.length) {
-          console.log("Found all GEOs validateNum : " + validateNum)
-
-          //make dots without convexHull
-          makePolyDot(vmGeo)
-          vmGeo = convexHull(vmGeo);
-
-          for (j = 0; j < vmGeo.length; j++) {
-
-            console.log("vmGeo[" + j + "] is" + vmGeo[j]);
-
-          }
-          //mcisGeo2.push(vmGeo);
-          //makePoly4( vmGeo[0], vmGeo[1],[-95.712891, 37.09024], vmGeo[0]);
-
-          //makePoly5( [-15.712891, 47.09024], [-25.712891, 12.09024], [25.712891, 32.09024],[-25.712891, 31.09024], [-15.712891, 47.09024]);
-
-          mcisName[cnt] = "[" + item.name + "]"
-          mcisStatus[cnt] = item.status
-
-          console.log("item.status is" + item.status);
-
-          //make poly with convexHull
-          makePolyArray(vmGeo);
-
-          cnt++;
-
-
-        }
-
-
-      }
-    }
-
-    });
-  }
-
-  http.request(mcisOptions, function (response) {
-    handleResponse(response);
-  }).end();
-
-}
-
+// Draw
 
 function drawMCIS(event) {
 
@@ -1394,53 +1434,13 @@ function drawMCIS(event) {
   //console.log(event.frameState);
 
 
-
-
   var vectorContext = getVectorContext(event);
   var frameState = event.frameState;
   var theta = 2 * Math.PI * frameState.time / omegaTheta;
 
 
-  /*
-  coordinates = [];
-  //var x = 0;
-  //var y = 0;
-
-  for (i = 0; i < n; ++i) {
-    var t = theta + 2 * Math.PI * i / n;
-    var x = (R + r) * Math.cos(t) + p * Math.cos((R + r) * t / r);
-    var y = (R + r) * Math.sin(t) + p * Math.sin((R + r) * t / r);
-    // x = n * i *100 + 2e6;
-    // y = n * i + 1e6;
-
-    var lon = 360 * Math.random() - 180;
-    var lat = 180 * Math.random() - 90;
-
-    //coordinates.push([x, y]);
-    coordinates.push([lon, lat]);
-    //console.log(x);
-    //console.log(y);
-    
-  }
-  */
-  //changePoints()
-
-
-  //vectorContext.drawGeometry(new MultiPoint(coordinates));
-
-
-  //vectorContext.drawGeometry(new MultiPoint(coordinates));
-  //vectorContext.drawGeometry(new MultiPoint(coordinates));
-
-  /*
-  for( i=0; i<coordinates.length; ++i){
-    var polys = new Polygon([[ coordinates[Math.floor(Math.random()*(coordinates.length-1))], coordinates[Math.floor(Math.random()*(coordinates.length-1))], coordinates[Math.floor(Math.random()*(coordinates.length-1))], coordinates[Math.floor(Math.random()*(coordinates.length-1))] ]]);
-    vectorContext.setStyle(polyStyle);
-    vectorContext.drawGeometry(polys);
-  }
-*/
     // Draw CSP location first
-  if (Array.isArray(geoCspPointsCloudit) && geoCspPointsCloudit.length) {
+  if (Array.isArray(geoCspPointsCloudit) && geoCspPointsCloudit.length ) {
       // array exists and is not empty
 
     vectorContext.setStyle(iconStyleAzure);
@@ -1454,6 +1454,13 @@ function drawMCIS(event) {
     vectorContext.setStyle(iconStyleCloudit);
     vectorContext.drawGeometry(geoCspPointsCloudit[0]);
 
+  }
+
+  if (cspPointsCircle.length) {
+    //console.log("cspPointsCircle.length:" +cspPointsCircle.length + "cspPointsCircle["+cspPointsCircle+"]")
+    //geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+    vectorContext.setStyle(iconStyleCircle);
+    vectorContext.drawGeometry(geoCspPointsCircle[0]);
   }
 
   //console.log( geometries );
@@ -1536,12 +1543,7 @@ function drawMCIS(event) {
     vectorContext.drawGeometry(geometries[i]);
   }
 
-  if (cspPointsCircle.length) {
-    //console.log("cspPointsCircle.length:" +cspPointsCircle.length + "cspPointsCircle["+cspPointsCircle+"]")
-    //geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
-    vectorContext.setStyle(iconStyleCircle);
-    vectorContext.drawGeometry(geoCspPointsCircle[0]);
-  }
+
 
   //vectorContext.setStyle(imageStyle);
 
