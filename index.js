@@ -465,7 +465,12 @@ var iconStyleCircle = new Style({
     crossOrigin: 'anonymous',
     src: 'img/circle.png',
     opacity: 1.0,
-    scale: 0.9
+
+    anchor: [0.4, 0.4],
+    anchorXUnits: 'fraction',
+    anchorYUnits: 'fraction',
+    scale: 1.4
+    //imgSize: [50, 50]
   }))
 });
 
@@ -1140,7 +1145,7 @@ function createMcis() {
   })
   .then((res)=>{
     console.log(res); // for debug
-    messageTextArea.value = JSON.stringify(res.data);
+    messageTextArea.value = JSON.stringify(res.data, null, 2);
     updateMcisList();
     clearCircle("none")
   });
@@ -1298,9 +1303,27 @@ function deleteMCIS() {
     console.log(res); // for debug
     messageTextArea.value = JSON.stringify(res.data);
     updateMcisList();
+
+    url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/defaultResources`
+
+    axios({
+      method: 'delete',
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`
+      }
+      
+    })
+    .then((res2)=>{
+      console.log(res2); // for debug
+      messageTextArea.value += `\n[Remove associated default resources]\n`
+      messageTextArea.value += JSON.stringify(res2.data, null, 2);
+    });
     
     //map.render();
   });
+
 }
 window.deleteMCIS = deleteMCIS;
 
