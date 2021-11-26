@@ -15,75 +15,100 @@
       height: 1200px;
       /* height:800px; */
     }
+
+  table {
+    border-collapse: separate;
+    border-spacing: 0 2px;
+  }
+  table td {
+    width: 160px;
+  }
   </style>
 </head>
 
 <body>
+  &nbsp;&nbsp;[CB-MapUI for Cloud-Barista Tumeblebug]
+
   <table>
     <tbody>
       <tr>
-        <td> &nbsp;&nbsp;TB IP/hostname:&nbsp;&nbsp;</td>
-        <td><input type=text id=hostname name=hostname value="localhost" style="text-align:center; width:120px"></td>
-        <td> &nbsp;&nbsp;TB Port:&nbsp;&nbsp;</td>
-        <td><input type=text id=port name=port value="1323" style="text-align:center; width:120px"> </td>
-        <td> &nbsp;&nbsp;Username:&nbsp;&nbsp;</td>
-        <td><input type=text id=username name=username value="default" style="text-align:center; width:120px"></td>
-        <td> &nbsp;&nbsp;Password:&nbsp;&nbsp;</td>
-        <td><input type=password id=password name=password value="default" style="text-align:center; width:120px"></td>
+        <td>&nbsp;&nbsp;System config&nbsp;&nbsp;</td>
+        <td>TB IP:&nbsp;<br><input type=text id=hostname name=hostname value="localhost" style="text-align:center; width:95%"></td>
+        <td>TB Port:&nbsp;<input type=text id=port name=port value="1323" style="text-align:center; width:95%"> </td>
+        <td>Username:&nbsp;<input type=text id=username name=username value="default" style="text-align:center; width:95%"></td>
+        <td>Password:&nbsp;<input type=password id=password name=password value="default" style="text-align:center; width:95%"></td>
+        <td>Display Interval:
+          <select id="refreshInterval" name="refreshInterval" style="text-align:center; width:50px">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="5">5</option>
+            <option value="10" selected="selected">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select> 
+          <input type=button value="Clear map" onClick="clearMap()" style="text-align:center; width:95%">
+        </td>
       </tr>
+
+
       <tr>
-        <td> &nbsp;&nbsp;TB NS ID:&nbsp;&nbsp;</td>
-        <td> <input type=text id=namespace name=namespace value="ns01" style="text-align:center; width:120px"></td>
-        <td> &nbsp;&nbsp;TB MCIS ID:&nbsp;&nbsp;</td>
-        <!-- <td> <input type="text" id="mcisid" name="mcisid" value="mcis01" style="text-align:center; width:120px"> </td> -->
-        <td>
-          <select id="mcisid" name="mcisid">
+        <td>&nbsp;&nbsp;User setting&nbsp;&nbsp;</td>
+        <td>NS ID:&nbsp;<input type=text id=namespace name=namespace value="ns01" style="text-align:center; width:95%"></td>
+        <td>MCIS ID:&nbsp;
+          <select id="mcisid" name="mcisid" style="text-align:center; width:95%">
           <!-- <option value="mcis01">mcis01</option> -->
           </select> 
-          <input type=button value="Reload" onClick="updateMcisList();" style="text-align:center; width:120px">
         </td>
-        <td> </td>
-        <td> Display Regions <input type="checkbox" id="displayOn" onClick="displayCSPListOn();" name="displayOn" value="on"> </td>
-        <td> &nbsp;&nbsp;Refresh interval:&nbsp;&nbsp;</td>
-        <td> <input type=text id=refreshInterval name=refreshInterval value="10" style="text-align:center; width:120px"> </td>
+        <td><input type=button value="Reload" onClick="updateMcisList();" style="text-align:center; width:90px"></td>
+        <td>&nbsp;</td>
+        <td>Total CSP regions:&nbsp;<input type="checkbox" id="displayOn" onClick="displayCSPListOn();" name="displayOn" value="on"><input type=button value="Show CSP" onClick="getConnection();" style="text-align:center; width:95%"></td>
       </tr>
+     
+
+      <tr>
+        <td>&nbsp;&nbsp;MCIS control&nbsp;&nbsp;</td>
+        <td><input type=button value="Suspend" onClick="controlMCIS('suspend');" style="text-align:center; width:95%"></td>
+        <td><input type=button value="Resume" onClick="controlMCIS('resume');" style="text-align:center; width:95%"></td>
+        <td><input type=button value="Reboot" onClick="controlMCIS('reboot');" style="text-align:center; width:95%"></td>
+
+        <td><input type=button value="Refine" onClick="controlMCIS('refine');" style="text-align:center; width:95%"></td>
+        <td><input type=button value="Terminate" onClick="controlMCIS('terminate');" style="text-align:center; width:95%"></td>
+        <td><input type=button value="Delete" onClick="deleteMCIS();" style="text-align:center; width:95%"></td>
+        <td><input type=button value="Release Resources" onClick="releaseResources();" style="text-align:center; width:95%"></td>
+      </tr> 
+      <tr> <td>&nbsp; </td> </tr> 
+
+      <tr>
+        <td>&nbsp;&nbsp;MCIS provisioning&nbsp;&nbsp;</td>
+        <td><input type=button value="Create" onClick="createMcis();" style="text-align:center; width:95%"></td>
+        <td><input type=button value="Clear request" onClick="clearCircle('clearText');" style="text-align:center; width:95%"></td>
+        <td><input type="range" value="1" min="1" max="200" onchange='range_change(this)'><input type='text' id='myvalue'></td>
+        <td></td>
+
+      </tr> 
+
+
+      <tr>
+        <td>&nbsp;&nbsp;Deploy application&nbsp;&nbsp;</td>
+        <td><input type=button value="Jitsi" onClick="deployApp()" style="text-align:center; width:95%"></td>
+      </tr> 
+
     </tbody>
   </table>
-  <br>
-  &nbsp;&nbsp;MCIS Control:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <input type=button value="Create computing infra" onClick="createMcis();" style="text-align:center; width:210px">
-  <input type=button value="Suspend" onClick="controlMCIS('suspend');" style="text-align:center; width:120px">
-  <input type=button value="Resume" onClick="controlMCIS('resume');" style="text-align:center; width:120px">
-  <input type=button value="Reboot" onClick="controlMCIS('reboot');" style="text-align:center; width:120px">
-  <input type=button value="Refine" onClick="controlMCIS('refine');" style="text-align:center; width:120px">  
-  <input type=button value="Terminate" onClick="controlMCIS('terminate');" style="text-align:center; width:120px">
-  <input type=button value="Delete" onClick="deleteMCIS();" style="text-align:center; width:120px">
-  <br>
-  &nbsp;&nbsp;Application:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <input type=button value="Deploy video conference" onClick="deployApp()" style="text-align:center; width:210px">
-  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  Display:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <input type=button value="Clear request" onClick="clearCircle('clearText');" style="text-align:center; width:120px">
-  <input type=button value="Clear map" onClick="clearMap()" style="text-align:center; width:120px">
-  <br>
+  
   <table>
     <tr>
-    <td rowspan="1" colspan="3" style="vertical-align: top; width: 30%;">
-      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-      <textarea id = "message" rows = "3" cols = "117" name = "description" readonly ></textarea>
-    </td>
+      <td>&nbsp;</td>
+      <td rowspan="1" colspan="3" >
+        <textarea id = "message" rows = "3" cols = "110" name = "description" readonly ></textarea>
+      </td>
     </tr>
   </table>
 
   <!-- 
-  Latitude: <input type=text id=latitude name=latitude  value="" style="text-align:center; width:120px"> 
-  Longitude: <input type=text id=longitude name=longitude  value="" style="text-align:center; width:120px"> 
+  Latitude: <input type=text id=latitude name=latitude  value="" style="text-align:center; width:95%"> 
+  Longitude: <input type=text id=longitude name=longitude  value="" style="text-align:center; width:95%"> 
   <input type=button value="Get Recommended Spec" onClick="getRecommendedSpec();" style="text-align:center; width:180px">
   <br>
   Recommended spec: <input type=text id=recommendedSpec name=recommendedSpec  value="" style="text-align:center; width:180px">

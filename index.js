@@ -107,7 +107,7 @@ function writeLatLonInputPair(idx, lat, lon) {
   //document.getElementById("latLonInputPairArea").innerHTML += 
   `VM ${idx+1}: (${latf}, ${lonf}) / `
   if (idx == 0) {
-    messageTextArea.value = ``
+    messageTextArea.value = `[Started MCIS configuration]\n`
   }
   messageTextArea.value += ` - [VM-${idx+1}]  Location:  ${latf}, ${lonf}    |    Best Spec: `
   messageTextArea.scrollTop = messageTextArea.scrollHeight;
@@ -898,7 +898,7 @@ for (i = 0; i < coordinatesFromX.length; ++i) {
 
 var refreshInterval = 5;
 setTimeout(() => console.log(getMcis()), refreshInterval*1000);
-setTimeout(() => console.log(getConnection()), refreshInterval*1000);
+//setTimeout(() => console.log(getConnection()), refreshInterval*1000);
 
 
 function getMcis() {
@@ -1023,7 +1023,7 @@ function getConnection() {
 
   refreshInterval = document.getElementById("refreshInterval").value;
   var filteredRefreshInterval = isNormalInteger(refreshInterval) ? refreshInterval : 5;
-  setTimeout(() => console.log(getConnection()), filteredRefreshInterval*1000);
+  //setTimeout(() => console.log(getConnection()), filteredRefreshInterval*1000);
     
   var http = require('http');
   var mcisOptions = {
@@ -1085,7 +1085,7 @@ function getConnection() {
     handleResponse(response);
   }).end();
 }
-
+window.getConnection = getConnection;
 
 
 
@@ -1228,6 +1228,11 @@ function getRecommendedSpec(idx, latitude, longitude) {
 }
 window.getRecommendedSpec = getRecommendedSpec;
 
+function range_change(obj) {
+  document.getElementById('myvalue').value=obj.value;
+}
+window.range_change = range_change;
+
 function addRegionMarker(spec) {
   var hostname = document.getElementById("hostname").value;
   var port = document.getElementById("port").value;
@@ -1275,57 +1280,6 @@ function addRegionMarker(spec) {
 }
 window.addRegionMarker = addRegionMarker;
 
-function deleteMCIS() {
-  messageTextArea.value = "Deleting MCIS";
-
-  var hostname = document.getElementById("hostname").value;
-  var port = document.getElementById("port").value;
-
-  var username = document.getElementById("username").value;
-  var password = document.getElementById("password").value;
-  var auth = "Basic " + new Buffer(username + ":" + password).toString("base64");
-
-  var namespace = document.getElementById("namespace").value;
-  var mcisid = document.getElementById("mcisid").value;
-
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=terminate`
-
-  axios({
-    method: 'delete',
-    url: url,
-    auth: {
-      username: `${username}`,
-      password: `${password}`
-    }
-    
-  })
-  .then((res)=>{
-    console.log(res); // for debug
-    messageTextArea.value = JSON.stringify(res.data);
-    updateMcisList();
-
-    url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/defaultResources`
-
-    axios({
-      method: 'delete',
-      url: url,
-      auth: {
-        username: `${username}`,
-        password: `${password}`
-      }
-      
-    })
-    .then((res2)=>{
-      console.log(res2); // for debug
-      messageTextArea.value += `\n[Remove associated default resources]\n`
-      messageTextArea.value += JSON.stringify(res2.data, null, 2);
-    });
-    
-    //map.render();
-  });
-
-}
-window.deleteMCIS = deleteMCIS;
 
 function controlMCIS(action) {
   switch(action) {
@@ -1382,6 +1336,72 @@ function controlMCIS(action) {
   }).end();
 }
 window.controlMCIS = controlMCIS;
+
+function deleteMCIS() {
+  messageTextArea.value = "Deleting MCIS";
+
+  var hostname = document.getElementById("hostname").value;
+  var port = document.getElementById("port").value;
+
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
+  var auth = "Basic " + new Buffer(username + ":" + password).toString("base64");
+
+  var namespace = document.getElementById("namespace").value;
+  var mcisid = document.getElementById("mcisid").value;
+
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=terminate`
+
+  axios({
+    method: 'delete',
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`
+    }
+    
+  })
+  .then((res)=>{
+    console.log(res); // for debug
+    //clearMap();
+    messageTextArea.value = JSON.stringify(res.data);
+    updateMcisList();
+  });
+
+}
+window.deleteMCIS = deleteMCIS;
+
+function releaseResources() {
+  messageTextArea.value = "[Remove all associated default resources]";
+
+  var hostname = document.getElementById("hostname").value;
+  var port = document.getElementById("port").value;
+
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
+  var auth = "Basic " + new Buffer(username + ":" + password).toString("base64");
+
+  var namespace = document.getElementById("namespace").value;
+  var mcisid = document.getElementById("mcisid").value;
+
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/defaultResources`
+
+  axios({
+    method: 'delete',
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`
+    }
+    
+  })
+  .then((res2)=>{
+    console.log(res2); // for debug
+    messageTextArea.value += JSON.stringify(res2.data, null, 2);
+  });
+
+}
+window.releaseResources = releaseResources;
 
 function updateMcisList() {
   // Clear options in 'select'
@@ -1567,51 +1587,6 @@ function drawMCIS(event) {
   }
 
 
-
-  //vectorContext.setStyle(imageStyle);
-
-  //console.log(imgPath);
-
-  //vectorContext.setStyle(iconStyle01);
-
-  //vectorContext.drawGeometry(new MultiPoint(coordinates));
-
-  /*
-  vectorContext.setStyle(lineStyle);
-  for (i = 0; i < coordinatesFromX.length; ++i) {
-    //console.log(coordinatesFrom[i])
-    //console.log(coordinatesTo[i])
-    //vectorContext.drawGeometry(new LineString([coordinatesFrom[i], coordinatesTo[i] ]));
-    var xFrom = coordinatesFromX[i]
-    var yFrom = coordinatesFromY[i]
-    var xTo = coordinatesToX[i]
-    var yTo = coordinatesToY[i]
-    for (j=1; j < n; ++j){
-
-      var goX = xFrom + (xTo - xFrom)/j
-      var goY = (yTo - yFrom)/(xTo - xFrom)*(goX-xFrom)+yFrom
-      //console.log(goX)
-      //console.log(goY)
-      vectorContext.setStyle(headOuterImageStyle);
-      vectorContext.drawGeometry(new Point([goX*100,goY*100]));
-    }
-  }
-  */
-
-
-  //var headPoint = new Point(coordinates[coordinates.length - 1]);
-
-  //vectorContext.setStyle(headOuterImageStyle);
-  //vectorContext.drawGeometry(headPoint);
-
-  //vectorContext.setStyle(headInnerImageStyle);
-  //vectorContext.drawGeometry(headPoint);
-
-
-  //var headPoly = new Polygon([[[-1e6, -2e6], [-2e6, 1e6], [-1e6, 3e6]]]);
-  //vectorContext.setStyle(imageStyle);
-  //vectorContext.drawGeometry(headPoly);
-
   map.render();
 }
 
@@ -1623,220 +1598,3 @@ tileLayer.on('postrender', function (event) {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-function getVmGeoTmp(publicIP) {
-  for (i = 0; i < ipTmpList.length; i++) {
-    if (ipTmpList[i] == publicIP) {
-      var returnTmpx = geoTmpList[i][0] + 10 * Math.random();
-      var returnTmpy = geoTmpList[i][1] + 10 * Math.random();
-
-      return [returnTmpx, returnTmpy];
-    }
-  }
-}
-
-/*
-function getVmGeoHttpSync(publicIP){
-
-  var request = require('sync-request');
-  var res = request('GET', 'http://cors-anywhere.herokuapp.com/api.ipgeolocationapi.com/geolocate/'+ publicIP);
-  var obj = JSON.parse(res.getBody());
-  console.log("obj.geo.longitude" + obj.geo.longitude +"obj.geo.latitude"+ obj.geo.latitude);
-  var lon = obj.geo.longitude;
-  var lat = obj.geo.latitude;
-  lon = lon +5*Math.random();
-  lat = lat +5*Math.random();
-  return [lon, lat];
-
-}
-*/
-/*
-function getVmGeoHttpASync(publicIP, i1, i2){
-
-  var request = require('sync-request');
-  var res = request('GET', 'http://cors-anywhere.herokuapp.com/api.ipgeolocationapi.com/geolocate/'+ publicIP);
-  var obj = JSON.parse(res.getBody());
-  console.log("obj.geo.longitude" + obj.geo.longitude +"obj.geo.latitude"+ obj.geo.latitude);
-  var lon = obj.geo.longitude;
-  var lat = obj.geo.latitude;
-  lon = lon +5*Math.random();
-  lat = lat +5*Math.random();
-  return [lon, lat];
-
-}*/
-
-
-
-function getVmGeo(publicIP, i1, i2) {
-
-  var http = require('http');
-
-  var Options = {
-    //hostname: 'cors-anywhere.herokuapp.com/api.ipgeolocation.io',
-    hostname: 'cors-anywhere.herokuapp.com/api.ipgeolocationapi.com',
-    //port: 1323,
-    path: '/geolocate/' + publicIP,
-    method: 'GET',
-    headers: {
-      //'Content-Type': 'application/json',
-      //'Origin': 'https://ipgeolocation.io',
-      //'Referer': 'https://ipgeolocation.io/',
-      //'Sec-Fetch-Mode': 'no-cors'
-    }
-  };
-
-  /*
- var Options = {
-  //hostname: 'cors-anywhere.herokuapp.com/api.ipgeolocation.io',
-  //http://api.ipstack.com/129.254.175.187?access_key=[geoServiceKey]&format=1
-  hostname: 'cors-anywhere.herokuapp.com/api.ipstack.com',
-  //port: 1323,
-  path: '/'+ publicIP + '?access_key='+geoServiceKey+'&format=1',
-  method: 'GET',
-  headers: {
-    //'access_key': geoServiceKey,
-    //'format': '1',
-    //'Referer': 'https://ipgeolocation.io/',
-    //'Sec-Fetch-Mode': 'no-cors'
-  }
-};
-*/
-
-  function handleResponse(response) {
-    var serverData = '';
-    response.on('data', function (chunk) {
-      serverData += chunk;
-    });
-    response.on('end', function () {
-      console.log("received server data:");
-      //console.log(serverData);
-      var obj = JSON.parse(serverData);
-
-
-      //mcisGeo[i1][i2] = [obj.geo.longitude, obj.geo.latitude];
-
-
-      var ipFlag = 0;
-      for (let ipStr of ipMap) {
-        if (publicIP == ipStr) {
-          ipFlag = 1;
-        }
-      }
-      if (ipFlag == 0) {
-        ipMap.push(publicIP);
-        geoMap.push([obj.geo.longitude + 2 * Math.random() - 2 * Math.random(), obj.geo.latitude + 2 * Math.random() - 2 * Math.random()]);
-      }
-
-
-    });
-
-  }
-  http.request(Options, function (response) {
-    handleResponse(response);
-    //return lonlat
-  }).end();
-}
-
-
-
-
-function getVmGeoAcc(publicIP) {
-
-  var http = require('http');
-
- var Options = {
-  //hostname: 'cors-anywhere.herokuapp.com/api.ipgeolocation.io',
-  //http://api.ipstack.com/129.254.175.187?access_key=[geoServiceKey]&format=1
-  hostname: 'cors-anywhere.herokuapp.com/api.ipstack.com',
-  //port: 1323,
-  path: '/'+ publicIP + '?access_key='+geoServiceKey+'&format=1',
-  method: 'GET',
-  headers: {
-    //'access_key': geoServiceKey,
-    //'format': '1',
-    //'Referer': 'https://ipgeolocation.io/',
-    //'Sec-Fetch-Mode': 'no-cors'
-  }
-};
-
-  function handleResponse(response) {
-    var serverData = '';
-    response.on('data', function (chunk) {
-      serverData += chunk;
-    });
-    response.on('end', function () {
-      console.log("[Lookup IP for Geographical location]");
-      //console.log(serverData);
-      var obj = JSON.parse(serverData);
-
-      var ipFlag = 0;
-      for (let ipStr of ipMap) {
-        if (publicIP == ipStr) {
-          ipFlag = 1;
-        }
-      }
-      if (ipFlag == 0) {
-        ipMap.push(publicIP);
-        var longitude = obj.longitude +  Math.random() -  Math.random();
-        var latitude = obj.latitude +  Math.random() -  Math.random();
-        if (obj.longitude == null || obj.longitude == "" || obj.latitude == null || obj.latitude == ""){
-
-          longitude = geoTmpList[geoTmpCnt][0] +  Math.random() -  Math.random();
-          latitude = geoTmpList[geoTmpCnt][1] +  Math.random() -  Math.random();
-          geoTmpCnt++;
-          if(geoTmpCnt == geoTmpList.length){
-            geoTmpCnt = 0;
-          }
-        }
-
-        geoMap.push([longitude,latitude]);
-      }
-
-
-    });
-
-  }
-  http.request(Options, function (response) {
-    handleResponse(response);
-    //return lonlat
-  }).end();
-}
-
-
-
-function getVmGeoStatic(publicIP) {
-
-  longitude = geoTmpList[geoTmpCnt][0] +  Math.random() -  Math.random();
-  latitude = geoTmpList[geoTmpCnt][1] +  Math.random() -  Math.random();
-  geoTmpCnt++;
-  if(geoTmpCnt == geoTmpList.length){
-    geoTmpCnt = 0;
-  }
-  ipMap.push(publicIP);
-  geoMap.push([longitude,latitude]);
-
-}
-
-function getVmGeoInfo(lon,lat) {
-
-  var longitude = Number(lon) +  Math.random() -  Math.random();
-  var latitude = Number(lat) +  Math.random() -  Math.random();
-  geoTmpCnt++;
-  if(geoTmpCnt == geoTmpList.length){
-    geoTmpCnt = 0;
-  }
-  //ipMap.push(publicIP);
-  geoMap.push([longitude,latitude]);
-
-}
