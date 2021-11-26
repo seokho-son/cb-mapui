@@ -1166,6 +1166,12 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
   // var latitude = document.getElementById("latitude").value;
   // var longitude = document.getElementById("longitude").value;
+
+  var minVCPU = document.getElementById("minVCPU").value;
+  var maxVCPU = document.getElementById("maxVCPU").value;
+  var minRAM = document.getElementById("minRAM").value;
+  var maxRAM = document.getElementById("maxRAM").value;
+  
   
   var url = `http://${hostname}:${port}/tumblebug/ns/common/testRecommendVm`
 
@@ -1175,11 +1181,28 @@ function getRecommendedSpec(idx, latitude, longitude) {
         {
           condition: [
             {
-              operand: "1",
+              operand: `${minVCPU}`,
+              operator: ">="
+            },
+            {
+              operand: `${maxVCPU}`,
               operator: "<="
             }
           ],
-          metric: "cpu"
+          metric: "cpu",
+        },
+        {
+          condition: [
+            {
+              operand: `${minRAM}`,
+              operator: ">="
+            },
+            {
+              operand: `${maxRAM}`,
+              operator: "<="
+            }
+          ],
+          metric: "memory",
         }
       ]
     },
@@ -1233,6 +1256,49 @@ function range_change(obj) {
 }
 window.range_change = range_change;
 
+(function() {
+  const parentS = document.querySelectorAll('.range-slider');
+
+  if (!parentS) {
+      return;
+  }
+
+  parentS.forEach((parent) => {
+    const rangeS = parent.querySelectorAll('input[type="range"]'),
+          numberS = parent.querySelectorAll('input[type="number"]');
+
+    rangeS.forEach((el) => {
+        el.oninput = () => {
+            let slide1 = parseFloat(rangeS[0].value),
+                slide2 = parseFloat(rangeS[1].value);
+
+            if (slide1 > slide2) {
+                [slide1, slide2] = [slide2, slide1];
+            }
+
+            numberS[0].value = slide1;
+            numberS[1].value = slide2;
+        }
+    });
+
+    numberS.forEach((el) => {
+        el.oninput = () => {
+            let number1 = parseFloat(numberS[0].value),
+                number2 = parseFloat(numberS[1].value);
+
+            if (number1 > number2) {
+                let tmp = number1;
+                numberS[0].value = number2;
+                numberS[1].value = tmp;
+            }
+
+            rangeS[0].value = number1;
+            rangeS[1].value = number2;
+        }
+    });
+  });
+})();
+
 function addRegionMarker(spec) {
   var hostname = document.getElementById("hostname").value;
   var port = document.getElementById("port").value;
@@ -1274,7 +1340,7 @@ function addRegionMarker(spec) {
 
       // push order [longitute, latitude]
       cspPointsCircle.push([res2.data.Location.longitude, res2.data.Location.latitude])
-       geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+      geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
     });
   });
 }
