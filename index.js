@@ -1270,7 +1270,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
   var maxRAM = document.getElementById("maxRAM").value;
   
   
-  var url = `http://${hostname}:${port}/tumblebug/ns/common/testRecommendVm`
+  var url = `http://${hostname}:${port}/tumblebug/ns/common/mcisRecommendVm`
 
   var struct01 = {
     filter: {
