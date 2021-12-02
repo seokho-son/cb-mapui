@@ -498,7 +498,7 @@ var iconStyleCircle = new Style({
     anchor: [0.4, 0.4],
     anchorXUnits: 'fraction',
     anchorYUnits: 'fraction',
-    scale: 1.4
+    scale: 1.5
     //imgSize: [50, 50]
   }))
 });
@@ -526,7 +526,7 @@ var iconStyleAzure = new Style({
     //anchor: [0.5, 46],
     //anchorXUnits: 'fraction',
     //anchorYUnits: 'pixels',
-    scale: 0.9
+    scale: 1.0
   }))
 });
 
@@ -547,7 +547,7 @@ var iconStyleAws = new Style({
     crossOrigin: 'anonymous',
     src: 'img/ht-aws.png',
     opacity: 1.0,
-    scale: 0.9
+    scale: 1.0
   }))
 });
 
@@ -568,7 +568,7 @@ var iconStyleGcp = new Style({
     crossOrigin: 'anonymous',
     src: 'img/ht-gcp.png',
     opacity: 1.0,
-    scale: 0.9
+    scale: 1.0
   }))
 });
 
@@ -589,7 +589,7 @@ var iconStyleAlibaba = new Style({
     crossOrigin: 'anonymous',
     src: 'img/ht-alibaba.png',
     opacity: 1.0,
-    scale: 0.9
+    scale: 1.0
   }))
 });
 
@@ -610,7 +610,7 @@ var iconStyleCloudit = new Style({
     crossOrigin: 'anonymous',
     src: 'img/ht-cloudit.png',
     opacity: 1.0,
-    scale: 0.9
+    scale: 1.0
   }))
 });
 
@@ -631,7 +631,7 @@ var iconStyleIBM = new Style({
     crossOrigin: 'anonymous',
     src: 'img/ibm.png',
     opacity: 1.0,
-    scale: 0.9
+    scale: 1.0
   }))
 });
 
@@ -653,7 +653,7 @@ var iconStyleTencent = new Style({
     crossOrigin: 'anonymous',
     src: 'img/tencent.png',
     opacity: 1.0,
-    scale: 0.9
+    scale: 1.0
   }))
 });
 
