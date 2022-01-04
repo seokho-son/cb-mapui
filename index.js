@@ -59,6 +59,7 @@ var cspListDisplayEnabled = document.getElementById("displayOn");
 var tableDisplayEnabled = document.getElementById("tableOn");
 var table = document.getElementById('detailTable');
 var recommendPolicy = document.getElementById('recommendPolicy');
+var newline = String.fromCharCode(13, 10); // newline is special Char used in TextArea box
 
 //for (i = 0; i < n; ++i) {
 //  mcisGeo[i] = new Array();
@@ -1813,7 +1814,7 @@ function deployAppGame() {
     .then((res)=>{
       console.log(res); // for debug
       document.getElementById("gameWestward").style.color = "#000000";
-      messageTextArea.value = "[Complete: Deployed App]\n" + JSON.stringify(res.data, null, 2);
+      messageTextArea.value = "[Complete: Deployed App]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t');
     });
   } else {
     messageTextArea.value = " MCIS ID is not assigned";
