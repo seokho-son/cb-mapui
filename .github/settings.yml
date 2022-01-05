@@ -31,8 +31,11 @@ branches:
         require_code_owner_reviews: true
       required_status_checks: null
       restrictions:
+        apps: []
         users:
          - jihoon-seo
+         - seokho-son
+        teams: []
       enforce_admins: null
       required_linear_history: null
       
