@@ -20,6 +20,7 @@ collaborators:
   # Chairs
   - username: seokho-son
     permission: admin
+    
   - username: cat-taesik
     permission: push
     
