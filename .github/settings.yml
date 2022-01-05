@@ -20,13 +20,38 @@ collaborators:
   # Chairs
   - username: seokho-son
     permission: admin
+    
   - username: cat-taesik
-    permission: triage
+    permission: push
     
 branches:
   - name: master
     protection:
       required_pull_request_reviews:
         required_approving_review_count: 1
-        dismiss_stale_reviews: true
         require_code_owner_reviews: true
+      required_status_checks: null
+      restrictions:
+        apps: []
+        users:
+         - jihoon-seo
+         - seokho-son
+        teams: []
+      enforce_admins: null
+      required_linear_history: null
+      
+  - name: seokho-son-patch-6
+    protection:
+      required_pull_request_reviews:
+        required_approving_review_count: 1
+        require_code_owner_reviews: true
+      required_status_checks: null
+      restrictions:
+        apps: []
+        users:
+         - cat-taesik
+        teams: []
+      enforce_admins: null
+      required_linear_history: null
+            
+      

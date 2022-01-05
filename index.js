@@ -1792,7 +1792,7 @@ function startApp() {
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`
     var cmd = ""
     if (selectApp.value == "Xonotic"){
-      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh"
+      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " + "Xonotic-by-Cloud-Barista-" + mcisid
     } else if (selectApp.value == "Westward"){
       cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
     } else if (selectApp.value == "Nginx"){
