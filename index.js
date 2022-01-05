@@ -59,6 +59,7 @@ var cspListDisplayEnabled = document.getElementById("displayOn");
 var tableDisplayEnabled = document.getElementById("tableOn");
 var table = document.getElementById('detailTable');
 var recommendPolicy = document.getElementById('recommendPolicy');
+var selectApp = document.getElementById('selectApp');
 var newline = String.fromCharCode(13, 10); // newline is special Char used in TextArea box
 
 //for (i = 0; i < n; ++i) {
@@ -1762,28 +1763,25 @@ function sleep(ms) {
 
 // fucntion for deployApp (mock)
 
-function deployApp() {
+// function deployApp() {
 
-  messageTextArea.value = " Deploying Video Conference Server ...";
-  console.log(messageTextArea.value); 
+//   messageTextArea.value = " Deploying Video Conference Server ...";
+//   console.log(messageTextArea.value); 
 
-  console.log("before");
-  sleep(5000).then(() => messageTextArea.value = " [Complete]\n Deployed Video Conference Server !\n Access to https://happy.cloud-barista.org");
+//   console.log("before");
+//   sleep(5000).then(() => messageTextArea.value = " [Complete]\n Deployed Video Conference Server !\n Access to https://happy.cloud-barista.org");
 
-}
-window.deployApp = deployApp;
-
-
-
-function deployAppGame() {
+// }
+// window.deployApp = deployApp;
 
 
+// function for startApp by startApp button item
+function startApp() {
   var mcisid = document.getElementById("mcisid").value;
-
   if (mcisid) {
 
-    messageTextArea.value = " Deploying Demo Game Server ...";
-    document.getElementById("gameWestward").style.color = "#FF0000";
+    messageTextArea.value = " Starting " + selectApp.value;
+    document.getElementById("startApp").style.color = "#FF0000";
   
     var hostname = document.getElementById("hostname").value;
     var port = document.getElementById("port").value;
@@ -1792,12 +1790,22 @@ function deployAppGame() {
     var namespace = document.getElementById("namespace").value;
   
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`
-
-    var cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+    var cmd = ""
+    if (selectApp.value == "Xonotic"){
+      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh"
+    } else if (selectApp.value == "Westward"){
+      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+    } else if (selectApp.value == "Nginx"){
+      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+    } else if (selectApp.value == "Jitsi"){
+      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+    } else {
+      cmd = "ls -al"
+    }
+    
     var commandReqTmp = {
       command: `${cmd}`
     }
-   
     var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
   
     axios({
@@ -1813,18 +1821,124 @@ function deployAppGame() {
     })
     .then((res)=>{
       console.log(res); // for debug
-      document.getElementById("gameWestward").style.color = "#000000";
+      document.getElementById("startApp").style.color = "#000000";
       messageTextArea.value = "[Complete: Deployed App]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t');
     });
   } else {
     messageTextArea.value = " MCIS ID is not assigned";
   }
-  
 }
-window.deployAppGame = deployAppGame;
+window.startApp = startApp;
 
+// function for stopApp by stopApp button item
+function stopApp() {
+  var mcisid = document.getElementById("mcisid").value;
+  if (mcisid) {
 
+    messageTextArea.value = " Stopping " + selectApp.value;
+    document.getElementById("stopApp").style.color = "#FF0000";
+  
+    var hostname = document.getElementById("hostname").value;
+    var port = document.getElementById("port").value;
+    var username = document.getElementById("username").value;
+    var password = document.getElementById("password").value;
+    var namespace = document.getElementById("namespace").value;
+  
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`
+    var cmd = ""
+    if (selectApp.value == "Xonotic"){
+      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/stopServer.sh; chmod +x ~/stopServer.sh; sudo ~/stopServer.sh"
+    } else if (selectApp.value == "Westward"){
+      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+    } else if (selectApp.value == "Nginx"){
+      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+    } else if (selectApp.value == "Jitsi"){
+      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+    } else {
+      cmd = "ls -al"
+    }
+    
+    var commandReqTmp = {
+      command: `${cmd}`
+    }
+    var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
+  
+    axios({
+      method: 'post',
+      url: url,
+      headers: { 'Content-Type': 'application/json' },
+      data: jsonBody,
+      auth: {
+        username: `${username}`,
+        password: `${password}`
+      }
+      
+    })
+    .then((res)=>{
+      console.log(res); // for debug
+      document.getElementById("stopApp").style.color = "#000000";
+      messageTextArea.value = "[Complete: Stopping App]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t');
+    });
+  } else {
+    messageTextArea.value = " MCIS ID is not assigned";
+  }
+}
+window.stopApp = stopApp;
 
+// function for statusApp by statusApp button item
+function statusApp() {
+  var mcisid = document.getElementById("mcisid").value;
+  if (mcisid) {
+
+    messageTextArea.value = " Getting status " + selectApp.value;
+    document.getElementById("statusApp").style.color = "#FF0000";
+  
+    var hostname = document.getElementById("hostname").value;
+    var port = document.getElementById("port").value;
+    var username = document.getElementById("username").value;
+    var password = document.getElementById("password").value;
+    var namespace = document.getElementById("namespace").value;
+  
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`
+    var cmd = ""
+    if (selectApp.value == "Xonotic"){
+      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/statusServer.sh; chmod +x ~/statusServer.sh; sudo ~/statusServer.sh"
+    } else if (selectApp.value == "Westward"){
+      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+    } else if (selectApp.value == "Nginx"){
+      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+    } else if (selectApp.value == "Jitsi"){
+      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+    } else {
+      cmd = "ls -al"
+    }
+    
+    var commandReqTmp = {
+      command: `${cmd}`
+    }
+    var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
+  
+    axios({
+      method: 'post',
+      url: url,
+      headers: { 'Content-Type': 'application/json' },
+      data: jsonBody,
+      auth: {
+        username: `${username}`,
+        password: `${password}`
+      }
+      
+    })
+    .then((res)=>{
+      console.log(res); // for debug
+      document.getElementById("statusApp").style.color = "#000000";
+      messageTextArea.value = "[Complete: Getting App status]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t');
+    });
+  } else {
+    messageTextArea.value = " MCIS ID is not assigned";
+  }
+}
+window.statusApp = statusApp;
 
 
 

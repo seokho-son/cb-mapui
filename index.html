@@ -209,7 +209,7 @@
 
 
         <td rowspan="1" colspan="1" >
-          Provisioning Policy:
+          Provisioning Policy
           <select id="recommendPolicy" name="recommendPolicy" style="text-align:center; width:95%">
             <option value="location" selected="selected">Location-based</option>
             <option value="price">Cost-based</option>
@@ -218,7 +218,7 @@
         </td>
 
         <td rowspan="1" colspan="1" >
-          OS Image Type:
+          OS Image Type
           <select id="osImage" name="osImage" style="text-align:center; width:95%">
             <option value="ubuntu18.04" selected="selected">Ubuntu 18.04</option>
             <option value="CentOS8.5.2111">CentOS 8.5.2111</option>
@@ -264,8 +264,23 @@
 
       <tr>
         <td>&nbsp;&nbsp;Deploy application&nbsp;&nbsp;</td>
-        <td><input type=button id="gameWestward" value="Game: Westward" onClick="deployAppGame()" style="text-align:center; width:95%"></td>
-        <td><input type=button value="Video Conf: Jitsi" onClick="deployApp()" style="text-align:center; width:95%"></td>
+
+        <td><input type=button id="startApp" value="Start App" onClick="startApp()" style="text-align:center; width:95%"></td>
+        <td><input type=button id="stopApp" value="Stop App" onClick="stopApp()" style="text-align:center; width:95%"></td>
+        <!-- <td><input type=button value="Video Conf: Jitsi" onClick="deployApp()" style="text-align:center; width:95%"></td> -->
+
+        <td rowspan="1" colspan="1" >
+          Select Application
+          <select id="selectApp" name="selectApp" style="text-align:center; width:95%">
+            <option value="Xonotic" selected="selected">FPSGame(Xonotic)</option>
+            <option value="Westward">MMORPG(Westward)</option>
+            <option value="Nginx">WebServer(Nginx)</option>
+            <option value="Jitsi">VideoConf(Jitsi)</option>
+          </select> 
+        </td>
+
+        <td><input type=button id="statusApp" value="Status App" onClick="statusApp()" style="text-align:center; width:95%"></td>
+
       </tr> 
 
     </tbody>
