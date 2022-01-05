@@ -22,7 +22,7 @@ collaborators:
     permission: admin
     
   - username: cat-taesik
-    permission: admin
+    permission: push
     
 branches:
   - name: master
