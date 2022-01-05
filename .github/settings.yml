@@ -21,7 +21,7 @@ collaborators:
   - username: seokho-son
     permission: admin
   - username: cat-taesik
-    permission: maintain
+    permission: push
     
 branches:
   - name: master
@@ -39,4 +39,18 @@ branches:
       enforce_admins: null
       required_linear_history: null
       
+  - name: seokho-son-patch-6
+    protection:
+      required_pull_request_reviews:
+        required_approving_review_count: 1
+        require_code_owner_reviews: true
+      required_status_checks: null
+      restrictions:
+        apps: []
+        users:
+         - cat-taesik
+        teams: []
+      enforce_admins: null
+      required_linear_history: null
+            
       
