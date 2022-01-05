@@ -1,0 +1,8 @@
+# These are the maintainers in the repo 
+# We require at least two maintainers to sign off on a new term
+
+* @seokho-son
+
+
+# These are the approvers for `/dist/img/` directory
+/dist/ @cat-taesik @seokho-son
