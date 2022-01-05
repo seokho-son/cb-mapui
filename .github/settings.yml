@@ -29,3 +29,9 @@ branches:
       required_pull_request_reviews:
         required_approving_review_count: 2
         require_code_owner_reviews: true
+      required_status_checks: null
+      restrictions: null
+      enforce_admins: null
+      required_linear_history: null
+      
+      
