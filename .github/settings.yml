@@ -21,7 +21,7 @@ collaborators:
   - username: seokho-son
     permission: admin
   - username: cat-taesik
-    permission: admin
+    permission: maintain
     
 branches:
   - name: master
