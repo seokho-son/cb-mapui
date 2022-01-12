@@ -150,11 +150,12 @@
     <tbody>
       <tr>
         <td>&nbsp;&nbsp;System config&nbsp;&nbsp;</td>
-        <td>TB IP:&nbsp;<br><input type=text id=hostname name=hostname value="localhost" style="text-align:center; width:95%"></td>
+        <td>TB IP:&nbsp;<br><input type=text id=hostname name=hostname value="localhost" onchange="endpointChanged();" style="text-align:center; width:95%"></td>
         <td>TB Port:&nbsp;<input type=text id=port name=port value="1323" style="text-align:center; width:95%"> </td>
         <td>Username:&nbsp;<input type=text id=username name=username value="default" style="text-align:center; width:95%"></td>
         <td>Password:&nbsp;<input type=password id=password name=password value="default" style="text-align:center; width:95%"></td>
-        <td>Total CSP regions:&nbsp;<input type="checkbox" id="displayOn" name="displayOn" onClick="displayCSPListOn();" value="on"><input type=button value="Show CSP" onClick="getConnection();" style="text-align:center; width:95%"></td>
+        <td>Total CSP regions:&nbsp;<input type="checkbox" id="displayOn" name="displayOn" onClick="displayCSPListOn();" value="on">
+            <input type=button value="Show CSP" onClick="getConnection();" style="text-align:center; width:95%"></td>
         <td>Display Interval:
           <select id="refreshInterval" name="refreshInterval" style="text-align:center; width:50px">
             <option value="1">1</option>

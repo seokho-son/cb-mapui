@@ -61,6 +61,8 @@ var table = document.getElementById('detailTable');
 var recommendPolicy = document.getElementById('recommendPolicy');
 var selectApp = document.getElementById('selectApp');
 var newline = String.fromCharCode(13, 10); // newline is special Char used in TextArea box
+var hostnameElement = document.getElementById("hostname");
+var portElement = document.getElementById("port");
 
 //for (i = 0; i < n; ++i) {
 //  mcisGeo[i] = new Array();
@@ -225,6 +227,11 @@ function displayTableOn() {
   table.innerHTML = "";
 }
 window.displayTableOn = displayTableOn;
+
+function endpointChanged() {
+  //getMcis();
+}
+window.endpointChanged = endpointChanged;
 
 
 var mcisGeo2 = [];
@@ -980,54 +987,37 @@ setTimeout(() => console.log(getMcis()), refreshInterval*1000);
 
 function getMcis() {
   
-  var hostname = document.getElementById("hostname").value;
-  var port = document.getElementById("port").value;
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
 
   var username = document.getElementById("username").value;
   var password = document.getElementById("password").value;
-  var auth = "Basic " + new Buffer(username + ":" + password).toString("base64");
-
   var namespace = document.getElementById("namespace").value;
 
   refreshInterval = document.getElementById("refreshInterval").value;
   var filteredRefreshInterval = isNormalInteger(refreshInterval) ? refreshInterval : 5;
   setTimeout(() => console.log(getMcis()), filteredRefreshInterval*1000);
-    
-  var http = require('http');
-  var mcisOptions = {
-    hostname: hostname,
-    port: port,
-    path: '/tumblebug/ns/' + namespace + '/mcis?option=status',
-    method: 'GET',
-    headers: {
-      "Authorization" : auth
-    }
-  };
+  
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis?option=status`
 
-  function handleResponse(response) {
-    var serverData = '';
-    response.on('data', function (chunk) {
-      serverData += chunk;
-    });
-    response.on('end', function () {
+  axios({
+    method: 'get',
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`
+    },
+    timeout: 9000
+  })
+  .then((res)=>{
+      document.getElementById("hostname").style.color = "#000000";
+      document.getElementById("port").style.color = "#000000";
+
       console.log("[Get MCIS list from CB-Tumblebug API]");
-      //console.log(serverData);
-      var obj = JSON.parse(serverData);
 
-      //console.log( obj.mcis[0].vm[0].publicIP );
-      //var publicIP = obj.mcis[0].vm[0].publicIP
-      //getGeoIp()
+      var obj = res.data;
 
-      //초기화
       cnt = cntInit;
-      //geometries.length = 0;
-
-      //console.log("obj.mcis.length = " + obj.mcis.length);
-
-      //console.log( obj.mcis[0].status );
-      //console.log( obj.mcis[1].status );
-
-      //for (i = 0; i < obj.mcis.length; i++) {
       if ( obj.mcis != null ){
         console.log(obj.mcis);
       for (let item of obj.mcis) {
@@ -1081,18 +1071,24 @@ function getMcis() {
         }
       }
     }
-    });
-  }
-  http.request(mcisOptions, function (response) {
-    handleResponse(response);
-  }).end();
+
+  })
+  .catch(function (error) {
+    
+    if (error.request) {
+      document.getElementById("hostname").style.color = "#FF0000";
+      document.getElementById("port").style.color = "#FF0000";
+    }
+    console.log(error);
+  });
+
 }
 
 // Get list of cloud connections
 function getConnection() {
   
-  var hostname = document.getElementById("hostname").value;
-  var port = document.getElementById("port").value;
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
 
   var username = document.getElementById("username").value;
   var password = document.getElementById("password").value;
@@ -1206,8 +1202,8 @@ function createMcis() {
     messageTextArea.value = " Creating MCIS ...";
     document.getElementById("createMcis").style.color = "#FF0000";
   
-    var hostname = document.getElementById("hostname").value;
-    var port = document.getElementById("port").value;
+    var hostname = hostnameElement.value;
+    var port = portElement.value;
   
     var username = document.getElementById("username").value;
     var password = document.getElementById("password").value;
@@ -1253,8 +1249,8 @@ window.createMcis = createMcis;
 
 function getRecommendedSpec(idx, latitude, longitude) {
   
-  var hostname = document.getElementById("hostname").value;
-  var port = document.getElementById("port").value;
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
 
   var username = document.getElementById("username").value;
   var password = document.getElementById("password").value;
@@ -1497,8 +1493,8 @@ window.range_change = range_change;
 })();
 
 function addRegionMarker(spec) {
-  var hostname = document.getElementById("hostname").value;
-  var port = document.getElementById("port").value;
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
 
   var username = document.getElementById("username").value;
   var password = document.getElementById("password").value;
@@ -1558,8 +1554,8 @@ function controlMCIS(action) {
   }
   messageTextArea.value = "[MCIS " +action +"]";
 
-  var hostname = document.getElementById("hostname").value;
-  var port = document.getElementById("port").value;
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
 
   var username = document.getElementById("username").value;
   var password = document.getElementById("password").value;
@@ -1605,8 +1601,8 @@ function statusMCIS() {
 
   messageTextArea.value = "[Get MCIS status]";
 
-  var hostname = document.getElementById("hostname").value;
-  var port = document.getElementById("port").value;
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
 
   var username = document.getElementById("username").value;
   var password = document.getElementById("password").value;
@@ -1651,8 +1647,8 @@ window.statusMCIS = statusMCIS;
 function deleteMCIS() {
   messageTextArea.value = "Deleting MCIS";
 
-  var hostname = document.getElementById("hostname").value;
-  var port = document.getElementById("port").value;
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
 
   var username = document.getElementById("username").value;
   var password = document.getElementById("password").value;
@@ -1685,8 +1681,8 @@ window.deleteMCIS = deleteMCIS;
 function releaseResources() {
   messageTextArea.value = " [Removing all associated default resources ...]";
 
-  var hostname = document.getElementById("hostname").value;
-  var port = document.getElementById("port").value;
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
 
   var username = document.getElementById("username").value;
   var password = document.getElementById("password").value;
@@ -1722,8 +1718,8 @@ function updateMcisList() {
     selectElement.remove(i);
   }
 
-  var hostname = document.getElementById("hostname").value;
-  var port = document.getElementById("port").value;
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
 
   var username = document.getElementById("username").value;
   var password = document.getElementById("password").value;
@@ -1783,8 +1779,8 @@ function startApp() {
     messageTextArea.value = " Starting " + selectApp.value;
     document.getElementById("startApp").style.color = "#FF0000";
   
-    var hostname = document.getElementById("hostname").value;
-    var port = document.getElementById("port").value;
+    var hostname = hostnameElement.value;
+    var port = portElement.value;
     var username = document.getElementById("username").value;
     var password = document.getElementById("password").value;
     var namespace = document.getElementById("namespace").value;
@@ -1838,8 +1834,8 @@ function stopApp() {
     messageTextArea.value = " Stopping " + selectApp.value;
     document.getElementById("stopApp").style.color = "#FF0000";
   
-    var hostname = document.getElementById("hostname").value;
-    var port = document.getElementById("port").value;
+    var hostname = hostnameElement.value;
+    var port = portElement.value;
     var username = document.getElementById("username").value;
     var password = document.getElementById("password").value;
     var namespace = document.getElementById("namespace").value;
@@ -1893,8 +1889,8 @@ function statusApp() {
     messageTextArea.value = " Getting status " + selectApp.value;
     document.getElementById("statusApp").style.color = "#FF0000";
   
-    var hostname = document.getElementById("hostname").value;
-    var port = document.getElementById("port").value;
+    var hostname = hostnameElement.value;
+    var port = portElement.value;
     var username = document.getElementById("username").value;
     var password = document.getElementById("password").value;
     var namespace = document.getElementById("namespace").value;
