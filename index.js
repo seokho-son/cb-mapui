@@ -781,9 +781,9 @@ var headOuterImageStyle = new Style({
 // magenta black blue orange yellow red grey green
 function changeColorStatus(status){
   if (status.includes("Partial")){
-    return 'orange';
+    return 'green';
   } else if (status.includes("Running")){
-    return 'bleu';
+    return 'blue';
   } else if (status.includes("Suspending")){
     return 'black';
   } else if (status.includes("Creating")){
@@ -803,15 +803,17 @@ function changeSizeStatus(status){
   } else if (status.includes("Partial")){
     return 2.4;
   } else if (status.includes("Running")){
-    return 3.0;
+    return 2.8;
   } else if (status.includes("Suspending")){
-    return 2.5;
+    return 2.4;
   } else if (status.includes("Suspended")){
-    return 2.5;
+    return 2.4;
   } else if (status.includes("Creating")){
-    return 2.9;
+    return 2.8;
+  } else if (status.includes("Resuming")){
+    return 2.4;
   } else if (status.includes("Terminated")){
-    return 2.5;
+    return 2.4;
   } else {
     return 1.0;
   }
@@ -1058,6 +1060,8 @@ function getMcis() {
 
       var obj = res.data;
 
+      var zoomLevel = map.getView().getZoom()
+
       cnt = cntInit;
       if ( obj.mcis != null ){
         console.log(obj.mcis);
@@ -1072,7 +1076,7 @@ function getMcis() {
         var validateNum = 0;
         for (j = 0; j < item.vm.length; j++) {
 
-          vmGeo.push([(item.vm[j].location.longitude*1) + (Math.round(Math.random()) * 2 - 1) * Math.random()*1, (item.vm[j].location.latitude*1) + (Math.round(Math.random()) * 2 - 1) * Math.random()*1 ])
+          vmGeo.push([(item.vm[j].location.longitude*1) + (Math.round(Math.random()) / zoomLevel - 1) * Math.random()*1, (item.vm[j].location.latitude*1) + (Math.round(Math.random()) / zoomLevel - 1) * Math.random()*1 ])
           validateNum++;
 
         }
@@ -2036,27 +2040,9 @@ function drawMCIS(event) {
     vectorContext.drawGeometry(geoCspPointsCircle[0]);
   }
 
-
   //console.log( geometries );
   for (i = geometries.length -1; i >= 0; --i) {
-
     var polyStyle = new Style({
-      /*  image: new Icon({
-          anchor: [0.5, 46],
-          anchorXUnits: 'fraction',
-          anchorYUnits: 'pixels',
-          opacity: 0.95,
-          src: 'data/icon.png'
-        }),
-        */
-      // image: new Icon(({
-      //   //anchor: [0.5, 0.5],
-      //   crossOrigin: 'anonymous',
-      //   src: 'img/icon2.png',
-      //   opacity: 0.60,
-      //   imgSize: [50, 50]
-      // })),
-
       stroke: new Stroke({
         width: 1,
         color: cororLineList[i % cororList.length]
@@ -2065,36 +2051,24 @@ function drawMCIS(event) {
         color: cororList[i % cororList.length]
       })
     });
+    
+    vectorContext.setStyle(polyStyle);
+    vectorContext.drawGeometry(geometries[i]);
 
-    // MCIS text style
-    var polyNameTextStyle = new Style({
+    vectorContext.setStyle(iconStyle03);
+    vectorContext.drawGeometry(geometriesPoints[i]);
 
-      text: new Text({
-        text: mcisName[i],
-        scale: (changeSizeByName(mcisName[i]+mcisStatus[i]) + 0.8 ),
-        offsetY: 60,
-        stroke: new Stroke({
-          color: 'black',
-          width: 0.4
-        }),
-        fill: new Fill({
-          color: 'black' //changeColorStatus(mcisStatus[i])
-        })
-      }),
-
-    });
-
-    // MCIS text style
+    // MCIS status style
     var polyStatusTextStyle = new Style({
-
       // MCIS status text style
       text: new Text({
         text: mcisStatus[i],
+        font: 'bold 12px sans-serif',
         scale: changeSizeStatus(mcisName[i]+mcisStatus[i]),
         offsetY: 110,
         stroke: new Stroke({
-          color: 'blue',
-          width: 0.3
+          color: 'white',
+          width: 1
         }),
         fill: new Fill({
           color: changeColorStatus(mcisStatus[i])
@@ -2102,18 +2076,29 @@ function drawMCIS(event) {
       }),
 
     });
-
-    vectorContext.setStyle(polyStyle);
-    //vectorContext.drawGeometry(mcisGeo[i]);
+    vectorContext.setStyle(polyStatusTextStyle);
     vectorContext.drawGeometry(geometries[i]);
+  }
 
-    vectorContext.setStyle(iconStyle03);
-    vectorContext.drawGeometry(geometriesPoints[i]);
+  for (i = geometries.length -1; i >= 0; --i) {
+    // MCIS text style
+    var polyNameTextStyle = new Style({
+      text: new Text({
+        text: mcisName[i],
+        font: 'bold 12px sans-serif',
+        scale: (changeSizeByName(mcisName[i]+mcisStatus[i]) + 0.8 ),
+        offsetY: 60,
+        stroke: new Stroke({
+          color: 'white',
+          width: 1
+        }),
+        fill: new Fill({
+          color: 'black' //changeColorStatus(mcisStatus[i])
+        })
+      }),
+    });
 
     vectorContext.setStyle(polyNameTextStyle);
-    vectorContext.drawGeometry(geometries[i]);
-
-    vectorContext.setStyle(polyStatusTextStyle);
     vectorContext.drawGeometry(geometries[i]);
   }
 
