@@ -197,6 +197,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         <td>TB Port:&nbsp;<input type=text id=port name=port value="1323" style="text-align:center; width:95%"> </td>
         <td>Username:&nbsp;<input type=text id=username name=username value="default" style="text-align:center; width:95%"></td>
         <td>Password:&nbsp;<input type=password id=password name=password value="default" style="text-align:center; width:95%"></td>
+        
         <td>Total CSP regions:&nbsp;<input type="checkbox" id="displayOn" name="displayOn" onClick="displayCSPListOn();" value="on">
             <input type=button value="Show CSP" onClick="getConnection();" style="text-align:center; width:95%"></td>
         <td>Display Interval:
@@ -210,6 +211,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             <option value="100">100</option>
           </select> 
           <input type=button value="Clear map" onClick="clearMap()" style="text-align:center; width:95%">
+          
         </td>
       </tr>
 
@@ -222,10 +224,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           <!-- <option value="mcis01">mcis01</option> -->
           </select> 
         </td>
+
         <td>&nbsp;</td>
-        <td><input type=button value="Status" onClick="statusMCIS();" style="text-align:center; width:95%"></td>
-        <td><input type=button value="Load info list" onClick="updateMcisList();" style="text-align:center; width:95%"></td>
-        <td><input type=button value="Release Resource" onClick="releaseResources();" style="text-align:center; width:95%"></td>
+        
+        <td><input type=button value="Load list" onClick="updateMcisList();" style="text-align:center; width:95%"></td>
+        <td><input type=button value="Status" onClick="statusMCIS();" style="text-align:center; width:95%"></td>   
+        <td><input type=button id="resourceOverview" value="Overview resources" onClick="resourceOverview();" style="text-align:center; width:95%"></td>
+        <td><input type=button id="registerCspResource" value="Register resources" onClick="registerCspResource();" style="text-align:center; width:95%"></td>
       </tr>
 
 
@@ -237,6 +242,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         <td><input type=button value="Refine" onClick="controlMCIS('refine');" style="text-align:center; width:95%"></td>
         <td><input type=button value="Terminate" onClick="controlMCIS('terminate');" style="text-align:center; width:95%"></td>
         <td><input type=button value="Delete" onClick="deleteMCIS();" style="text-align:center; width:95%"></td>
+        <td><input type=button value="Release default res" onClick="releaseResources();" style="text-align:center; width:95%"></td>
       </tr> 
 
       <tr>
@@ -334,7 +340,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <tr>
       <td>&nbsp;</td>
       <td rowspan="1" colspan="3" >
-        <textarea id = "message" rows = "4" cols = "80" name = "message" readonly ></textarea>
+        <textarea id = "message" rows = "4" cols = "100" name = "message" readonly ></textarea>
       </td>
       <td rowspan="1" colspan="3" >
         &nbsp;&nbsp;Display recommendation table:&nbsp;<input type="checkbox" id="tableOn" name="tableOn" onClick="displayTableOn();" value="on">

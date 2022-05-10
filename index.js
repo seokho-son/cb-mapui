@@ -456,13 +456,6 @@ var polygonFeature = new Feature(
   new Polygon([[[10, -3], [-5, 2], [-1, 1]]])
 );
 
-// var pointFeature = new Feature({
-//   geometry: new Point([10, -3]),
-//   name: '보이지 않는 꿈의 섬'
-
-// }
-// );
-
 function createStyle(src) {
   return new Style({
     image: new Icon(({
@@ -722,29 +715,6 @@ map.addLayer(iconLayer);
 
 
 
-// var vectorLayer = new VectorLayer({
-//   source: new VectorSource({
-//     features: [pointFeature]
-//   }),
-//   style: new Style({
-//     image: new Icon({
-//       anchor: [0.5, 46],
-//       anchorXUnits: 'fraction',
-//       anchorYUnits: 'pixels',
-//       opacity: 0.95,
-//       src: 'img/icon.png'
-//     }),
-//     // stroke: new Stroke({
-//     //   width: 4,
-//     //   color: [255, 0, 0, 1]
-//     // }),
-//     // fill: new Fill({
-//     //   color: [0, 0, 255, 0.6]
-//     // })
-//   })
-// });
-
-
 var imageStyle = new Style({
   image: new CircleStyle({
     radius: 2,
@@ -787,7 +757,7 @@ function changeColorStatus(status){
   } else if (status.includes("Suspending")){
     return 'black';
   } else if (status.includes("Creating")){
-    return 'yellow';
+    return 'orange';
   } else if (status.includes("Terminated")){
     return 'red';
   } else {
@@ -829,6 +799,44 @@ function changeSizeByName(status){
   } else {
     return 2.8;
   }
+}
+
+function returnAdjustmentPoint(num){
+  ax = 0.0;
+  ay = 0.0;
+  if (num == 1){
+    ax = 0;
+    ay = 1;
+  } else if (num == 2){
+    ax = 0.8;
+    ay = 0.8;
+  } else if (num == 3){
+    ax = 1;
+    ay = 0;
+  } else if (num == 4){
+    ax = 0.8;
+    ay = -0.8;
+  } else if (num == 5){
+    ax = 0;
+    ay = -1;
+  } else if (num == 6){
+    ax = -0.8;
+    ay = -0.8;
+  } else if (num == 7){
+    ax = -1;
+    ay = -0;
+  } else if (num == 8){
+    ax = -0.8;
+    ay = 0.8;
+  }else {
+    ax=Math.random() - Math.random();
+    ay=Math.random() - Math.random();
+  }
+  ax=Math.random()*0.1+ax
+  ay=Math.random()*0.1+ay
+  ay=ay*0.78
+
+  return { ax, ay }
 }
 
 var n = 400;
@@ -1060,7 +1068,8 @@ function getMcis() {
 
       var obj = res.data;
 
-      var zoomLevel = map.getView().getZoom()
+      var zoomLevel = map.getView().getZoom() * 2.0
+      var radius = 4.0
 
       cnt = cntInit;
       if ( obj.mcis != null ){
@@ -1075,17 +1084,21 @@ function getMcis() {
 
         var validateNum = 0;
         for (j = 0; j < item.vm.length; j++) {
-
-          vmGeo.push([(item.vm[j].location.longitude*1) + (Math.round(Math.random()) / zoomLevel - 1) * Math.random()*1, (item.vm[j].location.latitude*1) + (Math.round(Math.random()) / zoomLevel - 1) * Math.random()*1 ])
+          //vmGeo.push([(item.vm[j].location.longitude*1) + (Math.round(Math.random()) / zoomLevel - 1) * Math.random()*1, (item.vm[j].location.latitude*1) + (Math.round(Math.random()) / zoomLevel - 1) * Math.random()*1 ])
+          if (j == 0){
+            vmGeo.push([(item.vm[j].location.longitude*1), (item.vm[j].location.latitude*1) ])
+          } else {
+            vmGeo.push([(item.vm[j].location.longitude*1) + returnAdjustmentPoint(j).ax/zoomLevel*radius , (item.vm[j].location.latitude*1) + returnAdjustmentPoint(j).ay/zoomLevel*radius ])
+          }
           validateNum++;
 
         }
         if (item.vm.length == 1){
           // handling if there is only one vm so that we can not draw geometry
           vmGeo.pop()
-          vmGeo.push([(item.vm[0].location.longitude*1) + Math.random()*0.01, (item.vm[0].location.latitude*1) + Math.random()*0.01 ])
-          vmGeo.push([(item.vm[0].location.longitude*1) + Math.random()*0.01, (item.vm[0].location.latitude*1) + Math.random()*0.01 ])
-          vmGeo.push([(item.vm[0].location.longitude*1) + Math.random()*0.01, (item.vm[0].location.latitude*1) + Math.random()*0.01 ])
+          vmGeo.push([(item.vm[0].location.longitude*1) , (item.vm[0].location.latitude*1) ])
+          vmGeo.push([(item.vm[0].location.longitude*1) + Math.random()*0.001, (item.vm[0].location.latitude*1) + Math.random()*0.001 ])
+          vmGeo.push([(item.vm[0].location.longitude*1) + Math.random()*0.001, (item.vm[0].location.latitude*1) + Math.random()*0.001 ])
         }
         if (validateNum == item.vm.length) {
           console.log("Found all GEOs validateNum : " + validateNum)
@@ -1754,6 +1767,79 @@ function releaseResources() {
 
 }
 window.releaseResources = releaseResources;
+
+function resourceOverview() {
+  messageTextArea.value = " [Inspect all resources and overview them ...]\n";
+  document.getElementById("resourceOverview").style.color = "#FF0000";
+
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
+  var auth = "Basic " + new Buffer(username + ":" + password).toString("base64");
+
+  var namespace = document.getElementById("namespace").value;
+  var mcisid = document.getElementById("mcisid").value;
+
+  var url = `http://${hostname}:${port}/tumblebug/inspectResourcesOverview`
+
+  axios({
+    method: 'get',
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`
+    }
+  })
+  .then((res2)=>{
+    console.log(res2); // for debug
+    messageTextArea.value += JSON.stringify(res2.data, null, 2) + "\n";
+    document.getElementById("resourceOverview").style.color = "#000000";
+  });
+
+}
+window.resourceOverview = resourceOverview;
+
+// function for registerCspResource by registerCspResource button item
+function registerCspResource() {
+
+    messageTextArea.value = " [Registering all CSP's resources]";
+    document.getElementById("registerCspResource").style.color = "#FF0000";
+  
+    var hostname = hostnameElement.value;
+    var port = portElement.value;
+    var username = document.getElementById("username").value;
+    var password = document.getElementById("password").value;
+    var namespace = document.getElementById("namespace").value;
+  
+    var url = `http://${hostname}:${port}/tumblebug/registerCspResourcesAll`
+    
+    var commandReqTmp = {
+      mcisName: "csp",
+      nsId:`${namespace}`
+    }
+    var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
+  
+    axios({
+      method: 'post',
+      url: url,
+      headers: { 'Content-Type': 'application/json' },
+      data: jsonBody,
+      auth: {
+        username: `${username}`,
+        password: `${password}`
+      }
+      
+    })
+    .then((res)=>{
+      console.log(res); // for debug
+      document.getElementById("registerCspResource").style.color = "#000000";
+      messageTextArea.value = "[Complete: Registering all CSP's resources]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t');
+    });
+}
+window.registerCspResource = registerCspResource;
+
 
 function updateMcisList() {
   // Clear options in 'select'
