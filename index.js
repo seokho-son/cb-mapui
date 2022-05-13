@@ -1156,7 +1156,7 @@ function getConnection() {
   var filteredRefreshInterval = isNormalInteger(refreshInterval) ? refreshInterval : 5;
   //setTimeout(() => console.log(getConnection()), filteredRefreshInterval*1000);
     
-  var http = require('http');
+  // var http = require('http');
   var mcisOptions = {
     hostname: hostname,
     port: port,
@@ -1252,6 +1252,7 @@ var createMcisReqVmTmplt = {
   commonSpec: "",
   description: "mapui",
   label: "DynamicVM",
+  vmGroupSize: "",
 }
 
 function createMcis() {
@@ -1487,6 +1488,8 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
     var createMcisReqVm = $.extend( {}, createMcisReqVmTmplt );
     createMcisReqVm.commonSpec = res.data[0].id;
+    var myvmGroupSize = prompt('vmGroupSize? (1 ~ 10)', '1');
+    createMcisReqVm.vmGroupSize = myvmGroupSize;
     recommendedSpecList.push(createMcisReqVm);
 
     messageDetailTextArea.value = JSON.stringify(res.data, null, 2);
@@ -1622,7 +1625,7 @@ function controlMCIS(action) {
   var namespace = document.getElementById("namespace").value;
   var mcisid = document.getElementById("mcisid").value;
 
-  var http = require('http');
+  // var http = require('http');
   var mcisOptions = {
     hostname: hostname,
     port: port,
@@ -1669,7 +1672,7 @@ function statusMCIS() {
   var namespace = document.getElementById("namespace").value;
   var mcisid = document.getElementById("mcisid").value;
 
-  var http = require('http');
+  // var http = require('http');
   var mcisOptions = {
     hostname: hostname,
     port: port,
