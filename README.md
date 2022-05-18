@@ -11,40 +11,35 @@ Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
 ### Prerequisite
 
  - npm, Node.js
-   - https://github.com/nodesource/distributions의 Node.js **v14.x** 설치 (아래 설치 명령어 예시 참조)
-     ```code
+   - https://github.com/nodesource/distributions 의 Node.js **v16.x** 설치 (아래 설치 명령어 예시 참조)
+     ```bash
      # Using Ubuntu
-     curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -
+     curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
      sudo apt-get install -y nodejs
      ```
 
- - ol, parcel
-
-     Check the instruction from Openlayers.
-     https://openlayers.org/en/latest/doc/tutorials/bundle.html
-
+ - 의존 node 패키지: `package.json` 참고
+    `package.json` 를 기준으로 모든 의존 패키지(ol 및 parcel 포함) 설치
+     ```bash
+     npm install
      ```
-     npm install ol
-     ```
-
-     (필요에 따라 설치, buffer, http)
-     ```
-     npm install buffer --save
-     npm install http --save
-     ```
+     (Openlayers: https://openlayers.org/en/latest/doc/tutorials/bundle.html )
 
 ### 빌드 및 실행
 
  - 빌드
-  ```
+  ```bash
   npm run build
   ```
 
  - 서버 실행
 
+  ```bash
+  npm start
   ```
-  $ npm start
 
+  (출력 예시)
+  ```
   Server running at http://localhost:1324
   ✨ Built in 6.32s
 
@@ -59,7 +54,7 @@ Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
 
  - TextBox에 환경 변수 설정
    - TB IP/hostname: 서버 주소
-     - 기본값: `cb-tumblebug` 
+     - 기본값: `localhost` 
      - 예: `localhost`, `192.168.1.6`, `cb-tumblebug`
    - TB Port: 기본값은 `1323`, 사용자가 상황에 따라 `31323` 등으로 변경하여 사용 가능
    - TB Username, Password: CB-Tumblebug REST API (BasicAuth) 호출에 필요한 Username 및 Password 
