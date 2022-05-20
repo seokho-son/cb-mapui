@@ -1,20 +1,20 @@
 {
   "name": "cb-mapui",
   "dependencies": {
-    "axios": "^0.24.0",
+    "axios": "^0.27.2",
     "buffer": "^6.0.3",
     "csv-parser": "^3.0.0",
     "http": "0.0.1-security",
     "ol": "^6.14.1",
+    "parcel": "^2.5.0",
+    "stream-http": "^3.2.0",
     "sweetalert2": "^11.4.14"
   },
   "devDependencies": {
     "events": "^3.3.0",
-    "parcel": "^2.0.0",
     "process": "^0.11.10",
     "querystring-es3": "^0.2.1",
     "stream-browserify": "^3.0.0",
-    "stream-http": "^3.2.0",
     "url": "^0.11.0"
   },
   "scripts": {
