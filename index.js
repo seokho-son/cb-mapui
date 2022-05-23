@@ -1330,11 +1330,42 @@ function createMcis() {
     var createMcisReq = createMcisReqTmplt;
     createMcisReq.name = "mc-" + `${randomString}`;
     createMcisReq.vm = recommendedSpecList;
-   
+
     var jsonBody = JSON.stringify(createMcisReq, undefined, 4);
 
- 
-    if (confirm("[Confirm the following configuration for MCIS]\n"+ jsonBody)){
+    var vmGroupReqString = '';
+    for(i = 0; i < createMcisReq.vm.length; i++) {
+      var html = 
+      '<br><br></b> [VM group ' + i.toString()  + '] <b>' + 
+      '<br></b> image: <b>' + createMcisReq.vm[i].commonImage +
+      '<br></b> spec: <b>' + createMcisReq.vm[i].commonSpec +
+      '<br></b> VM group size: <b>' + createMcisReq.vm[i].vmGroupSize;
+
+      vmGroupReqString = vmGroupReqString + html;
+    }
+
+    var hasUserConfirmed = false;
+
+    Swal.fire({
+      title: 'Are you sure to create MCIS as follows:',
+      width: 600,
+      html: 
+        '<font size=3>' +
+        'MCIS name: <b>' + createMcisReq.name +
+        '<br></b> Install CB-Dragonfly monitoring agent? <b>' + createMcisReq.installMonAgent +
+        
+        vmGroupReqString,
+      showCancelButton: true,
+      confirmButtonText: 'Confirm',
+      showLoaderOnConfirm: true,
+      allowOutsideClick: () => !Swal.isLoading()
+    }).then((result) => {
+      if (result.isConfirmed) {
+        hasUserConfirmed = true;
+      }
+    })
+
+    if (hasUserConfirmed == true){
       messageTextArea.value = " Creating MCIS ...";
       document.getElementById("createMcis").style.color = "#FF0000";
     
@@ -1549,12 +1580,37 @@ function getRecommendedSpec(idx, latitude, longitude) {
       jsonToTable(JSON.stringify(res.data));
     }
 
-       
     var createMcisReqVm = $.extend( {}, createMcisReqVmTmplt );
     createMcisReqVm.commonSpec = res.data[0].id;
-    
-    var myvmGroupSize = prompt('Please input the number of VMs to create (1 ~ 10)\n\n[Selected spec: ' + createMcisReqVm.commonSpec + ']\n[Detail]\n' + JSON.stringify(res.data[0], null, 2)+'\n', '1');
-    createMcisReqVm.vmGroupSize = myvmGroupSize;
+
+    Swal.fire({
+      title: 'Please provide the number of VMs to create (1 ~ 10)',
+      width: 600,
+      html: 
+        '<font size=3>' +
+        'Spec to add: <b>' + res.data[0].cspSpecName +
+
+        '<br><br></b> vCPU: <b>' + res.data[0].numvCPU +
+        '<br></b> Mem(GiB): <b>' + res.data[0].memGiB +
+        '<br></b> Cost($/1H): <b>' + res.data[0].costPerHour +
+        
+        '<br><br></b> namespace: <b>' + res.data[0].namespace +
+        '<br></b> connConfig: <b>' + res.data[0].connectionName +
+        '<br></b> CSP: <b>' + res.data[0].providerName +
+        '<br></b> Region: <b>' + res.data[0].regionName,
+      input: 'text',
+      inputAttributes: {
+        autocapitalize: 'off'
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Confirm',
+      showLoaderOnConfirm: true,
+      allowOutsideClick: () => !Swal.isLoading()
+    }).then((result) => {
+      if (result.isConfirmed) {
+        createMcisReqVm.vmGroupSize = result.value;
+      }
+    })
 
     if (createMcisReqVm.vmGroupSize != null) {
       if (isNaN(createMcisReqVm.vmGroupSize)) {
