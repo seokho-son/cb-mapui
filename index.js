@@ -198,6 +198,7 @@ var cspPointsAlibaba = [];
 var cspPointsCloudit = [];
 var cspPointsIBM = [];
 var cspPointsTencent = [];
+var cspPointsNcpVpc = [];
 var cspPointsCircle = [];
 var geoCspPointsAzure = new Array();
 var geoCspPointsAws = new Array();
@@ -206,6 +207,7 @@ var geoCspPointsAlibaba = new Array();
 var geoCspPointsCloudit = new Array();
 var geoCspPointsIBM = new Array();
 var geoCspPointsTencent = new Array();
+var geoCspPointsNcpVpc = new Array();
 var geoCspPointsCircle = new Array();
 
 function displayCSPListOn() {
@@ -246,6 +248,9 @@ function displayCSPListOn() {
               if (cloudLocation[i]["CloudType"] == "tencent") {
                 cspPointsTencent.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
               }
+              if (cloudLocation[i]["CloudType"] == "ncpvpc") {
+                cspPointsNcpVpc.push([cloudLocation[i]["Longitude"], cloudLocation[i]["Latitude"]]);
+              }
             }
             
           });
@@ -259,6 +264,7 @@ function displayCSPListOn() {
     cspPointsCloudit = [];
     cspPointsIBM = [];
     cspPointsTencent = [];
+    cspPointsNcpVpc = [];
   }
   geoCspPointsAzure[0] = new MultiPoint([cspPointsAzure]);
   geoCspPointsAws[0] = new MultiPoint([cspPointsAws]);
@@ -267,6 +273,7 @@ function displayCSPListOn() {
   geoCspPointsCloudit[0] = new MultiPoint([cspPointsCloudit]);
   geoCspPointsIBM[0] = new MultiPoint([cspPointsIBM]);
   geoCspPointsTencent[0] = new MultiPoint([cspPointsTencent]);
+  geoCspPointsNcpVpc[0] = new MultiPoint([cspPointsNcpVpc]);
 }
 window.displayCSPListOn = displayCSPListOn;
 
@@ -705,6 +712,30 @@ var iconStyleTencent = new Style({
 });
 
 
+var vectorSource9 = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var iconFeature9 = new Feature(pnt);
+iconFeature9.set('style', createStyle('img/naver-15x15.png'));
+iconFeature9.set('index', '001');
+vectorSource9.addFeature(iconFeature9);
+var iconLayer9 = new VectorLayer({
+  style: function (feature) {
+    return feature.get('style');
+  },
+  source: vectorSource9
+})
+
+var iconStyleNcpVpc = new Style({
+  image: new Icon(({
+    crossOrigin: 'anonymous',
+    src: 'img/naver-15x15.png',
+    opacity: 1.0,
+    scale: 1.0
+  }))
+});
+
+
+
+
 
 // Icon layers
 map.addLayer(iconLayer1);
@@ -715,6 +746,7 @@ map.addLayer(iconLayer5);
 map.addLayer(iconLayer6);
 map.addLayer(iconLayer7);
 map.addLayer(iconLayer8);
+map.addLayer(iconLayer9);
 map.addLayer(iconLayer);
 
 
@@ -1267,6 +1299,9 @@ function getConnection() {
               if (providerName == "tencent") {
                 cspPointsTencent.push([longitude, latitude]);
               }
+              if (providerName == "ncpvpc") {
+                cspPointsNcpVpc.push([longitude, latitude]);
+              }
             }
 
             geoCspPointsAzure[0] = new MultiPoint([cspPointsAzure]);
@@ -1276,6 +1311,7 @@ function getConnection() {
             geoCspPointsCloudit[0] = new MultiPoint([cspPointsCloudit]);
             geoCspPointsIBM[0] = new MultiPoint([cspPointsIBM]);
             geoCspPointsTencent[0] = new MultiPoint([cspPointsTencent]);
+            geoCspPointsNcpVpc[0] = new MultiPoint([cspPointsNcpVpc]);
         
             infoAlert('Registered Cloud Regions: '+obj.connectionconfig.length)
   
@@ -2264,7 +2300,8 @@ function drawMCIS(event) {
     vectorContext.drawGeometry(geoCspPointsIBM[0]);
     vectorContext.setStyle(iconStyleTencent);
     vectorContext.drawGeometry(geoCspPointsTencent[0]);
-
+    vectorContext.setStyle(iconStyleNcpVpc);
+    vectorContext.drawGeometry(geoCspPointsNcpVpc[0]);
   }
 
   if (cspPointsCircle.length) {
