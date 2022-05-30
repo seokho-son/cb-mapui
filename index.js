@@ -809,13 +809,13 @@ function changeSizeStatus(status){
   } else if (status.includes("Partial")){
     return 2.4;
   } else if (status.includes("Running")){
-    return 2.8;
+    return 2.5;
   } else if (status.includes("Suspending")){
     return 2.4;
   } else if (status.includes("Suspended")){
     return 2.4;
   } else if (status.includes("Creating")){
-    return 2.8;
+    return 2.5;
   } else if (status.includes("Resuming")){
     return 2.4;
   } else if (status.includes("Terminated")){
@@ -833,7 +833,7 @@ function changeSizeByName(status){
   } else if (status.includes("-ws")){
     return 0.4;
   } else {
-    return 2.8;
+    return 2.5;
   }
 }
 
@@ -1114,7 +1114,7 @@ function getMcis() {
       username: `${username}`,
       password: `${password}`
     },
-    timeout: 9000
+    timeout: 30000
   })
   .then((res)=>{
       document.getElementById("hostname").style.color = "#000000";
@@ -1370,8 +1370,6 @@ function createMcis() {
     createMcisReq.name = "mc-" + `${randomString}`;
     createMcisReq.vm = recommendedSpecList;
 
-    var jsonBody = JSON.stringify(createMcisReq, undefined, 4);
-
     var vmGroupReqString = '';
     for(i = 0; i < createMcisReq.vm.length; i++) {
       var html = 
@@ -1393,15 +1391,25 @@ function createMcis() {
       html: 
         '<font size=3>' +
         'MCIS name: <b>' + createMcisReq.name +
-        '<br></b> Install CB-Dragonfly monitoring agent? <b>' + createMcisReq.installMonAgent +
         
         vmGroupReqString,
       showCancelButton: true,
+      inputPlaceholder: 'Deploy CB-Dragonfly monitoring agent',
+      input: 'checkbox',
+      inputValue: 0,
       confirmButtonText: 'Confirm',
+      inputPlaceholder: '<font size=3> Check to deploy CB-Dragonfly monitoring agent',
       showLoaderOnConfirm: true,
+      scrollbarPadding: false,
       allowOutsideClick: () => !Swal.isLoading()
     }).then((result) => {
       if (result.isConfirmed) {
+        if (result.value) {
+          Swal.fire('Create MCIS with CB-Dragonfly monitoring agent')
+          createMcisReq.installMonAgent = 'yes'
+        }
+        var jsonBody = JSON.stringify(createMcisReq, undefined, 4);
+
         messageTextArea.value = " Creating MCIS ...";
         document.getElementById("createMcis").style.color = "#FF0000";
       
@@ -1685,7 +1693,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
         messageTextArea.value = messageTextArea.value.replace(/\n.*$/, '')
         latLonInputPairIdx--;
         cspPointsCircle.pop();
-        geoCspPointsCircle.pop();
+        geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
       }
     })
   });
@@ -2285,15 +2293,6 @@ function drawMCIS(event) {
   // Draw CSP location first
   if (Array.isArray(geoCspPointsCloudit) && geoCspPointsCloudit.length ) {
     // array exists and is not empty
-
-    vectorContext.setStyle(iconStyleAzure);
-    vectorContext.drawGeometry(geoCspPointsAzure[0]);
-    vectorContext.setStyle(iconStyleAws);
-    vectorContext.drawGeometry(geoCspPointsAws[0]);
-    vectorContext.setStyle(iconStyleGcp);
-    vectorContext.drawGeometry(geoCspPointsGcp[0]);
-    vectorContext.setStyle(iconStyleAlibaba);
-    vectorContext.drawGeometry(geoCspPointsAlibaba[0]);
     vectorContext.setStyle(iconStyleCloudit);
     vectorContext.drawGeometry(geoCspPointsCloudit[0]);
     vectorContext.setStyle(iconStyleIBM);
@@ -2302,6 +2301,15 @@ function drawMCIS(event) {
     vectorContext.drawGeometry(geoCspPointsTencent[0]);
     vectorContext.setStyle(iconStyleNcpVpc);
     vectorContext.drawGeometry(geoCspPointsNcpVpc[0]);
+    vectorContext.setStyle(iconStyleAlibaba);
+    vectorContext.drawGeometry(geoCspPointsAlibaba[0]);
+    vectorContext.setStyle(iconStyleAzure);
+    vectorContext.drawGeometry(geoCspPointsAzure[0]);
+    vectorContext.setStyle(iconStyleAws);
+    vectorContext.drawGeometry(geoCspPointsAws[0]);
+    vectorContext.setStyle(iconStyleGcp);
+    vectorContext.drawGeometry(geoCspPointsGcp[0]);
+
   }
 
   if (cspPointsCircle.length) {
@@ -2334,7 +2342,7 @@ function drawMCIS(event) {
       // MCIS status text style
       text: new Text({
         text: mcisStatus[i],
-        font: 'bold 12px sans-serif',
+        font: 'bold 10px sans-serif',
         scale: changeSizeStatus(mcisName[i]+mcisStatus[i]),
         offsetY: 110,
         stroke: new Stroke({
@@ -2356,9 +2364,9 @@ function drawMCIS(event) {
     var polyNameTextStyle = new Style({
       text: new Text({
         text: mcisName[i],
-        font: 'bold 12px sans-serif',
+        font: 'bold 10px sans-serif',
         scale: (changeSizeByName(mcisName[i]+mcisStatus[i]) + 0.8 ),
-        offsetY: 60,
+        offsetY: 80,
         stroke: new Stroke({
           color: 'white',
           width: 1
