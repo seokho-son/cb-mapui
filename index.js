@@ -190,7 +190,7 @@ const http = require("http");
 const csv = require("csv-parser");
 
 const csvPath = "https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/assets/cloudlocation.csv";
-const cloudLocation = [];
+var cloudLocation = [];
 var cspPointsAzure = [];
 var cspPointsAws = [];
 var cspPointsGcp = [];
@@ -213,6 +213,7 @@ var geoCspPointsCircle = new Array();
 function displayCSPListOn() {
 
   if (cspListDisplayEnabled.checked){
+    cloudLocation = [];
     http.get(csvPath,
       (response) => {
         response
