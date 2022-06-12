@@ -2456,6 +2456,12 @@ window.statusApp = statusApp;
 
 
 window.onload = function() {
+  // Get host address and update text field
+  var tbServerAp = window.location.host;
+  var strArray = tbServerAp.split(':');
+  console.log('Host address: '+ strArray[0]);
+  document.getElementById("hostname").value = strArray[0];
+
   updateMcisList();
 }
 
