@@ -1115,7 +1115,7 @@ function getMcis() {
       username: `${username}`,
       password: `${password}`
     },
-    timeout: 30000
+    timeout: 60000
   })
   .then((res)=>{
       document.getElementById("hostname").style.color = "#000000";
@@ -2456,7 +2456,14 @@ window.statusApp = statusApp;
 
 
 window.onload = function() {
+  // Get host address and update text field
+  var tbServerAp = window.location.host;
+  var strArray = tbServerAp.split(':');
+  console.log('Host address: '+ strArray[0]);
+  document.getElementById("hostname").value = strArray[0];
+
   updateMcisList();
+  console.log(getMcis());
 }
 
 
@@ -2552,11 +2559,11 @@ function drawMCIS(event) {
         scale: (changeSizeByName(mcisName[i]+mcisStatus[i]) + 0.8 ),
         offsetY: 80,
         stroke: new Stroke({
-          color: 'white',
+          color: [255, 255, 255, 1], //white
           width: 1
         }),
         fill: new Fill({
-          color: 'black' //changeColorStatus(mcisStatus[i])
+          color: [0, 0, 0, 1] //black //changeColorStatus(mcisStatus[i])
         })
       }),
     });
