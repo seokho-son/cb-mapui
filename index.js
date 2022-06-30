@@ -1068,7 +1068,7 @@ for (i = 0; i < coordinatesFromX.length; ++i) {
 
 
 var refreshInterval = 5;
-setTimeout(() => console.log(getMcis()), refreshInterval*1000);
+// setTimeout(() => getMcis(), refreshInterval*1000);
 //setTimeout(() => console.log(getConnection()), refreshInterval*1000);
 
 
@@ -1104,7 +1104,7 @@ function getMcis() {
 
   refreshInterval = document.getElementById("refreshInterval").value;
   var filteredRefreshInterval = isNormalInteger(refreshInterval) ? refreshInterval : 5;
-  setTimeout(() => console.log(getMcis()), filteredRefreshInterval*1000);
+  setTimeout(() => getMcis(), filteredRefreshInterval*1000);
   
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis?option=status`
 
@@ -1868,7 +1868,9 @@ function controlMCIS(action) {
       messageTextArea.value = res.data.message;
       switch(action) {
         case 'refine':
-          infoAlert(JSON.stringify(res.data.message, null, 2));
+        case 'suspend':
+        case 'resume':
+        case 'reboot':
         case 'terminate':
           infoAlert(JSON.stringify(res.data.message, null, 2));
           break;
