@@ -106,6 +106,7 @@ var cspListDisplayEnabled = document.getElementById("displayOn");
 var tableDisplayEnabled = document.getElementById("tableOn");
 var table = document.getElementById('detailTable');
 var recommendPolicy = document.getElementById('recommendPolicy');
+var osImage = document.getElementById('osImage');
 var selectApp = document.getElementById('selectApp');
 var newline = String.fromCharCode(13, 10); // newline is special Char used in TextArea box
 var hostnameElement = document.getElementById("hostname");
@@ -1677,13 +1678,15 @@ function getRecommendedSpec(idx, latitude, longitude) {
     createMcisReqVm.commonSpec = res.data[0].id;
     createMcisReqVm.rootDiskType = res.data[0].rootDiskType;
     createMcisReqVm.rootDiskSize = res.data[0].rootDiskSize;
+    createMcisReqVm.commonImage = osImage.value;
 
     Swal.fire({
       title: 'Please provide the number of VMs to create (1 ~ 10)',
       width: 600,
       html: 
         '<font size=3>' +
-        'Spec to add: <b>' + res.data[0].cspSpecName +
+        'VM Spec to add: <b>' + res.data[0].cspSpecName +
+        '<br></b> VM Image: <b>' + createMcisReqVm.commonImage +
 
         '<br><br></b> vCPU: <b>' + res.data[0].numvCPU +
         '<br></b> Mem(GiB): <b>' + res.data[0].memGiB +
