@@ -107,6 +107,7 @@ var tableDisplayEnabled = document.getElementById("tableOn");
 var table = document.getElementById('detailTable');
 var recommendPolicy = document.getElementById('recommendPolicy');
 var osImage = document.getElementById('osImage');
+var diskSize = document.getElementById('diskSize');
 var selectApp = document.getElementById('selectApp');
 var newline = String.fromCharCode(13, 10); // newline is special Char used in TextArea box
 var hostnameElement = document.getElementById("hostname");
@@ -1674,12 +1675,24 @@ function getRecommendedSpec(idx, latitude, longitude) {
       jsonToTable(JSON.stringify(res.data));
     }
 
+
+
     var createMcisReqVm = $.extend( {}, createMcisReqVmTmplt );
     createMcisReqVm.commonSpec = res.data[0].id;
+    createMcisReqVm.commonImage = osImage.value;  
     createMcisReqVm.rootDiskType = res.data[0].rootDiskType;
-    createMcisReqVm.rootDiskSize = res.data[0].rootDiskSize;
-    createMcisReqVm.commonImage = osImage.value;
 
+    var diskSizeInput = diskSize.value;
+    if (isNaN(diskSizeInput)){
+      diskSizeInput = "default"
+    }
+    createMcisReqVm.rootDiskSize = diskSizeInput; 
+    if (diskSizeInput == "default" && res.data[0].rootDiskSize != "default"){
+      createMcisReqVm.rootDiskSize = res.data[0].rootDiskSize;
+      // need to validate requested disk size >= default disk size given by vm spec
+    }
+    
+    
     Swal.fire({
       title: 'Please provide the number of VMs to create (1 ~ 10)',
       width: 600,
@@ -1693,7 +1706,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
         '<br></b> Cost($/1H): <b>' + res.data[0].costPerHour +
 
         '<br></b> rootDiskType: <b>' + res.data[0].rootDiskType +
-        '<br></b> rootDiskSize(GB): <b>' + res.data[0].rootDiskSize +
+        '<br></b> rootDiskSize(GB): <b>' + createMcisReqVm.rootDiskSize +
 
         '<br></b> CSP: <b>' + res.data[0].providerName +
         '<br></b> Region: <b>' + res.data[0].regionName +
