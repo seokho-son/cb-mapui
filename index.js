@@ -2468,11 +2468,78 @@ function statusApp() {
 window.statusApp = statusApp;
 
 
+// function for remoteCmd by remoteCmd button item
+function remoteCmd() {
+  var mcisid = document.getElementById("mcisid").value;
+  if (mcisid) {
 
+    messageTextArea.value = " Forward remote ssh command to MCIS " + mcisid;
+    document.getElementById("remoteCmd").style.color = "#FF0000";
+  
+    var hostname = hostnameElement.value;
+    var port = portElement.value;
+    var username = document.getElementById("username").value;
+    var password = document.getElementById("password").value;
+    var namespace = document.getElementById("namespace").value;
+  
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`
+    var cmd = ""
 
+    Swal.fire({
+      title: 'Put command to forward',
+      width: 600,
+      html: 
+        '<font size=4>' +
+        'MCIS: ' + mcisid,
+      input: 'textarea',
+      inputAttributes: {
+        autocapitalize: 'off'
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Confirm',
+      //showLoaderOnConfirm: true,
+      // position: 'top-end',
+      //back(disabled section)ground color
+      backdrop: `rgba(0, 0, 0, 0.08)`
+    }).then((result) => {
+      // result.value is false if result.isDenied or another key such as result.isDismissed
+      if (result.value) {
+        cmd = result.value;
+        messageTextArea.value += cmd
 
+        var commandReqTmp = {
+          command: `${cmd}`
+        }
+        var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
+      
+        axios({
+          method: 'post',
+          url: url,
+          headers: { 'Content-Type': 'application/json' },
+          data: jsonBody,
+          auth: {
+            username: `${username}`,
+            password: `${password}`
+          }
+          
+        })
+        .then((res)=>{
+          console.log(res); // for debug
+          document.getElementById("remoteCmd").style.color = "#000000";
+          messageTextArea.value = "[Complete: remote ssh command to MCIS]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t');
+        });
 
-
+      } else {
+        messageTextArea.value = "Cannot set command"
+        document.getElementById("remoteCmd").style.color = "#000000";
+      }
+    })
+    
+  } else {
+    messageTextArea.value = " MCIS ID is not assigned";
+  }
+}
+window.remoteCmd = remoteCmd;
 
 
 
