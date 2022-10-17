@@ -2625,7 +2625,7 @@ function remoteCmd() {
   var mcisid = document.getElementById("mcisid").value;
   if (mcisid) {
 
-    messageTextArea.value = " Forward remote ssh command to MCIS " + mcisid;
+    messageTextArea.value = "[Forward remote ssh command to MCIS:" + mcisid + "]\n";
     document.getElementById("remoteCmd").style.color = "#FF0000";
   
     var hostname = hostnameElement.value;
