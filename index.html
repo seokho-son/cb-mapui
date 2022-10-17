@@ -209,10 +209,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             <option value="20">20</option>
             <option value="50">50</option>
             <option value="100">100</option>
-          </select> 
+          </select>
           <input type=button value="Clear map" onClick="clearMap()" style="text-align:center; width:95%">
           
         </td>
+        <td><input type=button id="registerCspResource" value="Register resources" onClick="registerCspResource();" style="text-align:center; width:95%"></td>
       </tr>
 
 
@@ -222,7 +223,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         <td>MCIS ID:&nbsp;
           <select id="mcisid" name="mcisid" style="text-align:center; width:95%">
           <!-- <option value="mcis01">mcis01</option> -->
-          </select> 
+          </select>
         </td>
 
         <!-- <td>&nbsp;</td> -->
@@ -231,7 +232,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         <td><input type=button value="Status" onClick="statusMCIS();" style="text-align:center; width:95%"></td>   
         <td><input type=button id="resourceOverview" value="Overview resources" onClick="resourceOverview();" style="text-align:center; width:95%"></td>
         <td><input type=button value="Hide/Show" onClick="hideMCIS();" style="text-align:center; width:95%"></td>   
-        <td><input type=button id="registerCspResource" value="Register resources" onClick="registerCspResource();" style="text-align:center; width:95%"></td>
+        <td><input type=button value="Release default res" onClick="releaseResources();" style="text-align:center; width:95%"></td>
       </tr>
 
 
@@ -243,7 +244,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         <td><input type=button value="Refine" onClick="controlMCIS('refine');" style="text-align:center; width:95%"></td>
         <td><input type=button value="Terminate" onClick="controlMCIS('terminate');" style="text-align:center; width:95%"></td>
         <td><input type=button value="Delete" onClick="deleteMCIS();" style="text-align:center; width:95%"></td>
-        <td><input type=button value="Release default res" onClick="releaseResources();" style="text-align:center; width:95%"></td>
+        <td><input type=button value="Get VMGroup" onClick="updateVMGroupList();" style="text-align:center; width:95%">
+          <select id="vmgroupid" name="vmgroupid" style="text-align:center; width:95%">
+          <!-- <option value="vmgroup01">vmgroup01</option> -->
+          </select>
+        </td>
+        <td>Port: 
+          <input type=text id=nlbport name=nlbport value="80" style="text-align:center; width:30%"><br>
+          <input type=button id=addNLB value="Add NLB" onClick="AddNLB();" style="text-align:center; width:45%">
+          <input type=button id=delNLB value="Del NLB" onClick="DelNLB();" style="text-align:center; width:45%">
+        </td>
       </tr> 
 
       <tr>
@@ -265,7 +275,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             <option value="location" selected="selected">Location-based</option>
             <option value="price">Cost-based</option>
             <option value="performance">Performance-based</option>
-          </select> 
+          </select>
         </td>
 
         <td rowspan="1" colspan="1" >
@@ -275,7 +285,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             <option value="ubuntu22.04" >Ubuntu 22.04</option>
             <option value="debian10" >Debian 10</option>
             <option value="windows2012-r2" >Windows 2012-R2</option>  
-          </select> 
+          </select>
         </td>
 
         <td>Disk Size&nbsp;<input type=text id=diskSize name=diskSize value="default" style="text-align:center; width:95%"></td>
@@ -330,7 +340,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             <option value="Westward">MMORPG(Westward)</option>
             <option value="Nginx">WebServer(Nginx)</option>
             <option value="Jitsi">VideoConf(Jitsi)</option>
-          </select> 
+          </select>
         </td>
 
         <td><input type=button id="statusApp" value="Status App" onClick="statusApp()" style="text-align:center; width:95%"></td>
