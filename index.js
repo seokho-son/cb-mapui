@@ -2271,8 +2271,6 @@ function updateNsList() {
         }
       }
 
-      console.log(getMcis());
-      
     }
   });
 }
@@ -2811,6 +2809,7 @@ window.onload = function() {
   document.getElementById("hostname").value = strArray[0];
 
   updateNsList();
+  console.log(getMcis());
 
 }
 
