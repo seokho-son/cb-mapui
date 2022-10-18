@@ -210,15 +210,18 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             <option value="50">50</option>
             <option value="100">100</option>
           </select>
-          <input type=button value="Clear map" onClick="clearMap()" style="text-align:center; width:95%">
-          
+          <input type=button value="Clear map" onClick="clearMap()" style="text-align:center; width:95%"> 
         </td>
-        <td><input type=button id="registerCspResource" value="Register resources" onClick="registerCspResource();" style="text-align:center; width:95%"></td>
+        <td>
+          <input type=button id="registerCspResource" value="Register resource" onClick="registerCspResource();" style="text-align:center; width:95%">
+          <input type=button id="resourceOverview" value="Overview resource" onClick="resourceOverview();" style="text-align:center; width:95%">
+        </td>
+
       </tr>
 
 
       <tr>
-        <td>&nbsp;&nbsp;User setting&nbsp;&nbsp;</td>
+        <td>&nbsp;&nbsp;MCIS setting&nbsp;&nbsp;</td>
         <td>NS ID:&nbsp;
           <select id="namespace" name="namespace" style="text-align:center; width:95%">
           <!-- <option value="mcis01">mcis01</option> -->
@@ -229,14 +232,23 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           <!-- <option value="mcis01">mcis01</option> -->
           </select>
         </td>
+        <td>SubGroup ID:&nbsp;
+          <select id="vmgroupid" name="vmgroupid" style="text-align:center; width:95%">
+            <!-- <option value="vmgroup01">vmgroup01</option> -->
+            </select>
+        </td>
 
         <!-- <td>&nbsp;</td> -->
         
-        <td><input type=button value="Load list" onClick="updateMcisList();" style="text-align:center; width:95%"></td>
+        <!-- <td><input type=button value="Load list" onClick="updateMcisList();" style="text-align:center; width:95%"></td> -->
         <td><input type=button value="Status" onClick="statusMCIS();" style="text-align:center; width:95%"></td>   
-        <td><input type=button id="resourceOverview" value="Overview resources" onClick="resourceOverview();" style="text-align:center; width:95%"></td>
         <td><input type=button value="Hide/Show" onClick="hideMCIS();" style="text-align:center; width:95%"></td>   
-        <td><input type=button value="Release default res" onClick="releaseResources();" style="text-align:center; width:95%"></td>
+        <td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MCIS NLB:</td>
+        <td>
+          <input type=button id=addNLB value="Add NLB" onClick="AddNLB();" style="text-align:center; width:45%">
+          <input type=button id=delNLB value="Del NLB" onClick="DelNLB();" style="text-align:center; width:45%">
+        </td>
+
       </tr>
 
 
@@ -248,16 +260,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         <td><input type=button value="Refine" onClick="controlMCIS('refine');" style="text-align:center; width:95%"></td>
         <td><input type=button value="Terminate" onClick="controlMCIS('terminate');" style="text-align:center; width:95%"></td>
         <td><input type=button value="Delete" onClick="deleteMCIS();" style="text-align:center; width:95%"></td>
-        <td><input type=button value="Get VMGroup" onClick="updateVMGroupList();" style="text-align:center; width:95%">
-          <select id="vmgroupid" name="vmgroupid" style="text-align:center; width:95%">
-          <!-- <option value="vmgroup01">vmgroup01</option> -->
-          </select>
-        </td>
-        <td>Port: 
-          <input type=text id=nlbport name=nlbport value="80" style="text-align:center; width:30%"><br>
-          <input type=button id=addNLB value="Add NLB" onClick="AddNLB();" style="text-align:center; width:45%">
-          <input type=button id=delNLB value="Del NLB" onClick="DelNLB();" style="text-align:center; width:45%">
-        </td>
+
+        <td><input type=button value="Release resource" onClick="releaseResources();" style="text-align:center; width:95%"></td>
+        
       </tr> 
 
       <tr>
