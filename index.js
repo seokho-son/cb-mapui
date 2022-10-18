@@ -1343,7 +1343,7 @@ var createMcisReqVmTmplt = {
   label: "DynamicVM",
   rootDiskType: "default",
   rootDiskSize: "default",
-  vmGroupSize: "",
+  subGroupSize: "",
   name: "",
 }
 
@@ -1368,19 +1368,19 @@ function createMcis() {
     createMcisReq.name = "mc-" + `${randomString}`;
     createMcisReq.vm = recommendedSpecList;
 
-    var vmGroupReqString = '';
+    var subGroupReqString = '';
     for(i = 0; i < createMcisReq.vm.length; i++) {
 
       createMcisReq.vm.name
 
       var html = 
-      '<br><br></b> <b>[' + i.toString() +']</b> <b>' + createMcisReq.vm[i].name + '</b> (size:  <b>'+ createMcisReq.vm[i].vmGroupSize+'</b>)' + 
+      '<br><br></b> <b>[' + i.toString() +']</b> <b>' + createMcisReq.vm[i].name + '</b> (size:  <b>'+ createMcisReq.vm[i].subGroupSize+'</b>)' + 
       '<br> - Image: <b>' + createMcisReq.vm[i].commonImage +
       '<br></b> - Spec: <b>' + createMcisReq.vm[i].commonSpec +
       '<br></b> - DiskType: <b>' + createMcisReq.vm[i].rootDiskType +
       '</b> / DiskSize: <b>' + createMcisReq.vm[i].rootDiskSize;
 
-      vmGroupReqString = vmGroupReqString + html;
+      subGroupReqString = subGroupReqString + html;
     }
 
     var hasUserConfirmed = false;
@@ -1407,7 +1407,7 @@ function createMcis() {
             '<font size=3>' +
             'MCIS name: <b>' + createMcisReq.name +
             
-            vmGroupReqString,
+            subGroupReqString,
           showCancelButton: true,
           inputPlaceholder: 'Deploy CB-Dragonfly monitoring agent',
           input: 'checkbox',
@@ -1718,11 +1718,11 @@ function getRecommendedSpec(idx, latitude, longitude) {
     }).then((result) => {
       // result.value is false if result.isDenied or another key such as result.isDismissed
       if (result.value) {
-        createMcisReqVm.vmGroupSize = result.value;
-        if (isNaN(createMcisReqVm.vmGroupSize) || createMcisReqVm.vmGroupSize <= 0 ) {
-          createMcisReqVm.vmGroupSize = 1
+        createMcisReqVm.subGroupSize = result.value;
+        if (isNaN(createMcisReqVm.subGroupSize) || createMcisReqVm.subGroupSize <= 0 ) {
+          createMcisReqVm.subGroupSize = 1
         }
-        messageTextArea.value += `${createMcisReqVm.commonSpec}` + `\t(${createMcisReqVm.vmGroupSize})`
+        messageTextArea.value += `${createMcisReqVm.commonSpec}` + `\t(${createMcisReqVm.subGroupSize})`
         recommendedSpecList.push(createMcisReqVm);
       } else {
         messageTextArea.value = messageTextArea.value.replace(/\n.*$/, '')
@@ -2326,7 +2326,7 @@ function updateMcisList() {
           break;
         }
       }
-      updateVMGroupList();  
+      updateSubGroupList();  
     }
   });
 }
@@ -2336,18 +2336,18 @@ document.getElementById('mcisid').onmouseover = function () {
   updateMcisList();
 }
 document.getElementById('mcisid').onchange = function () {
-  updateVMGroupList();
+  updateSubGroupList();
 }
 
 
-function updateVMGroupList() {
+function updateSubGroupList() {
   // if (!mcisid) {
-  //   console.log("When calling updateVMGroupList(), you must specify the mcisid.");
+  //   console.log("When calling updateSubGroupList(), you must specify the mcisid.");
   //   return;
   // }
 
   // Clear options in 'select'
-  var selectElement = document.getElementById('vmgroupid');
+  var selectElement = document.getElementById('subgroupid');
   var i, L = selectElement.options.length - 1;
   for(i = L; i >= 0; i--) {
     selectElement.remove(i);
@@ -2360,7 +2360,7 @@ function updateVMGroupList() {
   var namespace = document.getElementById("namespace").value;
   var mcisid = document.getElementById("mcisid").value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}/vmgroup`
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}/subgroup`
 
   axios({
     method: 'get',
@@ -2372,37 +2372,37 @@ function updateVMGroupList() {
   })
   .then((res)=>{
     if ( res.data.output != null ){
-      // console.log("in updateVMGroupList(); res.data.output: " + res.data.output);
+      // console.log("in updateSubGroupList(); res.data.output: " + res.data.output);
       for (let item of res.data.output) {
         var option = document.createElement("option");
         option.value = item;
         option.text = item;
-        document.getElementById('vmgroupid').appendChild(option);
+        document.getElementById('subgroupid').appendChild(option);
       }
     }
   });
 }
-window.updateVMGroupList = updateVMGroupList;
+window.updateSubGroupList = updateSubGroupList;
 
-document.getElementById('vmgroupid').onmouseover = function () {
-  updateVMGroupList();
+document.getElementById('subgroupid').onmouseover = function () {
+  updateSubGroupList();
 }
 
 
 function AddNLB() {
   var mcisid = document.getElementById("mcisid").value;
-  var vmgroupid = document.getElementById("vmgroupid").value;
+  var subgroupid = document.getElementById("subgroupid").value;
   // var nlbport = document.getElementById("nlbport").value;
 
   if (!mcisid) {
     messageTextArea.value = " When calling AddNLB(), you must specify the mcisid.";
   }
 
-  if (!vmgroupid) {
-    messageTextArea.value = " When calling AddNLB(), you must specify the vmgroupid.";
+  if (!subgroupid) {
+    messageTextArea.value = " When calling AddNLB(), you must specify the subgroupid.";
   }
 
-  messageTextArea.value = " Creating NLB " + vmgroupid;
+  messageTextArea.value = " Creating NLB " + subgroupid;
   document.getElementById("addNLB").style.color = "#FF0000";
 
   var hostname = hostnameElement.value;
@@ -2419,7 +2419,7 @@ function AddNLB() {
     html: 
       '<font size=3>' +
       'Target MCIS: <b>' + mcisid +
-      '<br></b> Target SubGroup: <b>' + vmgroupid +
+      '<br></b> Target SubGroup: <b>' + subgroupid +
       '<br></b> Protocol: <b>' + "TCP" +
       '<br></b> Port (listen/target): <b>',
     input: 'number',
@@ -2455,7 +2455,7 @@ function AddNLB() {
         targetGroup: {
           Protocol: "TCP",
           Port: `${nlbport}`,
-          vmGroupId: `${vmgroupid}`,
+          subGroupId: `${subgroupid}`,
         },
         HealthChecker: {
           Interval: "default",
@@ -2499,17 +2499,17 @@ window.AddNLB = AddNLB;
 
 function DelNLB() {
   var mcisid = document.getElementById("mcisid").value;
-  var vmgroupid = document.getElementById("vmgroupid").value;
+  var subgroupid = document.getElementById("subgroupid").value;
 
   if (!mcisid) {
     messageTextArea.value = " When calling DelNLB(), you must specify the mcisid.";
   }
 
-  if (!vmgroupid) {
-    messageTextArea.value = " When calling DelNLB(), you must specify the vmgroupid.";
+  if (!subgroupid) {
+    messageTextArea.value = " When calling DelNLB(), you must specify the subgroupid.";
   }
 
-  messageTextArea.value = " Deleting NLB " + vmgroupid;
+  messageTextArea.value = " Deleting NLB " + subgroupid;
   document.getElementById("delNLB").style.color = "#FF0000";
 
   var hostname = hostnameElement.value;
@@ -2518,7 +2518,7 @@ function DelNLB() {
   var password = document.getElementById("password").value;
   var namespace = document.getElementById("namespace").value;
   
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}/nlb/${vmgroupid}`
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}/nlb/${subgroupid}`
 
   axios({
     method: 'delete',
