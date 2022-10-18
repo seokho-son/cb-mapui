@@ -81,9 +81,6 @@ useGeographic();
 var i, j;
 var cnti, cntj;
 
-//var namespace = ''
-
-//var geoServiceKey = '';
 var geoServiceKey = 'your key';
 
 
@@ -112,12 +109,6 @@ var selectApp = document.getElementById('selectApp');
 var newline = String.fromCharCode(13, 10); // newline is special Char used in TextArea box
 var hostnameElement = document.getElementById("hostname");
 var portElement = document.getElementById("port");
-
-//for (i = 0; i < n; ++i) {
-//  mcisGeo[i] = new Array();
-//}
-
-
 
 var tileLayer = new TileLayer({
   source: new OSM()
@@ -306,14 +297,6 @@ for (var i = 0; i < cntInit; ++i) {
   lat = -60;
 
   if(i==0){
-    /*
-    testPoints.push([127,37]);
-    testPoints.push([127.4, 36.4]);
-    testPoints.push([126.7, 34.7]);
-    testPoints.push([129, 35.1]);
-    testPoints.push([128.9, 37.9]);
-*/
-
     testPoints.push([-42,-19]);
     testPoints.push([-44, -11]);
     testPoints.push([27, -29]);
