@@ -2112,11 +2112,17 @@ function deleteMCIS() {
   })
   .then((res)=>{
     if ( res.data != null ){
-      console.log(res.data);
-      messageTextArea.value = res.data.message;
+      console.log(res.data.output);
+      
       updateMcisList();
       clearMap();
-      infoAlert(JSON.stringify(res.data.message, null, 2));
+      infoAlert(JSON.stringify('Deleted: ' + mcisid, null, 2));
+
+      messageTextArea.value = 'Deleted: ' + mcisid + "\n\n";
+      for (let item of res.data.output){
+        messageTextArea.value += item + "\n";
+      }
+
     }
   })
   .catch(function (error) {
