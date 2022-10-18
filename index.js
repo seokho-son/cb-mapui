@@ -2288,6 +2288,43 @@ function updateMcisList() {
 }
 window.updateMcisList = updateMcisList;
 
+function updateNsList() {
+  // Clear options in 'select'
+  var selectElement = document.getElementById('namespace');
+  var i, L = selectElement.options.length - 1;
+  for(i = L; i >= 0; i--) {
+    selectElement.remove(i);
+  }
+
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
+  var namespace = document.getElementById("namespace").value;
+
+  var url = `http://${hostname}:${port}/tumblebug/ns?option=id`
+
+  axios({
+    method: 'get',
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`
+    }
+  })
+  .then((res)=>{
+    if ( res.data.output != null ){
+      // mcisList = res.data.output;
+      for (let item of res.data.output) {
+        var option = document.createElement("option");
+        option.value = item;
+        option.text = item;
+        document.getElementById('namespace').appendChild(option);
+      }
+    }
+  });
+}
+
 
 function updateVMGroupList() {
   // if (!mcisid) {
@@ -2711,6 +2748,7 @@ window.onload = function() {
   console.log('Host address: '+ strArray[0]);
   document.getElementById("hostname").value = strArray[0];
 
+  updateNsList();
   updateMcisList();
   console.log(getMcis());
 }
