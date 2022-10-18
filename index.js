@@ -2247,50 +2247,10 @@ function registerCspResource() {
 window.registerCspResource = registerCspResource;
 
 
-var mcisList = [];
-var mcisHideList = [];
-
-function updateMcisList() {
-  // Clear options in 'select'
-  var selectElement = document.getElementById('mcisid');
-  var i, L = selectElement.options.length - 1;
-  for(i = L; i >= 0; i--) {
-    selectElement.remove(i);
-  }
-
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = document.getElementById("username").value;
-  var password = document.getElementById("password").value;
-  var namespace = document.getElementById("namespace").value;
-
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis?option=id`
-
-  axios({
-    method: 'get',
-    url: url,
-    auth: {
-      username: `${username}`,
-      password: `${password}`
-    }
-  })
-  .then((res)=>{
-    if ( res.data.output != null ){
-      // mcisList = res.data.output;
-      for (let item of res.data.output) {
-        var option = document.createElement("option");
-        option.value = item;
-        option.text = item;
-        document.getElementById('mcisid').appendChild(option);
-      }
-    }
-  });
-}
-window.updateMcisList = updateMcisList;
-
 function updateNsList() {
   // Clear options in 'select'
   var selectElement = document.getElementById('namespace');
+  var previousSelection = selectElement.value;
   var i, L = selectElement.options.length - 1;
   for(i = L; i >= 0; i--) {
     selectElement.remove(i);
@@ -2321,8 +2281,81 @@ function updateNsList() {
         option.text = item;
         document.getElementById('namespace').appendChild(option);
       }
+      for (let i=0; i<selectElement.options.length; i++){  
+        if(selectElement.options[i].value == previousSelection){
+          selectElement.options[i].selected = true;
+          break;
+        }
+      }
+
+      console.log(getMcis());
+      
     }
   });
+}
+
+document.getElementById('namespace').onmouseover = function () {
+  updateNsList();
+}
+document.getElementById('namespace').onchange = function () {
+  updateMcisList();
+}
+
+
+var mcisList = [];
+var mcisHideList = [];
+
+function updateMcisList() {
+  // Clear options in 'select'
+  var selectElement = document.getElementById('mcisid');
+  var previousSelection = selectElement.value;
+  var i, L = selectElement.options.length - 1;
+  for(i = L; i >= 0; i--) {
+    selectElement.remove(i);
+  }
+
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
+  var namespace = document.getElementById("namespace").value;
+
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis?option=id`
+
+  axios({
+    method: 'get',
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`
+    }
+  })
+  .then((res)=>{
+    if ( res.data.output != null ){
+      // mcisList = res.data.output;
+      for (let item of res.data.output) {
+        var option = document.createElement("option");
+        option.value = item;
+        option.text = item;
+        selectElement.appendChild(option);
+      }
+      for (let i=0; i<selectElement.options.length; i++){  
+        if(selectElement.options[i].value == previousSelection){
+          selectElement.options[i].selected = true;
+          break;
+        }
+      }
+      updateVMGroupList();  
+    }
+  });
+}
+window.updateMcisList = updateMcisList;
+
+document.getElementById('mcisid').onmouseover = function () {
+  updateMcisList();
+}
+document.getElementById('mcisid').onchange = function () {
+  updateVMGroupList();
 }
 
 
@@ -2370,11 +2403,15 @@ function updateVMGroupList() {
 }
 window.updateVMGroupList = updateVMGroupList;
 
+document.getElementById('vmgroupid').onmouseover = function () {
+  updateVMGroupList();
+}
+
 
 function AddNLB() {
   var mcisid = document.getElementById("mcisid").value;
   var vmgroupid = document.getElementById("vmgroupid").value;
-  var nlbport = document.getElementById("nlbport").value;
+  // var nlbport = document.getElementById("nlbport").value;
 
   if (!mcisid) {
     messageTextArea.value = " When calling AddNLB(), you must specify the mcisid.";
@@ -2395,43 +2432,85 @@ function AddNLB() {
   
   var url = `http://${hostname}:${tbport}/tumblebug/ns/${namespace}/mcis/${mcisid}/nlb`
 
-  var nlbReqTmp = {
-    type: "PUBLIC",
-    scope: "REGION",
-    listener: {
-      Protocol: "TCP",
-      Port: `${nlbport}`
+  Swal.fire({
+    title: 'Configuration for a new NLB',
+    width: 600,
+    html: 
+      '<font size=3>' +
+      'Target MCIS: <b>' + mcisid +
+      '<br></b> Target SubGroup: <b>' + vmgroupid +
+      '<br></b> Protocol: <b>' + "TCP" +
+      '<br></b> Port (listen/target): <b>',
+    input: 'number',
+    inputValue: 80,
+    didOpen: () => {
+      const input = Swal.getInput()
+      //input.setSelectionRange(0, input.value.length)
     },
-    targetGroup: {
-      Protocol: "TCP",
-      Port: `${nlbport}`,
-      vmGroupId: `${vmgroupid}`,
+    inputAttributes: {
+      autocapitalize: 'off'
     },
-    HealthChecker: {
-      Interval: "default",
-      Timeout: "default",
-      Threshold: "default",
-    }
-  }
-  var jsonBody = JSON.stringify(nlbReqTmp, undefined, 4);
+    showCancelButton: true,
+    confirmButtonText: 'Confirm',
+    //showLoaderOnConfirm: true,
+    position: 'top-end',
+    //back(disabled section)ground color
+    backdrop: `rgba(0, 0, 0, 0.08)`
+  }).then((result) => {
+    // result.value is false if result.isDenied or another key such as result.isDismissed
+    if (result.value) {
+      var nlbport = result.value;
+      if (isNaN(nlbport) || nlbport <= 0 ) {
+        nlbport = 80
+      }
 
+      var nlbReqTmp = {
+        type: "PUBLIC",
+        scope: "REGION",
+        listener: {
+          Protocol: "TCP",
+          Port: `${nlbport}`
+        },
+        targetGroup: {
+          Protocol: "TCP",
+          Port: `${nlbport}`,
+          vmGroupId: `${vmgroupid}`,
+        },
+        HealthChecker: {
+          Interval: "default",
+          Timeout: "default",
+          Threshold: "default",
+        }
+      }
+      var jsonBody = JSON.stringify(nlbReqTmp, undefined, 4);
 
-  axios({
-    method: 'post',
-    url: url,
-    headers: { 'Content-Type': 'application/json' },
-    data: jsonBody,
-    auth: {
-      username: `${username}`,
-      password: `${password}`
+      axios({
+        method: 'post',
+        url: url,
+        headers: { 'Content-Type': 'application/json' },
+        data: jsonBody,
+        auth: {
+          username: `${username}`,
+          password: `${password}`
+        }
+        
+      })
+      .then((res)=>{
+        console.log(res); // for debug
+        document.getElementById("addNLB").style.color = "#000000";
+        messageTextArea.value = "[Created NLB]\n\n"
+        messageTextArea.value += "[ID]\n" + JSON.stringify(res.data.id, undefined, 4) + "\n\n";
+        messageTextArea.value += "[Listener]\n" + JSON.stringify(res.data.listener, undefined, 4) + "\n\n";
+        messageTextArea.value += "[Details]\n" + JSON.stringify(res.data, undefined, 4) + "\n";
+      });
+      
+    } else {
+      document.getElementById("addNLB").style.color = "#000000";
     }
-    
   })
-  .then((res)=>{
-    console.log(res); // for debug
-    document.getElementById("addNLB").style.color = "#000000";
-    messageTextArea.value = "[Created NLB]\n" + res.data.id;
-  });
+
+
+  
 }
 window.AddNLB = AddNLB;
 
@@ -2749,8 +2828,7 @@ window.onload = function() {
   document.getElementById("hostname").value = strArray[0];
 
   updateNsList();
-  updateMcisList();
-  console.log(getMcis());
+
 }
 
 
