@@ -2483,7 +2483,22 @@ function AddNLB() {
         messageTextArea.value += "[ID]\n" + JSON.stringify(res.data.id, undefined, 4) + "\n\n";
         messageTextArea.value += "[Listener]\n" + JSON.stringify(res.data.listener, undefined, 4) + "\n\n";
         messageTextArea.value += "[Details]\n" + JSON.stringify(res.data, undefined, 4) + "\n";
-      });
+        infoAlert('Created NLB: '+ JSON.stringify(res.data.id, undefined, 4));
+      })
+      .catch(function (error) {
+        if (error.response) {
+          // status code is not 2xx
+          console.log(error.response.data);
+          console.log(error.response.status);
+          console.log(error.response.headers);
+        }
+        else {
+          console.log('Error', error.message);
+        }
+        console.log(error.config);
+        document.getElementById("addNLB").style.color = "#000000";
+        errorAlert(JSON.stringify(error.response.data.message, null, 2));
+      });    
       
     } else {
       document.getElementById("addNLB").style.color = "#000000";
@@ -2532,7 +2547,22 @@ function DelNLB() {
   .then((res)=>{
     console.log(res); // for debug
     document.getElementById("delNLB").style.color = "#000000";
-    messageTextArea.value = "[Deleted NLB]\n" + res.data.id;
+    messageTextArea.value = "[Deleted NLB]\n" + res.data.message;
+    infoAlert(JSON.stringify(res.data.message, undefined, 4));
+  })
+  .catch(function (error) {
+    if (error.response) {
+      // status code is not 2xx
+      console.log(error.response.data);
+      console.log(error.response.status);
+      console.log(error.response.headers);
+    }
+    else {
+      console.log('Error', error.message);
+    }
+    console.log(error.config);
+    document.getElementById("delNLB").style.color = "#000000";
+    errorAlert(JSON.stringify(error.response.data.message, null, 2));
   });
 }
 window.DelNLB = DelNLB;
