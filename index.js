@@ -1374,7 +1374,7 @@ function createMcis() {
       createMcisReq.vm.name
 
       var html = 
-      '<br><br></b> <b>[' + i.toString() +']</b> <b>' + createMcisReq.vm[i].name + '</b> (size:  <b>'+ createMcisReq.vm[i].subGroupSize+'</b>)' + 
+      '<br><br></b> <b>[' + (i+1).toString() +']</b> <b>' + createMcisReq.vm[i].name + '</b> (size:  <b>'+ createMcisReq.vm[i].subGroupSize+'</b>)' + 
       '<br> - Image: <b>' + createMcisReq.vm[i].commonImage +
       '<br></b> - Spec: <b>' + createMcisReq.vm[i].commonSpec +
       '<br></b> - DiskType: <b>' + createMcisReq.vm[i].rootDiskType +
@@ -1665,7 +1665,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
     var createMcisReqVm = $.extend( {}, createMcisReqVmTmplt );
 
-    createMcisReqVm.name = "group-" + recommendedSpecList.length.toString()
+    createMcisReqVm.name = "g" + (recommendedSpecList.length +1).toString()
     
     createMcisReqVm.commonSpec = res.data[0].id;
     createMcisReqVm.commonImage = osImage.value;  
