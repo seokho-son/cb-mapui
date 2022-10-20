@@ -2883,6 +2883,41 @@ function remoteCmd() {
 window.remoteCmd = remoteCmd;
 
 
+// function for getAccessInfo of MCIS
+function getAccessInfo() {
+  var mcisid = document.getElementById("mcisid").value;
+  if (mcisid) {
+
+    messageTextArea.value = "[Retrieve access information for MCIS:" + mcisid + "]\n";
+  
+    var hostname = hostnameElement.value;
+    var port = portElement.value;
+    var username = document.getElementById("username").value;
+    var password = document.getElementById("password").value;
+    var namespace = document.getElementById("namespace").value;
+  
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=accessinfo`
+
+    axios({
+      method: 'get',
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`
+      }
+    })
+    .then((res2)=>{
+      console.log(res2); // for debug
+      messageTextArea.value += JSON.stringify(res2.data, null, 2).replace(/['"]+/g, '') + "\n";
+    });
+    
+  } else {
+    messageTextArea.value = " MCIS ID is not assigned";
+  }
+}
+window.getAccessInfo = getAccessInfo;
+
+
 // SSH Key save function
 const saveBtn = document.querySelector('button.save-file');
 saveBtn.addEventListener('click', function(){
@@ -2899,7 +2934,7 @@ saveBtn.addEventListener('click', function(){
   var groupid = document.getElementById("subgroupid").value;
   var vmid = document.getElementById("vmid").value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=accessinfo`
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=accessinfo&accessInfoOption=showSshKey`
 
   axios({
     method: 'get',
