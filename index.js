@@ -782,6 +782,8 @@ function changeColorStatus(status){
     return 'orange';
   } else if (status.includes("Terminated")){
     return 'red';
+  } else if (status.includes("Terminating")){
+    return 'grey';
   } else {
     return 'grey';
   }
@@ -1186,6 +1188,8 @@ function getMcis() {
             cnt++;
           }
         }
+    } else {
+      geometries = [];
     }
 
   })
@@ -2339,15 +2343,61 @@ document.getElementById('mcisid').onchange = function () {
   updateSubGroupList();
 }
 
+function updateVmList() {
+  // Clear options in 'select'
+  var selectElement = document.getElementById('vmid');
+  var previousSelection = selectElement.value;
+  var i, L = selectElement.options.length - 1;
+  for(i = L; i >= 0; i--) {
+    selectElement.remove(i);
+  }
+
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
+  var namespace = document.getElementById("namespace").value;
+  var mcisid = document.getElementById("mcisid").value;
+  var subgroupid = document.getElementById("subgroupid").value;
+
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}/subgroup/${subgroupid}`
+
+  axios({
+    method: 'get',
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`
+    }
+  })
+  .then((res)=>{
+    if ( res.data.output != null ){
+      for (let item of res.data.output) {
+        var option = document.createElement("option");
+        option.value = item;
+        option.text = item;
+        selectElement.appendChild(option);
+      }
+      for (let i=0; i<selectElement.options.length; i++){  
+        if(selectElement.options[i].value == previousSelection){
+          selectElement.options[i].selected = true;
+          break;
+        }
+      }
+    }
+  });
+}
+window.updateMcisList = updateMcisList;
+
+document.getElementById('vmid').onmouseover = function () {
+  updateVmList();
+}
+
 
 function updateSubGroupList() {
-  // if (!mcisid) {
-  //   console.log("When calling updateSubGroupList(), you must specify the mcisid.");
-  //   return;
-  // }
 
-  // Clear options in 'select'
   var selectElement = document.getElementById('subgroupid');
+  var previousSelection = selectElement.value;
   var i, L = selectElement.options.length - 1;
   for(i = L; i >= 0; i--) {
     selectElement.remove(i);
@@ -2378,6 +2428,12 @@ function updateSubGroupList() {
         option.value = item;
         option.text = item;
         document.getElementById('subgroupid').appendChild(option);
+      }
+      for (let i=0; i<selectElement.options.length; i++){  
+        if(selectElement.options[i].value == previousSelection){
+          selectElement.options[i].selected = true;
+          break;
+        }
       }
     }
   });
@@ -2827,6 +2883,58 @@ function remoteCmd() {
 window.remoteCmd = remoteCmd;
 
 
+// SSH Key save function
+const saveBtn = document.querySelector('button.save-file');
+saveBtn.addEventListener('click', function(){
+
+  messageTextArea.value = " [Retrieve MCIS Access Information ...]\n";
+
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
+  var namespace = document.getElementById("namespace").value;
+  var mcisid = document.getElementById("mcisid").value;
+  var groupid = document.getElementById("subgroupid").value;
+  var vmid = document.getElementById("vmid").value;
+
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=accessinfo`
+
+  axios({
+    method: 'get',
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`
+    }
+  })
+  .then((res2)=>{
+    console.log(res2); // for debug
+    messageTextArea.value += JSON.stringify(res2.data, null, 2).replace(/['"]+/g, '') + "\n";
+    var privateKey = ""
+
+    for (let subGroupAccessInfo of res2.data.McisSubGroupAccessInfo) {
+      if (subGroupAccessInfo.SubGroupId == groupid){
+        for (let vmAccessInfo of subGroupAccessInfo.McisVmAccessInfo) {
+          if (vmAccessInfo.vmId == vmid){
+            privateKey = (vmAccessInfo.privateKey).replace(/['"]+/g, '')
+            break
+          }
+        }
+      }
+    }
+
+    var tempLink = document.createElement("a");
+    var taBlob = new Blob([privateKey], {type: 'text/plain'});
+   
+    tempLink.setAttribute('href', URL.createObjectURL(taBlob));
+    tempLink.setAttribute('download', `${namespace}-${mcisid}-${vmid}.pem`);
+    tempLink.click();
+     
+    URL.revokeObjectURL(tempLink.href);
+  });
+});
 
 
 
