@@ -192,14 +192,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <table>
     <tbody>
       <tr>
-        <td>&nbsp;&nbsp;System config&nbsp;&nbsp;</td>
+        <td>&nbsp;&nbsp;Configuration&nbsp;&nbsp;</td>
         <td>TB IP:&nbsp;<br><input type=text id=hostname name=hostname value="localhost" onchange="endpointChanged();" style="text-align:center; width:95%"></td>
         <td>TB Port:&nbsp;<input type=text id=port name=port value="1323" style="text-align:center; width:95%"> </td>
         <td>Username:&nbsp;<input type=text id=username name=username value="default" style="text-align:center; width:95%"></td>
         <td>Password:&nbsp;<input type=password id=password name=password value="default" style="text-align:center; width:95%"></td>
         
         <td>Total CSP regions:&nbsp;<input type="checkbox" id="displayOn" name="displayOn" onClick="displayCSPListOn();" value="on">
-            <input type=button value="Show CSP" onClick="getConnection();" style="text-align:center; width:95%"></td>
+          <input type=button value="Show CSP" onClick="getConnection();" style="text-align:center; width:95%">
+        </td>
+        <td>MCIS Display:&nbsp;<input type=button value="Hide/Show" onClick="hideMCIS();" style="text-align:center; width:95%"></td>   
         <td>Display Interval:
           <select id="refreshInterval" name="refreshInterval" style="text-align:center; width:50px">
             <option value="1">1</option>
@@ -212,16 +214,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           </select>
           <input type=button value="Clear map" onClick="clearMap()" style="text-align:center; width:95%"> 
         </td>
-        <td>
-          <input type=button id="registerCspResource" value="Register resource" onClick="registerCspResource();" style="text-align:center; width:95%">
-          <input type=button id="resourceOverview" value="Overview resource" onClick="resourceOverview();" style="text-align:center; width:95%">
-        </td>
 
       </tr>
 
 
       <tr>
-        <td>&nbsp;&nbsp;MCIS setting&nbsp;&nbsp;</td>
+        <td>&nbsp;&nbsp;MCIS Setting&nbsp;&nbsp;</td>
         <td>NS ID:&nbsp;
           <select id="namespace" name="namespace" style="text-align:center; width:95%">
           <!-- <option value="mcis01">mcis01</option> -->
@@ -243,22 +241,21 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           </select>
         </td>
 
-        <!-- <td>&nbsp;</td> -->
-        
-        <!-- <td><input type=button value="Load list" onClick="updateMcisList();" style="text-align:center; width:95%"></td> -->
-        <td><input type=button value="Status" onClick="statusMCIS();" style="text-align:center; width:95%"></td>   
-        <td><input type=button value="Hide/Show" onClick="hideMCIS();" style="text-align:center; width:95%"></td>   
-        <td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MCIS NLB:</td>
         <td>
+          SubGroup NLB:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
           <input type=button id=addNLB value="Add NLB" onClick="AddNLB();" style="text-align:center; width:45%">
           <input type=button id=delNLB value="Del NLB" onClick="DelNLB();" style="text-align:center; width:45%">
         </td>
-
+        <td><input type=button id="registerCspResource" value="Register resource" onClick="registerCspResource();" style="text-align:center; width:95%"></td>
+        <td><input type=button id="resourceOverview" value="Overview resource" onClick="resourceOverview();" style="text-align:center; width:95%"></td>
+        
+        
       </tr>
 
 
       <tr>
-        <td>&nbsp;&nbsp;MCIS control&nbsp;&nbsp;</td>
+        <td>&nbsp;&nbsp;MCIS Control&nbsp;&nbsp;</td>
+        <td><input type=button value="Status" onClick="statusMCIS();" style="text-align:center; width:95%"></td>   
         <td><input type=button value="Suspend" onClick="controlMCIS('suspend');" style="text-align:center; width:95%"></td>
         <td><input type=button value="Resume" onClick="controlMCIS('resume');" style="text-align:center; width:95%"></td>
         <td><input type=button value="Reboot" onClick="controlMCIS('reboot');" style="text-align:center; width:95%"></td>
@@ -276,21 +273,20 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
       <tr>
-        <td>&nbsp;&nbsp;MCIS provisioning&nbsp;&nbsp;</td>
-        <td><input id="createMcis" type=button value="Create" onClick="createMcis();" style="text-align:center; width:95%"></td>
-        <td>
-          <input type=button value="Clear request" onClick="clearCircle('clearText');" style="text-align:center; width:95%">
-        </td>
-
+        <td>&nbsp;&nbsp;MCIS Provisioning&nbsp;&nbsp;</td>
 
         <td rowspan="1" colspan="1" >
-          Provisioning Policy
+          <!-- Provisioning Policy -->
           <select id="recommendPolicy" name="recommendPolicy" style="text-align:center; width:95%">
             <option value="location" selected="selected">Location-based</option>
             <option value="price">Cost-based</option>
             <option value="performance">Performance-based</option>
           </select>
         </td>
+
+        <td><input id="createMcis" type=button value="Create MCIS" onClick="createMcis();" style="text-align:center; width:95%"></td>
+        <td><input type=button value="Clear Selection" onClick="clearCircle('clearText');" style="text-align:center; width:95%"></td>
+
 
         <td rowspan="1" colspan="1" >
           OS Image Type
@@ -303,52 +299,46 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         </td>
 
         <td>Disk Size&nbsp;<input type=text id=diskSize name=diskSize value="default" style="text-align:center; width:95%"></td>
-
-        <!-- <td><input type="range" value="1" min="1" max="200" onchange='range_change(this)'><input type='text' id='myvalue'></td> -->
-        <td>
-          <div class="range-slider">
-            <span>CPU
-              <input type="number" value="1" min="1" max="448" step="1" style="text-align:center; width:50px">
-              ~<input type="number" value="8" min="1" max="448" step="1" style="text-align:center; width:50px">
+        <td>CPU range (N):&nbsp;
+          <!-- <div class="range-slider"> -->
+            <span>
+              <input type="number" id='minVCPU' value="1" min="1" max="448" step="1" style="text-align:center; width:40%">
+              ~<input type="number" id='maxVCPU' value="8" min="1" max="448" step="1" style="text-align:center; width:40%">
             </span>
-            <input value="1" min="1" max="104" step="1" type="range" id='minVCPU'>
-            <input value="8" min="1" max="104" step="1" type="range" id='maxVCPU'>
-            <svg width="100%" height="24">
+            <!-- <input value="1" min="1" max="104" step="1" type="range" id='minVCPU'> -->
+            <!-- <input value="8" min="1" max="104" step="1" type="range" id='maxVCPU'> -->
+            <!-- <svg width="100%" height="24"> -->
                 <!-- .range-slider width & x2 should be same -->
-                <line x1="4" y1="0" x2="150" y2="0" stroke="#444" stroke-width="12" stroke-dasharray="1 28"></line>
-            </svg>
-          </div>
+                <!-- <line x1="4" y1="0" x2="150" y2="0" stroke="#444" stroke-width="12" stroke-dasharray="1 28"></line> -->
+            <!-- </svg> -->
+          <!-- </div> -->
         </td>
-        <!-- <td width=20px></td> -->
 
-        <td>
-          <div class="range-slider">
-            <span>RAM
-              <input type="number" value="0.5" min="0.5" max="12288" step="0.5" style="text-align:center; width:50px">
-              ~<input type="number" value="8" min="0.5" max="12288" step="0.5" style="text-align:center; width:50px">
+        <td>Memory range (GB):&nbsp;
+          <!-- <div class="range-slider"> -->
+            <span>
+              <input type="number" id='minRAM' value="0.5" min="0.5" max="12288" step="0.5" style="text-align:center; width:40%">
+              ~<input type="number" id='maxRAM' value="8" min="0.5" max="12288" step="0.5" style="text-align:center; width:40%">
             </span>
-            <input value="0.5" min="0.5" max="128" step="1" type="range" id='minRAM'>
-            <input value="8" min="0.5" max="128" step="1" type="range" id='maxRAM'>
-            <svg width="100%" height="24">
+            <!-- <input value="0.5" min="0.5" max="128" step="1" type="range" id='minRAM'> -->
+            <!-- <input value="8" min="0.5" max="128" step="1" type="range" id='maxRAM'> -->
+            <!-- <svg width="100%" height="24"> -->
                 <!-- .range-slider width & x2 should be same -->
-                <line x1="4" y1="0" x2="150" y2="0" stroke="#444" stroke-width="12" stroke-dasharray="1 28"></line>
-            </svg>
+                <!-- <line x1="4" y1="0" x2="150" y2="0" stroke="#444" stroke-width="12" stroke-dasharray="1 28"></line> -->
+            <!-- </svg> -->
           </div>
         </td>
 
+        
 
       </tr> 
 
 
       <tr>
-        <td>&nbsp;&nbsp;Deploy application&nbsp;&nbsp;</td>
-
-        <td><input type=button id="startApp" value="Start App" onClick="startApp()" style="text-align:center; width:95%"></td>
-        <td><input type=button id="stopApp" value="Stop App" onClick="stopApp()" style="text-align:center; width:95%"></td>
-        <!-- <td><input type=button value="Video Conf: Jitsi" onClick="deployApp()" style="text-align:center; width:95%"></td> -->
+        <td>&nbsp;&nbsp;MCIS Application&nbsp;&nbsp;</td>
 
         <td rowspan="1" colspan="1" >
-          Select Application
+          <!-- Select Application -->
           <select id="selectApp" name="selectApp" style="text-align:center; width:95%">
             <option value="Xonotic" selected="selected">FPSGame(Xonotic)</option>
             <option value="Westward">MMORPG(Westward)</option>
@@ -357,8 +347,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           </select>
         </td>
 
+        <td><input type=button id="startApp" value="Start App" onClick="startApp()" style="text-align:center; width:95%"></td>
+        <td><input type=button id="stopApp" value="Stop App" onClick="stopApp()" style="text-align:center; width:95%"></td>
+        <!-- <td><input type=button value="Video Conf: Jitsi" onClick="deployApp()" style="text-align:center; width:95%"></td> -->
+
         <td><input type=button id="statusApp" value="Status App" onClick="statusApp()" style="text-align:center; width:95%"></td>
         <td><input type=button id="remoteCmd" value="Remote Command" onClick="remoteCmd()" style="text-align:center; width:95%"></td>
+
+        <td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MCIS Access: &nbsp;</td>
+
+        <td><input type=button id="getAccessInfo" value="Get Access Info" onClick="getAccessInfo()" style="text-align:center; width:95%"></td>
         <td><button class="save-file" style="text-align:center; width:95%">Save SSH Key</button></td>
       </tr> 
 
@@ -369,7 +367,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <tr>
       <td>&nbsp;</td>
       <td rowspan="1" colspan="3" >
-        <textarea id = "message" rows = "4" cols = "100" name = "message" readonly ></textarea>
+        <textarea id = "message" rows = "4" cols = "130" name = "message" readonly ></textarea>
       </td>
       <td rowspan="1" colspan="3" >
         &nbsp;&nbsp;Display recommendation table:&nbsp;<input type="checkbox" id="tableOn" name="tableOn" onClick="displayTableOn();" value="on">
