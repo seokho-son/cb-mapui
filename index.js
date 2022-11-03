@@ -1444,7 +1444,7 @@ function createMcis() {
             .then((res)=>{
               console.log(res); // for debug
               document.getElementById("createMcis").style.color = "#000000";
-              messageTextArea.value = "[Complete: MCIS Info]\n" + JSON.stringify(res.data, null, 2);
+              messageTextArea.value = "[Complete: MCIS Info]\n" + JSON.stringify(res.data, null, 2).replace(/['",]+/g, '');
               updateMcisList();
               clearCircle("none")
               infoAlert('Created '+ createMcisReq.name);
@@ -1461,7 +1461,7 @@ function createMcis() {
               }
               console.log(error.config);
               document.getElementById("createMcis").style.color = "#000000";
-              errorAlert(JSON.stringify(error.response.data, null, 2));
+              errorAlert(JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, ''));
             });
           }
         })
@@ -1658,7 +1658,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
     addRegionMarker(res.data[0].id);
     //document.getElementById("latLonInputPairArea").innerHTML += `${res.data[0].id}<br>`;
 
-    messageDetailTextArea.value = JSON.stringify(res.data, null, 2);
+    messageDetailTextArea.value = JSON.stringify(res.data, null, 2).replace(/['",]+/g, '');
     // messageDetailTextArea.scrollTop = messageDetailTextArea.scrollHeight;
 
     if (tableDisplayEnabled.checked){
@@ -1881,7 +1881,7 @@ function controlMCIS(action) {
         case 'resume':
         case 'reboot':
         case 'terminate':
-          infoAlert(JSON.stringify(res.data.message, null, 2));
+          infoAlert(JSON.stringify(res.data.message, null, 2).replace(/['",]+/g, ''));
           break;
         default:
           console.log(`The actions ${action} is not supported. Supported actions: refine, suspend, resume, reboot, terminate.`);
@@ -1899,7 +1899,7 @@ function controlMCIS(action) {
       console.log('Error', error.message);
     }
     console.log(error.config);
-    errorAlert(JSON.stringify(error.response.data, null, 2));
+    errorAlert(JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, ''));
   });
 
 }
@@ -2059,7 +2059,7 @@ function statusMCIS() {
       var obj = JSON.parse(serverData);
       if ( obj.status != null ){
         console.log(obj.status);
-        messageTextArea.value = "[Status MCIS]\n" + JSON.stringify(obj.status, null, 2);
+        messageTextArea.value = "[Status MCIS]\n" + JSON.stringify(obj.status, null, 2).replace(/['",]+/g, '');
       }
     });
   }
@@ -2103,7 +2103,7 @@ function deleteMCIS() {
       
       updateMcisList();
       clearMap();
-      infoAlert(JSON.stringify('Deleted: ' + mcisid, null, 2));
+      infoAlert(JSON.stringify('Deleted: ' + mcisid, null, 2).replace(/['",]+/g, ''));
 
       messageTextArea.value = 'Deleted: ' + mcisid + "\n\n";
       for (let item of res.data.output){
@@ -2123,7 +2123,7 @@ function deleteMCIS() {
       console.log('Error', error.message);
     }
     console.log(error.config);
-    errorAlert(JSON.stringify(error.response.data, null, 2));
+    errorAlert(JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, ''));
   });
 
 }
@@ -2155,7 +2155,7 @@ function releaseResources() {
   })
   .then((res2)=>{
     console.log(res2); // for debug
-    messageTextArea.value += JSON.stringify(res2.data, null, 2);
+    messageTextArea.value += JSON.stringify(res2.data, null, 2).replace(/['",]+/g, '');
   });
 
 }
@@ -2187,7 +2187,7 @@ function resourceOverview() {
   })
   .then((res2)=>{
     console.log(res2); // for debug
-    messageTextArea.value += JSON.stringify(res2.data, null, 2) + "\n";
+    messageTextArea.value += JSON.stringify(res2.data, null, 2).replace(/['",]+/g, '') + "\n";
     document.getElementById("resourceOverview").style.color = "#000000";
   });
 
@@ -2228,7 +2228,7 @@ function registerCspResource() {
     .then((res)=>{
       console.log(res); // for debug
       document.getElementById("registerCspResource").style.color = "#000000";
-      messageTextArea.value = "[Complete: Registering all CSP's resources]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t');
+      messageTextArea.value = "[Complete: Registering all CSP's resources]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t').replace(/['",]+/g, '');
     });
 }
 window.registerCspResource = registerCspResource;
@@ -2536,10 +2536,10 @@ function AddNLB() {
         console.log(res); // for debug
         document.getElementById("addNLB").style.color = "#000000";
         messageTextArea.value = "[Created NLB]\n\n"
-        messageTextArea.value += "[ID]\n" + JSON.stringify(res.data.id, undefined, 4) + "\n\n";
-        messageTextArea.value += "[Listener]\n" + JSON.stringify(res.data.listener, undefined, 4) + "\n\n";
-        messageTextArea.value += "[Details]\n" + JSON.stringify(res.data, undefined, 4) + "\n";
-        infoAlert('Created NLB: '+ JSON.stringify(res.data.id, undefined, 4));
+        messageTextArea.value += "[ID]\n" + JSON.stringify(res.data.id, undefined, 4).replace(/['",]+/g, '') + "\n\n";
+        messageTextArea.value += "[Listener]\n" + JSON.stringify(res.data.listener, undefined, 4).replace(/['",]+/g, '') + "\n\n";
+        messageTextArea.value += "[Details]\n" + JSON.stringify(res.data, undefined, 4).replace(/['",]+/g, '') + "\n";
+        infoAlert('Created NLB: '+ JSON.stringify(res.data.id, undefined, 4).replace(/['",]+/g, ''));
       })
       .catch(function (error) {
         if (error.response) {
@@ -2553,7 +2553,7 @@ function AddNLB() {
         }
         console.log(error.config);
         document.getElementById("addNLB").style.color = "#000000";
-        errorAlert(JSON.stringify(error.response.data.message, null, 2));
+        errorAlert(JSON.stringify(error.response.data.message, null, 2).replace(/['",]+/g, ''));
       });    
       
     } else {
@@ -2604,7 +2604,7 @@ function DelNLB() {
     console.log(res); // for debug
     document.getElementById("delNLB").style.color = "#000000";
     messageTextArea.value = "[Deleted NLB]\n" + res.data.message;
-    infoAlert(JSON.stringify(res.data.message, undefined, 4));
+    infoAlert(JSON.stringify(res.data.message, undefined, 4).replace(/['",]+/g, ''));
   })
   .catch(function (error) {
     if (error.response) {
@@ -2618,7 +2618,7 @@ function DelNLB() {
     }
     console.log(error.config);
     document.getElementById("delNLB").style.color = "#000000";
-    errorAlert(JSON.stringify(error.response.data.message, null, 2));
+    errorAlert(JSON.stringify(error.response.data.message, null, 2).replace(/['",]+/g, ''));
   });
 }
 window.DelNLB = DelNLB;
@@ -2690,7 +2690,7 @@ function startApp() {
     .then((res)=>{
       console.log(res); // for debug
       document.getElementById("startApp").style.color = "#000000";
-      messageTextArea.value = "[Complete: Deployed App]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t');
+      messageTextArea.value = "[Complete: Deployed App]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t').replace(/['",]+/g, '');
     });
   } else {
     messageTextArea.value = " MCIS ID is not assigned";
@@ -2745,7 +2745,7 @@ function stopApp() {
     .then((res)=>{
       console.log(res); // for debug
       document.getElementById("stopApp").style.color = "#000000";
-      messageTextArea.value = "[Complete: Stopping App]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t');
+      messageTextArea.value = "[Complete: Stopping App]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t').replace(/['",]+/g, '');
     });
   } else {
     messageTextArea.value = " MCIS ID is not assigned";
@@ -2800,7 +2800,7 @@ function statusApp() {
     .then((res)=>{
       console.log(res); // for debug
       document.getElementById("statusApp").style.color = "#000000";
-      messageTextArea.value = "[Complete: Getting App status]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t');
+      messageTextArea.value = "[Complete: Getting App status]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t').replace(/['",]+/g, '');
     });
   } else {
     messageTextArea.value = " MCIS ID is not assigned";
@@ -2867,7 +2867,7 @@ function remoteCmd() {
         .then((res)=>{
           console.log(res); // for debug
           document.getElementById("remoteCmd").style.color = "#000000";
-          messageTextArea.value = "[Complete: remote ssh command to MCIS]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t');
+          messageTextArea.value = "[Complete: remote ssh command to MCIS]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t').replace(/['",]+/g, '');
         });
 
       } else {
@@ -2908,7 +2908,7 @@ function getAccessInfo() {
     })
     .then((res2)=>{
       console.log(res2); // for debug
-      messageTextArea.value += JSON.stringify(res2.data, null, 2).replace(/['"]+/g, '') + "\n";
+      messageTextArea.value += JSON.stringify(res2.data, null, 2).replace(/['",]+/g, '') + "\n";
     });
     
   } else {
@@ -2946,14 +2946,14 @@ saveBtn.addEventListener('click', function(){
   })
   .then((res2)=>{
     console.log(res2); // for debug
-    messageTextArea.value += JSON.stringify(res2.data, null, 2).replace(/['"]+/g, '') + "\n";
+    messageTextArea.value += JSON.stringify(res2.data, null, 2).replace(/['",]+/g, '') + "\n";
     var privateKey = ""
 
     for (let subGroupAccessInfo of res2.data.McisSubGroupAccessInfo) {
       if (subGroupAccessInfo.SubGroupId == groupid){
         for (let vmAccessInfo of subGroupAccessInfo.McisVmAccessInfo) {
           if (vmAccessInfo.vmId == vmid){
-            privateKey = (vmAccessInfo.privateKey).replace(/['"]+/g, '')
+            privateKey = (vmAccessInfo.privateKey).replace(/['",]+/g, '')
             break
           }
         }
