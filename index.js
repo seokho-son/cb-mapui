@@ -2445,6 +2445,123 @@ document.getElementById('subgroupid').onmouseover = function () {
 }
 
 
+function AddMcNLB() {
+  var mcisid = document.getElementById("mcisid").value;
+  // var nlbport = document.getElementById("nlbport").value;
+
+  if (!mcisid) {
+    messageTextArea.value = " When calling AddMcNLB(), you must specify the mcisid.";
+  }
+
+
+  messageTextArea.value = " Creating Multi-Cloud NLB (special MCIS)";
+  document.getElementById("addMcNLB").style.color = "#FF0000";
+
+  var hostname = hostnameElement.value;
+  var tbport = portElement.value;
+  var username = document.getElementById("username").value;
+  var password = document.getElementById("password").value;
+  var namespace = document.getElementById("namespace").value;
+  
+  var url = `http://${hostname}:${tbport}/tumblebug/ns/${namespace}/mcis/${mcisid}/mcSwNlb`
+
+  Swal.fire({
+    title: 'Configuration for a new NLB',
+    width: 600,
+    html: 
+      '<font size=3>' +
+      'Target MCIS: <b>' + mcisid +
+      '<br></b> Protocol: <b>' + "TCP" +
+      '<br></b> Port (listen/target): <b>',
+    input: 'number',
+    inputValue: 80,
+    didOpen: () => {
+      const input = Swal.getInput()
+      //input.setSelectionRange(0, input.value.length)
+    },
+    inputAttributes: {
+      autocapitalize: 'off'
+    },
+    showCancelButton: true,
+    confirmButtonText: 'Confirm',
+    //showLoaderOnConfirm: true,
+    position: 'top-end',
+    //back(disabled section)ground color
+    backdrop: `rgba(0, 0, 0, 0.08)`
+  }).then((result) => {
+    // result.value is false if result.isDenied or another key such as result.isDismissed
+    if (result.value) {
+      var nlbport = result.value;
+      if (isNaN(nlbport) || nlbport <= 0 ) {
+        nlbport = 80
+      }
+
+      var nlbReqTmp = {
+        type: "PUBLIC",
+        scope: "REGION",
+        listener: {
+          Protocol: "TCP",
+          Port: `${nlbport}`,
+        },
+        targetGroup: {
+          Protocol: "TCP",
+          Port: `${nlbport}`,
+          // subGroupId: `${subgroupid}`,
+        },
+        HealthChecker: {
+          Interval: "default",
+          Timeout: "default",
+          Threshold: "default",
+        }
+      }
+      var jsonBody = JSON.stringify(nlbReqTmp, undefined, 4);
+
+      axios({
+        method: 'post',
+        url: url,
+        headers: { 'Content-Type': 'application/json' },
+        data: jsonBody,
+        auth: {
+          username: `${username}`,
+          password: `${password}`
+        }
+        
+      })
+      .then((res)=>{
+        console.log(res); // for debug
+        document.getElementById("addMcNLB").style.color = "#000000";
+        messageTextArea.value = "[Created Multi-Cloud NLB (special MCIS)]\n\n"
+        messageTextArea.value += "[ID]\n" + JSON.stringify(res.data.id, undefined, 4).replace(/['",]+/g, '') + "\n\n";
+        messageTextArea.value += "[IP]\n" + JSON.stringify(res.data.vm[0].publicIP, undefined, 4).replace(/['",]+/g, '') + "\n\n";
+        infoAlert('Created NLB: '+ JSON.stringify(res.data.id, undefined, 4).replace(/['",]+/g, ''));
+      })
+      .catch(function (error) {
+        if (error.response) {
+          // status code is not 2xx
+          console.log(error.response.data);
+          console.log(error.response.status);
+          console.log(error.response.headers);
+        }
+        else {
+          console.log('Error', error.message);
+        }
+        console.log(error.config);
+        document.getElementById("addMcNLB").style.color = "#000000";
+        errorAlert(JSON.stringify(error.response.data.message, null, 2).replace(/['",]+/g, ''));
+      });    
+      
+    } else {
+      document.getElementById("addMcNLB").style.color = "#000000";
+    }
+  })
+
+
+  
+}
+window.AddMcNLB = AddMcNLB;
+
+
+
 function AddNLB() {
   var mcisid = document.getElementById("mcisid").value;
   var subgroupid = document.getElementById("subgroupid").value;
