@@ -50,17 +50,20 @@ Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
 
   웹브라우저를 통해 http://x.x.x.x:1324 (ex: http://localhost:1324) 접속 
 
-  ![image](https://user-images.githubusercontent.com/5966944/130864303-a45becd5-c681-4d1f-a02e-593b3fb77279.png)
+  ![image](https://user-images.githubusercontent.com/5966944/200498408-35cbeace-b45b-4fe0-b2b1-9b6c42a0b49d.png)
 
- - TextBox에 환경 변수 설정
+
+ - TextBox에 환경 변수 확인 및 설정
    - TB IP/hostname: 서버 주소
-     - 기본값: `localhost` 
-     - 예: `localhost`, `192.168.1.6`, `cb-tumblebug`
+     - 웹브라우저 접속 주소와 동일하게 자동 지정
    - TB Port: 기본값은 `1323`, 사용자가 상황에 따라 `31323` 등으로 변경하여 사용 가능
-   - TB Username, Password: CB-Tumblebug REST API (BasicAuth) 호출에 필요한 Username 및 Password 
-   - TB namespace: cb-mapui에 표시할 namespace를 지정
-   - Refresh interval: 기본값은 5 (단위: 초)며, 정상적인 양의 정수를 입력했을 때에만 유효
-
+   - TB Username, Password: CB-Tumblebug REST API (BasicAuth) 호출에 필요한 Username 및 Password (ex: `default`, `default`)
+   - NS ID: cb-mapui에 표시할 namespace를 지정
+   - Display interval: 기본값은 10 (단위: 초)며, 정상적인 양의 정수를 입력했을 때에만 유효
+ - MCIS 생성
+   - MCIS Provisioning에서 MCIS 구성을 위한 상세 정보를 설정. Location-based 를 지정한 경우 Map에 클릭하면, 추천 VM이 지정됨.
+   - 추천 VM들로 구성한 MCIS 요구사항이 마련되면, `Create MCIS` 버튼을 클릭하여 구성 정보 확인 후 MCIS 생성 요청.
+   - 생성 결과는 알림창 및 Text areabox에 표시됨.
 
 ## cb-mapui 동작 방식
 
@@ -78,4 +81,4 @@ index.js 는 Openlayers를 기반으로,
 
 - CB-Tumblebug API를 콜하여 MCIS 및 VM 정보를 조회(function getMcis())하고,
 - MCIS를 생성 및 제어할 수 있는 기능을 버튼으로 제공함.
-- tileLayer.on('postrender', function (event) Openlayers에서 반복적으로 그래픽 출력을 수행하는 펑션이며, MCIS Polygon 객체들을 도형으로 출력한다. 이때 MCIS의 상태도 갱신하여, 정보를 함께 출력.
+- tileLayer.on('postrender', function (event) Openlayers에서 반복적으로 그래픽 출력을 수행하는 펑션이며, MCIS Polygon 객체들을 도형으로 출력. 이때 MCIS의 상태도 갱신하여, 정보를 함께 출력.
