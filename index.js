@@ -364,7 +364,7 @@ function initDemoPoly(){
 
 }
 
-var imgPath = 'https://openlayers.org/en/v3.20.1/examples/data/icon.png'
+//var imgPath = 'https://openlayers.org/en/v3.20.1/examples/data/iconVm.png'
 //var imgPath = './img/icon2.png'
 
 
@@ -470,7 +470,7 @@ var pnt = new Point([-68, -50]);
 import Vector from 'ol/source/Vector.js';
 var vectorSource = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
 var iconFeature = new Feature(pnt);
-iconFeature.set('style', createStyle('img/icon.png'));
+iconFeature.set('style', createStyle('img/iconVm.png'));
 iconFeature.set('index', '001');
 vectorSource.addFeature(iconFeature);
 var iconLayer = new VectorLayer({
@@ -480,11 +480,36 @@ var iconLayer = new VectorLayer({
   source: vectorSource
 })
 
-var iconStyle03 = new Style({
+var iconStyleVm = new Style({
   image: new Icon(({
     //anchor: [0.5, 0.5],
     crossOrigin: 'anonymous',
-    src: 'img/icon.png',
+    src: 'img/iconVm.png',
+    opacity: 1.0,
+    //anchor: [0.5, 46],
+    //anchorXUnits: 'fraction',
+    //anchorYUnits: 'pixels',
+    scale: 0.7
+  }))
+});
+
+var vectorSourceNlb = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var iconFeatureNlb = new Feature(pnt);
+iconFeatureNlb.set('style', createStyle('img/iconNlb.png'));
+iconFeatureNlb.set('index', '001');
+vectorSourceNlb.addFeature(iconFeatureNlb);
+var iconLayerNlb = new VectorLayer({
+  style: function (feature) {
+    return feature.get('style');
+  },
+  source: vectorSourceNlb
+})
+
+var iconStyleNlb = new Style({
+  image: new Icon(({
+    //anchor: [0.5, 0.5],
+    crossOrigin: 'anonymous',
+    src: 'img/iconNlb.png',
     opacity: 1.0,
     //anchor: [0.5, 46],
     //anchorXUnits: 'fraction',
@@ -734,7 +759,7 @@ map.addLayer(iconLayer7);
 map.addLayer(iconLayer8);
 map.addLayer(iconLayer9);
 map.addLayer(iconLayer);
-
+map.addLayer(iconLayerNlb);
 
 
 var imageStyle = new Style({
@@ -794,6 +819,8 @@ function changeSizeStatus(status){
     return 0.4;
   } else if (status.includes("-ws")){
     return 0.4;
+  } else if (status.includes("NLB")){
+    return 1.5;
   } else if (status.includes("Partial")){
     return 2.4;
   } else if (status.includes("Running")){
@@ -820,6 +847,8 @@ function changeSizeByName(status){
     return 0.4;
   } else if (status.includes("-ws")){
     return 0.4;
+  } else if (status.includes("NLB")){
+    return 1.5;
   } else {
     return 2.5;
   }
@@ -1174,10 +1203,16 @@ function getMcis() {
 
             mcisStatus[cnt] = item.status  
             //mcisStatus[cnt] = item.targetAction + '-> ' + item.status 
+
+            var newName = item.name
+            if (newName.includes("-nlb")){
+              newName = "NLB"
+            }
+
             if (item.targetAction == "None" || item.targetAction == "") {
-              mcisName[cnt] = "[" + item.name + "]"
+              mcisName[cnt] = "[" + newName + "]"
             } else {
-              mcisName[cnt] = item.targetAction + '-> '+"[" + item.name + "]"
+              mcisName[cnt] = item.targetAction + '-> '+"[" + newName + "]"
             }
 
             console.log("item.status is" + item.status);
@@ -3162,7 +3197,11 @@ function drawMCIS(event) {
     vectorContext.setStyle(polyStyle);
     vectorContext.drawGeometry(geometries[i]);
 
-    vectorContext.setStyle(iconStyle03);
+    if (mcisName[i].includes("NLB")){
+      vectorContext.setStyle(iconStyleNlb);
+    } else {
+      vectorContext.setStyle(iconStyleVm);
+    }
     vectorContext.drawGeometry(geometriesPoints[i]);
 
     // MCIS status style
@@ -3172,7 +3211,7 @@ function drawMCIS(event) {
         text: mcisStatus[i],
         font: 'bold 10px sans-serif',
         scale: changeSizeStatus(mcisName[i]+mcisStatus[i]),
-        offsetY: 110,
+        offsetY: 44 * changeSizeStatus(mcisName[i]+mcisStatus[i]) ,
         stroke: new Stroke({
           color: 'white',
           width: 1
@@ -3194,7 +3233,7 @@ function drawMCIS(event) {
         text: mcisName[i],
         font: 'bold 10px sans-serif',
         scale: (changeSizeByName(mcisName[i]+mcisStatus[i]) + 0.8 ),
-        offsetY: 80,
+        offsetY: 32 * changeSizeByName(mcisName[i]+mcisStatus[i]) ,
         stroke: new Stroke({
           color: [255, 255, 255, 1], //white
           width: 1
