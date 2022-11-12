@@ -1167,6 +1167,10 @@ function getMcis() {
           var vmGeo = [];
 
           var validateNum = 0;
+          if (item.vm == null) {
+            console.log(item)
+            break
+          }
           for (j = 0; j < item.vm.length; j++) {
             //vmGeo.push([(item.vm[j].location.longitude*1) + (Math.round(Math.random()) / zoomLevel - 1) * Math.random()*1, (item.vm[j].location.latitude*1) + (Math.round(Math.random()) / zoomLevel - 1) * Math.random()*1 ])
             if (j == 0){
@@ -2808,42 +2812,72 @@ function startApp() {
     var username = document.getElementById("username").value;
     var password = document.getElementById("password").value;
     var namespace = document.getElementById("namespace").value;
-  
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`
-    var cmd = ""
-    if (selectApp.value == "Xonotic"){
-      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " + "Xonotic-by-Cloud-Barista-" + mcisid + " 26000" + " 8"
-    } else if (selectApp.value == "Westward"){
-      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
-    } else if (selectApp.value == "Nginx"){
-      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setweb.sh -O ~/setweb.sh; chmod +x ~/setweb.sh; sudo ~/setweb.sh"
-    } else if (selectApp.value == "Jitsi"){
-      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
-    } else {
-      cmd = "ls -al"
-    }
-    
-    var commandReqTmp = {
-      command: `${cmd}`
-    }
-    var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
-  
+
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=accessinfo`
+
     axios({
-      method: 'post',
+      method: 'get',
       url: url,
-      headers: { 'Content-Type': 'application/json' },
-      data: jsonBody,
       auth: {
         username: `${username}`,
         password: `${password}`
       }
-      
     })
-    .then((res)=>{
-      console.log(res); // for debug
-      document.getElementById("startApp").style.color = "#000000";
-      messageTextArea.value = "[Complete: Deployed App]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t').replace(/['",]+/g, '');
+    .then((res2)=>{
+      console.log(res2); // for debug
+
+      var publicIPs = ""
+      var privateIPs = ""
+
+      for (let l1 of res2.data.McisSubGroupAccessInfo){
+        for (let l2 of l1.McisVmAccessInfo){
+          publicIPs = publicIPs + " " + l2.publicIP
+          privateIPs = privateIPs + " " + l2.privateIP
+        }
+      }
+
+      var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`
+      var cmd = ""
+      if (selectApp.value == "Xonotic"){
+        cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " + "Xonotic-by-Cloud-Barista-" + mcisid + " 26000" + " 8"
+      } else if (selectApp.value == "Westward"){
+        cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+      } else if (selectApp.value == "WeaveScope"){
+        cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/weavescope/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " + publicIPs + " " + privateIPs
+      } else if (selectApp.value == "Nginx"){
+        cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setweb.sh -O ~/setweb.sh; chmod +x ~/setweb.sh; sudo ~/setweb.sh"
+      } else if (selectApp.value == "Jitsi"){
+        cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+      } else {
+        cmd = "ls -al"
+      }
+      console.log(cmd)
+      
+      var commandReqTmp = {
+        command: `${cmd}`
+      }
+      var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
+    
+      axios({
+        method: 'post',
+        url: url,
+        headers: { 'Content-Type': 'application/json' },
+        data: jsonBody,
+        auth: {
+          username: `${username}`,
+          password: `${password}`
+        }
+        
+      })
+      .then((res)=>{
+        console.log(res); // for debug
+        document.getElementById("startApp").style.color = "#000000";
+        messageTextArea.value = "[Complete: Deployed App]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t').replace(/['",]+/g, '');
+      });
+
     });
+    
+
   } else {
     messageTextArea.value = " MCIS ID is not assigned";
   }
