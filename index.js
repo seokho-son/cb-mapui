@@ -2570,8 +2570,13 @@ function AddMcNLB() {
         console.log(res); // for debug
         document.getElementById("addMcNLB").style.color = "#000000";
         messageTextArea.value = "[Created Multi-Cloud NLB (special MCIS)]\n\n"
-        messageTextArea.value += "[ID]\n" + JSON.stringify(res.data.id, undefined, 4).replace(/['",]+/g, '') + "\n\n";
-        messageTextArea.value += "[IP]\n" + JSON.stringify(res.data.vm[0].publicIP, undefined, 4).replace(/['",]+/g, '') + "\n\n";
+        messageTextArea.value += "[G-NLB ID] " + JSON.stringify(res.data.id, undefined, 4).replace(/['",]+/g, '') + "\n\n";
+        for (let vm of res.data.vm) {
+          messageTextArea.value += "[ID] " + JSON.stringify(vm.id, undefined, 4).replace(/['",]+/g, '') + "\n";
+          messageTextArea.value += "[IP] " + JSON.stringify(vm.publicIP, undefined, 4).replace(/['",]+/g, '') + "\n";
+          messageTextArea.value += "[Where]\n" + JSON.stringify(vm.connectionConfig, undefined, 4).replace(/['",]+/g, '') + "\n\n";
+        }
+        
         infoAlert('Created NLB: '+ JSON.stringify(res.data.id, undefined, 4).replace(/['",]+/g, ''));
       })
       .catch(function (error) {
@@ -2848,6 +2853,8 @@ function startApp() {
         cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setweb.sh -O ~/setweb.sh; chmod +x ~/setweb.sh; sudo ~/setweb.sh"
       } else if (selectApp.value == "Jitsi"){
         cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+      } else if (selectApp.value == "Stress"){
+        cmd = "sudo apt install -y stress > /dev/null; stress -c 16 -t 60"
       } else {
         cmd = "ls -al"
       }
