@@ -1460,6 +1460,7 @@ function createMcis() {
           scrollbarPadding: false
         }).then((result) => {
           if (result.isConfirmed) {
+            createMcisReq.installMonAgent = 'no'
             if (result.value) {
               Swal.fire('Create MCIS with CB-Dragonfly monitoring agent')
               createMcisReq.installMonAgent = 'yes'
@@ -2245,7 +2246,7 @@ function registerCspResource() {
     var password = document.getElementById("password").value;
     var namespace = document.getElementById("namespace").value;
   
-    var url = `http://${hostname}:${port}/tumblebug/registerCspResourcesAll`
+    var url = `http://${hostname}:${port}/tumblebug/registerCspResourcesAll?mcisFlag=n`
     
     var commandReqTmp = {
       mcisName: "csp",
