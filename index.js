@@ -2843,7 +2843,7 @@ function startApp() {
       }
 
       var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`
-      var cmd = ""
+      var cmd = []
       if (selectApp.value == "Xonotic"){
         cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " + "Xonotic-by-Cloud-Barista-" + mcisid + " 26000" + " 8"
       } else if (selectApp.value == "Westward"){
@@ -2862,7 +2862,7 @@ function startApp() {
       console.log(cmd)
       
       var commandReqTmp = {
-        command: `${cmd}`
+        command: cmd
       }
       var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
     
@@ -2907,21 +2907,29 @@ function stopApp() {
     var namespace = document.getElementById("namespace").value;
   
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`
-    var cmd = ""
+    var cmd = []
     if (selectApp.value == "Xonotic"){
-      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/stopServer.sh; chmod +x ~/stopServer.sh; sudo ~/stopServer.sh"
+      cmd.push("wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/stopServer.sh")
+      cmd.push("chmod +x ~/stopServer.sh")
+      cmd.push("sudo ~/stopServer.sh")
     } else if (selectApp.value == "Westward"){
-      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+      cmd.push("wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/stopServer.sh")
+      cmd.push("chmod +x ~/stopServer.sh")
+      cmd.push("sudo ~/stopServer.sh")
     } else if (selectApp.value == "Nginx"){
-      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+      cmd.push("wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/stopServer.sh")
+      cmd.push("chmod +x ~/stopServer.sh")
+      cmd.push("sudo ~/stopServer.sh")
     } else if (selectApp.value == "Jitsi"){
-      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+      cmd.push("wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/stopServer.sh")
+      cmd.push("chmod +x ~/stopServer.sh")
+      cmd.push("sudo ~/stopServer.sh")
     } else {
-      cmd = "ls -al"
+      cmd.push("ls -al")
     }
     
     var commandReqTmp = {
-      command: `${cmd}`
+      command: cmd
     }
     var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
   
@@ -2962,21 +2970,29 @@ function statusApp() {
     var namespace = document.getElementById("namespace").value;
   
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`
-    var cmd = ""
+    var cmd = []
     if (selectApp.value == "Xonotic"){
-      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/statusServer.sh; chmod +x ~/statusServer.sh; sudo ~/statusServer.sh"
+      cmd.push("wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/statusServer.sh -O ~/statusServer.sh")
+      cmd.push("chmod +x ~/statusServer.sh")
+      cmd.push("sudo ~/statusServer.sh")
     } else if (selectApp.value == "Westward"){
-      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+      cmd.push("wget wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh")
+      cmd.push("chmod +x ~/setgame.sh")
+      cmd.push("sudo ~/setgame.sh")
     } else if (selectApp.value == "Nginx"){
-      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+      cmd.push("wget wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setweb.sh -O ~/setweb.sh")
+      cmd.push("chmod +x ~/setweb.sh")
+      cmd.push("sudo ~/setweb.sh")
     } else if (selectApp.value == "Jitsi"){
-      cmd = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh"
+      cmd.push("wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/jitsi/statusServer.sh -O ~/statusServer.sh")
+      cmd.push("chmod +x ~/statusServer.sh")
+      cmd.push("sudo ~/statusServer.sh")
     } else {
-      cmd = "ls -al"
+      cmd.push("ls -al")
     }
     
     var commandReqTmp = {
-      command: `${cmd}`
+      command: cmd
     }
     var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
   
@@ -3018,7 +3034,7 @@ function remoteCmd() {
     var namespace = document.getElementById("namespace").value;
   
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`
-    var cmd = ""
+    var cmd = []
 
     Swal.fire({
       title: 'Put command to forward',
@@ -3039,12 +3055,13 @@ function remoteCmd() {
     }).then((result) => {
       // result.value is false if result.isDenied or another key such as result.isDismissed
       if (result.value) {
-        cmd = result.value;
-        messageTextArea.value += cmd
+        cmd = result.value.split('\n')
+        messageTextArea.value += cmd.join(', ')
 
         var commandReqTmp = {
-          command: `${cmd}`
+          command: cmd
         }
+        
         var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
       
         axios({
