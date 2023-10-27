@@ -44,360 +44,512 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 <!DOCTYPE html>
 <html lang="en">
 
+
 <head>
-  <title>Cloud-Barista Tumblebug Map Client</title>
+  <title>Cloud-Barista Tumblebug Map Dashboard</title>
   <!-- The line below is only needed for old environments like Internet Explorer and Android 4.x -->
   <script
     src="https://cdn.polyfill.io/v2/polyfill.min.js?features=requestAnimationFrame,Element.prototype.classList,URL"></script>
-  <script src="https://code.jquery.com/jquery-2.2.3.min.js"></script>
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
-  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"
+    integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+  <!-- Optional JavaScript -->
+  <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+  <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
+    integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+    crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"
+    integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+    crossorigin="anonymous"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"
+    integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+    crossorigin="anonymous"></script>
+  <!-- json-formatter-js (MIT) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/json-formatter-js/2.2.1/json-formatter.min.js"></script>
+
+
   <style>
     .map {
       width: 100%;
-      height: 1200px;
+      height: 100%;
       /* height:800px; */
     }
+
+    body {
+    transform: scale(0.8);
+    transform-origin: 0 0;
+    width: 125%;
+    margin-right: auto;
+    margin-left: auto;
+}
 
     table {
       border-collapse: separate;
       border-spacing: 0 2px;
     }
+
     table td {
       width: 160px;
     }
 
-    .range-slider {
-  /* .range-slider width & svg-line-x2 should be same */
-      width: 150px;
-      height: 50px;
-  /* Match this to the SVG's x2 value */
-      margin: auto;
-      text-align: center;
-      position: relative;
+    .form-group {
+      min-width: 200px;
     }
-    .range-slider svg,
-    .range-slider input[type="range"] {
-        position: absolute;
-        left: 0;
-        bottom: 0;
+
+    .input-group-text {
+      min-width: 100px;
+      height: 38.5px;
+
     }
-    input[type="number"] {
-        border: 1px solid #ddd;
-        text-align: center;
-        font-size: 14px;
+
+    .form-control {
+      height: 38.5px;
     }
-    input[type="number"]:invalid,
-    input[type="number"]:out-of-range {
-        border: 2px solid #ff6347;
+
+    .card {
+      font-size: 1.1rem;
     }
-    /* webkit-inner-spin-button section is for enable arrow show */
-    input[type=number]::-webkit-inner-spin-button, 
-    input[type=number]::-webkit-outer-spin-button {  
-      opacity: 1;
+
+    /* dropdown button style */
+    .dropdown-menu {
+      width: 98%;
     }
-    input[type="range"] {
-        -webkit-appearance: none;
-        width: 100%;
+
+    .dropdown-menu a {
+      border-bottom: 1px solid #b4b4b4;
+      padding: 20px;
     }
-    input[type="range"]:focus {
-        outline: none;
-    }
-    input[type="range"]:focus::-webkit-slider-runnable-track {
-        background: #2497e3;
-    }
-    input[type="range"]:focus::-ms-fill-lower {
-        background: #2497e3;
-    }
-    input[type="range"]:focus::-ms-fill-upper {
-        background: #2497e3;
-    }
-    input[type="range"]::-webkit-slider-runnable-track {
-        width: 100%;
-        height: 5px;
-        cursor: pointer;
-        animate: 0.2s;
-        background: #2497e3;
-        border-radius: 1px;
-        box-shadow: none;
-        border: 0;
-    }
-    input[type="range"]::-webkit-slider-thumb {
-        z-index: 2;
-        position: relative;
-        box-shadow: 0px 0px 0px #000;
-        border: 1px solid #2497e3;
-        height: 15px;
-        width: 15px;
-        border-radius: 5px;
-        background: #a1d0ff;
-        cursor: pointer;
-        -webkit-appearance: none;
-        margin-top: -7px;
-    }
-    input[type="range"]::-moz-range-track {
-        width: 100%;
-        height: 5px;
-        cursor: pointer;
-        animate: 0.2s;
-        background: #2497e3;
-        border-radius: 1px;
-        box-shadow: none;
-        border: 0;
-    }
-    input[type="range"]::-moz-range-thumb {
-        z-index: 2;
-        position: relative;
-        box-shadow: 0px 0px 0px #000;
-        border: 1px solid #2497e3;
-        height: 15px;
-        width: 15px;
-        border-radius: 5px;
-        background: #a1d0ff;
-        cursor: pointer;
-    }
-    input[type="range"]::-ms-track {
-        width: 100%;
-        height: 5px;
-        cursor: pointer;
-        animate: 0.2s;
-        background: transparent;
-        border-color: transparent;
-        color: transparent;
-    }
-    input[type="range"]::-ms-fill-lower,
-    input[type="range"]::-ms-fill-upper {
-        background: #2497e3;
-        border-radius: 1px;
-        box-shadow: none;
-        border: 0;
-    }
-    input[type="range"]::-ms-thumb {
-        z-index: 2;
-        position: relative;
-        box-shadow: 0px 0px 0px #000;
-        border: 1px solid #2497e3;
-        height: 18px;
-        width: 18px;
-        border-radius: 25px;
-        background: #a1d0ff;
-        cursor: pointer;
+
+    .dropdown-menu a:hover {
+      background-color: #98ed90;
+
     }
   </style>
 </head>
 
 <body>
-  &nbsp;&nbsp;[CB-MapUI for Cloud-Barista Tumeblebug]
+  <div class="container-fluid">
+    <!-- <h3 class="my-1">CB-Tumblebug Map Dashboard</h3> -->
 
-  <table>
-    <tbody>
-      <tr>
-        <td>&nbsp;&nbsp;Configuration&nbsp;&nbsp;</td>
-        <td>TB IP:&nbsp;<br><input type=text id=hostname name=hostname value="localhost" onchange="endpointChanged();" style="text-align:center; width:95%"></td>
-        <td>TB Port:&nbsp;<input type=text id=port name=port value="1323" style="text-align:center; width:95%"> </td>
-        <td>Username:&nbsp;<input type=text id=username name=username value="default" style="text-align:center; width:95%"></td>
-        <td>Password:&nbsp;<input type=password id=password name=password value="default" style="text-align:center; width:95%"></td>
-        
-        <td>Total CSP regions:&nbsp;<input type="checkbox" id="displayOn" name="displayOn" onClick="displayCSPListOn();" value="on">
-          <input type=button value="Show CSP" onClick="getConnection();" style="text-align:center; width:95%">
-        </td>
-        <td>MCIS Display:&nbsp;<input type=button value="Hide/Show" onClick="hideMCIS();" style="text-align:center; width:95%"></td>   
-        <td>Display Interval:
-          <select id="refreshInterval" name="refreshInterval" style="text-align:center; width:50px">
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="5">5</option>
-            <option value="10" selected="selected">10</option>
-            <option value="20">20</option>
-            <option value="50">50</option>
-            <option value="100">100</option>
-          </select>
-          <input type=button value="Clear map" onClick="clearMap()" style="text-align:center; width:95%"> 
-        </td>
+    <div class="row">
+      <!-- Left Column for Cards -->
+      <div class="col-md-3">
 
-      </tr>
+        <!-- Configuration Card -->
+        <div class="card mb-2">
+          <div class="card-header">Dashboard Configuration</div>
+          <div class="card-body d-flex flex-column">
+            <form id="configuration-form" class="form-row">
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">IP</span>
+                  </div>
+                  <input type="text" class="form-control" id="hostname" name="hostname" value="localhost"
+                    onchange="endpointChanged();">
+                </div>
+              </div>
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">Port</span>
+                  </div>
+                  <input type="text" class="form-control" id="port" name="port" value="1323">
+                </div>
+              </div>
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">Username</span>
+                  </div>
+                  <input type="text" class="form-control" id="username" name="username" value="default">
+                </div>
+              </div>
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">Password</span>
+                  </div>
+                  <input type="password" class="form-control" id="password" name="password" value="default">
+                </div>
+              </div>
 
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text" id="refreshIntervalLabel">Refresh(s)</span>
+                  </div>
+                  <select id="refreshInterval" name="refreshInterval" class="form-control" aria-label="Display Interval"
+                    aria-describedby="refreshIntervalLabel">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="5" selected="selected">5</option>
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
+                </div>
+              </div>
 
-      <tr>
-        <td>&nbsp;&nbsp;MCIS Setting&nbsp;&nbsp;</td>
-        <td>NS ID:&nbsp;
-          <select id="namespace" name="namespace" style="text-align:center; width:95%">
-          <!-- <option value="mcis01">mcis01</option> -->
-          </select>
-        </td>
-        <td>MCIS ID:&nbsp;
-          <select id="mcisid" name="mcisid" style="text-align:center; width:95%">
-          <!-- <option value="mcis01">mcis01</option> -->
-          </select>
-        </td>
-        <td>SubGroup ID:&nbsp;
-          <select id="subgroupid" name="subgroupid" style="text-align:center; width:95%">
-            <!-- <option value="subgroup01">subgroup01</option> -->
-            </select>
-        </td>
-        <td>VM ID:&nbsp;
-          <select id="vmid" name="vmid" style="text-align:center; width:95%">
-          <!-- <option value="vmid">vmid</option> -->
-          </select>
-        </td>
+              <div class="form-group col dropdown">
+                <button class="btn btn-secondary dropdown-toggle w-100" type="button" id="mapControlDropdown"
+                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                  Map Control
+                </button>
+                <div class="dropdown-menu" aria-labelledby="mapControlDropdown">
+                  <a class="dropdown-item" href="javascript:void(0)" onclick="getConnection();">Show all Clouds</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onclick="hideMCIS();">Hide/Show MCIS</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onclick="clearMap();">Clear Map</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onclick="toggleView();">Toggle Map/API</a>
+                </div>
+              </div>
 
-        <td>
-          Multi-Cloud NLB:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-          <input type=button id=addMcNLB value="Add MC-NLB" onClick="AddMcNLB();" style="text-align:center; width:95%">
-        </td>
+              <!-- Create MCIS Field -->
+              <div class="form-group col">
+                <button type="button" onClick="toggleView();" class="btn btn-secondary w-100">Toggle Map/API</button>
+              </div>
 
-        <td>
-          SubGroup NLB:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-          <input type=button id=addNLB value="Add NLB" onClick="AddNLB();" style="text-align:center; width:45%">
-          <input type=button id=delNLB value="Del NLB" onClick="DelNLB();" style="text-align:center; width:45%">
-        </td>
-        <td><input type=button id="registerCspResource" value="Register resource" onClick="registerCspResource();" style="text-align:center; width:95%"></td>
-        <td><input type=button id="resourceOverview" value="Overview resource" onClick="resourceOverview();" style="text-align:center; width:95%"></td>
-        
-        
-      </tr>
-
-
-      <tr>
-        <td>&nbsp;&nbsp;MCIS Control&nbsp;&nbsp;</td>
-        <td><input type=button value="Status" onClick="statusMCIS();" style="text-align:center; width:95%"></td>   
-        <td><input type=button value="Suspend" onClick="controlMCIS('suspend');" style="text-align:center; width:95%"></td>
-        <td><input type=button value="Resume" onClick="controlMCIS('resume');" style="text-align:center; width:95%"></td>
-        <td><input type=button value="Reboot" onClick="controlMCIS('reboot');" style="text-align:center; width:95%"></td>
-        <td><input type=button value="Refine" onClick="controlMCIS('refine');" style="text-align:center; width:95%"></td>
-        <td><input type=button value="Terminate" onClick="controlMCIS('terminate');" style="text-align:center; width:95%"></td>
-        <td><input type=button value="Delete" onClick="deleteMCIS();" style="text-align:center; width:95%"></td>
-
-        <td><input type=button value="Release resource" onClick="releaseResources();" style="text-align:center; width:95%"></td>
-        
-      </tr> 
-
-      <tr>
-        <td>&nbsp;&nbsp;&nbsp;&nbsp;</td>
-      </tr> 
-
-
-      <tr>
-        <td>&nbsp;&nbsp;MCIS Provisioning&nbsp;&nbsp;</td>
-
-        <td rowspan="1" colspan="1" >
-          <!-- Provisioning Policy -->
-          <select id="recommendPolicy" name="recommendPolicy" style="text-align:center; width:95%">
-            <option value="location" selected="selected">Location-based</option>
-            <option value="price">Cost-based</option>
-            <option value="performance">Performance-based</option>
-          </select>
-        </td>
-
-        <td><input id="createMcis" type=button value="Create MCIS" onClick="createMcis();" style="text-align:center; width:95%"></td>
-        <td><input type=button value="Clear Selection" onClick="clearCircle('clearText');" style="text-align:center; width:95%"></td>
-
-
-        <td rowspan="1" colspan="1" >
-          OS Image Type
-          <select id="osImage" name="osImage" style="text-align:center; width:95%">
-            <option value="Ubuntu18.04" selected="selected">Ubuntu 18.04</option>
-            <option value="Ubuntu22.04" >Ubuntu 22.04</option>
-            <option value="Debian10" >Debian 10</option>
-            <option value="WindowsServer2012R2" >Windows 2012 R2</option>  
-          </select>
-        </td>
-
-        <td>Disk Size&nbsp;<input type=text id=diskSize name=diskSize value="default" style="text-align:center; width:95%"></td>
-        <td>CPU range (N):&nbsp;
-          <!-- <div class="range-slider"> -->
-            <span>
-              <input type="number" id='minVCPU' value="1" min="1" max="448" step="1" style="text-align:center; width:40%">
-              ~<input type="number" id='maxVCPU' value="8" min="1" max="448" step="1" style="text-align:center; width:40%">
-            </span>
-            <!-- <input value="1" min="1" max="104" step="1" type="range" id='minVCPU'> -->
-            <!-- <input value="8" min="1" max="104" step="1" type="range" id='maxVCPU'> -->
-            <!-- <svg width="100%" height="24"> -->
-                <!-- .range-slider width & x2 should be same -->
-                <!-- <line x1="4" y1="0" x2="150" y2="0" stroke="#444" stroke-width="12" stroke-dasharray="1 28"></line> -->
-            <!-- </svg> -->
-          <!-- </div> -->
-        </td>
-
-        <td>Memory range (GB):&nbsp;
-          <!-- <div class="range-slider"> -->
-            <span>
-              <input type="number" id='minRAM' value="0.5" min="0.5" max="12288" step="0.5" style="text-align:center; width:40%">
-              ~<input type="number" id='maxRAM' value="8" min="0.5" max="12288" step="0.5" style="text-align:center; width:40%">
-            </span>
-            <!-- <input value="0.5" min="0.5" max="128" step="1" type="range" id='minRAM'> -->
-            <!-- <input value="8" min="0.5" max="128" step="1" type="range" id='maxRAM'> -->
-            <!-- <svg width="100%" height="24"> -->
-                <!-- .range-slider width & x2 should be same -->
-                <!-- <line x1="4" y1="0" x2="150" y2="0" stroke="#444" stroke-width="12" stroke-dasharray="1 28"></line> -->
-            <!-- </svg> -->
+            </form>
           </div>
-        </td>
+        </div>
 
-        
+        <!-- MCIS Setting Card -->
+        <div class="card mb-2">
+          <div class="card-header">MCIS Setting</div>
+          <div class="card-body d-flex flex-column">
+            <form id="mcis-setting-form" class="form-row">
+              <!-- Namespace ID Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text" id="namespaceLabel">NS ID</span>
+                  </div>
+                  <select id="namespace" name="namespace" class="form-control" aria-label="Namespace ID"
+                    aria-describedby="namespaceLabel">
+                    <!-- Options will be filled dynamically -->
+                  </select>
+                </div>
+              </div>
 
-      </tr> 
+              <!-- MCIS ID Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text" id="mcisidLabel">MCIS ID</span>
+                  </div>
+                  <select id="mcisid" name="mcisid" class="form-control" aria-label="MCIS ID"
+                    aria-describedby="mcisidLabel">
+                    <!-- Options will be filled dynamically -->
+                  </select>
+                </div>
+              </div>
+
+              <!-- SubGroup ID Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text" id="subgroupidLabel">Group ID</span>
+                  </div>
+                  <select id="subgroupid" name="subgroupid" class="form-control" aria-label="SubGroup ID"
+                    aria-describedby="subgroupidLabel">
+                    <!-- Options will be filled dynamically -->
+                  </select>
+                </div>
+              </div>
+
+              <!-- VM ID Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text" id="vmidLabel">VM ID</span>
+                  </div>
+                  <select id="vmid" name="vmid" class="form-control" aria-label="VM ID" aria-describedby="vmidLabel">
+                    <!-- Options will be filled dynamically -->
+                  </select>
+                </div>
+              </div>
+
+              <!-- Resource Control Field -->
+              <div class="form-group col dropdown">
+                <button class="btn btn-primary dropdown-toggle w-100" type="button" id="resourceControlDropdown"
+                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                  Resource Control
+                </button>
+                <div class="dropdown-menu" aria-labelledby="resourceControlDropdown">
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="releaseResources();">Release Used
+                    Resources</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="resourceOverview();">Overview
+                    Resources</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="registerCspResource();">Register Existing
+                    Resources</a>
+                </div>
+              </div>
 
 
-      <tr>
-        <td>&nbsp;&nbsp;MCIS Application&nbsp;&nbsp;</td>
+            </form>
+          </div>
+        </div>
 
-        <td rowspan="1" colspan="1" >
-          <!-- Select Application -->
-          <select id="selectApp" name="selectApp" style="text-align:center; width:95%">
-            <option value="Xonotic" selected="selected">FPSGame(Xonotic)</option>
-            <option value="Westward">MMORPG(Westward)</option>
-            <option value="Nginx">WebServer(Nginx)</option>
-            <option value="WeaveScope">Monitor(WeaveScope)</option>
-            <option value="Jitsi">VideoConf(Jitsi)</option>
-            <option value="Stress">LoadTest(Stress)</option>
-          </select>
-        </td>
 
-        <td><input type=button id="startApp" value="Start App" onClick="startApp()" style="text-align:center; width:95%"></td>
-        <td><input type=button id="stopApp" value="Stop App" onClick="stopApp()" style="text-align:center; width:95%"></td>
-        <!-- <td><input type=button value="Video Conf: Jitsi" onClick="deployApp()" style="text-align:center; width:95%"></td> -->
+        <!-- MCIS Control Card -->
+        <div class="card mb-2">
+          <div class="card-header">MCIS Control</div>
+          <div class="card-body d-flex flex-column">
+            <form id="mcis-control-form" class="form-row">
 
-        <td><input type=button id="statusApp" value="Status App" onClick="statusApp()" style="text-align:center; width:95%"></td>
-        <td><input type=button id="remoteCmd" value="Remote Command" onClick="remoteCmd()" style="text-align:center; width:95%"></td>
+              <!-- Create MCIS Field -->
+              <div class="form-group col">
+                <button type="button" id="createMcisButton" onClick="createMcis();" class="btn btn-primary w-100">Create
+                  MCIS</button>
+              </div>
 
-        <td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MCIS Access: &nbsp;</td>
+              <!-- Status Field -->
+              <div class="form-group col">
+                <input type="button" value="Status" onClick="statusMCIS();" class="btn btn-primary w-100">
+              </div>
 
-        <td><input type=button id="getAccessInfo" value="Get Access Info" onClick="getAccessInfo()" style="text-align:center; width:95%"></td>
-        <td><button class="save-file" style="text-align:center; width:95%">Save SSH Key</button></td>
-      </tr> 
+              <!-- Control Actions Dropdown -->
+              <div class="form-group col dropdown">
+                <button class="btn btn-secondary dropdown-toggle w-100" type="button" id="controlActionsDropdown"
+                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                  Actions
+                </button>
+                <div class="dropdown-menu" aria-labelledby="controlActionsDropdown">
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCIS('suspend');">Suspend</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCIS('resume');">Resume</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCIS('reboot');">Reboot</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCIS('refine');">Refine</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCIS('terminate');">Terminate</a>
+                </div>
+              </div>
 
-    </tbody>
-  </table>
-  
-  <table>
-    <tr>
-      <td>&nbsp;</td>
-      <td rowspan="1" colspan="3" >
-        <textarea id = "message" rows = "4" cols = "130" name = "message" readonly ></textarea>
-      </td>
-      <td rowspan="1" colspan="3" >
-        &nbsp;&nbsp;Display recommendation table:&nbsp;<input type="checkbox" id="tableOn" name="tableOn" onClick="displayTableOn();" value="on">
-        <textarea id = "message2" rows = "3" cols = "40" name = "message2" readonly ></textarea>
-      </td>
-    </tr>
-  </table>
+              <!-- Delete Field -->
+              <div class="form-group col">
+                <input type="button" value="Delete" onClick="deleteMCIS();" class="btn btn-dark w-100">
+              </div>
 
-  <table id="detailTable" border="1" style="text-align:center; width:1111px">
-  </table>
 
-  <!-- 
-  Latitude: <input type=text id=latitude name=latitude  value="" style="text-align:center; width:95%"> 
-  Longitude: <input type=text id=longitude name=longitude  value="" style="text-align:center; width:95%"> 
-  <input type=button value="Get Recommended Spec" onClick="getRecommendedSpec();" style="text-align:center; width:180px">
-  <br>
-  Recommended spec: <input type=text id=recommendedSpec name=recommendedSpec  value="" style="text-align:center; width:180px">
-  <div id="latLonInputPairArea"></div>
-  -->
-  <div id="map" class="map">
-    <div id="popup"></div>
-  </div>
-  <script type="module" src="./index.js"></script>
+              <!-- NLB Control Dropdown -->
+              <div class="form-group col dropdown">
+                <button class="btn btn-secondary dropdown-toggle w-100" type="button" id="nlbControlDropdown"
+                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                  NLB Control
+                </button>
+                <div class="dropdown-menu" aria-labelledby="nlbControlDropdown">
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="AddMcNLB();">Add Global-NLB</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="AddNLB();">Add Regional-NLB</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="DelNLB();">Del Regional-NLB</a>
+                </div>
+              </div>
+
+            </form>
+          </div>
+        </div>
+
+        <!-- MCIS Configuration Card -->
+        <div class="card mb-2">
+          <div class="card-header">MCIS Configuration</div>
+          <div class="card-body d-flex flex-column">
+            <form id="mcis-configuration-form" class="form-row">
+              <!-- Recommendation Policy Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">Policy</span>
+                  </div>
+                  <select id="recommendPolicy" name="recommendPolicy" class="form-control">
+                    <option value="location" selected="selected">Location-based</option>
+                    <option value="price">Cost-based</option>
+                    <option value="performance">Performance-based</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- OS Image Type Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">OS Image</span>
+                  </div>
+                  <select id="osImage" name="osImage" class="form-control">
+                    <option value="Ubuntu18.04" selected="selected">Ubuntu 18.04</option>
+                    <option value="Ubuntu22.04">Ubuntu 22.04</option>
+                    <option value="Debian10">Debian 10</option>
+                    <option value="WindowsServer2012R2">Windows 2012 R2</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Disk Size Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">Disk Size</span>
+                  </div>
+                  <input type="text" class="form-control" id="diskSize" name="diskSize" value="default">
+                </div>
+              </div>
+
+              <!-- CPU Range Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">CPU (n)</span>
+                  </div>
+                  <input type="number" class="form-control m-0" id='minVCPU' value="1" min="1" max="448" step="1">
+                  <span class="mx-1">~</span>
+                  <input type="number" class="form-control m-0" id='maxVCPU' value="8" min="1" max="448" step="1">
+                </div>
+              </div>
+
+
+              <!-- Memory Range Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">Mem (GB)</span>
+                  </div>
+                  <input type="number" class="form-control m-0" id='minRAM' value="0.5" min="0.5" max="12288"
+                    step="0.5">
+                  <span class="mx-1">~</span>
+                  <input type="number" class="form-control m-0" id='maxRAM' value="8" min="0.5" max="12288" step="0.5">
+                </div>
+              </div>
+
+              <!-- Clear Selection Field -->
+              <div class="form-group col">
+                <button type="button" onClick="clearCircle('clearText');" class="btn btn-secondary w-100">Clear
+                  Selection</button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+
+        <!-- MCIS Application Card -->
+        <div class="card mb-2">
+          <div class="card-header">MCIS Application</div>
+          <div class="card-body d-flex flex-column">
+            <form id="mcis-application-form" class="form-row">
+
+              <!-- Select Application Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text" id="selectAppLabel">Select App</span>
+                  </div>
+                  <select id="selectApp" name="selectApp" class="form-control" aria-label="Select Application"
+                    aria-describedby="selectAppLabel">
+                    <option value="Xonotic" selected="selected">FPSGame(Xonotic)</option>
+                    <option value="Westward">MMORPG(Westward)</option>
+                    <option value="Nginx">WebServer(Nginx)</option>
+                    <option value="WeaveScope">Monitor(WeaveScope)</option>
+                    <option value="Jitsi">VideoConf(Jitsi)</option>
+                    <option value="Stress">LoadTest(Stress)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Application Control Buttons -->
+              <div class="form-group col dropdown">
+                <button class="btn btn-secondary dropdown-toggle w-100" type="button" id="appControlDropdown"
+                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                  App Control
+                </button>
+                <div class="dropdown-menu" aria-labelledby="appControlDropdown">
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="startApp();">Start App</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="stopApp();">Stop App</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="statusApp();">Status App</a>
+                </div>
+              </div>
+
+
+              <!-- MCIS Access Field -->
+              <div class="form-group col dropdown">
+                <button class="btn btn-primary dropdown-toggle w-100" type="button" id="accessDropdown"
+                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                  Get Access
+                </button>
+                <div class="dropdown-menu" aria-labelledby="accessDropdown">
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="getAccessInfo();">Get Access Info</a>
+                  <a class="dropdown-item save-file" href="javascript:void(0)">Save SSH Key</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="executeRemoteCmd();">Remote Command</a>
+                </div>
+              </div>
+
+
+              <!-- Remote Command Field -->
+              <div class="form-group col">
+                <button type="button" id="remoteCmd" onClick="executeRemoteCmd();" class="btn btn-warning w-100">Remote
+                  Command</button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+        <!-- Message Area -->
+        <div class="card mb-2">
+          <div class="card-header">Message Area</div>
+          <div class="card-body d-flex flex-column">
+            <div class="row">
+              <div class="col-md-9">
+                <textarea id="message" rows="3" cols="130" name="message" readonly class="form-control"></textarea>
+              </div>
+              <div class="col-md-3">
+                <div class="form-check mb-2">
+                  <label class="form-check-label" for="tableOn">Display table</label>
+                  <input type="checkbox" class="form-check-input" id="tableOn" name="tableOn"
+                    onClick="displayTableOn();" value="on">
+
+                </div>
+              </div>
+              <div class="col-md-9">
+                <div id="jsonoutput" class="form-control" readonly style="height: auto;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detail Table -->
+        <div class="card mb-2">
+          <div class="card-header">Detail Table</div>
+          <div class="card-body d-flex flex-column">
+            <table id="detailTable" border="1" style="text-align:center; width:1111px" class="table table-bordered">
+              <!-- ... (Table headers and data rows) ... -->
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column for Map or API-->
+      <div class="col-md-9">
+        <div id="map" class="map" style="display:block;">
+          <div id="popup"></div>
+        </div>
+        <iframe id="iframe" src="http://localhost:1323/tumblebug/swagger/index.html"
+          style="display:none; width:100%; height:100%;"></iframe>
+      </div>
+
+    </div>
+
+
+    <script type="module" src="./index.js"></script>
+    <script type="text/javascript">
+      function toggleView() {
+        var map = document.getElementById('map');
+        var iframe = document.getElementById('iframe');
+
+        if (map.style.display === "none") {
+          map.style.display = "block";
+          iframe.style.display = "none";
+        } else {
+          map.style.display = "none";
+          iframe.src = "http://" + document.getElementById('hostname').value + ":" + document.getElementById('port').value + "/tumblebug/swagger/index.html";
+          iframe.style.display = "block";
+        }
+      }
+    </script>
 </body>
 
 </html>
