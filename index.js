@@ -55,6 +55,7 @@ import Feature from 'ol/Feature';
 import { TileJSON, Vector as VectorSource } from 'ol/source';
 import { Icon } from 'ol/style';
 import { useGeographic } from 'ol/proj';
+import JSONFormatter from 'json-formatter-js' 
 
 // popup overlay
 import Overlay from 'ol/Overlay';
@@ -98,7 +99,7 @@ var ipMap = [];
 var geoMap = [];
 
 var messageTextArea = document.getElementById("message");
-var messageDetailTextArea = document.getElementById("message2");
+var messageJsonOutput = document.getElementById('jsonoutput');
 var cspListDisplayEnabled = document.getElementById("displayOn");
 var tableDisplayEnabled = document.getElementById("tableOn");
 var table = document.getElementById('detailTable');
@@ -121,8 +122,8 @@ var map = new Map({
   layers: [tileLayer],
   target: 'map',
   view: new View({
-    center: [0, 0],
-    zoom: 2
+    center: [40, 90],
+    zoom: 3
   }),
   //projection: 'EPSG:4326'
 });
@@ -130,7 +131,7 @@ var map = new Map({
 // fucntion for clear map.
 function clearMap() {
   table.innerHTML = "";
-  messageDetailTextArea.value = '';
+  messageJsonOutput.value = '';
   messageTextArea.value = '';
   geometries = [];
   map.render();
@@ -146,7 +147,7 @@ function clearCircle(option) {
   recommendedSpecList = [];
   cspPointsCircle = [];
   geoCspPointsCircle = [];
-  messageDetailTextArea.value = '';
+  messageJsonOutput.value = '';
   table.innerHTML = "";
 }
 window.clearCircle = clearCircle;
@@ -1468,7 +1469,7 @@ function createMcis() {
             var jsonBody = JSON.stringify(createMcisReq, undefined, 4);
     
             messageTextArea.value = " Creating MCIS ...";
-            document.getElementById("createMcis").style.color = "#FF0000";
+            document.getElementById("createMcisButton").style.color = "#FF0000";
           
             axios({
               method: 'post',
@@ -1483,8 +1484,8 @@ function createMcis() {
             })
             .then((res)=>{
               console.log(res); // for debug
-              document.getElementById("createMcis").style.color = "#000000";
-              messageTextArea.value = "[Complete: MCIS Info]\n" + JSON.stringify(res.data, null, 2).replace(/['",]+/g, '');
+              document.getElementById("createMcisButton").style.color = "#000000";
+              messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
               updateMcisList();
               clearCircle("none")
               infoAlert('Created '+ createMcisReq.name);
@@ -1500,7 +1501,7 @@ function createMcis() {
                 console.log('Error', error.message);
               }
               console.log(error.config);
-              document.getElementById("createMcis").style.color = "#000000";
+              document.getElementById("createMcisButton").style.color = "#000000";
               errorAlert(JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, ''));
             });
           }
@@ -1698,8 +1699,8 @@ function getRecommendedSpec(idx, latitude, longitude) {
     addRegionMarker(res.data[0].id);
     //document.getElementById("latLonInputPairArea").innerHTML += `${res.data[0].id}<br>`;
 
-    messageDetailTextArea.value = JSON.stringify(res.data, null, 2).replace(/['",]+/g, '');
-    // messageDetailTextArea.scrollTop = messageDetailTextArea.scrollHeight;
+    messageJsonOutput.appendChild(new JSONFormatter(res.data).render())
+    // messageJsonOutput.scrollTop = messageJsonOutput.scrollHeight;
 
     if (tableDisplayEnabled.checked){
       jsonToTable(JSON.stringify(res.data));
@@ -1914,7 +1915,7 @@ function controlMCIS(action) {
   .then((res)=>{
     if ( res.data != null ){
       console.log(res.data);
-      messageTextArea.value = res.data.message;
+      messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
       switch(action) {
         case 'refine':
         case 'suspend':
@@ -2099,7 +2100,7 @@ function statusMCIS() {
       var obj = JSON.parse(serverData);
       if ( obj.status != null ){
         console.log(obj.status);
-        messageTextArea.value = "[Status MCIS]\n" + JSON.stringify(obj.status, null, 2).replace(/['",]+/g, '');
+        messageJsonOutput.appendChild(new JSONFormatter(obj.status).render());
       }
     });
   }
@@ -2193,9 +2194,9 @@ function releaseResources() {
     }
     
   })
-  .then((res2)=>{
-    console.log(res2); // for debug
-    messageTextArea.value += JSON.stringify(res2.data, null, 2).replace(/['",]+/g, '');
+  .then((res)=>{
+    console.log(res); // for debug
+    messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
   });
 
 }
@@ -2203,7 +2204,7 @@ window.releaseResources = releaseResources;
 
 function resourceOverview() {
   messageTextArea.value = " [Inspect all resources and overview them ...]\n";
-  document.getElementById("resourceOverview").style.color = "#FF0000";
+  document.getElementById("resourceOverviewButton").style.color = "#FF0000";
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
@@ -2225,10 +2226,10 @@ function resourceOverview() {
       password: `${password}`
     }
   })
-  .then((res2)=>{
-    console.log(res2); // for debug
-    messageTextArea.value += JSON.stringify(res2.data, null, 2).replace(/['",]+/g, '') + "\n";
-    document.getElementById("resourceOverview").style.color = "#000000";
+  .then((res)=>{
+    console.log(res); // for debug
+    messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
+    document.getElementById("resourceOverviewButton").style.color = "#000000";
   });
 
 }
@@ -2238,7 +2239,7 @@ window.resourceOverview = resourceOverview;
 function registerCspResource() {
 
     messageTextArea.value = " [Registering all CSP's resources]";
-    document.getElementById("registerCspResource").style.color = "#FF0000";
+    document.getElementById("registerCspResourceButton").style.color = "#FF0000";
   
     var hostname = hostnameElement.value;
     var port = portElement.value;
@@ -2267,8 +2268,9 @@ function registerCspResource() {
     })
     .then((res)=>{
       console.log(res); // for debug
-      document.getElementById("registerCspResource").style.color = "#000000";
-      messageTextArea.value = "[Complete: Registering all CSP's resources]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t').replace(/['",]+/g, '');
+      document.getElementById("registerCspResourceButton").style.color = "#000000";
+      messageTextArea.value = "[Complete: Registering all CSP's resources]\n" 
+      messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
     });
 }
 window.registerCspResource = registerCspResource;
@@ -2765,7 +2767,8 @@ function DelNLB() {
   .then((res)=>{
     console.log(res); // for debug
     document.getElementById("delNLB").style.color = "#000000";
-    messageTextArea.value = "[Deleted NLB]\n" + res.data.message;
+    messageTextArea.value = "[Deleted NLB]\n"
+    messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
     infoAlert(JSON.stringify(res.data.message, undefined, 4).replace(/['",]+/g, ''));
   })
   .catch(function (error) {
@@ -2811,7 +2814,7 @@ function startApp() {
   if (mcisid) {
 
     messageTextArea.value = " Starting " + selectApp.value;
-    document.getElementById("startApp").style.color = "#FF0000";
+    document.getElementById("startAppButton").style.color = "#FF0000";
   
     var hostname = hostnameElement.value;
     var port = portElement.value;
@@ -2879,8 +2882,9 @@ function startApp() {
       })
       .then((res)=>{
         console.log(res); // for debug
-        document.getElementById("startApp").style.color = "#000000";
-        messageTextArea.value = "[Complete: Deployed App]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t').replace(/['",]+/g, '');
+        document.getElementById("startAppButton").style.color = "#000000";
+        messageTextArea.value = "[Complete: Deployed App]\n" 
+        messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
       });
 
     });
@@ -2898,7 +2902,7 @@ function stopApp() {
   if (mcisid) {
 
     messageTextArea.value = " Stopping " + selectApp.value;
-    document.getElementById("stopApp").style.color = "#FF0000";
+    document.getElementById("stopAppButton").style.color = "#FF0000";
   
     var hostname = hostnameElement.value;
     var port = portElement.value;
@@ -2946,8 +2950,9 @@ function stopApp() {
     })
     .then((res)=>{
       console.log(res); // for debug
-      document.getElementById("stopApp").style.color = "#000000";
-      messageTextArea.value = "[Complete: Stopping App]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t').replace(/['",]+/g, '');
+      document.getElementById("stopAppButton").style.color = "#000000";
+      messageTextArea.value = "[Complete: Stopping App]\n" 
+      messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
     });
   } else {
     messageTextArea.value = " MCIS ID is not assigned";
@@ -2961,7 +2966,7 @@ function statusApp() {
   if (mcisid) {
 
     messageTextArea.value = " Getting status " + selectApp.value;
-    document.getElementById("statusApp").style.color = "#FF0000";
+    document.getElementById("statusAppButton").style.color = "#FF0000";
   
     var hostname = hostnameElement.value;
     var port = portElement.value;
@@ -3009,8 +3014,9 @@ function statusApp() {
     })
     .then((res)=>{
       console.log(res); // for debug
-      document.getElementById("statusApp").style.color = "#000000";
-      messageTextArea.value = "[Complete: Getting App status]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t').replace(/['",]+/g, '');
+      document.getElementById("statusAppButton").style.color = "#000000";
+      messageTextArea.value = "[Complete: Getting App status]\n" 
+      messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
     });
   } else {
     messageTextArea.value = " MCIS ID is not assigned";
@@ -3019,9 +3025,13 @@ function statusApp() {
 window.statusApp = statusApp;
 
 
-// function for remoteCmd by remoteCmd button item
-function remoteCmd() {
+// function for executeRemoteCmd by remoteCmd button item
+function executeRemoteCmd() {
   var mcisid = document.getElementById("mcisid").value;
+  var subgroupid = document.getElementById("subgroupid").value;
+  var vmid = document.getElementById("vmid").value;
+  let cmdCount = 3; // Initial number of textboxes
+
   if (mcisid) {
 
     messageTextArea.value = "[Forward remote ssh command to MCIS:" + mcisid + "]\n";
@@ -3037,25 +3047,89 @@ function remoteCmd() {
     var cmd = []
 
     Swal.fire({
-      title: 'Put command to forward',
+      title: '<font size=5><b>Put multiple commands to forward</b></font>',
       width: 600,
-      html: 
-        '<font size=4>' +
-        'MCIS: ' + mcisid,
-      input: 'textarea',
-      inputAttributes: {
-        autocapitalize: 'off'
-      },
+      html: `
+      <div id="dynamicContainer" style="text-align: left;">
+        <p><font size=4><b>[Commands]</b></font></p>
+        <div id="cmdContainer" style="margin-bottom: 20px;">
+          <div id="cmdDiv1" class="cmdRow">
+            Command 1: <input type="text" id="cmd1" style="width: 60%" value="client_ip=$(echo $SSH_CLIENT | awk '{print $1}'); echo SSH client IP is: $client_ip">
+            <button onclick="document.getElementById('cmd1').value = ''">Clear</button>
+          </div>
+          <div id="cmdDiv2" class="cmdRow">
+            Command 2: <input type="text" id="cmd2" style="width: 60%">
+            <button onclick="document.getElementById('cmd2').value = ''">Clear</button>
+          </div>
+          <div id="cmdDiv3" class="cmdRow">
+            Command 3: <input type="text" id="cmd3" style="width: 60%">
+            <button onclick="document.getElementById('cmd3').value = ''">Clear</button>
+          </div>
+          <button id="addCmd" onclick="addCmd()" style="margin-left: 1px;"> + </button>
+        </div>
+        
+        <p><font size=4><b>[Select target]</b></font></p>
+        <div style="display: flex; align-items: center;">
+          <div style="margin-right: 10px;">
+            <input type="radio" id="mcisOption" name="selectOption" value="MCIS" checked>
+            <label for="mcisOption">MCIS: <span style="color:blue;">${mcisid}</span></label>
+          </div>
+          <div style="margin-right: 10px;">
+            <input type="radio" id="subGroupOption" name="selectOption" value="SubGroup">
+            <label for="subGroupOption">SUBGROUP: <span style="color:green;">${subgroupid}</span></label>
+          </div>
+          <div>
+            <input type="radio" id="vmOption" name="selectOption" value="VM">
+            <label for="vmOption">VM: <span style="color:red;">${vmid}</span></label>
+          </div>
+        </div>
+      </div>`,
       showCancelButton: true,
-      confirmButtonText: 'Confirm',
-      //showLoaderOnConfirm: true,
-      // position: 'top-end',
-      //back(disabled section)ground color
-      backdrop: `rgba(0, 0, 0, 0.08)`
+      confirmButtonText: 'Execute',
+      didOpen: () => {
+        // Function to add additional textbox
+        window.addCmd = () => {
+          cmdCount++;
+          const newCmd = document.createElement('div');
+          newCmd.id = `cmdDiv${cmdCount}`;
+          newCmd.className = "cmdRow"; // class for each command row
+          newCmd.innerHTML = `Command ${cmdCount}: <input type="text" id="cmd${cmdCount}" style="width: 60%">
+                              <button onclick="document.getElementById('cmd${cmdCount}').value = ''">Clear</button>`;
+          document.getElementById('cmdContainer').appendChild(newCmd);
+  
+          // Move the addCmd button to be next to the last command's Clear button
+          const lastCmd = document.getElementById(`cmdDiv${cmdCount}`);
+          lastCmd.appendChild(document.getElementById("addCmd"));
+        }
+      },
+      preConfirm: () => {
+        // Collect commands from textboxes
+        const commands = [];
+        for (let i = 1; i <= cmdCount; i++) {
+          const cmd = document.getElementById('cmd' + i).value;
+          if (cmd) {
+            commands.push(cmd);
+          }
+        }
+        return commands;
+      },
     }).then((result) => {
       // result.value is false if result.isDenied or another key such as result.isDismissed
       if (result.value) {
-        cmd = result.value.split('\n')
+        // Handle radio button value
+        const radioValue = Swal.getPopup().querySelector('input[name="selectOption"]:checked').value;
+        if (radioValue === "MCIS") {
+          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`
+          console.log("Performing tasks for MCIS");
+        } else if (radioValue === "SubGroup") {
+          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}?subGroupId=${subgroupid}`
+          console.log("Performing tasks for SubGroup");
+        } else if (radioValue === "VM") {
+          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}?vmId=${vmid}`
+          console.log("Performing tasks for VM");
+        }
+
+        cmd = result.value
         messageTextArea.value += cmd.join(', ')
 
         var commandReqTmp = {
@@ -3077,8 +3151,27 @@ function remoteCmd() {
         })
         .then((res)=>{
           console.log(res); // for debug
-          document.getElementById("remoteCmd").style.color = "#000000";
-          messageTextArea.value = "[Complete: remote ssh command to MCIS]\n" + JSON.stringify(res.data, null, 2).replaceAll(/\\n/g, newline +'\t' +'\t').replace(/['",]+/g, '');
+          let formattedOutput = "[Complete: remote ssh command to MCIS]\n\n";
+    
+          res.data.results.forEach((result) => {
+              formattedOutput += `### MCIS ID: ${result.mcisId} | IP: ${result.vmId} | IP: ${result.vmIp} ###\n`;
+              
+              Object.keys(result.command).forEach((key) => {
+                  formattedOutput += `\nCommand: ${result.command[key]}`;
+      
+                  if (result.stdout[key].trim()) {
+                      formattedOutput += `\nOutput:\n${result.stdout[key]}`;
+                  }
+                  
+                  if (result.stderr[key].trim()) {
+                      formattedOutput += `\nError:\n${result.stderr[key]}`;
+                  }
+              });
+      
+              formattedOutput += "\n--------------------------------------\n";
+          });
+      
+          messageTextArea.value = formattedOutput;
         });
 
       } else {
@@ -3091,7 +3184,7 @@ function remoteCmd() {
     messageTextArea.value = " MCIS ID is not assigned";
   }
 }
-window.remoteCmd = remoteCmd;
+window.executeRemoteCmd = executeRemoteCmd;
 
 
 // function for getAccessInfo of MCIS
@@ -3117,9 +3210,9 @@ function getAccessInfo() {
         password: `${password}`
       }
     })
-    .then((res2)=>{
-      console.log(res2); // for debug
-      messageTextArea.value += JSON.stringify(res2.data, null, 2).replace(/['",]+/g, '') + "\n";
+    .then((res)=>{
+      console.log(res); // for debug
+      messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
     });
     
   } else {
@@ -3130,7 +3223,7 @@ window.getAccessInfo = getAccessInfo;
 
 
 // SSH Key save function
-const saveBtn = document.querySelector('button.save-file');
+const saveBtn = document.querySelector('.save-file');
 saveBtn.addEventListener('click', function(){
 
   messageTextArea.value = " [Retrieve MCIS Access Information ...]\n";
@@ -3155,12 +3248,12 @@ saveBtn.addEventListener('click', function(){
       password: `${password}`
     }
   })
-  .then((res2)=>{
-    console.log(res2); // for debug
-    messageTextArea.value += JSON.stringify(res2.data, null, 2).replace(/['",]+/g, '') + "\n";
+  .then((res)=>{
+    console.log(res); // for debug
+    messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
     var privateKey = ""
 
-    for (let subGroupAccessInfo of res2.data.McisSubGroupAccessInfo) {
+    for (let subGroupAccessInfo of res.data.McisSubGroupAccessInfo) {
       if (subGroupAccessInfo.SubGroupId == groupid){
         for (let vmAccessInfo of subGroupAccessInfo.McisVmAccessInfo) {
           if (vmAccessInfo.vmId == vmid){
