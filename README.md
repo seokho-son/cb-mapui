@@ -26,6 +26,8 @@ Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
      sudo apt-get install nodejs -y
 
      sudo apt-get install npm
+
+     node -v; npm -v
      ```
 
  - 의존 node 패키지: `package.json` 참고
@@ -36,6 +38,11 @@ Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
      (Openlayers: https://openlayers.org/en/latest/doc/tutorials/bundle.html )
 
 ### 빌드 및 실행
+ - 다운로드
+   ```bash
+   https://github.com/cloud-barista/cb-mapui.git
+   cd ./cb-mapui
+   ```
 
  - 빌드
   ```bash
