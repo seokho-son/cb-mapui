@@ -1,5 +1,5 @@
-# cb-mapui
-Interactive Map-based GUI for CB-Tumblebug (control and display multi-cloud infra)
+# CB-MapUI
+Interactive Map-based GUI dashboard for CB-Tumblebug (control and display multi-cloud infra)
 
 Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
 
@@ -14,8 +14,18 @@ Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
    - https://github.com/nodesource/distributions 의 Node.js **v16.x** 설치 (아래 설치 명령어 예시 참조)
      ```bash
      # Using Ubuntu
-     curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-     sudo apt-get install -y nodejs
+     sudo apt-get update
+     sudo apt-get install -y ca-certificates curl gnupg
+     sudo mkdir -p /etc/apt/keyrings
+     curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+
+     NODE_MAJOR=16
+     echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list
+
+     sudo apt-get update
+     sudo apt-get install nodejs -y
+
+     sudo apt-get install npm
      ```
 
  - 의존 node 패키지: `package.json` 참고
