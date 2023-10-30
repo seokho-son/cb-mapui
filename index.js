@@ -71,12 +71,8 @@ import {defaults as defaultControls} from 'ol/control';
 import Swal from 'sweetalert2'
 const Swal = require('sweetalert2')
 
-const axios = require('axios')
+import axios, {isCancel, AxiosError} from 'axios';
 
-//var express = require('express');
-//var app = express();
-//var publicDir = require('path').join(__dirname,'/public');
-//app.use(express.static(publicDir));
 
 useGeographic();
 var i, j;
@@ -98,8 +94,7 @@ var mcisGeo = new Array();
 var ipMap = [];
 var geoMap = [];
 
-var messageTextArea = document.getElementById("message");
-var messageJsonOutput = document.getElementById('jsonoutput');
+
 var cspListDisplayEnabled = document.getElementById("displayOn");
 var tableDisplayEnabled = document.getElementById("tableOn");
 var table = document.getElementById('detailTable');
@@ -110,6 +105,10 @@ var selectApp = document.getElementById('selectApp');
 var newline = String.fromCharCode(13, 10); // newline is special Char used in TextArea box
 var hostnameElement = document.getElementById("hostname");
 var portElement = document.getElementById("port");
+
+var messageTextArea = document.getElementById("message");
+var messageJsonOutput = document.getElementById('jsonoutput');
+
 
 var tileLayer = new TileLayer({
   source: new OSM()
@@ -325,13 +324,7 @@ for (var i = 0; i < cntInit; ++i) {
     mcisStatus[i] = "Running-(6/6)"
   }
   
-  //testPoints.push([lon, lat] );
 
-  //console.log("testPoints : " + testPoints);
-
-  //geometries[i] = new Polygon([[[lon, lat], [lon+5, lat+5], [lon-5, lat-5], [lon, lat]]]);
-  //geometriesPoints[i] = new MultiPoint([[[lon, lat], [lon+5, lat+5], [lon-5, lat-5], [lon, lat]]]);
-  
   mcisGeo[i] = new Polygon([[[lon, lat], [lon + 5, lat + 5], [lon - 5, lat - 5], [lon, lat]]]);
   geometriesPoints[i] = new MultiPoint([testPoints]);
 
@@ -400,17 +393,17 @@ var ipTmpList = [
 
 var geoTmpCnt = 0;
 var geoTmpList = [
-  [-80, 50],    //a-central-1    캐나다(중부) Montreal
-  [-119, 37],   //us-west-1    미국 서부(캘리포니아 북부 지역) 
-  [-81, 35],    //us-east-1    미국 동부(버지니아 북부) 
-  [127, 37.5],  //ap-northeast-2 아시아 태평양(서울)
-  [73.5, 19],   //ap-south-1 아시아 태평양(뭄바이)
-  [103.5, 2],   //ap-southeast-1 아시아 태평양(싱가포르)
-  [140, 36],    //ap-northeast-1 아시아 태평양(도쿄)
+  [-80, 50],    //a-central-1    
+  [-119, 37],   //us-west-1    
+  [-81, 35],    //us-east-1  
+  [127, 37.5],  //ap-northeast-2 
+  [73.5, 19],   //ap-south-1 
+  [103.5, 2],   //ap-southeast-1 
+  [140, 36],    //ap-northeast-1
   [114.2, 22.2],//East Asia (location: Hong Kong)
-  [113, -32],   //호주 서부
-  [151, -33.7], //ap-southeast-2 아시아 태평양(시드니)
-  [0, 51.5]     //런던
+  [113, -32],   //
+  [151, -33.7], //ap-southeast-2 
+  [0, 51.5]     //
 ];
 
 var alpha = 0.3;
@@ -469,7 +462,7 @@ function createStyle(src) {
 var pnt = new Point([-68, -50]);
 
 import Vector from 'ol/source/Vector.js';
-var vectorSource = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var vectorSource = new Vector({ projection: 'EPSG:4326' });
 var iconFeature = new Feature(pnt);
 iconFeature.set('style', createStyle('img/iconVm.png'));
 iconFeature.set('index', '001');
@@ -494,7 +487,7 @@ var iconStyleVm = new Style({
   }))
 });
 
-var vectorSourceNlb = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var vectorSourceNlb = new Vector({ projection: 'EPSG:4326' });
 var iconFeatureNlb = new Feature(pnt);
 iconFeatureNlb.set('style', createStyle('img/iconNlb.png'));
 iconFeatureNlb.set('index', '001');
@@ -519,30 +512,8 @@ var iconStyleNlb = new Style({
   }))
 });
 
-// var iconStyle01 = new Style({
-//   image: new Icon(({
-//     //anchor: [0.5, 0.5],
-//     crossOrigin: 'anonymous',
-//     src: 'img/icon2.png',
-//     opacity: 0.60,
-//     imgSize: [50, 50]
-//   }))
-// });
 
-// var iconStyle02 = new Style({
-//   image: new Icon(({
-//     anchor: [0.5, 46],
-//     anchorXUnits: 'fraction',
-//     anchorYUnits: 'pixels',
-//     opacity: 0.95,
-//     src: 'img/icon2.png'
-//   }))
-// });
-
-// CSP location Circle icon style
-// pnt = new Point([-48, -50]);
-
-var vectorSource1 = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var vectorSource1 = new Vector({ projection: 'EPSG:4326' });
 var iconFeature1 = new Feature(pnt);
 iconFeature1.set('style', createStyle('img/circle.png'));
 iconFeature1.set('index', '001');
@@ -571,7 +542,7 @@ var iconStyleCircle = new Style({
 
 // CSP location icon styles
 
-var vectorSource2 = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var vectorSource2 = new Vector({ projection: 'EPSG:4326' });
 var iconFeature2 = new Feature(pnt);
 iconFeature2.set('style', createStyle('img/ht-azure.png'));
 iconFeature2.set('index', '001');
@@ -596,7 +567,7 @@ var iconStyleAzure = new Style({
   }))
 });
 
-var vectorSource3 = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var vectorSource3 = new Vector({ projection: 'EPSG:4326' });
 var iconFeature3 = new Feature(pnt);
 iconFeature3.set('style', createStyle('img/ht-aws.png'));
 iconFeature3.set('index', '001');
@@ -617,7 +588,7 @@ var iconStyleAws = new Style({
   }))
 });
 
-var vectorSource4 = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var vectorSource4 = new Vector({ projection: 'EPSG:4326' });
 var iconFeature4 = new Feature(pnt);
 iconFeature4.set('style', createStyle('img/ht-gcp.png'));
 iconFeature4.set('index', '001');
@@ -638,7 +609,7 @@ var iconStyleGcp = new Style({
   }))
 });
 
-var vectorSource5 = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var vectorSource5 = new Vector({ projection: 'EPSG:4326' });
 var iconFeature5 = new Feature(pnt);
 iconFeature5.set('style', createStyle('img/ht-alibaba.png'));
 iconFeature5.set('index', '001');
@@ -659,7 +630,7 @@ var iconStyleAlibaba = new Style({
   }))
 });
 
-var vectorSource6 = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var vectorSource6 = new Vector({ projection: 'EPSG:4326' });
 var iconFeature6 = new Feature(pnt);
 iconFeature6.set('style', createStyle('img/ht-cloudit.png'));
 iconFeature6.set('index', '001');
@@ -680,7 +651,7 @@ var iconStyleCloudit = new Style({
   }))
 });
 
-var vectorSource7 = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var vectorSource7 = new Vector({ projection: 'EPSG:4326' });
 var iconFeature7 = new Feature(pnt);
 iconFeature7.set('style', createStyle('img/ibm.png'));
 iconFeature7.set('index', '001');
@@ -702,7 +673,7 @@ var iconStyleIBM = new Style({
 });
 
 
-var vectorSource8 = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var vectorSource8 = new Vector({ projection: 'EPSG:4326' });
 var iconFeature8 = new Feature(pnt);
 iconFeature8.set('style', createStyle('img/tencent.png'));
 iconFeature8.set('index', '001');
@@ -724,7 +695,7 @@ var iconStyleTencent = new Style({
 });
 
 
-var vectorSource9 = new Vector({ projection: 'EPSG:4326' }); //새로운 벡터 생성
+var vectorSource9 = new Vector({ projection: 'EPSG:4326' });
 var iconFeature9 = new Feature(pnt);
 iconFeature9.set('style', createStyle('img/naver-15x15.png'));
 iconFeature9.set('index', '001');
@@ -922,29 +893,6 @@ function makeTria(ip1, ip2, ip3) {
   //cnt++;
 }
 
-/*
-//Example: Make poly using arguments object.
-function makePoly(){
-
-  for(i = 0; i < arguments.length; i++) {
-    coordinates.push(arguments[i]); 
-  }
-
-  var resourcePoints = [];
-
-  for(i = 0; i < arguments.length; i++) {
-    resourcePoints.push(arguments[i]); 
-  }
-  geometriesPoints[cnt] = new MultiPoint(resourcePoints);
-
-  resourcePoints.push(arguments[0]); 
-
-  geometries[cnt] = new Polygon([resourcePoints]);
-
-  mcisGeo[cnt] = new Polygon([resourcePoints]);
-  //cnt++;
-}
-*/
 
 function makePolyDot(vmPoints) {
 
@@ -1028,20 +976,11 @@ function changePoints(ipFrom, ipTo) {
   var lat1 = 180 * Math.random() - 90;
 
 
-  //coordinates.push([x, y]);
-  //coordinates.push([lon, lat]);  
   console.log(ipFrom);
   console.log(ipTo);
 
   coordinates.push(ipFrom);
   coordinates.push(ipTo);
-  //coordinates.push([lon1, lat1]);
-  /*
-      coordinatesFromX.push([lon]);
-      coordinatesFromY.push([lat]);
-      coordinatesToX.push([lon]);
-      coordinatesToY.push([lat]);
-  */
 
   var i, j;
 
@@ -1053,33 +992,8 @@ function changePoints(ipFrom, ipTo) {
 
     var goX = xFrom + j * (xTo - xFrom) / n
     var goY = (yTo - yFrom) / (xTo - xFrom) * (goX - xFrom) + yFrom
-    //coordinates.push([goX, goY]);
 
-    //console.log(goX)
-    //console.log(goY)
-    //vectorContext.setStyle(headOuterImageStyle);
-    //vectorContext.drawGeometry(new Point([goX*100,goY*100]));
   }
-  /*
-for (i = 0; i < coordinatesFromX.length; ++i) {
-  //console.log(coordinatesFrom[i])
-  //console.log(coordinatesTo[i])
-  //vectorContext.drawGeometry(new LineString([coordinatesFrom[i], coordinatesTo[i] ]));
-  var xFrom = coordinatesFromX[i]
-  var yFrom = coordinatesFromY[i]
-  var xTo = coordinatesToX[i]
-  var yTo = coordinatesToY[i]
-  for (j=1; j < n; ++j){
- 
-    var goX = xFrom + (xTo - xFrom)/j
-    var goY = (yTo - yFrom)/(xTo - xFrom)*(goX-xFrom)+yFrom
-    //console.log(goX)
-    //console.log(goY)
-    vectorContext.setStyle(headOuterImageStyle);
-    vectorContext.drawGeometry(new Point([goX*100,goY*100]));
-  }
-}
-*/
 
 }
 
@@ -1107,6 +1021,15 @@ function errorAlert(message) {
     showConfirmButton: true,
     //timer: 2000
   })
+}
+
+function displayJsonData(jsonData) {
+  const jsonOutputConfig = {
+    theme: 'dark'
+  };
+  const messageJsonOutput = document.getElementById('jsonoutput');
+  messageJsonOutput.innerHTML = '';  // Clear existing content
+  messageJsonOutput.appendChild(new JSONFormatter(jsonData, Infinity, jsonOutputConfig).render());
 }
 
 
@@ -1485,7 +1408,7 @@ function createMcis() {
             .then((res)=>{
               console.log(res); // for debug
               document.getElementById("createMcisButton").style.color = "#000000";
-              messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
+              displayJsonData(res.data)
               updateMcisList();
               clearCircle("none")
               infoAlert('Created '+ createMcisReq.name);
@@ -1699,12 +1622,12 @@ function getRecommendedSpec(idx, latitude, longitude) {
     addRegionMarker(res.data[0].id);
     //document.getElementById("latLonInputPairArea").innerHTML += `${res.data[0].id}<br>`;
 
-    messageJsonOutput.appendChild(new JSONFormatter(res.data).render())
+    displayJsonData(res.data)
     // messageJsonOutput.scrollTop = messageJsonOutput.scrollHeight;
 
-    if (tableDisplayEnabled.checked){
-      jsonToTable(JSON.stringify(res.data));
-    }
+    // if (tableDisplayEnabled.checked){
+    //   jsonToTable(JSON.stringify(res.data));
+    // }
 
 
 
@@ -1915,7 +1838,7 @@ function controlMCIS(action) {
   .then((res)=>{
     if ( res.data != null ){
       console.log(res.data);
-      messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
+      displayJsonData(res.data)
       switch(action) {
         case 'refine':
         case 'suspend':
@@ -2100,7 +2023,7 @@ function statusMCIS() {
       var obj = JSON.parse(serverData);
       if ( obj.status != null ){
         console.log(obj.status);
-        messageJsonOutput.appendChild(new JSONFormatter(obj.status).render());
+        displayJsonData(obj.status)
       }
     });
   }
@@ -2196,7 +2119,7 @@ function releaseResources() {
   })
   .then((res)=>{
     console.log(res); // for debug
-    messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
+    displayJsonData(res.data)
   });
 
 }
@@ -2228,7 +2151,7 @@ function resourceOverview() {
   })
   .then((res)=>{
     console.log(res); // for debug
-    messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
+    displayJsonData(res.data)
     document.getElementById("resourceOverviewButton").style.color = "#000000";
   });
 
@@ -2270,7 +2193,7 @@ function registerCspResource() {
       console.log(res); // for debug
       document.getElementById("registerCspResourceButton").style.color = "#000000";
       messageTextArea.value = "[Complete: Registering all CSP's resources]\n" 
-      messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
+      displayJsonData(res.data)
     });
 }
 window.registerCspResource = registerCspResource;
@@ -2768,7 +2691,7 @@ function DelNLB() {
     console.log(res); // for debug
     document.getElementById("delNLB").style.color = "#000000";
     messageTextArea.value = "[Deleted NLB]\n"
-    messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
+    displayJsonData(res.data)
     infoAlert(JSON.stringify(res.data.message, undefined, 4).replace(/['",]+/g, ''));
   })
   .catch(function (error) {
@@ -2884,7 +2807,7 @@ function startApp() {
         console.log(res); // for debug
         document.getElementById("startAppButton").style.color = "#000000";
         messageTextArea.value = "[Complete: Deployed App]\n" 
-        messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
+        displayJsonData(res.data)
       });
 
     });
@@ -2952,7 +2875,7 @@ function stopApp() {
       console.log(res); // for debug
       document.getElementById("stopAppButton").style.color = "#000000";
       messageTextArea.value = "[Complete: Stopping App]\n" 
-      messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
+      displayJsonData(res.data)
     });
   } else {
     messageTextArea.value = " MCIS ID is not assigned";
@@ -3016,7 +2939,7 @@ function statusApp() {
       console.log(res); // for debug
       document.getElementById("statusAppButton").style.color = "#000000";
       messageTextArea.value = "[Complete: Getting App status]\n" 
-      messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
+      displayJsonData(res.data)
     });
   } else {
     messageTextArea.value = " MCIS ID is not assigned";
@@ -3212,7 +3135,7 @@ function getAccessInfo() {
     })
     .then((res)=>{
       console.log(res); // for debug
-      messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
+      displayJsonData(res.data)
     });
     
   } else {
@@ -3250,7 +3173,7 @@ saveBtn.addEventListener('click', function(){
   })
   .then((res)=>{
     console.log(res); // for debug
-    messageJsonOutput.appendChild(new JSONFormatter(res.data).render());
+    displayJsonData(res.data)
     var privateKey = ""
 
     for (let subGroupAccessInfo of res.data.McisSubGroupAccessInfo) {
