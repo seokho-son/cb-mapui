@@ -50,8 +50,7 @@ Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
 
   웹브라우저를 통해 http://x.x.x.x:1324 (ex: http://localhost:1324) 접속 
 
-  ![image](https://user-images.githubusercontent.com/5966944/200498408-35cbeace-b45b-4fe0-b2b1-9b6c42a0b49d.png)
-
+  ![image](https://github.com/cloud-barista/cb-mapui/assets/5966944/2423fbcd-0fdb-4511-85e2-488ba15ae8c0)
 
  - TextBox에 환경 변수 확인 및 설정
    - TB IP/hostname: 서버 주소
