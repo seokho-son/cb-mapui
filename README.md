@@ -10,6 +10,12 @@ Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
 
 ### Prerequisite
 
+ - 다운로드
+   ```bash
+   https://github.com/cloud-barista/cb-mapui.git
+   cd ./cb-mapui
+   ```
+
  - npm, Node.js
    - https://github.com/nodesource/distributions 의 Node.js **v16.x** 설치 (아래 설치 명령어 예시 참조)
      ```bash
@@ -38,30 +44,24 @@ Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
      (Openlayers: https://openlayers.org/en/latest/doc/tutorials/bundle.html )
 
 ### 빌드 및 실행
- - 다운로드
-   ```bash
-   https://github.com/cloud-barista/cb-mapui.git
-   cd ./cb-mapui
-   ```
 
  - 빌드
-  ```bash
-  npm run build
-  ```
+   ```bash
+   npm run build
+   ```
 
  - 서버 실행
+   ```bash
+   npm start
+   ```
 
-  ```bash
-  npm start
-  ```
-
-  (출력 예시)
-  ```
-  Server running at http://localhost:1324
-  ✨ Built in 6.32s
-
-  # Access to http://x.x.x.x:1324/ (ex: http://localhost:1324/)
-  ```
+   (출력 예시)
+   ```
+   Server running at http://localhost:1324
+   ✨ Built in 6.32s
+ 
+   # Access to http://x.x.x.x:1324/ (ex: http://localhost:1324/)
+   ```
 
  - 서버 접속
 
