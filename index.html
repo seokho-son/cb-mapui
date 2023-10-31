@@ -573,11 +573,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <script type="text/javascript">
       document.addEventListener('DOMContentLoaded', (event) => {
         document.querySelectorAll('#namespace, #mcisid, #subgroupid, #vmid').forEach(element => {
+          let previousValue = null; 
+
           element.addEventListener('click', () => {
-            if (element.value) {
-              navigator.clipboard.writeText(element.options[element.selectedIndex].text)
+
+            if (element.value && element.selectedIndex >= 0 && element.options[element.selectedIndex] && element.value !== previousValue) {
+              var tosave = element.options[element.selectedIndex].text
+              navigator.clipboard.writeText(tosave)
                 .then(() => {
-                  console.log('Text copied to clipboard');
+                  console.log('Text copied to clipboard: '+tosave);
+                  previousValue = element.value; 
                 })
                 .catch(err => {
                   console.error('Error in copying text: ', err);
@@ -586,7 +591,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           });
         });
       });
-
 
     </script>
 

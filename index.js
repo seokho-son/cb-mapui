@@ -1013,6 +1013,27 @@ function infoAlert(message) {
   })
 }
 
+function outputAlert(jsonData) {
+  const jsonOutputConfig = {
+    theme: 'dark'
+  };
+  Swal.fire({
+    position: 'top-end',
+    icon: 'info',
+    html: '<div id="json-output" class="form-control" style="height: auto; background-color: black; text-align: left;"></div>',
+    background: '#0e1746',
+    showConfirmButton: true,
+    backdrop: false,
+    didOpen: () => {
+      const container = document.getElementById('json-output');
+      const formatter = new JSONFormatter(jsonData, Infinity, jsonOutputConfig);
+      container.appendChild(formatter.render());
+    }
+  });
+}
+
+
+
 function errorAlert(message) {
   Swal.fire({
     // position: 'bottom-start',
@@ -1027,6 +1048,7 @@ function displayJsonData(jsonData) {
   const jsonOutputConfig = {
     theme: 'dark'
   };
+  outputAlert(jsonData)
   const messageJsonOutput = document.getElementById('jsonoutput');
   messageJsonOutput.innerHTML = '';  // Clear existing content
   messageJsonOutput.appendChild(new JSONFormatter(jsonData, Infinity, jsonOutputConfig).render());
@@ -3074,6 +3096,7 @@ function executeRemoteCmd() {
         })
         .then((res)=>{
           console.log(res); // for debug
+          displayJsonData(res.data)
           let formattedOutput = "[Complete: remote ssh command to MCIS]\n\n";
     
           res.data.results.forEach((result) => {
