@@ -12,7 +12,7 @@ Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
 
  - 다운로드
    ```bash
-   https://github.com/cloud-barista/cb-mapui.git
+   git clone https://github.com/cloud-barista/cb-mapui.git
    cd ./cb-mapui
    ```
 
