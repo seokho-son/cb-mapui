@@ -39,6 +39,7 @@ FROM node:16-alpine AS prod
 WORKDIR /app
 
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/img ./dist/img
 COPY --from=builder /app/index.html ./
 COPY --from=builder /app/index.js ./
 COPY --from=builder /app/node_modules ./node_modules

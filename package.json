@@ -22,10 +22,10 @@
   },
   "scripts": {
     "start": "parcel -p 1324 index.html",
-    "build": "echo 'Removing temporal cache files' && rm -rf dist/* .parcel-cache/* & mkdir -p dist/img/ && cp -r img/ dist/ && parcel build --public-url . index.html"
+    "build": "echo 'Removing temporal cache files' && rm -rf dist/* .parcel-cache/* && mkdir -p dist/img/ && cp -r img/ dist/ && parcel build --public-url . index.html"
   },
   "description": "A MapUI Client for CB-Tumblebug (display multi-cloud infra service)",
-  "version": "0.7.4",
+  "version": "0.7.6",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cloud-barista/cb-mapui.git"
