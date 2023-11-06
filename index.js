@@ -2913,26 +2913,27 @@ function startApp() {
 
       if (selectApp.value == "Xonotic") {
         defaultRemoteCommand =
-          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " +
+          "wget -O ~/startServer.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " +
           "Xonotic-by-Cloud-Barista-" +
           mcisid +
           " 26000" +
           " 8";
       } else if (selectApp.value == "Westward") {
         defaultRemoteCommand =
-          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh";
+          "wget -O ~/setgame.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh";
       } else if (selectApp.value == "WeaveScope") {
         defaultRemoteCommand =
-          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/weavescope/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " +
+          "wget -O ~/startServer.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/weavescope/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " +
           publicIPs +
           " " +
           privateIPs;
       } else if (selectApp.value == "Nginx") {
         defaultRemoteCommand =
-          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setweb.sh -O ~/setweb.sh; chmod +x ~/setweb.sh; sudo ~/setweb.sh";
+          "wget -O ~/setweb.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setweb.sh; chmod +x ~/setweb.sh; sudo ~/setweb.sh";
       } else if (selectApp.value == "Jitsi") {
         defaultRemoteCommand =
-          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh -O ~/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh";
+        "wget -O ~/startServer.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/jitsi/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " + publicIPs + " " +
+        "DNS EMAIL";
       } else if (selectApp.value == "Stress") {
         defaultRemoteCommand = "sudo apt install -y stress > /dev/null; stress -c 16 -t 60";
       } else {
