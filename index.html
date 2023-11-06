@@ -80,7 +80,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       width: 125%; */
       margin-right: auto;
       margin-left: auto;
-      overflow: hidden;
+      overflow: auto;
     }
 
     .scrollable-column {
@@ -540,6 +540,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                   App Control
                 </button>
+
                 <div class="dropdown-menu" aria-labelledby="appControlDropdown">
                   <a class="dropdown-item" href="javascript:void(0)" onClick="startApp();">Start App</a>
                   <a class="dropdown-item" href="javascript:void(0)" onClick="stopApp();">Stop App</a>
@@ -609,9 +610,23 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       <div class="col-md-9">
         <div id="map" class="map" style="display:block;">
           <div id="popup"></div>
+
+          <!-- Spinner for request status -->
+          <div id="spinner-container"
+            style="display: none; position: absolute; bottom: 10px; left: 20px; z-index: 1000; align-items: center;">
+            <div class="spinner-border text-primary spinner-border-sm " role="status">
+              <span class="sr-only">Loading...</span>
+            </div>
+            <div id="spinner-text"
+              style="margin-left: 10px; background-color: #00ba06; color: white; padding: 5px 10px; border-radius: 4px;">
+              ...
+            </div>
+          </div>
+
         </div>
         <iframe id="iframe" src="http://localhost:1323/tumblebug/swagger/index.html"
-          style="display:none; width:100%; height:100%;"></iframe>
+        style="visibility:hidden; width:100%; height:100%; position:absolute; top:0; left:0;"></iframe>
+
       </div>
 
     </div>
@@ -623,13 +638,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         var map = document.getElementById('map');
         var iframe = document.getElementById('iframe');
 
-        if (map.style.display === "none") {
-          map.style.display = "block";
-          iframe.style.display = "none";
-        } else {
+        if (iframe.style.visibility === "hidden") {
           map.style.display = "none";
-          iframe.src = "http://" + document.getElementById('hostname').value + ":" + document.getElementById('port').value + "/tumblebug/swagger/index.html";
-          iframe.style.display = "block";
+          iframe.style.visibility = "visible";
+          iframe.style.position = "static"; 
+        } else {
+          map.style.display = "block";
+          iframe.style.visibility = "hidden";
+          iframe.style.position = "absolute"; 
         }
       }
     </script>
