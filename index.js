@@ -1426,6 +1426,7 @@ function createMcis() {
                 console.log(res); // for debug
 
                 displayJsonData(res.data, typeInfo);
+                handleAxiosResponse(res);
 
                 updateMcisList();
 
@@ -1628,6 +1629,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
     },
   }).then((res) => {
     console.log(res); // for debug
+    handleAxiosResponse(res);
     addRegionMarker(res.data[0].id);
     //document.getElementById("latLonInputPairArea").innerHTML += `${res.data[0].id}<br>`;
 
@@ -3244,6 +3246,71 @@ saveBtn.addEventListener("click", function () {
     URL.revokeObjectURL(tempLink.href);
   });
 });
+
+// Global array to store X-Request-Ids
+let xRequestIds = [];
+
+// Function to handle Axios response and extract X-Request-Id
+function handleAxiosResponse(response) {
+    // Extract X-Request-Id from the response headers
+    console.log('Response Headers:', response.headers);
+    const requestId = response.headers['x-request-id'];
+    console.log('X-Request-Id:', requestId);
+    if (requestId) {
+        
+        // Add X-Request-Id to the global array if it's not already present
+        if (!xRequestIds.includes(requestId)) {
+            xRequestIds.push(requestId);
+            addRequestIdToSelect(requestId);
+        }
+    }
+}
+
+// Function to add X-Request-Id to the select element
+function addRequestIdToSelect(requestId) {
+    const select = document.getElementById('xRequestIdSelect');
+    const option = document.createElement('option');
+    option.value = requestId;
+    option.text = requestId;
+    select.appendChild(option);
+}
+
+// Function to handle selection of an X-Request-Id
+function handleRequestIdSelection() {
+    const select = document.getElementById('xRequestIdSelect');
+    const selectedRequestId = select.value;
+    console.log('Selected X-Request-Id:', selectedRequestId);
+
+    // actions based on the selected X-Request-Id 
+  
+    if (selectedRequestId) {
+
+      var hostname = hostnameElement.value;
+      var port = portElement.value;
+      var username = usernameElement.value;
+      var password = passwordElement.value;
+
+      var url = `http://${hostname}:${port}/tumblebug/request/${selectedRequestId}`;
+  
+      axios({
+        method: "get",
+        url: url,
+        auth: {
+          username: `${username}`,
+          password: `${password}`,
+        },
+      }).then((res) => {
+        console.log(res); // for debug
+        displayJsonData(res.data, typeInfo);
+      });
+    } else {
+      console.log('No X-Request-Id selected');
+    }
+
+}
+window.handleRequestIdSelection = handleRequestIdSelection;
+
+
 
 window.onload = function () {
   // Get host address and update text field

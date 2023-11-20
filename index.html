@@ -200,6 +200,20 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 </div>
               </div>
 
+              <!-- X-Request-Id list -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text" id="xRequestIdLabel">Req Log</span>
+                  </div>
+                  <select id="xRequestIdSelect" name="xRequestId" class="form-control" aria-label="X-Request-Id"
+                    aria-describedby="xRequestIdLabel" onchange="handleRequestIdSelection();">
+                    <option value="">Select ID</option>
+                    <!-- Options will be filled dynamically -->
+                  </select>
+                </div>
+              </div>
+
               <div class="form-group col dropdown">
                 <button class="btn btn-secondary dropdown-toggle w-100" type="button" id="mapControlDropdown"
                   data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
