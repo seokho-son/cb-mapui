@@ -200,6 +200,20 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 </div>
               </div>
 
+              <!-- X-Request-Id list -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text" id="xRequestIdLabel">Req Log</span>
+                  </div>
+                  <select id="xRequestIdSelect" name="xRequestId" class="form-control" aria-label="X-Request-Id"
+                    aria-describedby="xRequestIdLabel" onchange="handleRequestIdSelection();">
+                    <option value="">Select ID</option>
+                    <!-- Options will be filled dynamically -->
+                  </select>
+                </div>
+              </div>
+
               <div class="form-group col dropdown">
                 <button class="btn btn-secondary dropdown-toggle w-100" type="button" id="mapControlDropdown"
                   data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -625,7 +639,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
         </div>
         <iframe id="iframe" src="http://localhost:1323/tumblebug/swagger/index.html"
-        style="visibility:hidden; width:100%; height:100%; position:absolute; top:0; left:0;"></iframe>
+          style="visibility:hidden; width:100%; height:100%; position:absolute; top:0; left:0;"></iframe>
 
       </div>
 
@@ -641,11 +655,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         if (iframe.style.visibility === "hidden") {
           map.style.display = "none";
           iframe.style.visibility = "visible";
-          iframe.style.position = "static"; 
+          iframe.style.position = "static";
         } else {
           map.style.display = "block";
           iframe.style.visibility = "hidden";
-          iframe.style.position = "absolute"; 
+          iframe.style.position = "absolute";
         }
       }
     </script>
@@ -663,17 +677,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
     <script type="text/javascript">
       document.addEventListener('DOMContentLoaded', (event) => {
-        document.querySelectorAll('#namespace, #mcisid, #subgroupid, #vmid').forEach(element => {
-          let previousValue = null;
-
-          element.addEventListener('click', () => {
-
-            if (element.value && element.selectedIndex >= 0 && element.options[element.selectedIndex] && element.value !== previousValue) {
-              var tosave = element.options[element.selectedIndex].text
-              navigator.clipboard.writeText(tosave)
+        // event linster for copy to clipboard
+        document.querySelectorAll('.input-group-text').forEach(label => {
+          label.addEventListener('click', () => {
+            // get seleted option
+            const select = label.parentElement.nextElementSibling;
+            if (select && select.options[select.selectedIndex]) {
+              var toCopy = select.options[select.selectedIndex].text;
+              navigator.clipboard.writeText(toCopy)
                 .then(() => {
-                  console.log('Text copied to clipboard: ' + tosave);
-                  previousValue = element.value;
+                  console.log('Text copied to clipboard: ' + toCopy);
                 })
                 .catch(err => {
                   console.error('Error in copying text: ', err);
