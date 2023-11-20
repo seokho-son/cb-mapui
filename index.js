@@ -77,8 +77,6 @@ useGeographic();
 var i, j;
 var cnti, cntj;
 
-var geoServiceKey = "your key";
-
 const cntInit = 0;
 var cnt = cntInit;
 
@@ -115,6 +113,8 @@ const typeStringSpec = "spec";
 const typeStringSG = "securityGroup";
 const typeStringSshKey = "sshKey";
 const typeStringVNet = "vNet";
+const typeInfo = "info";
+const typeError = "error";
 
 var tileLayer = new TileLayer({
   source: new OSM(),
@@ -135,7 +135,7 @@ var map = new Map({
 
 // fucntion for clear map.
 function clearMap() {
-  table.innerHTML = "";
+  // table.innerHTML = "";
   messageJsonOutput.value = "";
   messageTextArea.value = "";
   geometries = [];
@@ -153,7 +153,7 @@ function clearCircle(option) {
   cspPointsCircle = [];
   geoCspPointsCircle = [];
   messageJsonOutput.value = "";
-  table.innerHTML = "";
+  // table.innerHTML = "";
 }
 window.clearCircle = clearCircle;
 
@@ -193,7 +193,7 @@ let currentSpinnerId = 0;
 // Function to create a unique spinner task ID based on the function name
 function generateSpinnerId(functionName) {
   currentSpinnerId++; // Increment the ID
-  return "["+currentSpinnerId+"] " + functionName; // Return the unique task ID
+  return "[" + currentSpinnerId + "] " + functionName; // Return the unique task ID
 }
 
 // Function to add a new task to the spinner stack and update the spinner's visibility
@@ -214,21 +214,20 @@ function removeSpinnerTask(taskId) {
 
 // Function to update the spinner's visibility based on the active tasks in the stack
 function updateSpinnerVisibility() {
-  const spinnerContainer = document.getElementById('spinner-container'); // Get the spinner container element
-  const spinnerText = document.getElementById('spinner-text'); // Get the spinner text element
-  
+  const spinnerContainer = document.getElementById("spinner-container"); // Get the spinner container element
+  const spinnerText = document.getElementById("spinner-text"); // Get the spinner text element
+
   // Check if there are any tasks remaining in the stack
   const tasksRemaining = Object.keys(spinnerStack).length > 0;
 
   if (tasksRemaining) {
-    spinnerContainer.style.display = 'flex'; // If there are tasks, display the spinner
+    spinnerContainer.style.display = "flex"; // If there are tasks, display the spinner
     // Update the spinner text to show all active task names
     spinnerText.textContent = Object.keys(spinnerStack).join(",  ");
   } else {
-    spinnerContainer.style.display = 'none'; // If no tasks, hide the spinner
+    spinnerContainer.style.display = "none"; // If no tasks, hide the spinner
   }
 }
-
 
 // Display Icon for Cloud locations
 // npm i -s csv-parser
@@ -349,7 +348,7 @@ function displayCSPListOn() {
 window.displayCSPListOn = displayCSPListOn;
 
 function displayTableOn() {
-  table.innerHTML = "";
+  // table.innerHTML = "";
 }
 window.displayTableOn = displayTableOn;
 
@@ -411,7 +410,6 @@ for (var i = 0; i < cntInit; ++i) {
   testPoints.push(testPoints[0]);
   geometries[i] = new Polygon([testPoints]);
 }
-
 
 var alpha = 0.3;
 var cororList = [
@@ -1008,25 +1006,6 @@ function infoAlert(message) {
   });
 }
 
-function outputAlert(jsonData) {
-  const jsonOutputConfig = {
-    theme: "dark",
-  };
-  Swal.fire({
-    position: "top-end",
-    icon: "info",
-    html: '<div id="json-output" class="form-control" style="height: auto; background-color: black; text-align: left;"></div>',
-    background: "#0e1746",
-    showConfirmButton: true,
-    backdrop: false,
-    didOpen: () => {
-      const container = document.getElementById("json-output");
-      const formatter = new JSONFormatter(jsonData, Infinity, jsonOutputConfig);
-      container.appendChild(formatter.render());
-    },
-  });
-}
-
 function errorAlert(message) {
   Swal.fire({
     // position: 'bottom-start',
@@ -1037,11 +1016,30 @@ function errorAlert(message) {
   });
 }
 
-function displayJsonData(jsonData) {
+function outputAlert(jsonData, type) {
   const jsonOutputConfig = {
     theme: "dark",
   };
-  outputAlert(jsonData);
+  Swal.fire({
+    position: "top-end",
+    icon: type,
+    html: '<div id="json-output" class="form-control" style="height: auto; background-color: black; text-align: left;"></div>',
+    background: "#0e1746",
+    showConfirmButton: true,
+    //backdrop: false,
+    didOpen: () => {
+      const container = document.getElementById("json-output");
+      const formatter = new JSONFormatter(jsonData, Infinity, jsonOutputConfig);
+      container.appendChild(formatter.render());
+    },
+  });
+}
+
+function displayJsonData(jsonData, type) {
+  const jsonOutputConfig = {
+    theme: "dark",
+  };
+  outputAlert(jsonData, type);
   const messageJsonOutput = document.getElementById("jsonoutput");
   messageJsonOutput.innerHTML = ""; // Clear existing content
   messageJsonOutput.appendChild(
@@ -1062,6 +1060,7 @@ function getMcis() {
     : 5;
   setTimeout(() => getMcis(), filteredRefreshInterval * 1000);
 
+  if (namespace && namespace != "") {
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis?option=status`;
 
   axios({
@@ -1074,10 +1073,6 @@ function getMcis() {
     timeout: 60000,
   })
     .then((res) => {
-      document.getElementById("hostname").style.color = "#000000";
-      document.getElementById("port").style.color = "#000000";
-
-      console.log("[Get MCIS list from CB-Tumblebug API]");
 
       var obj = res.data;
 
@@ -1086,7 +1081,7 @@ function getMcis() {
 
       cnt = cntInit;
       if (obj.mcis != null) {
-        console.log(obj.mcis);
+        //console.log(obj.mcis);
         for (let item of obj.mcis) {
           //console.log("Index:[" + "]obj.mcis[i].name = " + item.name);
           console.log(item);
@@ -1101,8 +1096,6 @@ function getMcis() {
           if (hideFlag) {
             continue;
           }
-
-          //mcisGeo[i] = new Array();
 
           var vmGeo = [];
 
@@ -1145,22 +1138,13 @@ function getMcis() {
             ]);
           }
           if (validateNum == item.vm.length) {
-            console.log("Found all GEOs validateNum : " + validateNum);
+            //console.log("Found all GEOs validateNum : " + validateNum);
 
             //make dots without convexHull
             makePolyDot(vmGeo);
             vmGeo = convexHull(vmGeo);
 
-            for (j = 0; j < vmGeo.length; j++) {
-              console.log("vmGeo[" + j + "] is" + vmGeo[j]);
-            }
-            //mcisGeo2.push(vmGeo);
-            //makePoly4( vmGeo[0], vmGeo[1],[-95.712891, 37.09024], vmGeo[0]);
-
-            //makePoly5( [-15.712891, 47.09024], [-25.712891, 12.09024], [25.712891, 32.09024],[-25.712891, 31.09024], [-15.712891, 47.09024]);
-
             mcisStatus[cnt] = item.status;
-            //mcisStatus[cnt] = item.targetAction + '-> ' + item.status
 
             var newName = item.name;
             if (newName.includes("-nlb")) {
@@ -1173,8 +1157,6 @@ function getMcis() {
               mcisName[cnt] = item.targetAction + "-> " + "[" + newName + "]";
             }
 
-            console.log("item.status is" + item.status);
-
             //make poly with convexHull
             makePolyArray(vmGeo);
 
@@ -1186,12 +1168,9 @@ function getMcis() {
       }
     })
     .catch(function (error) {
-      if (error.request) {
-        document.getElementById("hostname").style.color = "#FF0000";
-        document.getElementById("port").style.color = "#FF0000";
-      }
       console.log(error);
     });
+  }
 }
 
 // Get list of cloud connections
@@ -1429,7 +1408,9 @@ function createMcis() {
             var jsonBody = JSON.stringify(createMcisReq, undefined, 4);
 
             messageTextArea.value = " Creating MCIS ...";
-            var spinnerId = addSpinnerTask("Creating MCIS: "+ createMcisReq.name);
+            var spinnerId = addSpinnerTask(
+              "Creating MCIS: " + createMcisReq.name
+            );
 
             axios({
               method: "post",
@@ -1444,8 +1425,8 @@ function createMcis() {
               .then((res) => {
                 console.log(res); // for debug
 
-                displayJsonData(res.data);
-                
+                displayJsonData(res.data, typeInfo);
+
                 updateMcisList();
 
                 clearCircle("none");
@@ -1469,7 +1450,7 @@ function createMcis() {
                   )
                 );
               })
-              .finally(function() {
+              .finally(function () {
                 removeSpinnerTask(spinnerId);
               });
           }
@@ -1650,7 +1631,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
     addRegionMarker(res.data[0].id);
     //document.getElementById("latLonInputPairArea").innerHTML += `${res.data[0].id}<br>`;
 
-    displayJsonData(res.data);
+    //displayJsonData(res.data, typeInfo);
     // messageJsonOutput.scrollTop = messageJsonOutput.scrollHeight;
 
     // if (tableDisplayEnabled.checked){
@@ -1804,7 +1785,7 @@ function addRegionMarker(spec) {
       password: `${password}`,
     },
   }).then((res) => {
-    console.log("in addRegionMarker(); "); // for debug
+
     console.log(res);
 
     var connConfig = res.data.connectionName;
@@ -1880,7 +1861,7 @@ function controlMCIS(action) {
     .then((res) => {
       if (res.data != null) {
         console.log(res.data);
-        displayJsonData(res.data);
+        displayJsonData(res.data, typeInfo);
         switch (action) {
           case "refine":
           case "suspend":
@@ -1912,7 +1893,7 @@ function controlMCIS(action) {
         JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, "")
       );
     })
-    .finally(function() {
+    .finally(function () {
       removeSpinnerTask(spinnerId);
     });
 }
@@ -2064,11 +2045,7 @@ function statusMCIS() {
   })
     .then((res) => {
       console.log("[Status MCIS]");
-      var obj = res.data;
-      if (obj.status != null) {
-        console.log(obj.status);
-        displayJsonData(obj.status);
-      }
+      displayJsonData(res.data, typeInfo);
     })
     .catch(function (error) {
       if (error.response) {
@@ -2099,7 +2076,7 @@ function deleteMCIS() {
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=terminate`;
 
-  var spinnerId = addSpinnerTask("Deleting MCIS: "+ mcisid);  
+  var spinnerId = addSpinnerTask("Deleting MCIS: " + mcisid);
   infoAlert("Delete: " + mcisid + " (option=terminate)");
 
   axios({
@@ -2111,36 +2088,18 @@ function deleteMCIS() {
     },
   })
     .then((res) => {
-      if (res.data != null) {
-        console.log(res.data.output);
-
-        updateMcisList();
-        clearMap();
-        infoAlert(
-          JSON.stringify("Deleted: " + mcisid, null, 2).replace(/['",]+/g, "")
-        );
-
-        messageTextArea.value = "Deleted: " + mcisid + "\n\n";
-        for (let item of res.data.output) {
-          messageTextArea.value += item + "\n";
-        }
-      }
+      console.log(res);
+      displayJsonData(res.data, typeInfo);
+      clearMap();
+      updateMcisList();
     })
     .catch(function (error) {
-      if (error.response) {
-        // status code is not 2xx
-        console.log(error.response.data);
-        console.log(error.response.status);
-        console.log(error.response.headers);
-      } else {
-        console.log("Error", error.message);
+      console.log(error);
+      if (error.response && error.response.data) {
+        displayJsonData(error.response, typeError);
       }
-      console.log(error.config);
-      errorAlert(
-        JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, "")
-      );
     })
-    .finally(function() {
+    .finally(function () {
       removeSpinnerTask(spinnerId);
     });
 }
@@ -2165,15 +2124,16 @@ function releaseResources() {
       username: `${username}`,
       password: `${password}`,
     },
-  }).then((res) => {
+  })
+    .then((res) => {
+      updateNsList();
 
-    updateNsList();
-    
-    console.log(res); // for debug
-    displayJsonData(res.data);
-  }).finally(function() {
-    removeSpinnerTask(spinnerId);
-  });
+      console.log(res); // for debug
+      displayJsonData(res.data, typeInfo);
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
 }
 window.releaseResources = releaseResources;
 
@@ -2195,12 +2155,14 @@ function resourceOverview() {
       username: `${username}`,
       password: `${password}`,
     },
-  }).then((res) => {
-    console.log(res); // for debug
-    displayJsonData(res.data);
-  }).finally(function() {
-    removeSpinnerTask(spinnerId);
-  });
+  })
+    .then((res) => {
+      console.log(res); // for debug
+      displayJsonData(res.data, typeInfo);
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
 }
 window.resourceOverview = resourceOverview;
 
@@ -2232,14 +2194,16 @@ function registerCspResource() {
       username: `${username}`,
       password: `${password}`,
     },
-  }).then((res) => {
-    console.log(res); // for debug
+  })
+    .then((res) => {
+      console.log(res); // for debug
 
-    messageTextArea.value = "[Complete: Registering all CSP's resources]\n";
-    displayJsonData(res.data);
-  }).finally(function() {
-    removeSpinnerTask(spinnerId);
-  });
+      messageTextArea.value = "[Complete: Registering all CSP's resources]\n";
+      displayJsonData(res.data, typeInfo);
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
 }
 window.registerCspResource = registerCspResource;
 
@@ -2258,35 +2222,38 @@ function updateNsList() {
   var username = usernameElement.value;
   var password = passwordElement.value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns?option=id`;
+  if (hostname && hostname != "" && port && port != "") {
+    var url = `http://${hostname}:${port}/tumblebug/ns?option=id`;
 
-  axios({
-    method: "get",
-    url: url,
-    auth: {
-      username: `${username}`,
-      password: `${password}`,
-    },
-  }).then((res) => {
-    if (res.data.output != null) {
-      // mcisList = res.data.output;
-      for (let item of res.data.output) {
-        var option = document.createElement("option");
-        option.value = item;
-        option.text = item;
-        document.getElementById("namespace").appendChild(option);
-      }
-      for (let i = 0; i < selectElement.options.length; i++) {
-        if (selectElement.options[i].value == previousSelection) {
-          selectElement.options[i].selected = true;
-          break;
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+    })
+      .then((res) => {
+        if (res.data.output != null) {
+          // mcisList = res.data.output;
+          for (let item of res.data.output) {
+            var option = document.createElement("option");
+            option.value = item;
+            option.text = item;
+            document.getElementById("namespace").appendChild(option);
+          }
+          for (let i = 0; i < selectElement.options.length; i++) {
+            if (selectElement.options[i].value == previousSelection) {
+              selectElement.options[i].selected = true;
+              break;
+            }
+          }
         }
-      }
-    }
-  })
-  .finally(function() {
-    updateMcisList();
-  });
+      })
+      .finally(function () {
+        updateMcisList();
+      });
+  }
 }
 
 document.getElementById("namespace").onmouseover = function () {
@@ -2315,41 +2282,43 @@ function updateMcisList() {
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis?option=id`;
+  if (namespace && namespace != "") {
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis?option=id`;
 
-  axios({
-    method: "get",
-    url: url,
-    auth: {
-      username: `${username}`,
-      password: `${password}`,
-    },
-  }).then((res) => {
-    if (res.data.output != null) {
-      // mcisList = res.data.output;
-      for (let item of res.data.output) {
-        var option = document.createElement("option");
-        option.value = item;
-        option.text = item;
-        selectElement.appendChild(option);
-      }
-      for (let i = 0; i < selectElement.options.length; i++) {
-        if (selectElement.options[i].value == previousSelection) {
-          selectElement.options[i].selected = true;
-          break;
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+    })
+      .then((res) => {
+        if (res.data.output != null) {
+          // mcisList = res.data.output;
+          for (let item of res.data.output) {
+            var option = document.createElement("option");
+            option.value = item;
+            option.text = item;
+            selectElement.appendChild(option);
+          }
+          for (let i = 0; i < selectElement.options.length; i++) {
+            if (selectElement.options[i].value == previousSelection) {
+              selectElement.options[i].selected = true;
+              break;
+            }
+          }
         }
-      }
-    }
-  })
-  .finally(function() {
-    updateSubGroupList();
-    updateResourceList(typeStringVNet);
-    updateResourceList(typeStringSG);
-    updateResourceList(typeStringSshKey);
-    updateResourceList(typeStringSpec);
-    updateResourceList(typeStringImage);
-
-  });
+      })
+      .finally(function () {
+        updateSubGroupList();
+        updateResourceList(typeStringVNet);
+        updateResourceList(typeStringSG);
+        updateResourceList(typeStringSshKey);
+        updateResourceList(typeStringSpec);
+        updateResourceList(typeStringImage);
+      });
+  }
 }
 window.updateMcisList = updateMcisList;
 
@@ -2359,7 +2328,6 @@ document.getElementById("mcisid").onmouseover = function () {
 document.getElementById("mcisid").onchange = function () {
   updateSubGroupList();
 };
-
 
 function updateVmList() {
   // Clear options in 'select'
@@ -2379,31 +2347,33 @@ function updateVmList() {
   var mcisid = mcisidElement.value;
   var subgroupid = document.getElementById("subgroupid").value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}/subgroup/${subgroupid}`;
+  if (subgroupid && subgroupid != "") {
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}/subgroup/${subgroupid}`;
 
-  axios({
-    method: "get",
-    url: url,
-    auth: {
-      username: `${username}`,
-      password: `${password}`,
-    },
-  }).then((res) => {
-    if (res.data.output != null) {
-      for (let item of res.data.output) {
-        var option = document.createElement("option");
-        option.value = item;
-        option.text = item;
-        selectElement.appendChild(option);
-      }
-      for (let i = 0; i < selectElement.options.length; i++) {
-        if (selectElement.options[i].value == previousSelection) {
-          selectElement.options[i].selected = true;
-          break;
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+    }).then((res) => {
+      if (res.data.output != null) {
+        for (let item of res.data.output) {
+          var option = document.createElement("option");
+          option.value = item;
+          option.text = item;
+          selectElement.appendChild(option);
+        }
+        for (let i = 0; i < selectElement.options.length; i++) {
+          if (selectElement.options[i].value == previousSelection) {
+            selectElement.options[i].selected = true;
+            break;
+          }
         }
       }
-    }
-  });
+    });
+  }
 }
 window.updateMcisList = updateMcisList;
 
@@ -2427,42 +2397,44 @@ function updateSubGroupList() {
   var namespace = namespaceElement.value;
   var mcisid = mcisidElement.value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}/subgroup`;
+  if (namespace && namespace != "" && mcisid && mcisid != "") {
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}/subgroup`;
 
-  axios({
-    method: "get",
-    url: url,
-    auth: {
-      username: `${username}`,
-      password: `${password}`,
-    },
-  }).then((res) => {
-    if (res.data.output != null) {
-      // console.log("in updateSubGroupList(); res.data.output: " + res.data.output);
-      for (let item of res.data.output) {
-        var option = document.createElement("option");
-        option.value = item;
-        option.text = item;
-        document.getElementById("subgroupid").appendChild(option);
-      }
-      for (let i = 0; i < selectElement.options.length; i++) {
-        if (selectElement.options[i].value == previousSelection) {
-          selectElement.options[i].selected = true;
-          break;
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+    })
+      .then((res) => {
+        if (res.data.output != null) {
+          // console.log("in updateSubGroupList(); res.data.output: " + res.data.output);
+          for (let item of res.data.output) {
+            var option = document.createElement("option");
+            option.value = item;
+            option.text = item;
+            document.getElementById("subgroupid").appendChild(option);
+          }
+          for (let i = 0; i < selectElement.options.length; i++) {
+            if (selectElement.options[i].value == previousSelection) {
+              selectElement.options[i].selected = true;
+              break;
+            }
+          }
         }
-      }
-    }
-  })
-  .finally(function() {
-    updateVmList();
-  });
+      })
+      .finally(function () {
+        updateVmList();
+      });
+  }
 }
 window.updateSubGroupList = updateSubGroupList;
 
 document.getElementById("subgroupid").onmouseover = function () {
   updateSubGroupList();
 };
-
 
 function updateResourceList(resourceType) {
   var selectElement = document.getElementById(resourceType);
@@ -2479,32 +2451,33 @@ function updateResourceList(resourceType) {
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/${resourceType}?option=id`;
+  if (namespace && namespace != "" && resourceType && resourceType != "") {
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/${resourceType}?option=id`;
 
-  axios({
-    method: "get",
-    url: url,
-    auth: {
-      username: `${username}`,
-      password: `${password}`,
-    },
-  }).then((res) => {
-    if (res.data.output != null) {
-
-      for (let item of res.data.output) {
-        var option = document.createElement("option");
-        option.value = item;
-        option.text = item;
-        document.getElementById(resourceType).appendChild(option);
-      }
-      for (let i = 0; i < selectElement.options.length; i++) {
-        if (selectElement.options[i].value == previousSelection) {
-          selectElement.options[i].selected = true;
-          break;
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+    }).then((res) => {
+      if (res.data.output != null) {
+        for (let item of res.data.output) {
+          var option = document.createElement("option");
+          option.value = item;
+          option.text = item;
+          document.getElementById(resourceType).appendChild(option);
+        }
+        for (let i = 0; i < selectElement.options.length; i++) {
+          if (selectElement.options[i].value == previousSelection) {
+            selectElement.options[i].selected = true;
+            break;
+          }
         }
       }
-    }
-  });
+    });
+  }
 }
 
 document.getElementById(typeStringVNet).onmouseover = function () {
@@ -2522,8 +2495,6 @@ document.getElementById(typeStringImage).onmouseover = function () {
 document.getElementById(typeStringSpec).onmouseover = function () {
   updateResourceList(typeStringSpec);
 };
-
-
 
 function AddMcNLB() {
   var mcisid = document.getElementById("mcisid").value;
@@ -2573,8 +2544,9 @@ function AddMcNLB() {
     if (result.value) {
       infoAlert("Creating MC-NLB(special MCIS) to : " + mcisid);
       messageTextArea.value = " Creating Multi-Cloud NLB (special MCIS)";
-      var spinnerId = addSpinnerTask("Creating MC-NLB(special MCIS) to : " + mcisid);
-    
+      var spinnerId = addSpinnerTask(
+        "Creating MC-NLB(special MCIS) to : " + mcisid
+      );
 
       var nlbport = result.value;
       if (isNaN(nlbport) || nlbport <= 0) {
@@ -2613,35 +2585,7 @@ function AddMcNLB() {
       })
         .then((res) => {
           console.log(res); // for debug
-
-          messageTextArea.value =
-            "[Created Multi-Cloud NLB (special MCIS)]\n\n";
-          messageTextArea.value +=
-            "[G-NLB ID] " +
-            JSON.stringify(res.data.id, undefined, 4).replace(/['",]+/g, "") +
-            "\n\n";
-          for (let vm of res.data.vm) {
-            messageTextArea.value +=
-              "[ID] " +
-              JSON.stringify(vm.id, undefined, 4).replace(/['",]+/g, "") +
-              "\n";
-            messageTextArea.value +=
-              "[IP] " +
-              JSON.stringify(vm.publicIP, undefined, 4).replace(/['",]+/g, "") +
-              "\n";
-            messageTextArea.value +=
-              "[Where]\n" +
-              JSON.stringify(vm.connectionConfig, undefined, 4).replace(
-                /['",]+/g,
-                ""
-              ) +
-              "\n\n";
-          }
-
-          infoAlert(
-            "Created NLB: " +
-              JSON.stringify(res.data.id, undefined, 4).replace(/['",]+/g, "")
-          );
+          displayJsonData(res.data, typeInfo);
         })
         .catch(function (error) {
           if (error.response) {
@@ -2655,13 +2599,10 @@ function AddMcNLB() {
           console.log(error.config);
 
           errorAlert(
-            JSON.stringify(error.response.data.message, null, 2).replace(
-              /['",]+/g,
-              ""
-            )
+            JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, "")
           );
         })
-        .finally(function() {
+        .finally(function () {
           removeSpinnerTask(spinnerId);
         });
     } else {
@@ -2761,29 +2702,11 @@ function AddNLB() {
       })
         .then((res) => {
           console.log(res); // for debug
-        
-          messageTextArea.value = "[Created NLB]\n\n";
-          messageTextArea.value +=
-            "[ID]\n" +
-            JSON.stringify(res.data.id, undefined, 4).replace(/['",]+/g, "") +
-            "\n\n";
-          messageTextArea.value +=
-            "[Listener]\n" +
-            JSON.stringify(res.data.listener, undefined, 4).replace(
-              /['",]+/g,
-              ""
-            ) +
-            "\n\n";
-          messageTextArea.value +=
-            "[Details]\n" +
-            JSON.stringify(res.data, undefined, 4).replace(/['",]+/g, "") +
-            "\n";
-          infoAlert(
-            "Created NLB: " +
-              JSON.stringify(res.data.id, undefined, 4).replace(/['",]+/g, "")
-          );
+
+          displayJsonData(res.data, typeInfo);
         })
         .catch(function (error) {
+          console.log(error);
           if (error.response) {
             // status code is not 2xx
             console.log(error.response.data);
@@ -2793,16 +2716,12 @@ function AddNLB() {
             console.log("Error", error.message);
           }
           console.log(error.config);
-          
+
           errorAlert(
-            JSON.stringify(error.response.data.message, null, 2).replace(
-              /['",]+/g,
-              ""
-            )
+            JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, "")
           );
         });
     } else {
-      
     }
   });
 }
@@ -2828,7 +2747,6 @@ function DelNLB() {
   }
 
   messageTextArea.value = " Deleting NLB " + subgroupid;
-  
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}/nlb/${subgroupid}`;
 
@@ -2842,10 +2760,9 @@ function DelNLB() {
   })
     .then((res) => {
       console.log(res); // for debug
-      
-      messageTextArea.value = "[Deleted NLB]\n";
-      displayJsonData(res.data);
 
+      messageTextArea.value = "[Deleted NLB]\n";
+      displayJsonData(res.data, typeInfo);
     })
     .catch(function (error) {
       if (error.response) {
@@ -2857,12 +2774,9 @@ function DelNLB() {
         console.log("Error", error.message);
       }
       console.log(error.config);
-      
+
       errorAlert(
-        JSON.stringify(error.response.data.message, null, 2).replace(
-          /['",]+/g,
-          ""
-        )
+        JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, "")
       );
     });
 }
@@ -2873,16 +2787,15 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-var defaultRemoteCommand = "client_ip=$(echo $SSH_CLIENT | awk '{print $1}'); echo SSH client IP is: $client_ip";
-
+var defaultRemoteCommand =
+  "client_ip=$(echo $SSH_CLIENT | awk '{print $1}'); echo SSH client IP is: $client_ip";
 
 // function for startApp by startApp button item
 function startApp() {
-  
   var mcisid = mcisidElement.value;
   if (mcisid) {
     messageTextArea.value = " Starting " + selectApp.value;
-    
+
     var hostname = hostnameElement.value;
     var port = portElement.value;
     var username = usernameElement.value;
@@ -2932,16 +2845,18 @@ function startApp() {
           "wget -O ~/setweb.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setweb.sh; chmod +x ~/setweb.sh; sudo ~/setweb.sh";
       } else if (selectApp.value == "Jitsi") {
         defaultRemoteCommand =
-        "wget -O ~/startServer.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/jitsi/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " + publicIPs + " " +
-        "DNS EMAIL";
+          "wget -O ~/startServer.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/jitsi/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " +
+          publicIPs +
+          " " +
+          "DNS EMAIL";
       } else if (selectApp.value == "Stress") {
-        defaultRemoteCommand = "sudo apt install -y stress > /dev/null; stress -c 16 -t 60";
+        defaultRemoteCommand =
+          "sudo apt install -y stress > /dev/null; stress -c 16 -t 60";
       } else {
         defaultRemoteCommand = "ls -al";
       }
 
       executeRemoteCmd();
-
     });
   } else {
     messageTextArea.value = " MCIS ID is not assigned";
@@ -2954,7 +2869,6 @@ function stopApp() {
   var mcisid = mcisidElement.value;
   if (mcisid) {
     messageTextArea.value = " Stopping " + selectApp.value;
-    
 
     var hostname = hostnameElement.value;
     var port = portElement.value;
@@ -3008,9 +2922,9 @@ function stopApp() {
       },
     }).then((res) => {
       console.log(res); // for debug
-      
+
       messageTextArea.value = "[Complete: Stopping App]\n";
-      displayJsonData(res.data);
+      displayJsonData(res.data, typeInfo);
     });
   } else {
     messageTextArea.value = " MCIS ID is not assigned";
@@ -3029,7 +2943,6 @@ function statusApp() {
 
   if (mcisid) {
     messageTextArea.value = " Getting status " + selectApp.value;
-    
 
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`;
     var cmd = [];
@@ -3077,9 +2990,9 @@ function statusApp() {
       },
     }).then((res) => {
       console.log(res); // for debug
-      
+
       messageTextArea.value = "[Complete: Getting App status]\n";
-      displayJsonData(res.data);
+      displayJsonData(res.data, typeInfo);
     });
   } else {
     messageTextArea.value = " MCIS ID is not assigned";
@@ -3089,8 +3002,6 @@ window.statusApp = statusApp;
 
 // function for executeRemoteCmd by remoteCmd button item
 function executeRemoteCmd() {
- 
-
   var hostname = hostnameElement.value;
   var port = portElement.value;
   var username = usernameElement.value;
@@ -3103,7 +3014,7 @@ function executeRemoteCmd() {
   let cmdCount = 3; // Initial number of textboxes
 
   if (mcisid) {
-    var spinnerId = addSpinnerTask("Remote command to "+mcisid);
+    var spinnerId = addSpinnerTask("Remote command to " + mcisid);
 
     messageTextArea.value =
       "[Forward remote ssh command to MCIS:" + mcisid + "]\n";
@@ -3216,7 +3127,7 @@ function executeRemoteCmd() {
           },
         }).then((res) => {
           console.log(res); // for debug
-          displayJsonData(res.data);
+          displayJsonData(res.data, typeInfo);
           let formattedOutput = "[Complete: remote ssh command to MCIS]\n\n";
 
           res.data.results.forEach((result) => {
@@ -3240,7 +3151,6 @@ function executeRemoteCmd() {
           messageTextArea.value = formattedOutput;
 
           removeSpinnerTask(spinnerId);
-
         });
       } else {
         messageTextArea.value = "Cannot set command";
@@ -3277,7 +3187,7 @@ function getAccessInfo() {
       },
     }).then((res) => {
       console.log(res); // for debug
-      displayJsonData(res.data);
+      displayJsonData(res.data, typeInfo);
     });
   } else {
     messageTextArea.value = " MCIS ID is not assigned";
@@ -3310,7 +3220,7 @@ saveBtn.addEventListener("click", function () {
     },
   }).then((res) => {
     console.log(res); // for debug
-    displayJsonData(res.data);
+    displayJsonData(res.data, typeInfo);
     var privateKey = "";
 
     for (let subGroupAccessInfo of res.data.McisSubGroupAccessInfo) {
@@ -3344,8 +3254,7 @@ window.onload = function () {
 
   updateNsList();
 
-
-  console.log(getMcis());
+  getMcis();
 };
 
 // Draw
@@ -3479,7 +3388,7 @@ function jsonToTable(jsonText) {
     arr04[i] = json[i].costPerHour;
     arr05[i] = json[i].evaluationScore09;
   }
-  table.innerHTML = "";
+  // table.innerHTML = "";
 
   // Header
   let tr0 = document.createElement("tr");
@@ -3536,4 +3445,3 @@ function jsonToTable(jsonText) {
     table.appendChild(tr);
   }
 }
-
