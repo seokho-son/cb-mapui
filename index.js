@@ -2836,6 +2836,9 @@ function startApp() {
       } else if (selectApp.value == "Westward") {
         defaultRemoteCommand =
           "wget -O ~/setgame.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh";
+      } else if (selectApp.value == "ELK") {
+        defaultRemoteCommand =
+        "wget -O ~/startServer.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/elastic-stack/startELK.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh ";
       } else if (selectApp.value == "WeaveScope") {
         defaultRemoteCommand =
           "wget -O ~/startServer.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/weavescope/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " +
@@ -2886,6 +2889,12 @@ function stopApp() {
       );
       cmd.push("chmod +x ~/stopServer.sh");
       cmd.push("sudo ~/stopServer.sh");
+    } else if (selectApp.value == "ELK") {
+      cmd.push(
+        "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/elastic-stack/stopELK.sh"
+      );
+      cmd.push("chmod +x ~/stopELK.sh");
+      cmd.push("sudo ~/stopELK.sh");
     } else if (selectApp.value == "Westward") {
       cmd.push(
         "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/stopServer.sh"
@@ -2969,6 +2978,12 @@ function statusApp() {
     } else if (selectApp.value == "Jitsi") {
       cmd.push(
         "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/jitsi/statusServer.sh -O ~/statusServer.sh"
+      );
+      cmd.push("chmod +x ~/statusServer.sh");
+      cmd.push("sudo ~/statusServer.sh");
+    } else if (selectApp.value == "ELK") {
+      cmd.push(
+        "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/elastic-stack/statusELK.sh -O ~/statusServer.sh"
       );
       cmd.push("chmod +x ~/statusServer.sh");
       cmd.push("sudo ~/statusServer.sh");
