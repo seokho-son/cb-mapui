@@ -108,6 +108,7 @@ var passwordElement = document.getElementById("password");
 var namespaceElement = document.getElementById("namespace");
 var mcisidElement = document.getElementById("mcisid");
 
+const typeStringConnection = "connection";
 const typeStringImage = "image";
 const typeStringSpec = "spec";
 const typeStringSG = "securityGroup";
@@ -2496,6 +2497,52 @@ document.getElementById(typeStringImage).onmouseover = function () {
 };
 document.getElementById(typeStringSpec).onmouseover = function () {
   updateResourceList(typeStringSpec);
+};
+
+function updateConnectionList() {
+  var selectElement = document.getElementById(typeStringConnection);
+  var previousSelection = selectElement.value;
+  var i,
+    L = selectElement.options.length - 1;
+  for (i = L; i >= 0; i--) {
+    selectElement.remove(i);
+  }
+
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+  var username = usernameElement.value;
+  var password = passwordElement.value;
+
+    var url = `http://${hostname}:${port}/tumblebug/connConfig`;
+
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+    }).then((res) => {
+      if (res.data.connectionconfig != null) {
+        for (let item of res.data.connectionconfig) {
+          var option = document.createElement("option");
+          option.value = item.ConfigName;
+          option.text = item.ConfigName;
+          document.getElementById(typeStringConnection).appendChild(option);
+        }
+        for (let i = 0; i < selectElement.options.length; i++) {
+          if (selectElement.options[i].value == previousSelection) {
+            selectElement.options[i].selected = true;
+            break;
+          }
+        }
+      }
+    });
+
+}
+
+document.getElementById(typeStringConnection).onmouseover = function () {
+  updateConnectionList();
 };
 
 function AddMcNLB() {
