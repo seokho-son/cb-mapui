@@ -383,6 +383,29 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 </div>
               </div>
 
+              <!-- VM Public IP Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text" id="pubipLabel">Pub IP</span>
+                  </div>
+                  <select id="pubip" name="pubip" class="form-control" aria-label="Pub IP" aria-describedby="pubipLabel">
+                    <!-- Options will be filled dynamically -->
+                  </select>
+                </div>
+              </div>
+
+              <!-- VM Private IP Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text" id="priipLabel">Pri IP</span>
+                  </div>
+                  <select id="priip" name="priip" class="form-control" aria-label="Pri IP" aria-describedby="priipLabel">
+                    <!-- Options will be filled dynamically -->
+                  </select>
+                </div>
+              </div>
 
 
               <!-- Control Actions Dropdown -->
@@ -697,12 +720,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             const select = label.parentElement.nextElementSibling;
             if (select && select.options[select.selectedIndex]) {
               var toCopy = select.options[select.selectedIndex].text;
+              var labelText = label.textContent || label.innerText;
               navigator.clipboard.writeText(toCopy)
                 .then(() => {
                   console.log('Text copied to clipboard: ' + toCopy);
+                  document.getElementById('message').value = '[' + labelText + ' to Clipboard]\n' + toCopy;
                 })
                 .catch(err => {
                   console.error('Error in copying text: ', err);
+                  document.getElementById('message').value = '[Error in copying to Clipboard]\nLabel: ' + labelText + '\nError: ' + err;
                 });
             }
           });
