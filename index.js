@@ -1024,8 +1024,7 @@ function outputAlert(jsonData, type) {
   Swal.fire({
     position: "top-end",
     icon: type,
-    html: '<div id="json-output" class="form-control" style="height: auto; background-color: black; text-align: left;"></div>',
-    background: "#0e1746",
+    html: '<div id="json-output" class="form-control" style="height: auto; background-color: black; text-align: left; white-space: pre-wrap; word-break: break-all; overflow-wrap: break-word; overflow-x: auto;"></div>',    background: "#0e1746",
     showConfirmButton: true,
     //backdrop: false,
     didOpen: () => {
@@ -1432,7 +1431,8 @@ function createMcis() {
                 updateMcisList();
 
                 clearCircle("none");
-                infoAlert("Created " + createMcisReq.name);
+                messageTextArea.value = "Created " + createMcisReq.name;
+                //infoAlert("Created " + createMcisReq.name);
               })
               .catch(function (error) {
                 if (error.response) {
