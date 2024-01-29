@@ -2375,14 +2375,74 @@ function updateVmList() {
           }
         }
       }
+    }).finally(function () {
+      updateIpList();
     });
   }
 }
-window.updateMcisList = updateMcisList;
+window.updateVmList = updateVmList;
 
 document.getElementById("vmid").onmouseover = function () {
   updateVmList();
 };
+
+function updateIpList() {
+  var pubip = document.getElementById("pubip");
+  var priip = document.getElementById("priip");
+
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+  var username = usernameElement.value;
+  var password = passwordElement.value;
+  var namespace = namespaceElement.value;
+  var mcisid = mcisidElement.value;
+  var groupid = document.getElementById("subgroupid").value;
+  var vmid = document.getElementById("vmid").value;
+
+  if (vmid && vmid != "") {
+    pubip.options.length = 0;
+    priip.options.length = 0;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=accessinfo`;
+
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+    }).then((res) => {
+
+      for (let subGroupAccessInfo of res.data.McisSubGroupAccessInfo) {
+        if (subGroupAccessInfo.SubGroupId == groupid) {
+          for (let vmAccessInfo of subGroupAccessInfo.McisVmAccessInfo) {
+            if (vmAccessInfo.vmId == vmid) {
+              var optionPublicIP = document.createElement("option");
+              optionPublicIP.value = vmAccessInfo.publicIP;
+              optionPublicIP.text = vmAccessInfo.publicIP;
+              pubip.appendChild(optionPublicIP);
+
+              var optionPrivateIP = document.createElement("option");
+              optionPrivateIP.value = vmAccessInfo.privateIP;
+              optionPrivateIP.text = vmAccessInfo.privateIP;
+              priip.appendChild(optionPrivateIP);
+            }
+          }
+        }
+      }
+      
+    });
+  } else {
+    pubip.options.length = 0;
+    priip.options.length = 0;
+  }
+}
+window.updateIpList = updateIpList;
+
+document.getElementById("vmid").onmouseover = function () {
+  updateVmList();
+};
+
 
 function updateSubGroupList() {
   var selectElement = document.getElementById("subgroupid");
