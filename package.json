@@ -4,21 +4,23 @@
     "axios": "^1.6.0",
     "buffer": "^6.0.3",
     "csv-parser": "^3.0.0",
+    "events": "^3.3.0",
     "http": "^0.0.1-security",
     "jquery": "^3.7.1",
     "json-formatter-js": "^2.3.4",
     "ol": "^8.1.0",
     "parcel": "^2.10.1",
+    "process": "^0.11.10",
+    "punycode": "^1.4.1",
+    "querystring-es3": "^0.2.1",
+    "stream-browserify": "^3.0.0",
     "stream-http": "^3.2.0",
     "sweetalert2": "^11.4.14",
-    "events": "^3.3.0",
-    "process": "^0.11.10",
-    "url": "^0.11.0",
-    "stream-browserify": "^3.0.0",
-    "querystring-es3": "^0.2.1",
-    "punycode": "^1.4.1"
+    "url": "^0.11.0"
   },
   "devDependencies": {
+    "https-browserify": "^1.0.0",
+    "util": "^0.12.5"
   },
   "scripts": {
     "start": "parcel -p 1324 index.html",

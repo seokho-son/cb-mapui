@@ -41,37 +41,47 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----
 */
 
+// OpenLayers CSS
 import "ol/ol.css";
+
+// OpenLayers core components
 import Map from "ol/Map";
 import View from "ol/View";
-import { MultiPoint, Point } from "ol/geom";
-import TileLayer from "ol/layer/Tile";
-import OSM from "ol/source/OSM";
-import { Circle as CircleStyle, Fill, Stroke, Style, Text } from "ol/style";
-import { getVectorContext } from "ol/render";
-import { LineString, Polygon } from "ol/geom";
-import { Vector as VectorLayer } from "ol/layer";
 import Feature from "ol/Feature";
-import { TileJSON, Vector as VectorSource } from "ol/source";
-import { Icon } from "ol/style";
-import { useGeographic } from "ol/proj";
-import JSONFormatter from "json-formatter-js";
-
-// popup overlay
 import Overlay from "ol/Overlay";
-import { toLonLat } from "ol/proj";
-import { toStringHDMS } from "ol/coordinate";
 
-// mouse postion
+// OpenLayers geometry types
+import { MultiPoint, Point, LineString, Polygon } from "ol/geom";
+
+// OpenLayers layer types
+import TileLayer from "ol/layer/Tile";
+import { Vector as VectorLayer } from "ol/layer";
+
+// OpenLayers source types
+import OSM from "ol/source/OSM";
+import { TileJSON, Vector as VectorSource } from "ol/source";
+
+// OpenLayers style components
+import {
+  Circle as CircleStyle,
+  Fill,
+  Stroke,
+  Style,
+  Text,
+  Icon,
+} from "ol/style";
+
+// OpenLayers utilities and controls
+import { getVectorContext } from "ol/render";
+import { useGeographic, toLonLat } from "ol/proj";
+import { toStringHDMS, createStringXY } from "ol/coordinate";
 import MousePosition from "ol/control/MousePosition";
-import { createStringXY } from "ol/coordinate";
 import { defaults as defaultControls } from "ol/control";
 
-// ES6 Modules or TypeScript
+// Third-party libraries
 import Swal from "sweetalert2";
-const Swal = require("sweetalert2");
-
-import axios, { isCancel, AxiosError } from "axios";
+import axios, { AxiosError } from "axios";
+import JSONFormatter from "json-formatter-js";
 
 useGeographic();
 var i, j;
@@ -86,9 +96,6 @@ var geometriesPoints = new Array();
 var mcisName = new Array();
 var mcisStatus = new Array();
 var mcisGeo = new Array();
-
-var ipMap = [];
-var geoMap = [];
 
 var cspListDisplayEnabled = document.getElementById("displayOn");
 var tableDisplayEnabled = document.getElementById("tableOn");
@@ -238,24 +245,11 @@ const csv = require("csv-parser");
 const csvPath =
   "https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/assets/cloudlocation.csv";
 var cloudLocation = [];
-var cspPointsAzure = [];
-var cspPointsAws = [];
-var cspPointsGcp = [];
-var cspPointsAlibaba = [];
-var cspPointsCloudit = [];
-var cspPointsIBM = [];
-var cspPointsTencent = [];
-var cspPointsNcpVpc = [];
 var cspPointsCircle = [];
-var geoCspPointsAzure = new Array();
-var geoCspPointsAws = new Array();
-var geoCspPointsGcp = new Array();
-var geoCspPointsAlibaba = new Array();
-var geoCspPointsCloudit = new Array();
-var geoCspPointsIBM = new Array();
-var geoCspPointsTencent = new Array();
-var geoCspPointsNcpVpc = new Array();
 var geoCspPointsCircle = new Array();
+
+var cspPoints = {};
+var geoCspPoints = {};
 
 function displayCSPListOn() {
   if (cspListDisplayEnabled.checked) {
@@ -272,79 +266,35 @@ function displayCSPListOn() {
             cloudLocation.length +
             "\n";
 
-          for (var i = 0; i < cloudLocation.length; ++i) {
-            // title: CloudType, ID,        DisplayName, Latitude, Longitude
-            // ex:    azure,     eastasia,  East Asia,   22.2670,  114.1880
-            console.log(cloudLocation[i]["CloudType"]);
-            if (cloudLocation[i]["CloudType"] == "azure") {
-              cspPointsAzure.push([
-                cloudLocation[i]["Longitude"],
-                cloudLocation[i]["Latitude"],
-              ]);
+          cloudLocation.forEach((location) => {
+            const { CloudType, Longitude, Latitude } = location;
+            const cloudTypeLower = CloudType.toLowerCase();
+            if (!cspPoints[cloudTypeLower]) {
+              cspPoints[cloudTypeLower] = [];
             }
-            if (cloudLocation[i]["CloudType"] == "aws") {
-              cspPointsAws.push([
-                cloudLocation[i]["Longitude"],
-                cloudLocation[i]["Latitude"],
-              ]);
+            if (!geoCspPoints[cloudTypeLower]) {
+              geoCspPoints[cloudTypeLower] = [];
             }
-            if (cloudLocation[i]["CloudType"] == "gcp") {
-              cspPointsGcp.push([
-                cloudLocation[i]["Longitude"],
-                cloudLocation[i]["Latitude"],
-              ]);
+
+            cspPoints[cloudTypeLower].push([
+              parseFloat(Longitude),
+              parseFloat(Latitude),
+            ]);
+          });
+
+          Object.keys(cspPoints).forEach((csp) => {
+            if (cspPoints[csp].length > 0) {
+              geoCspPoints[csp][0] = new MultiPoint(cspPoints[csp]);
             }
-            if (cloudLocation[i]["CloudType"] == "ncpvpc") {
-              cspPointsNcpVpc.push([
-                cloudLocation[i]["Longitude"],
-                cloudLocation[i]["Latitude"],
-              ]);
-            }
-            if (cloudLocation[i]["CloudType"] == "alibaba") {
-              cspPointsAlibaba.push([
-                cloudLocation[i]["Longitude"],
-                cloudLocation[i]["Latitude"],
-              ]);
-            }
-            if (cloudLocation[i]["CloudType"] == "cloudit") {
-              cspPointsCloudit.push([
-                cloudLocation[i]["Longitude"],
-                cloudLocation[i]["Latitude"],
-              ]);
-            }
-            if (cloudLocation[i]["CloudType"] == "ibm") {
-              cspPointsIBM.push([
-                cloudLocation[i]["Longitude"],
-                cloudLocation[i]["Latitude"],
-              ]);
-            }
-            if (cloudLocation[i]["CloudType"] == "tencent") {
-              cspPointsTencent.push([
-                cloudLocation[i]["Longitude"],
-                cloudLocation[i]["Latitude"],
-              ]);
-            }
-          }
+          });
         });
     });
   } else {
-    cspPointsAzure = [];
-    cspPointsAws = [];
-    cspPointsGcp = [];
-    cspPointsAlibaba = [];
-    cspPointsCloudit = [];
-    cspPointsIBM = [];
-    cspPointsTencent = [];
-    cspPointsNcpVpc = [];
+    Object.keys(cspPoints).forEach((csp) => {
+      cspPoints[csp] = [];
+      geoCspPoints[csp] = [];
+    });
   }
-  geoCspPointsAzure[0] = new MultiPoint([cspPointsAzure]);
-  geoCspPointsAws[0] = new MultiPoint([cspPointsAws]);
-  geoCspPointsGcp[0] = new MultiPoint([cspPointsGcp]);
-  geoCspPointsAlibaba[0] = new MultiPoint([cspPointsAlibaba]);
-  geoCspPointsCloudit[0] = new MultiPoint([cspPointsCloudit]);
-  geoCspPointsIBM[0] = new MultiPoint([cspPointsIBM]);
-  geoCspPointsTencent[0] = new MultiPoint([cspPointsTencent]);
-  geoCspPointsNcpVpc[0] = new MultiPoint([cspPointsNcpVpc]);
 }
 window.displayCSPListOn = displayCSPListOn;
 
@@ -470,71 +420,30 @@ function createStyle(src) {
   });
 }
 
+// temporary point
 var pnt = new Point([-68, -50]);
 
-import Vector from "ol/source/Vector.js";
-var vectorSource = new Vector({ projection: "EPSG:4326" });
-var iconFeature = new Feature(pnt);
-iconFeature.set("style", createStyle("img/iconVm.png"));
-iconFeature.set("index", "001");
-vectorSource.addFeature(iconFeature);
-var iconLayer = new VectorLayer({
-  style: function (feature) {
-    return feature.get("style");
-  },
-  source: vectorSource,
-});
-
+addIconToMap("img/iconVm.png", pnt, "001");
 var iconStyleVm = new Style({
   image: new Icon({
-    //anchor: [0.5, 0.5],
     crossOrigin: "anonymous",
     src: "img/iconVm.png",
     opacity: 1.0,
-    //anchor: [0.5, 46],
-    //anchorXUnits: 'fraction',
-    //anchorYUnits: 'pixels',
     scale: 0.7,
   }),
 });
 
-var vectorSourceNlb = new Vector({ projection: "EPSG:4326" });
-var iconFeatureNlb = new Feature(pnt);
-iconFeatureNlb.set("style", createStyle("img/iconNlb.png"));
-iconFeatureNlb.set("index", "001");
-vectorSourceNlb.addFeature(iconFeatureNlb);
-var iconLayerNlb = new VectorLayer({
-  style: function (feature) {
-    return feature.get("style");
-  },
-  source: vectorSourceNlb,
-});
-
+addIconToMap("img/iconNlb.png", pnt, "001");
 var iconStyleNlb = new Style({
   image: new Icon({
-    //anchor: [0.5, 0.5],
     crossOrigin: "anonymous",
     src: "img/iconNlb.png",
     opacity: 1.0,
-    //anchor: [0.5, 46],
-    //anchorXUnits: 'fraction',
-    //anchorYUnits: 'pixels',
     scale: 0.7,
   }),
 });
 
-var vectorSource1 = new Vector({ projection: "EPSG:4326" });
-var iconFeature1 = new Feature(pnt);
-iconFeature1.set("style", createStyle("img/circle.png"));
-iconFeature1.set("index", "001");
-vectorSource1.addFeature(iconFeature1);
-var iconLayer1 = new VectorLayer({
-  style: function (feature) {
-    return feature.get("style");
-  },
-  source: vectorSource1,
-});
-
+addIconToMap("img/circle.png", pnt, "001");
 var iconStyleCircle = new Style({
   image: new Icon({
     crossOrigin: "anonymous",
@@ -550,219 +459,58 @@ var iconStyleCircle = new Style({
 });
 
 // CSP location icon styles
+const cspIconImg = {
+  azure: "img/ht-azure.png",
+  aws: "img/ht-aws.png",
+  gcp: "img/ht-gcp.png",
+  alibaba: "img/ht-alibaba.png",
+  cloudit: "img/ht-cloudit.png",
+  ibm: "img/ibm.png",
+  tencent: "img/tencent.png",
+  ncpvpc: "img/ncpvpc.png",
+  ncp: "img/ncp.png",
+  ktvpc: "img/ktvpc.png",
+  kt: "img/kt.png",
+  nhn: "img/nhn.png",
 
-var vectorSource2 = new Vector({ projection: "EPSG:4326" });
-var iconFeature2 = new Feature(pnt);
-iconFeature2.set("style", createStyle("img/ht-azure.png"));
-iconFeature2.set("index", "001");
-vectorSource2.addFeature(iconFeature2);
-var iconLayer2 = new VectorLayer({
-  style: function (feature) {
-    return feature.get("style");
-  },
-  source: vectorSource2,
+  // Add more CSP icons here
+};
+
+// cspIconStyles
+const cspIconStyles = {};
+
+function createIconStyle(imageSrc) {
+  return new Style({
+    image: new Icon({
+      crossOrigin: "anonymous",
+      src: imageSrc,
+      opacity: 1.0,
+      scale: 1.0,
+    }),
+  });
+}
+
+// addIconToMap
+Object.keys(cspIconImg).forEach((csp) => {
+  cspIconStyles[csp] = createIconStyle(cspIconImg[csp]);
 });
-
-var iconStyleAzure = new Style({
-  image: new Icon({
-    //anchor: [0.5, 0.5],
-    crossOrigin: "anonymous",
-    src: "img/ht-azure.png",
-    opacity: 1.0,
-    //anchor: [0.5, 46],
-    //anchorXUnits: 'fraction',
-    //anchorYUnits: 'pixels',
-    scale: 1.0,
-  }),
-});
-
-var vectorSource3 = new Vector({ projection: "EPSG:4326" });
-var iconFeature3 = new Feature(pnt);
-iconFeature3.set("style", createStyle("img/ht-aws.png"));
-iconFeature3.set("index", "001");
-vectorSource3.addFeature(iconFeature3);
-var iconLayer3 = new VectorLayer({
-  style: function (feature) {
-    return feature.get("style");
-  },
-  source: vectorSource3,
-});
-
-var iconStyleAws = new Style({
-  image: new Icon({
-    crossOrigin: "anonymous",
-    src: "img/ht-aws.png",
-    opacity: 1.0,
-    scale: 1.0,
-  }),
-});
-
-var vectorSource4 = new Vector({ projection: "EPSG:4326" });
-var iconFeature4 = new Feature(pnt);
-iconFeature4.set("style", createStyle("img/ht-gcp.png"));
-iconFeature4.set("index", "001");
-vectorSource4.addFeature(iconFeature4);
-var iconLayer4 = new VectorLayer({
-  style: function (feature) {
-    return feature.get("style");
-  },
-  source: vectorSource4,
-});
-
-var iconStyleGcp = new Style({
-  image: new Icon({
-    crossOrigin: "anonymous",
-    src: "img/ht-gcp.png",
-    opacity: 1.0,
-    scale: 1.0,
-  }),
-});
-
-var vectorSource5 = new Vector({ projection: "EPSG:4326" });
-var iconFeature5 = new Feature(pnt);
-iconFeature5.set("style", createStyle("img/ht-alibaba.png"));
-iconFeature5.set("index", "001");
-vectorSource5.addFeature(iconFeature5);
-var iconLayer5 = new VectorLayer({
-  style: function (feature) {
-    return feature.get("style");
-  },
-  source: vectorSource5,
-});
-
-var iconStyleAlibaba = new Style({
-  image: new Icon({
-    crossOrigin: "anonymous",
-    src: "img/ht-alibaba.png",
-    opacity: 1.0,
-    scale: 1.0,
-  }),
-});
-
-var vectorSource6 = new Vector({ projection: "EPSG:4326" });
-var iconFeature6 = new Feature(pnt);
-iconFeature6.set("style", createStyle("img/ht-cloudit.png"));
-iconFeature6.set("index", "001");
-vectorSource6.addFeature(iconFeature6);
-var iconLayer6 = new VectorLayer({
-  style: function (feature) {
-    return feature.get("style");
-  },
-  source: vectorSource6,
-});
-
-var iconStyleCloudit = new Style({
-  image: new Icon({
-    crossOrigin: "anonymous",
-    src: "img/ht-cloudit.png",
-    opacity: 1.0,
-    scale: 1.0,
-  }),
-});
-
-var vectorSource7 = new Vector({ projection: "EPSG:4326" });
-var iconFeature7 = new Feature(pnt);
-iconFeature7.set("style", createStyle("img/ibm.png"));
-iconFeature7.set("index", "001");
-vectorSource7.addFeature(iconFeature7);
-var iconLayer7 = new VectorLayer({
-  style: function (feature) {
-    return feature.get("style");
-  },
-  source: vectorSource7,
-});
-
-var iconStyleIBM = new Style({
-  image: new Icon({
-    crossOrigin: "anonymous",
-    src: "img/ibm.png",
-    opacity: 1.0,
-    scale: 1.0,
-  }),
-});
-
-var vectorSource8 = new Vector({ projection: "EPSG:4326" });
-var iconFeature8 = new Feature(pnt);
-iconFeature8.set("style", createStyle("img/tencent.png"));
-iconFeature8.set("index", "001");
-vectorSource8.addFeature(iconFeature8);
-var iconLayer8 = new VectorLayer({
-  style: function (feature) {
-    return feature.get("style");
-  },
-  source: vectorSource8,
-});
-
-var iconStyleTencent = new Style({
-  image: new Icon({
-    crossOrigin: "anonymous",
-    src: "img/tencent.png",
-    opacity: 1.0,
-    scale: 1.0,
-  }),
-});
-
-var vectorSource9 = new Vector({ projection: "EPSG:4326" });
-var iconFeature9 = new Feature(pnt);
-iconFeature9.set("style", createStyle("img/naver-15x15.png"));
-iconFeature9.set("index", "001");
-vectorSource9.addFeature(iconFeature9);
-var iconLayer9 = new VectorLayer({
-  style: function (feature) {
-    return feature.get("style");
-  },
-  source: vectorSource9,
-});
-
-var iconStyleNcpVpc = new Style({
-  image: new Icon({
-    crossOrigin: "anonymous",
-    src: "img/naver-15x15.png",
-    opacity: 1.0,
-    scale: 1.0,
-  }),
-});
-
-// Icon layers
-map.addLayer(iconLayer1);
-map.addLayer(iconLayer2);
-map.addLayer(iconLayer3);
-map.addLayer(iconLayer4);
-map.addLayer(iconLayer5);
-map.addLayer(iconLayer6);
-map.addLayer(iconLayer7);
-map.addLayer(iconLayer8);
-map.addLayer(iconLayer9);
-map.addLayer(iconLayer);
-map.addLayer(iconLayerNlb);
-
-var imageStyle = new Style({
-  image: new CircleStyle({
-    radius: 2,
-    fill: new Fill({ color: "red" }),
-    //stroke: new Stroke({color: 'red', width: 1})
-  }),
-});
-
-var lineStyle = new Style({
-  stroke: new Stroke({
-    width: 5,
-    color: [255, 0, 0, 1],
-  }),
-});
-
-var headInnerImageStyle = new Style({
-  image: new CircleStyle({
-    radius: 1,
-    fill: new Fill({ color: "blue" }),
-  }),
-});
-
-var headOuterImageStyle = new Style({
-  image: new CircleStyle({
-    radius: 1,
-    fill: new Fill({ color: "black" }),
-  }),
+function addIconToMap(imageSrc, point, index) {
+  var vectorSource = new VectorSource({ projection: "EPSG:4326" });
+  var iconFeature = new Feature(point);
+  iconFeature.set("style", createStyle(imageSrc));
+  iconFeature.set("index", index);
+  vectorSource.addFeature(iconFeature);
+  var iconLayer = new VectorLayer({
+    style: function (feature) {
+      return feature.get("style");
+    },
+    source: vectorSource,
+  });
+  map.addLayer(iconLayer);
+}
+Object.keys(cspIconImg).forEach((csp, index) => {
+  const iconIndex = index.toString().padStart(3, "0");
+  addIconToMap(cspIconImg[csp], pnt, iconIndex);
 });
 
 // magenta black blue orange yellow red grey green
@@ -1024,7 +772,8 @@ function outputAlert(jsonData, type) {
   Swal.fire({
     position: "top-end",
     icon: type,
-    html: '<div id="json-output" class="form-control" style="height: auto; background-color: black; text-align: left; white-space: pre-wrap; word-break: break-all; overflow-wrap: break-word; overflow-x: auto;"></div>',    background: "#0e1746",
+    html: '<div id="json-output" class="form-control" style="height: auto; background-color: black; text-align: left; white-space: pre-wrap; word-break: break-all; overflow-wrap: break-word; overflow-x: auto;"></div>',
+    background: "#0e1746",
     showConfirmButton: true,
     //backdrop: false,
     didOpen: () => {
@@ -1061,115 +810,114 @@ function getMcis() {
   setTimeout(() => getMcis(), filteredRefreshInterval * 1000);
 
   if (namespace && namespace != "") {
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis?option=status`;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis?option=status`;
 
-  axios({
-    method: "get",
-    url: url,
-    auth: {
-      username: `${username}`,
-      password: `${password}`,
-    },
-    timeout: 60000,
-  })
-    .then((res) => {
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+      timeout: 60000,
+    })
+      .then((res) => {
+        var obj = res.data;
 
-      var obj = res.data;
+        var zoomLevel = map.getView().getZoom() * 2.0;
+        var radius = 4.0;
 
-      var zoomLevel = map.getView().getZoom() * 2.0;
-      var radius = 4.0;
+        cnt = cntInit;
+        if (obj.mcis != null) {
+          //console.log(obj.mcis);
+          for (let item of obj.mcis) {
+            //console.log("Index:[" + "]obj.mcis[i].name = " + item.name);
+            console.log(item);
 
-      cnt = cntInit;
-      if (obj.mcis != null) {
-        //console.log(obj.mcis);
-        for (let item of obj.mcis) {
-          //console.log("Index:[" + "]obj.mcis[i].name = " + item.name);
-          console.log(item);
+            var hideFlag = false;
+            for (let hideName of mcisHideList) {
+              if (item.id == hideName) {
+                hideFlag = true;
+                break;
+              }
+            }
+            if (hideFlag) {
+              continue;
+            }
 
-          var hideFlag = false;
-          for (let hideName of mcisHideList) {
-            if (item.id == hideName) {
-              hideFlag = true;
+            var vmGeo = [];
+
+            var validateNum = 0;
+            if (item.vm == null) {
+              console.log(item);
               break;
             }
-          }
-          if (hideFlag) {
-            continue;
-          }
-
-          var vmGeo = [];
-
-          var validateNum = 0;
-          if (item.vm == null) {
-            console.log(item);
-            break;
-          }
-          for (j = 0; j < item.vm.length; j++) {
-            //vmGeo.push([(item.vm[j].location.longitude*1) + (Math.round(Math.random()) / zoomLevel - 1) * Math.random()*1, (item.vm[j].location.latitude*1) + (Math.round(Math.random()) / zoomLevel - 1) * Math.random()*1 ])
-            if (j == 0) {
+            for (j = 0; j < item.vm.length; j++) {
+              //vmGeo.push([(item.vm[j].location.longitude*1) + (Math.round(Math.random()) / zoomLevel - 1) * Math.random()*1, (item.vm[j].location.latitude*1) + (Math.round(Math.random()) / zoomLevel - 1) * Math.random()*1 ])
+              if (j == 0) {
+                vmGeo.push([
+                  item.vm[j].location.longitude * 1,
+                  item.vm[j].location.latitude * 1,
+                ]);
+              } else {
+                vmGeo.push([
+                  item.vm[j].location.longitude * 1 +
+                    (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
+                  item.vm[j].location.latitude * 1 +
+                    (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
+                ]);
+              }
+              validateNum++;
+            }
+            if (item.vm.length == 1) {
+              // handling if there is only one vm so that we can not draw geometry
+              vmGeo.pop();
               vmGeo.push([
-                item.vm[j].location.longitude * 1,
-                item.vm[j].location.latitude * 1,
+                item.vm[0].location.longitude * 1,
+                item.vm[0].location.latitude * 1,
               ]);
-            } else {
               vmGeo.push([
-                item.vm[j].location.longitude * 1 +
-                  (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
-                item.vm[j].location.latitude * 1 +
-                  (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
+                item.vm[0].location.longitude * 1 + Math.random() * 0.001,
+                item.vm[0].location.latitude * 1 + Math.random() * 0.001,
+              ]);
+              vmGeo.push([
+                item.vm[0].location.longitude * 1 + Math.random() * 0.001,
+                item.vm[0].location.latitude * 1 + Math.random() * 0.001,
               ]);
             }
-            validateNum++;
-          }
-          if (item.vm.length == 1) {
-            // handling if there is only one vm so that we can not draw geometry
-            vmGeo.pop();
-            vmGeo.push([
-              item.vm[0].location.longitude * 1,
-              item.vm[0].location.latitude * 1,
-            ]);
-            vmGeo.push([
-              item.vm[0].location.longitude * 1 + Math.random() * 0.001,
-              item.vm[0].location.latitude * 1 + Math.random() * 0.001,
-            ]);
-            vmGeo.push([
-              item.vm[0].location.longitude * 1 + Math.random() * 0.001,
-              item.vm[0].location.latitude * 1 + Math.random() * 0.001,
-            ]);
-          }
-          if (validateNum == item.vm.length) {
-            //console.log("Found all GEOs validateNum : " + validateNum);
+            if (validateNum == item.vm.length) {
+              //console.log("Found all GEOs validateNum : " + validateNum);
 
-            //make dots without convexHull
-            makePolyDot(vmGeo);
-            vmGeo = convexHull(vmGeo);
+              //make dots without convexHull
+              makePolyDot(vmGeo);
+              vmGeo = convexHull(vmGeo);
 
-            mcisStatus[cnt] = item.status;
+              mcisStatus[cnt] = item.status;
 
-            var newName = item.name;
-            if (newName.includes("-nlb")) {
-              newName = "NLB";
+              var newName = item.name;
+              if (newName.includes("-nlb")) {
+                newName = "NLB";
+              }
+
+              if (item.targetAction == "None" || item.targetAction == "") {
+                mcisName[cnt] = "[" + newName + "]";
+              } else {
+                mcisName[cnt] = item.targetAction + "-> " + "[" + newName + "]";
+              }
+
+              //make poly with convexHull
+              makePolyArray(vmGeo);
+
+              cnt++;
             }
-
-            if (item.targetAction == "None" || item.targetAction == "") {
-              mcisName[cnt] = "[" + newName + "]";
-            } else {
-              mcisName[cnt] = item.targetAction + "-> " + "[" + newName + "]";
-            }
-
-            //make poly with convexHull
-            makePolyArray(vmGeo);
-
-            cnt++;
           }
+        } else {
+          geometries = [];
         }
-      } else {
-        geometries = [];
-      }
-    })
-    .catch(function (error) {
-      console.log(error);
-    });
+      })
+      .catch(function (error) {
+        console.log(error);
+      });
   }
 }
 
@@ -1229,20 +977,18 @@ function getConnection() {
           obj.connectionconfig.length +
           "\n";
 
-        for (var i = 0; i < obj.connectionconfig.length; ++i) {
-          // title: CloudType, ID,        DisplayName, Latitude, Longitude
-          // ex:    azure,     eastasia,  East Asia,   22.2670,  114.1880
-          providerName = obj.connectionconfig[i].ProviderName.toLowerCase();
-          longitude = obj.connectionconfig[i].Location.longitude;
-          latitude = obj.connectionconfig[i].Location.latitude;
-          briefAddr = obj.connectionconfig[i].Location.briefAddr;
-          nativeRegion = obj.connectionconfig[i].Location.nativeRegion;
+        obj.connectionconfig.forEach((config, i) => {
+          const providerName = config.ProviderName.toLowerCase();
+          const longitude = config.Location.longitude;
+          const latitude = config.Location.latitude;
+          const briefAddr = config.Location.briefAddr;
+          const nativeRegion = config.Location.nativeRegion;
 
           messageTextArea.value +=
             "[" +
             i +
             "] " +
-            obj.connectionconfig[i].ProviderName +
+            config.ProviderName +
             "(" +
             nativeRegion +
             ")" +
@@ -1255,40 +1001,21 @@ function getConnection() {
             briefAddr +
             ")\n";
 
-          if (providerName == "azure") {
-            cspPointsAzure.push([longitude, latitude]);
+          // 배열이 존재하지 않는 경우 초기화
+          if (!cspPoints[providerName]) {
+            cspPoints[providerName] = [];
           }
-          if (providerName == "aws") {
-            cspPointsAws.push([longitude, latitude]);
-          }
-          if (providerName == "gcp") {
-            cspPointsGcp.push([longitude, latitude]);
-          }
-          if (providerName == "ncpvpc") {
-            cspPointsNcpVpc.push([longitude, latitude]);
-          }
-          if (providerName == "alibaba") {
-            cspPointsAlibaba.push([longitude, latitude]);
-          }
-          if (providerName == "cloudit") {
-            cspPointsCloudit.push([longitude, latitude]);
-          }
-          if (providerName == "ibm") {
-            cspPointsIBM.push([longitude, latitude]);
-          }
-          if (providerName == "tencent") {
-            cspPointsTencent.push([longitude, latitude]);
-          }
-        }
 
-        geoCspPointsAzure[0] = new MultiPoint([cspPointsAzure]);
-        geoCspPointsAws[0] = new MultiPoint([cspPointsAws]);
-        geoCspPointsGcp[0] = new MultiPoint([cspPointsGcp]);
-        geoCspPointsNcpVpc[0] = new MultiPoint([cspPointsNcpVpc]);
-        geoCspPointsAlibaba[0] = new MultiPoint([cspPointsAlibaba]);
-        geoCspPointsCloudit[0] = new MultiPoint([cspPointsCloudit]);
-        geoCspPointsIBM[0] = new MultiPoint([cspPointsIBM]);
-        geoCspPointsTencent[0] = new MultiPoint([cspPointsTencent]);
+          cspPoints[providerName].push([longitude, latitude]);
+
+          // geoCspPoints에 MultiPoint 객체 생성
+          if (!geoCspPoints[providerName]) {
+            geoCspPoints[providerName] = [];
+          }
+          geoCspPoints[providerName][0] = new MultiPoint(
+            cspPoints[providerName]
+          );
+        });
 
         infoAlert("Registered Cloud Regions: " + obj.connectionconfig.length);
       }
@@ -1788,7 +1515,6 @@ function addRegionMarker(spec) {
       password: `${password}`,
     },
   }).then((res) => {
-
     console.log(res);
 
     var connConfig = res.data.connectionName;
@@ -2360,24 +2086,26 @@ function updateVmList() {
         username: `${username}`,
         password: `${password}`,
       },
-    }).then((res) => {
-      if (res.data.output != null) {
-        for (let item of res.data.output) {
-          var option = document.createElement("option");
-          option.value = item;
-          option.text = item;
-          selectElement.appendChild(option);
-        }
-        for (let i = 0; i < selectElement.options.length; i++) {
-          if (selectElement.options[i].value == previousSelection) {
-            selectElement.options[i].selected = true;
-            break;
+    })
+      .then((res) => {
+        if (res.data.output != null) {
+          for (let item of res.data.output) {
+            var option = document.createElement("option");
+            option.value = item;
+            option.text = item;
+            selectElement.appendChild(option);
+          }
+          for (let i = 0; i < selectElement.options.length; i++) {
+            if (selectElement.options[i].value == previousSelection) {
+              selectElement.options[i].selected = true;
+              break;
+            }
           }
         }
-      }
-    }).finally(function () {
-      updateIpList();
-    });
+      })
+      .finally(function () {
+        updateIpList();
+      });
   }
 }
 window.updateVmList = updateVmList;
@@ -2412,7 +2140,6 @@ function updateIpList() {
         password: `${password}`,
       },
     }).then((res) => {
-
       for (let subGroupAccessInfo of res.data.McisSubGroupAccessInfo) {
         if (subGroupAccessInfo.SubGroupId == groupid) {
           for (let vmAccessInfo of subGroupAccessInfo.McisVmAccessInfo) {
@@ -2430,7 +2157,6 @@ function updateIpList() {
           }
         }
       }
-      
     });
   } else {
     pubip.options.length = 0;
@@ -2442,7 +2168,6 @@ window.updateIpList = updateIpList;
 document.getElementById("vmid").onmouseover = function () {
   updateVmList();
 };
-
 
 function updateSubGroupList() {
   var selectElement = document.getElementById("subgroupid");
@@ -2573,32 +2298,31 @@ function updateConnectionList() {
   var username = usernameElement.value;
   var password = passwordElement.value;
 
-    var url = `http://${hostname}:${port}/tumblebug/connConfig`;
+  var url = `http://${hostname}:${port}/tumblebug/connConfig`;
 
-    axios({
-      method: "get",
-      url: url,
-      auth: {
-        username: `${username}`,
-        password: `${password}`,
-      },
-    }).then((res) => {
-      if (res.data.connectionconfig != null) {
-        for (let item of res.data.connectionconfig) {
-          var option = document.createElement("option");
-          option.value = item.ConfigName;
-          option.text = item.ConfigName;
-          document.getElementById(typeStringConnection).appendChild(option);
-        }
-        for (let i = 0; i < selectElement.options.length; i++) {
-          if (selectElement.options[i].value == previousSelection) {
-            selectElement.options[i].selected = true;
-            break;
-          }
+  axios({
+    method: "get",
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`,
+    },
+  }).then((res) => {
+    if (res.data.connectionconfig != null) {
+      for (let item of res.data.connectionconfig) {
+        var option = document.createElement("option");
+        option.value = item.ConfigName;
+        option.text = item.ConfigName;
+        document.getElementById(typeStringConnection).appendChild(option);
+      }
+      for (let i = 0; i < selectElement.options.length; i++) {
+        if (selectElement.options[i].value == previousSelection) {
+          selectElement.options[i].selected = true;
+          break;
         }
       }
-    });
-
+    }
+  });
 }
 
 document.getElementById(typeStringConnection).onmouseover = function () {
@@ -2945,7 +2669,7 @@ function startApp() {
           "wget -O ~/setgame.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh";
       } else if (selectApp.value == "ELK") {
         defaultRemoteCommand =
-        "wget -O ~/startServer.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/elastic-stack/startELK.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh ";
+          "wget -O ~/startServer.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/elastic-stack/startELK.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh ";
       } else if (selectApp.value == "WeaveScope") {
         defaultRemoteCommand =
           "wget -O ~/startServer.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/weavescope/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " +
@@ -3374,65 +3098,60 @@ let xRequestIds = [];
 
 // Function to handle Axios response and extract X-Request-Id
 function handleAxiosResponse(response) {
-    // Extract X-Request-Id from the response headers
-    console.log('Response Headers:', response.headers);
-    const requestId = response.headers['x-request-id'];
-    console.log('X-Request-Id:', requestId);
-    if (requestId) {
-        
-        // Add X-Request-Id to the global array if it's not already present
-        if (!xRequestIds.includes(requestId)) {
-            xRequestIds.push(requestId);
-            addRequestIdToSelect(requestId);
-        }
+  // Extract X-Request-Id from the response headers
+  console.log("Response Headers:", response.headers);
+  const requestId = response.headers["x-request-id"];
+  console.log("X-Request-Id:", requestId);
+  if (requestId) {
+    // Add X-Request-Id to the global array if it's not already present
+    if (!xRequestIds.includes(requestId)) {
+      xRequestIds.push(requestId);
+      addRequestIdToSelect(requestId);
     }
+  }
 }
 
 // Function to add X-Request-Id to the select element
 function addRequestIdToSelect(requestId) {
-    const select = document.getElementById('xRequestIdSelect');
-    const option = document.createElement('option');
-    option.value = requestId;
-    option.text = requestId;
-    select.appendChild(option);
+  const select = document.getElementById("xRequestIdSelect");
+  const option = document.createElement("option");
+  option.value = requestId;
+  option.text = requestId;
+  select.appendChild(option);
 }
 
 // Function to handle selection of an X-Request-Id
 function handleRequestIdSelection() {
-    const select = document.getElementById('xRequestIdSelect');
-    const selectedRequestId = select.value;
-    console.log('Selected X-Request-Id:', selectedRequestId);
+  const select = document.getElementById("xRequestIdSelect");
+  const selectedRequestId = select.value;
+  console.log("Selected X-Request-Id:", selectedRequestId);
 
-    // actions based on the selected X-Request-Id 
-  
-    if (selectedRequestId) {
+  // actions based on the selected X-Request-Id
 
-      var hostname = hostnameElement.value;
-      var port = portElement.value;
-      var username = usernameElement.value;
-      var password = passwordElement.value;
+  if (selectedRequestId) {
+    var hostname = hostnameElement.value;
+    var port = portElement.value;
+    var username = usernameElement.value;
+    var password = passwordElement.value;
 
-      var url = `http://${hostname}:${port}/tumblebug/request/${selectedRequestId}`;
-  
-      axios({
-        method: "get",
-        url: url,
-        auth: {
-          username: `${username}`,
-          password: `${password}`,
-        },
-      }).then((res) => {
-        console.log(res); // for debug
-        displayJsonData(res.data, typeInfo);
-      });
-    } else {
-      console.log('No X-Request-Id selected');
-    }
+    var url = `http://${hostname}:${port}/tumblebug/request/${selectedRequestId}`;
 
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+    }).then((res) => {
+      console.log(res); // for debug
+      displayJsonData(res.data, typeInfo);
+    });
+  } else {
+    console.log("No X-Request-Id selected");
+  }
 }
 window.handleRequestIdSelection = handleRequestIdSelection;
-
-
 
 window.onload = function () {
   // Get host address and update text field
@@ -3458,25 +3177,13 @@ function drawMCIS(event) {
   var theta = (2 * Math.PI * frameState.time) / omegaTheta;
 
   // Draw CSP location first
-  if (Array.isArray(geoCspPointsCloudit) && geoCspPointsCloudit.length) {
-    // array exists and is not empty
-    vectorContext.setStyle(iconStyleCloudit);
-    vectorContext.drawGeometry(geoCspPointsCloudit[0]);
-    vectorContext.setStyle(iconStyleIBM);
-    vectorContext.drawGeometry(geoCspPointsIBM[0]);
-    vectorContext.setStyle(iconStyleTencent);
-    vectorContext.drawGeometry(geoCspPointsTencent[0]);
-    vectorContext.setStyle(iconStyleAlibaba);
-    vectorContext.drawGeometry(geoCspPointsAlibaba[0]);
-    vectorContext.setStyle(iconStyleNcpVpc);
-    vectorContext.drawGeometry(geoCspPointsNcpVpc[0]);
-    vectorContext.setStyle(iconStyleAzure);
-    vectorContext.drawGeometry(geoCspPointsAzure[0]);
-    vectorContext.setStyle(iconStyleAws);
-    vectorContext.drawGeometry(geoCspPointsAws[0]);
-    vectorContext.setStyle(iconStyleGcp);
-    vectorContext.drawGeometry(geoCspPointsGcp[0]);
-  }
+  Object.keys(cspIconStyles).forEach((csp) => {
+    if (Array.isArray(geoCspPoints[csp]) && geoCspPoints[csp].length) {
+      // 해당 CSP에 대한 지오메트리 배열이 존재하고 비어있지 않은 경우
+      vectorContext.setStyle(cspIconStyles[csp]); // CSP에 맞는 스타일 설정
+      vectorContext.drawGeometry(geoCspPoints[csp][0]); // 첫 번째 지오메트리 그리기
+    }
+  });
 
   if (cspPointsCircle.length) {
     //console.log("cspPointsCircle.length:" +cspPointsCircle.length + "cspPointsCircle["+cspPointsCircle+"]")
