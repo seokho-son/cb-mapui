@@ -308,59 +308,6 @@ function endpointChanged() {
 }
 window.endpointChanged = endpointChanged;
 
-var mcisGeo2 = [];
-//mcisGeo2.push([-180, -90]);
-
-for (var i = 0; i < cntInit; ++i) {
-  var lon = 300 * Math.random() - 180;
-  var lat = 100 * Math.random() - 90;
-
-  var testPoints = [];
-
-  lon = -60;
-  lat = -60;
-
-  if (i == 0) {
-    testPoints.push([-42, -19]);
-    testPoints.push([-44, -11]);
-    testPoints.push([27, -29]);
-    testPoints.push([29, -25]);
-    mcisName[i] = "[M1] " + "Running-(4/4)";
-    mcisStatus[i] = "Running-(4/4)";
-  }
-  if (i == 1) {
-    testPoints.push([-121, 45]);
-    testPoints.push([-100, 46]);
-    testPoints.push([-80, 35]);
-    testPoints.push([-117, 34]);
-    mcisName[i] = "[M2] " + "Running-(4/4)";
-    mcisStatus[i] = "Running-(4/4)";
-  }
-  if (i == 2) {
-    testPoints.push([2, 49]);
-    testPoints.push([14, 52]);
-    testPoints.push([22, 51]);
-    testPoints.push([23, 48]);
-    testPoints.push([13, 46]);
-    testPoints.push([7, 45]);
-    mcisName[i] = "[M3] " + "Running-(6/6)";
-    mcisStatus[i] = "Running-(6/6)";
-  }
-
-  mcisGeo[i] = new Polygon([
-    [
-      [lon, lat],
-      [lon + 5, lat + 5],
-      [lon - 5, lat - 5],
-      [lon, lat],
-    ],
-  ]);
-  geometriesPoints[i] = new MultiPoint([testPoints]);
-
-  testPoints = convexHull(testPoints);
-  testPoints.push(testPoints[0]);
-  geometries[i] = new Polygon([testPoints]);
-}
 
 var alpha = 0.3;
 var cororList = [
@@ -469,9 +416,9 @@ const cspIconImg = {
   tencent: "img/tencent.png",
   ncpvpc: "img/ncpvpc.png",
   ncp: "img/ncp.png",
-  ktvpc: "img/ktvpc.png",
-  kt: "img/kt.png",
-  nhn: "img/nhn.png",
+  ktcloud: "img/kt.png",
+  ktcloudvpc: "img/ktvpc.png",
+  nhncloud: "img/nhn.png",
 
   // Add more CSP icons here
 };
@@ -3167,7 +3114,7 @@ window.onload = function () {
 
 // Draw
 
-function drawMCIS(event) {
+function drawObjects(event) {
   //event.frameState = event.frameState / 10;
   //console.log("event.frameState");
   //console.log(event.frameState);
@@ -3261,7 +3208,7 @@ function drawMCIS(event) {
 }
 
 tileLayer.on("postrender", function (event) {
-  drawMCIS(event);
+  drawObjects(event);
 });
 
 // Section for general tools
