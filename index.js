@@ -2568,7 +2568,11 @@ function sleep(ms) {
 }
 
 var defaultRemoteCommand =
-  "client_ip=$(echo $SSH_CLIENT | awk '{print $1}'); echo SSH client IP is: $client_ip";
+  "client_ip=$(echo $SSH_CLIENT | awk '{print $1}'); my_ip=$(hostname -I)";
+var defaultRemoteCommand01 =
+  "echo SSH client (bastion) IP is: $client_ip";
+var defaultRemoteCommand02 =
+  "echo IPs of my network: $my_ip";
 
 // function for startApp by startApp button item
 function startApp() {
@@ -2606,32 +2610,47 @@ function startApp() {
 
       if (selectApp.value == "Xonotic") {
         defaultRemoteCommand =
-          "wget -O ~/startServer.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " +
-          "Xonotic-by-Cloud-Barista-" +
-          mcisid +
-          " 26000" +
-          " 8";
-      } else if (selectApp.value == "Westward") {
-        defaultRemoteCommand =
-          "wget -O ~/setgame.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh; chmod +x ~/setgame.sh; sudo ~/setgame.sh";
+          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh";
+        defaultRemoteCommand01 = 
+          "chmod +x ~/startServer.sh";
+        defaultRemoteCommand02 =
+          "sudo ~/startServer.sh " + "Xonotic-by-Cloud-Barista-" + mcisid + " 26000" + " 8";
       } else if (selectApp.value == "ELK") {
         defaultRemoteCommand =
-          "wget -O ~/startServer.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/elastic-stack/startELK.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh ";
+          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/elastic-stack/startELK.sh";
+        defaultRemoteCommand01 = 
+          "chmod +x ~/startServer.sh";
+        defaultRemoteCommand02 =
+          "sudo ~/startServer.sh ";
+      } else if (selectApp.value == "LLM") {
+        defaultRemoteCommand =
+          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/llmServer.py";
+        defaultRemoteCommand01 =
+          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/startServer.sh; chmod +x ~/startServer.sh";
+        defaultRemoteCommand02 =
+          "~/startServer.sh " + "--ip" + publicIPs + " --port 5000" + " --model tiiuae/falcon-7b-instruct";
+      } else if (selectApp.value == "Westward") {
+        defaultRemoteCommand =
+          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh";
+        defaultRemoteCommand01 = 
+          "chmod +x ~/setgame.sh; sudo ~/setgame.sh";
       } else if (selectApp.value == "WeaveScope") {
         defaultRemoteCommand =
-          "wget -O ~/startServer.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/weavescope/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " +
-          publicIPs +
-          " " +
-          privateIPs;
+        "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/weavescope/startServer.sh";
+        defaultRemoteCommand01 = 
+          "chmod +x ~/startServer.sh";
+        defaultRemoteCommand02 =
+          "sudo ~/startServer.sh " + publicIPs + " " + privateIPs;
       } else if (selectApp.value == "Nginx") {
         defaultRemoteCommand =
           "wget -O ~/setweb.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setweb.sh; chmod +x ~/setweb.sh; sudo ~/setweb.sh";
       } else if (selectApp.value == "Jitsi") {
         defaultRemoteCommand =
-          "wget -O ~/startServer.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/jitsi/startServer.sh; chmod +x ~/startServer.sh; sudo ~/startServer.sh " +
-          publicIPs +
-          " " +
-          "DNS EMAIL";
+        "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/jitsi/startServer.sh";
+        defaultRemoteCommand01 = 
+          "chmod +x ~/startServer.sh";
+        defaultRemoteCommand02 =
+          "sudo ~/startServer.sh " + publicIPs + " " + "DNS EMAIL";
       } else if (selectApp.value == "Stress") {
         defaultRemoteCommand =
           "sudo apt install -y stress > /dev/null; stress -c 16 -t 60";
@@ -2819,21 +2838,21 @@ function executeRemoteCmd() {
 
     Swal.fire({
       title: "<font size=5><b>Put multiple commands to forward</b></font>",
-      width: 600,
+      width: 900,
       html: `
       <div id="dynamicContainer" style="text-align: left;">
         <p><font size=4><b>[Commands]</b></font></p>
         <div id="cmdContainer" style="margin-bottom: 20px;">
           <div id="cmdDiv1" class="cmdRow">
-            Command 1: <input type="text" id="cmd1" style="width: 60%" value="${defaultRemoteCommand}">
+            Command 1: <input type="text" id="cmd1" style="width: 75%" value="${defaultRemoteCommand}">
             <button onclick="document.getElementById('cmd1').value = ''">Clear</button>
           </div>
           <div id="cmdDiv2" class="cmdRow">
-            Command 2: <input type="text" id="cmd2" style="width: 60%">
+            Command 2: <input type="text" id="cmd2" style="width: 75%" value="${defaultRemoteCommand01}">
             <button onclick="document.getElementById('cmd2').value = ''">Clear</button>
           </div>
           <div id="cmdDiv3" class="cmdRow">
-            Command 3: <input type="text" id="cmd3" style="width: 60%">
+            Command 3: <input type="text" id="cmd3" style="width: 75%" value="${defaultRemoteCommand02}">
             <button onclick="document.getElementById('cmd3').value = ''">Clear</button>
           </div>
           <button id="addCmd" onclick="addCmd()" style="margin-left: 1px;"> + </button>
@@ -2864,7 +2883,7 @@ function executeRemoteCmd() {
           const newCmd = document.createElement("div");
           newCmd.id = `cmdDiv${cmdCount}`;
           newCmd.className = "cmdRow"; // class for each command row
-          newCmd.innerHTML = `Command ${cmdCount}: <input type="text" id="cmd${cmdCount}" style="width: 60%">
+          newCmd.innerHTML = `Command ${cmdCount}: <input type="text" id="cmd${cmdCount}" style="width: 75%">
                               <button onclick="document.getElementById('cmd${cmdCount}').value = ''">Clear</button>`;
           document.getElementById("cmdContainer").appendChild(newCmd);
 
