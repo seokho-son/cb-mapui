@@ -135,7 +135,7 @@ var map = new Map({
   layers: [tileLayer],
   target: "map",
   view: new View({
-    center: [40, 90],
+    center: [30, 30],
     zoom: 3,
   }),
   //projection: 'EPSG:4326'
@@ -454,6 +454,7 @@ function addIconToMap(imageSrc, point, index) {
     source: vectorSource,
   });
   map.addLayer(iconLayer);
+  map.render();
 }
 Object.keys(cspIconImg).forEach((csp, index) => {
   const iconIndex = index.toString().padStart(3, "0");
@@ -870,29 +871,29 @@ function getMcis() {
 
 // Get list of cloud connections
 function getConnection() {
-  let timerInterval;
-  Swal.fire({
-    title: "Show registered Cloud Regions to the Map",
-    html: "closed in <b></b> milliseconds.",
-    timer: 2000,
-    timerProgressBar: true,
-    position: "top-end",
-    didOpen: () => {
-      Swal.showLoading();
-      const b = Swal.getHtmlContainer().querySelector("b");
-      timerInterval = setInterval(() => {
-        b.textContent = Swal.getTimerLeft();
-      }, 100);
-    },
-    willClose: () => {
-      clearInterval(timerInterval);
-    },
-  }).then((result) => {
-    /* Read more about handling dismissals below */
-    if (result.dismiss === Swal.DismissReason.timer) {
-      console.log("I was closed by the timer");
-    }
-  });
+  // let timerInterval;
+  // Swal.fire({
+  //   title: "Show registered Cloud Regions to the Map",
+  //   html: "closed in <b></b> milliseconds.",
+  //   timer: 2000,
+  //   timerProgressBar: true,
+  //   position: "top-end",
+  //   didOpen: () => {
+  //     Swal.showLoading();
+  //     const b = Swal.getHtmlContainer().querySelector("b");
+  //     timerInterval = setInterval(() => {
+  //       b.textContent = Swal.getTimerLeft();
+  //     }, 100);
+  //   },
+  //   willClose: () => {
+  //     clearInterval(timerInterval);
+  //   },
+  // }).then((result) => {
+  //   /* Read more about handling dismissals below */
+  //   if (result.dismiss === Swal.DismissReason.timer) {
+  //     console.log("I was closed by the timer");
+  //   }
+  // });
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
@@ -948,14 +949,12 @@ function getConnection() {
             briefAddr +
             ")\n";
 
-          // 배열이 존재하지 않는 경우 초기화
           if (!cspPoints[providerName]) {
             cspPoints[providerName] = [];
           }
 
           cspPoints[providerName].push([longitude, latitude]);
 
-          // geoCspPoints에 MultiPoint 객체 생성
           if (!geoCspPoints[providerName]) {
             geoCspPoints[providerName] = [];
           }
@@ -963,6 +962,7 @@ function getConnection() {
             cspPoints[providerName]
           );
         });
+        map.render();
 
         infoAlert("Registered Cloud Regions: " + obj.connectionconfig.length);
       }
@@ -1151,6 +1151,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
   var maxVCPU = document.getElementById("maxVCPU").value;
   var minRAM = document.getElementById("minRAM").value;
   var maxRAM = document.getElementById("maxRAM").value;
+  var specName = document.getElementById("specName").value;
 
   var url = `http://${hostname}:${port}/tumblebug/mcisRecommendVm`;
 
@@ -1182,6 +1183,14 @@ function getRecommendedSpec(idx, latitude, longitude) {
             },
           ],
           metric: "memory",
+        },
+        {
+          condition: [
+            {
+              operand: `${specName}`,
+            }
+          ],
+          metric: "specname",
         },
       ],
     },
@@ -1231,6 +1240,14 @@ function getRecommendedSpec(idx, latitude, longitude) {
           ],
           metric: "memory",
         },
+        {
+          condition: [
+            {
+              operand: `${specName}`,
+            }
+          ],
+          metric: "specname",
+        },
       ],
     },
     limit: "10",
@@ -1272,6 +1289,14 @@ function getRecommendedSpec(idx, latitude, longitude) {
             },
           ],
           metric: "memory",
+        },
+        {
+          condition: [
+            {
+              operand: `${specName}`,
+            }
+          ],
+          metric: "specname",
         },
       ],
     },
@@ -3125,6 +3150,7 @@ window.onload = function () {
   var strArray = tbServerAp.split(":");
   console.log("Host address: " + strArray[0]);
   document.getElementById("hostname").value = strArray[0];
+  setTimeout(getConnection, 3000);
 
   updateNsList();
 
