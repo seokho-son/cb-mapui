@@ -272,21 +272,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 </div>
               </div>
 
-              <!-- Disk Size Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">Disk Size</span>
-                  </div>
-                  <input type="text" class="form-control" id="diskSize" name="diskSize" value="default">
-                </div>
-              </div>
 
               <!-- CPU Range Field -->
               <div class="form-group col">
                 <div class="input-group">
                   <div class="input-group-prepend">
-                    <span class="input-group-text">CPU(N)</span>
+                    <span class="input-group-text">CPU(n)</span>
                   </div>
                   <input type="number" class="form-control m-0" id='minVCPU' value="1" min="1" max="448" step="1">
                   <span class="mx-1">~</span>
@@ -299,7 +290,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               <div class="form-group col">
                 <div class="input-group">
                   <div class="input-group-prepend">
-                    <span class="input-group-text">Mem(GB)</span>
+                    <span class="input-group-text">Mem(gb)</span>
                   </div>
                   <input type="number" class="form-control m-0" id='minRAM' value="0.5" min="0.5" max="12288"
                     step="0.5">
@@ -307,6 +298,28 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <input type="number" class="form-control m-0" id='maxRAM' value="8" min="0.5" max="12288" step="0.5">
                 </div>
               </div>
+
+              <!-- Spec Name Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">Spec(t)</span>
+                  </div>
+                  <input type="text" class="form-control" id="specName" name="specName" value=""
+                    placeholder="Ex: 2xlarge">
+                </div>
+              </div>
+
+              <!-- Disk Size Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">Disk Size</span>
+                  </div>
+                  <input type="text" class="form-control" id="diskSize" name="diskSize" placeholder="Ex: 250">
+                </div>
+              </div>
+
 
               <!-- Clear Selection Field -->
               <div class="form-group col">
@@ -390,7 +403,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <div class="input-group-prepend">
                     <span class="input-group-text" id="pubipLabel">Pub IP</span>
                   </div>
-                  <select id="pubip" name="pubip" class="form-control" aria-label="Pub IP" aria-describedby="pubipLabel">
+                  <select id="pubip" name="pubip" class="form-control" aria-label="Pub IP"
+                    aria-describedby="pubipLabel">
                     <!-- Options will be filled dynamically -->
                   </select>
                 </div>
@@ -402,7 +416,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <div class="input-group-prepend">
                     <span class="input-group-text" id="priipLabel">Pri IP</span>
                   </div>
-                  <select id="priip" name="priip" class="form-control" aria-label="Pri IP" aria-describedby="priipLabel">
+                  <select id="priip" name="priip" class="form-control" aria-label="Pri IP"
+                    aria-describedby="priipLabel">
                     <!-- Options will be filled dynamically -->
                   </select>
                 </div>
@@ -640,7 +655,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 </div>
               </div> -->
               <div class="col-md-12">
-                <div id="jsonoutput" class="form-control" readonly style="height: auto; background-color: black; word-wrap: break-word; overflow-wrap: break-word; overflow-x: auto;"></div>
+                <div id="jsonoutput" class="form-control" readonly
+                  style="height: auto; background-color: black; word-wrap: break-word; overflow-wrap: break-word; overflow-x: auto;">
+                </div>
               </div>
             </div>
           </div>
@@ -712,6 +729,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
       setColumnHeight();
     </script>
+
 
     <script type="text/javascript">
       document.addEventListener('DOMContentLoaded', (event) => {
