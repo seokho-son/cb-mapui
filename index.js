@@ -2653,7 +2653,7 @@ function startApp() {
         defaultRemoteCommand01 =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/startServer.sh; chmod +x ~/startServer.sh";
         defaultRemoteCommand02 =
-          "~/startServer.sh " + "--ip" + publicIPs + " --port 5000" + " --model tiiuae/falcon-7b-instruct";
+          "~/startServer.sh " + "--ip" + publicIPs + " --port 5000" + " --token 1024" + " --model tiiuae/falcon-7b-instruct";
       } else if (selectApp.value == "Westward") {
         defaultRemoteCommand =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh";
@@ -2853,7 +2853,7 @@ function executeRemoteCmd() {
   let cmdCount = 3; // Initial number of textboxes
 
   if (mcisid) {
-    var spinnerId = addSpinnerTask("Remote command to " + mcisid);
+    var spinnerId = ""
 
     messageTextArea.value =
       "[Forward remote ssh command to MCIS:" + mcisid + "]\n";
@@ -2955,6 +2955,8 @@ function executeRemoteCmd() {
 
         var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
 
+        spinnerId = addSpinnerTask("Remote command to " + mcisid);
+
         axios({
           method: "post",
           url: url,
@@ -2988,9 +2990,29 @@ function executeRemoteCmd() {
           });
 
           messageTextArea.value = formattedOutput;
+        })
+        .catch(function (error) {
+          if (error.response) {
+            // status code is not 2xx
+            console.log(error.response.data);
+            console.log(error.response.status);
+            console.log(error.response.headers);
+          } else {
+            console.log("Error", error.message);
+          }
+          console.log(error.config);
 
+          errorAlert(
+            JSON.stringify(error.response.data, null, 2).replace(
+              /['",]+/g,
+              ""
+            )
+          );
+        })
+        .finally(function () {
           removeSpinnerTask(spinnerId);
         });
+
       } else {
         messageTextArea.value = "Cannot set command";
         removeSpinnerTask(spinnerId);
