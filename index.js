@@ -1349,7 +1349,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
     createMcisReqVm.rootDiskType = res.data[0].rootDiskType;
 
     var diskSizeInput = diskSize.value;
-    if (isNaN(diskSizeInput)) {
+    if (isNaN(diskSizeInput) || diskSizeInput == "") {
       diskSizeInput = "default";
     }
     createMcisReqVm.rootDiskSize = diskSizeInput;
