@@ -693,9 +693,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           </div>
 
         </div>
-        <iframe id="iframe" src="http://localhost:1323/tumblebug/swagger/index.html"
-          style="visibility:hidden; width:100%; height:100%; position:absolute; top:0; left:0;"></iframe>
 
+        <!-- Admin dashboards -->
+        <div id="console" style="display:none; width:100%; height:100%; position:absolute; top:0; left:0;">
+            <iframe id="iframe" src="http://localhost:1323/tumblebug/api/index.html"
+                style="visibility:visible; width:50%; height:100%; position:relative;"></iframe>
+            <iframe id="iframe2" src="http://localhost:1024/spider/adminweb"
+                style="visibility:visible; width:50%; height:100%; position:relative;"></iframe> 
+        </div>  
       </div>
 
     </div>
@@ -705,16 +710,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <script type="text/javascript">
       function toggleView() {
         var map = document.getElementById('map');
-        var iframe = document.getElementById('iframe');
+        var console = document.getElementById('console');
 
-        if (iframe.style.visibility === "hidden") {
+        if (console.style.display === "none") {
           map.style.display = "none";
-          iframe.style.visibility = "visible";
-          iframe.style.position = "static";
+          console.style.display = "flex";
         } else {
           map.style.display = "block";
-          iframe.style.visibility = "hidden";
-          iframe.style.position = "absolute";
+          console.style.display = "none";
         }
       }
     </script>

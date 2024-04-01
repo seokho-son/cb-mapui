@@ -1119,12 +1119,8 @@ function createMcis() {
                 }
                 console.log(error.config);
 
-                errorAlert(
-                  JSON.stringify(error.response.data, null, 2).replace(
-                    /['",]+/g,
-                    ""
-                  )
-                );
+                displayJsonData(error.response, typeError);
+
               })
               .finally(function () {
                 removeSpinnerTask(spinnerId);
@@ -3172,7 +3168,7 @@ window.onload = function () {
   var strArray = tbServerAp.split(":");
   console.log("Host address: " + strArray[0]);
   document.getElementById("hostname").value = strArray[0];
-  setTimeout(getConnection, 3000);
+  setTimeout(getConnection, 1000);
 
   updateNsList();
 
