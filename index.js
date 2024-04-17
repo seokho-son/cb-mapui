@@ -1109,18 +1109,17 @@ function createMcis() {
                 //infoAlert("Created " + createMcisReq.name);
               })
               .catch(function (error) {
+                errorAlert("Failed to create MCIS: " + createMcisReq.name);
                 if (error.response) {
                   // status code is not 2xx
                   console.log(error.response.data);
                   console.log(error.response.status);
                   console.log(error.response.headers);
+                  displayJsonData(error.response.data, typeError);
                 } else {
-                  console.log("Error", error.message);
+                  console.log("Error", error.message);              
                 }
                 console.log(error.config);
-
-                displayJsonData(error.response, typeError);
-
               })
               .finally(function () {
                 removeSpinnerTask(spinnerId);
@@ -1792,8 +1791,9 @@ function deleteMCIS() {
     })
     .catch(function (error) {
       console.log(error);
+      errorAlert("Failed to delete MCIS: " + mcisid);
       if (error.response && error.response.data) {
-        displayJsonData(error.response, typeError);
+        displayJsonData(error.response.data, typeError);
       }
     })
     .finally(function () {
