@@ -2078,8 +2078,18 @@ function updateVmList() {
         }
       })
       .finally(function () {
-        updateIpList();
+
       });
+  } else {
+    // clear public ip and private ip
+    var pubip = document.getElementById("pubip");
+    var priip = document.getElementById("priip");
+    while (pubip.options.length > 0) {
+      pubip.remove(0);
+    }
+    while (priip.options.length > 0) {
+      priip.remove(0);
+    }
   }
 }
 window.updateVmList = updateVmList;
@@ -2087,6 +2097,9 @@ window.updateVmList = updateVmList;
 document.getElementById("vmid").onmouseover = function () {
   updateVmList();
 };
+document.getElementById("vmid").addEventListener('change', function () {
+  updateIpList();
+});
 
 function updateIpList() {
   var pubip = document.getElementById("pubip");
@@ -2102,8 +2115,12 @@ function updateIpList() {
   var vmid = document.getElementById("vmid").value;
 
   if (namespace && namespace != "" && mcisid && mcisid != "" && subgroupid && subgroupid != "" && vmid && vmid != "") {
-    pubip.options.length = 0;
-    priip.options.length = 0;
+    while (pubip.options.length > 0) {
+      pubip.remove(0);
+    }
+    while (priip.options.length > 0) {
+      priip.remove(0);
+    }
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=accessinfo`;
 
     axios({
@@ -2139,8 +2156,11 @@ function updateIpList() {
 }
 window.updateIpList = updateIpList;
 
-document.getElementById("vmid").onmouseover = function () {
-  updateVmList();
+document.getElementById("pubip").onmouseover = function () {
+  updateIpList();
+};
+document.getElementById("priip").onmouseover = function () {
+  updateIpList();
 };
 
 function updateSubGroupList() {
