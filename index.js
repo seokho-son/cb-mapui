@@ -305,6 +305,12 @@ window.displayTableOn = displayTableOn;
 
 function endpointChanged() {
   //getMcis();
+  var hostname = document.getElementById('hostname').value;
+  var iframe = document.getElementById('iframe');
+  var iframe2 = document.getElementById('iframe2');
+
+  iframe.src = "http://" + hostname + ":1323/tumblebug/api/index.html";
+  iframe2.src = "http://" + hostname + ":1024/spider/adminweb";
 }
 window.endpointChanged = endpointChanged;
 
@@ -2044,7 +2050,7 @@ function updateVmList() {
   var mcisid = mcisidElement.value;
   var subgroupid = document.getElementById("subgroupid").value;
 
-  if (subgroupid && subgroupid != "") {
+  if (namespace && namespace != "" && mcisid && mcisid != "" && subgroupid && subgroupid != "") {
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}/subgroup/${subgroupid}`;
 
     axios({
@@ -2095,7 +2101,7 @@ function updateIpList() {
   var groupid = document.getElementById("subgroupid").value;
   var vmid = document.getElementById("vmid").value;
 
-  if (vmid && vmid != "") {
+  if (namespace && namespace != "" && mcisid && mcisid != "" && subgroupid && subgroupid != "" && vmid && vmid != "") {
     pubip.options.length = 0;
     priip.options.length = 0;
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=accessinfo`;
@@ -3189,9 +3195,8 @@ function drawObjects(event) {
   // Draw CSP location first
   Object.keys(cspIconStyles).forEach((csp) => {
     if (Array.isArray(geoCspPoints[csp]) && geoCspPoints[csp].length) {
-      // 해당 CSP에 대한 지오메트리 배열이 존재하고 비어있지 않은 경우
-      vectorContext.setStyle(cspIconStyles[csp]); // CSP에 맞는 스타일 설정
-      vectorContext.drawGeometry(geoCspPoints[csp][0]); // 첫 번째 지오메트리 그리기
+      vectorContext.setStyle(cspIconStyles[csp]); 
+      vectorContext.drawGeometry(geoCspPoints[csp][0]);
     }
   });
 
