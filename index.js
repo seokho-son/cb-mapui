@@ -932,17 +932,17 @@ function getConnection() {
           "\n";
 
         obj.connectionconfig.forEach((config, i) => {
-          const providerName = config.ProviderName.toLowerCase();
-          const longitude = config.Location.longitude;
-          const latitude = config.Location.latitude;
-          const briefAddr = config.Location.briefAddr;
-          const nativeRegion = config.Location.nativeRegion;
+          const providerName = config.providerName;
+          const longitude = config.regionDetail.location.longitude;
+          const latitude = config.regionDetail.location.latitude;
+          const briefAddr = config.regionDetail.location.display;
+          const nativeRegion = config.regionDetail.regionName;
 
           messageTextArea.value +=
             "[" +
             i +
             "] " +
-            config.ProviderName +
+            config.providerName +
             "(" +
             nativeRegion +
             ")" +
@@ -1331,6 +1331,12 @@ function getRecommendedSpec(idx, latitude, longitude) {
   }).then((res) => {
     console.log(res); // for debug
     handleAxiosResponse(res);
+
+    if (res.data.length == 0) {
+      errorAlert("No recommended spec found with the given condition");
+      return;
+    }
+
     addRegionMarker(res.data[0].id);
     //document.getElementById("latLonInputPairArea").innerHTML += `${res.data[0].id}<br>`;
 
@@ -1505,16 +1511,16 @@ function addRegionMarker(spec) {
     }).then((res2) => {
       console.log(
         "Best cloud location: [" +
-          res2.data.Location.latitude +
+          res2.data.regionDetail.location.latitude +
           "," +
-          res2.data.Location.longitude +
+          res2.data.regionDetail.location.longitude +
           "]"
       ); // for debug
 
       // push order [longitute, latitude]
       cspPointsCircle.push([
-        res2.data.Location.longitude,
-        res2.data.Location.latitude,
+        res2.data.regionDetail.location.longitude,
+        res2.data.regionDetail.location.latitude,
       ]);
       geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
     });
@@ -2015,6 +2021,8 @@ function updateMcisList() {
       })
       .finally(function () {
         updateSubGroupList();
+        updateVmList();
+        updateIpList();
         updateResourceList(typeStringVNet);
         updateResourceList(typeStringSG);
         updateResourceList(typeStringSshKey);
