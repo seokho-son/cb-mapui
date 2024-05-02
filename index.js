@@ -846,7 +846,7 @@ function getMcis() {
               makePolyDot(vmGeo);
               vmGeo = convexHull(vmGeo);
 
-              mcisStatus[cnt] = item.status;
+              mcisStatus[cnt] = item.status;fv
 
               var newName = item.name;
               if (newName.includes("-nlb")) {
@@ -912,7 +912,7 @@ function getConnection() {
     : 5;
   //setTimeout(() => console.log(getConnection()), filteredRefreshInterval*1000);
 
-  var url = `http://${hostname}:${port}/tumblebug/connConfig`;
+  var url = `http://${hostname}:${port}/tumblebug/connConfig?filterVerified=true&filterRegionRepresentative=true`;
 
   axios({
     method: "get",
@@ -927,7 +927,7 @@ function getConnection() {
       var obj = res.data;
       if (obj.connectionconfig != null) {
         messageTextArea.value =
-          "[Complete] Number of Registered Cloud Regions: " +
+          "[Complete] Registered Cloud Regions: " +
           obj.connectionconfig.length +
           "\n";
 
@@ -979,6 +979,7 @@ function getConnection() {
         document.getElementById("port").style.color = "#FF0000";
       }
       console.log(error);
+      infoAlert("Cannot get cloud info \n(check the server status and refresh)");
     });
 }
 window.getConnection = getConnection;
@@ -1332,6 +1333,10 @@ function getRecommendedSpec(idx, latitude, longitude) {
     console.log(res); // for debug
     handleAxiosResponse(res);
 
+    if (res.data == null) {
+      errorAlert("No recommended spec found with the given condition");
+      return;
+    }
     if (res.data.length == 0) {
       errorAlert("No recommended spec found with the given condition");
       return;
@@ -1426,6 +1431,12 @@ function getRecommendedSpec(idx, latitude, longitude) {
         geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
       }
     });
+  }).catch(function (error) {
+    console.log(error);
+    errorAlert("Cannnot recommend a spec (Check log for details)");
+    if (error.response && error.response.data) {
+      displayJsonData(error.response.data, typeError);
+    }
   });
 }
 window.getRecommendedSpec = getRecommendedSpec;
@@ -2300,7 +2311,7 @@ function updateConnectionList() {
   var username = usernameElement.value;
   var password = passwordElement.value;
 
-  var url = `http://${hostname}:${port}/tumblebug/connConfig`;
+  var url = `http://${hostname}:${port}/tumblebug/connConfig?filterVerified=true&filterRegionRepresentative=true`;
 
   axios({
     method: "get",
@@ -2313,8 +2324,9 @@ function updateConnectionList() {
     if (res.data.connectionconfig != null) {
       for (let item of res.data.connectionconfig) {
         var option = document.createElement("option");
-        option.value = item.ConfigName;
-        option.text = item.ConfigName;
+        option.value = item.configName;
+        option.text = item.configName;
+        //option.text = item.providerName + "/" + item.regionDetail.regionName;
         document.getElementById(typeStringConnection).appendChild(option);
       }
       for (let i = 0; i < selectElement.options.length; i++) {
@@ -2323,6 +2335,12 @@ function updateConnectionList() {
           break;
         }
       }
+    }
+  }).catch(function (error) {
+    console.log(error);
+    //errorAlert("Failed to get connection list");
+    if (error.response && error.response.data) {
+      displayJsonData(error.response.data, typeError);
     }
   });
 }
