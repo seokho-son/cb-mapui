@@ -27,7 +27,7 @@
     "build": "echo 'Removing temporal cache files' && rm -rf dist/* .parcel-cache/* && mkdir -p dist/img/ && cp -r img/ dist/ && parcel build --public-url . index.html"
   },
   "description": "MapUI Client for CB-Tumblebug (display multi-cloud infra service)",
-  "version": "0.8.10",
+  "version": "0.8.11",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cloud-barista/cb-mapui.git"
