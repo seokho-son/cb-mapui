@@ -846,7 +846,7 @@ function getMcis() {
               makePolyDot(vmGeo);
               vmGeo = convexHull(vmGeo);
 
-              mcisStatus[cnt] = item.status;fv
+              mcisStatus[cnt] = item.status;
 
               var newName = item.name;
               if (newName.includes("-nlb")) {
