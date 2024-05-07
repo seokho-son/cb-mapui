@@ -277,11 +277,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               <div class="form-group col">
                 <div class="input-group">
                   <div class="input-group-prepend">
-                    <span class="input-group-text">CPU(n)</span>
+                    <span class="input-group-text">vCPU</span>
                   </div>
-                  <input type="number" class="form-control m-0" id='minVCPU' value="1" min="1" max="448" step="1">
+                  <input type="number" class="form-control m-0" id='minVCPU' value="1" min="1" max="1447" step="1">
                   <span class="mx-1">~</span>
-                  <input type="number" class="form-control m-0" id='maxVCPU' value="8" min="1" max="448" step="1">
+                  <input type="number" class="form-control m-0" id='maxVCPU' value="8" min="1" max="1448" step="1">
                 </div>
               </div>
 
@@ -290,12 +290,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               <div class="form-group col">
                 <div class="input-group">
                   <div class="input-group-prepend">
-                    <span class="input-group-text">Mem(gb)</span>
+                    <span class="input-group-text">Mem(GiB)</span>
                   </div>
-                  <input type="number" class="form-control m-0" id='minRAM' value="0.5" min="0.5" max="12288"
+                  <input type="number" class="form-control m-0" id='minRAM' value="0.5" min="0.5" max="112288"
                     step="0.5">
                   <span class="mx-1">~</span>
-                  <input type="number" class="form-control m-0" id='maxRAM' value="8" min="0.5" max="12288" step="0.5">
+                  <input type="number" class="form-control m-0" id='maxRAM' value="16" min="0.5" max="112289" step="0.5">
                 </div>
               </div>
 
@@ -303,7 +303,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               <div class="form-group col">
                 <div class="input-group">
                   <div class="input-group-prepend">
-                    <span class="input-group-text">Spec(t)</span>
+                    <span class="input-group-text">SpecID</span>
                   </div>
                   <input type="text" class="form-control" id="specName" name="specName" value=""
                     placeholder="Ex: 2xlarge">
@@ -314,7 +314,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               <div class="form-group col">
                 <div class="input-group">
                   <div class="input-group-prepend">
-                    <span class="input-group-text">Disk Size</span>
+                    <span class="input-group-text">Disk(GB)</span>
                   </div>
                   <input type="text" class="form-control" id="diskSize" name="diskSize" placeholder="Ex: 250">
                 </div>
@@ -352,17 +352,30 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                       </div>
                     </div>
               
+                    <!-- Accelerator Count Range Field -->
+                    <div class="form-group">
+                      <div class="input-group">
+                        <div class="input-group-prepend">
+                          <span class="input-group-text">Count</span>
+                        </div>
+                        <input type="number" class="form-control" id='minAcceleratorCount'  min="1" max="999998" step="1">
+                        <span class="mx-1">~</span>
+                        <input type="number" class="form-control" id='maxAcceleratorCount'  min="1" max="999999" step="1">
+                      </div>
+                    </div>
+
                     <!-- Accelerator Memory Range Field -->
                     <div class="form-group">
                       <div class="input-group">
                         <div class="input-group-prepend">
-                          <span class="input-group-text">Mem</span>
+                          <span class="input-group-text">Mem(GB)</span>
                         </div>
                         <input type="number" class="form-control" id='minAMEM'  min="1" max="999998" step="1">
                         <span class="mx-1">~</span>
                         <input type="number" class="form-control" id='maxAMEM'  min="1" max="999999" step="1">
                       </div>
                     </div>
+
                   </div>
                 </div>
               </div>
@@ -633,7 +646,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               <div class="form-group col">
                 <div class="input-group">
                   <div class="input-group-prepend">
-                    <span class="input-group-text" id="selectAppLabel">Select App</span>
+                    <span class="input-group-text" id="selectAppLabel">App</span>
                   </div>
                   <select id="selectApp" name="selectApp" class="form-control" aria-label="Select Application"
                     aria-describedby="selectAppLabel">

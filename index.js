@@ -1156,6 +1156,8 @@ function getRecommendedSpec(idx, latitude, longitude) {
   var specName = document.getElementById("specName").value;
   var acceleratorType = document.getElementById("acceleratorType").value;
   var acceleratorModel = document.getElementById("acceleratorModel").value;
+  var minAcceleratorCount = document.getElementById("minAcceleratorCount").value;
+  var maxAcceleratorCount = document.getElementById("maxAcceleratorCount").value;
   var minAMEM = document.getElementById("minAMEM").value;
   var maxAMEM = document.getElementById("maxAMEM").value;
 
@@ -1175,12 +1177,13 @@ function getRecommendedSpec(idx, latitude, longitude) {
   }
   
   var policies = [
-    createPolicyConditions("NumvCPU", { min: minVCPU, max: maxVCPU }, "range"),
-    createPolicyConditions("MemGiB", { min: minRAM, max: maxRAM }, "range"),
+    createPolicyConditions("vCPU", { min: minVCPU, max: maxVCPU }, "range"),
+    createPolicyConditions("MemoryGiB", { min: minRAM, max: maxRAM }, "range"),
     createPolicyConditions("CspSpecName", { value: specName }, "single"),
     createPolicyConditions("AcceleratorType", { value: acceleratorType }, "single"),
     createPolicyConditions("AcceleratorModel", { value: acceleratorModel }, "single"),
-    createPolicyConditions("AcceleratorMemory", { min: minAMEM, max: maxAMEM }, "range"),
+    createPolicyConditions("AcceleratorMemoryGB", { min: minAMEM, max: maxAMEM }, "range"),
+    createPolicyConditions("AcceleratorCount", { min: minAcceleratorCount, max: maxAcceleratorCount }, "range"),
   ];
 
   var recommendationPolicy = recommendPolicy.value;
@@ -1263,26 +1266,40 @@ function getRecommendedSpec(idx, latitude, longitude) {
       width: 600,
       html:
         "<font size=3>" +
-        "VM Spec to add: <b>" +
+        "Recommended VM Spec <b>" +
         res.data[0].cspSpecName +
-        "<br></b> VM Image: <b>" +
+        "<br></b> OS Image Type: <b>" +
         createMcisReqVm.commonImage +
+
         "<br><br></b> vCPU: <b>" +
-        res.data[0].numvCPU +
+        res.data[0].vCPU +
         "<br></b> Mem(GiB): <b>" +
-        res.data[0].memGiB +
+        res.data[0].memoryGiB +
+        "<br></b> RootDiskType: <b>" +
+        res.data[0].rootDiskType +
+        "<br></b> RootDiskSize(GB): <b>" +
+        createMcisReqVm.rootDiskSize +
         "<br></b> Cost($/1H): <b>" +
         res.data[0].costPerHour +
-        "<br></b> rootDiskType: <b>" +
-        res.data[0].rootDiskType +
-        "<br></b> rootDiskSize(GB): <b>" +
-        createMcisReqVm.rootDiskSize +
+        "<br>"+
+
+        "<br></b> AcceleratorType: <b>" +
+        res.data[0].acceleratorType +
+        "<br></b> AcceleratorModel: <b>" +
+        res.data[0].acceleratorModel +
+        "<br></b> AcceleratorCount: <b>" +
+        res.data[0].acceleratorCount +
+        "<br></b> AcceleratorMemoryGB: <b>" +
+        res.data[0].acceleratorMemoryGB +
+        "<br>"+
+
         "<br></b> CSP: <b>" +
         res.data[0].providerName +
         "<br></b> Region: <b>" +
         res.data[0].regionName +
-        "<br></b> connConfig: <b>" +
-        res.data[0].connectionName,
+        "<br></b> ConnectionConfig: <b>" +
+        res.data[0].connectionName 
+        ,
       input: "number",
       inputValue: 1,
       didOpen: () => {
@@ -3228,8 +3245,8 @@ function jsonToTable(jsonText) {
   for (i = 0; i < json.length; i++) {
     arr00[i] = json[i].connectionName;
     arr01[i] = json[i].cspSpecName;
-    arr02[i] = json[i].numvCPU;
-    arr03[i] = json[i].memGiB;
+    arr02[i] = json[i].vCPU;
+    arr03[i] = json[i].memoryGiB;
     arr04[i] = json[i].costPerHour;
     arr05[i] = json[i].evaluationScore09;
   }
@@ -3243,9 +3260,9 @@ function jsonToTable(jsonText) {
   let th1 = document.createElement("th");
   th1.appendChild(document.createTextNode("   cspSpecName"));
   let th2 = document.createElement("th");
-  th2.appendChild(document.createTextNode("   numvCPU"));
+  th2.appendChild(document.createTextNode("   vCPU"));
   let th3 = document.createElement("th");
-  th3.appendChild(document.createTextNode("   memGiB"));
+  th3.appendChild(document.createTextNode("   memoryGiB"));
   let th4 = document.createElement("th");
   th4.appendChild(document.createTextNode("   costPerHour"));
   let th5 = document.createElement("th");
