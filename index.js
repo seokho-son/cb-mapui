@@ -979,7 +979,7 @@ function getConnection() {
         document.getElementById("port").style.color = "#FF0000";
       }
       console.log(error);
-      infoAlert("Cannot get cloud info \n(check the server status and refresh)");
+      errorAlert("Cannot load cloud info\n\n - check dashboard config \n - check the server is ready");
     });
 }
 window.getConnection = getConnection;
@@ -1154,171 +1154,59 @@ function getRecommendedSpec(idx, latitude, longitude) {
   var minRAM = document.getElementById("minRAM").value;
   var maxRAM = document.getElementById("maxRAM").value;
   var specName = document.getElementById("specName").value;
+  var acceleratorType = document.getElementById("acceleratorType").value;
+  var acceleratorModel = document.getElementById("acceleratorModel").value;
+  var minAMEM = document.getElementById("minAMEM").value;
+  var maxAMEM = document.getElementById("maxAMEM").value;
 
   var url = `http://${hostname}:${port}/tumblebug/mcisRecommendVm`;
 
-  var struct01 = {
-    filter: {
-      policy: [
-        {
-          condition: [
-            {
-              operand: `${minVCPU}`,
-              operator: ">=",
-            },
-            {
-              operand: `${maxVCPU}`,
-              operator: "<=",
-            },
-          ],
-          metric: "cpu",
-        },
-        {
-          condition: [
-            {
-              operand: `${minRAM}`,
-              operator: ">=",
-            },
-            {
-              operand: `${maxRAM}`,
-              operator: "<=",
-            },
-          ],
-          metric: "memory",
-        },
-        {
-          condition: [
-            {
-              operand: `${specName}`,
-            }
-          ],
-          metric: "specname",
-        },
-      ],
-    },
-    limit: "10",
-    priority: {
-      policy: [
-        {
-          metric: "location",
-          parameter: [
-            {
-              key: "coordinateClose",
-              val: [`${latitude}/${longitude}`],
-            },
-          ],
-          weight: "1.0",
-        },
-      ],
-    },
-  };
-
-  var struct02 = {
-    filter: {
-      policy: [
-        {
-          condition: [
-            {
-              operand: `${minVCPU}`,
-              operator: ">=",
-            },
-            {
-              operand: `${maxVCPU}`,
-              operator: "<=",
-            },
-          ],
-          metric: "cpu",
-        },
-        {
-          condition: [
-            {
-              operand: `${minRAM}`,
-              operator: ">=",
-            },
-            {
-              operand: `${maxRAM}`,
-              operator: "<=",
-            },
-          ],
-          metric: "memory",
-        },
-        {
-          condition: [
-            {
-              operand: `${specName}`,
-            }
-          ],
-          metric: "specname",
-        },
-      ],
-    },
-    limit: "10",
-    priority: {
-      policy: [
-        {
-          metric: "cost",
-          weight: "1.0",
-        },
-      ],
-    },
-  };
-
-  var struct03 = {
-    filter: {
-      policy: [
-        {
-          condition: [
-            {
-              operand: `${minVCPU}`,
-              operator: ">=",
-            },
-            {
-              operand: `${maxVCPU}`,
-              operator: "<=",
-            },
-          ],
-          metric: "cpu",
-        },
-        {
-          condition: [
-            {
-              operand: `${minRAM}`,
-              operator: ">=",
-            },
-            {
-              operand: `${maxRAM}`,
-              operator: "<=",
-            },
-          ],
-          metric: "memory",
-        },
-        {
-          condition: [
-            {
-              operand: `${specName}`,
-            }
-          ],
-          metric: "specname",
-        },
-      ],
-    },
-    limit: "10",
-    priority: {
-      policy: [
-        {
-          metric: "performance",
-          weight: "1.0",
-        },
-      ],
-    },
-  };
-
-  var jsonBody = JSON.stringify(struct01);
-  if (recommendPolicy.value == "price") {
-    jsonBody = JSON.stringify(struct02);
-  } else if (recommendPolicy.value == "performance") {
-    jsonBody = JSON.stringify(struct03);
+  function createPolicyConditions(metric, values, type) {
+    const conditions = [];
+  
+    if (type === 'range') {
+      if (values.min) conditions.push({ operand: `${values.min}`, operator: ">=" });
+      if (values.max) conditions.push({ operand: `${values.max}`, operator: "<=" });
+    } else if (type === 'single') {
+      if (values.value) conditions.push({ operand: `${values.value}` });
+    }
+  
+    return { metric: metric, condition: conditions };
   }
+  
+  var policies = [
+    createPolicyConditions("NumvCPU", { min: minVCPU, max: maxVCPU }, "range"),
+    createPolicyConditions("MemGiB", { min: minRAM, max: maxRAM }, "range"),
+    createPolicyConditions("CspSpecName", { value: specName }, "single"),
+    createPolicyConditions("AcceleratorType", { value: acceleratorType }, "single"),
+    createPolicyConditions("AcceleratorModel", { value: acceleratorModel }, "single"),
+    createPolicyConditions("AcceleratorMemory", { min: minAMEM, max: maxAMEM }, "range"),
+  ];
+
+  var recommendationPolicy = recommendPolicy.value;
+  var priorities = {
+    "location": {
+      metric: "location",
+      parameter: [{ key: "coordinateClose", val: [`${latitude}/${longitude}`] }],
+      weight: "1.0"
+    },
+    "cost": {
+      metric: "cost",
+      weight: "1.0"
+    },
+    "performance": {
+      metric: "performance",
+      weight: "1.0"
+    }
+  };
+
+  var struct = {
+    filter: { policy: policies },
+    limit: "10",
+    priority: { policy: [priorities[recommendationPolicy]] }
+  };
+
+  var jsonBody = JSON.stringify(struct);
 
   axios({
     method: "post",
