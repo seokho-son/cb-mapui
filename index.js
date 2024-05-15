@@ -101,8 +101,6 @@ var cspListDisplayEnabled = document.getElementById("displayOn");
 var tableDisplayEnabled = document.getElementById("tableOn");
 var table = document.getElementById("detailTable");
 var recommendPolicy = document.getElementById("recommendPolicy");
-var osImage = document.getElementById("osImage");
-var diskSize = document.getElementById("diskSize");
 var selectApp = document.getElementById("selectApp");
 
 var messageTextArea = document.getElementById("message");
@@ -1070,24 +1068,34 @@ function createMcis() {
             "<font size=3>" +
             "MCIS name: <b>" +
             createMcisReq.name +
-            subGroupReqString,
+            subGroupReqString +
+            "<br><br><input type='checkbox' id='hold-checkbox'> Hold VM provisioning of the MCIS"+
+            "<br><input type='checkbox' id='monitoring-checkbox'> Deploy CB-Dragonfly monitoring agent",
           showCancelButton: true,
-          inputPlaceholder: "Deploy CB-Dragonfly monitoring agent",
-          input: "checkbox",
-          inputValue: 0,
           confirmButtonText: "Confirm",
-          inputPlaceholder:
-            "<font size=3> Check to deploy CB-Dragonfly monitoring agent",
           scrollbarPadding: false,
+
+          preConfirm: () => {
+            return {
+              monitoring: document.getElementById('monitoring-checkbox').checked,
+              hold: document.getElementById('hold-checkbox').checked
+            };
+          }
+
+
         }).then((result) => {
           if (result.isConfirmed) {
             createMcisReq.installMonAgent = "no";
-            if (result.value) {
+            if (result.value.monitoring) {
               Swal.fire("Create MCIS with CB-Dragonfly monitoring agent");
               createMcisReq.installMonAgent = "yes";
             }
-            var jsonBody = JSON.stringify(createMcisReq, undefined, 4);
+            if (result.value.hold) {
+              Swal.fire("Create MCIS with hold option. It will not be deployed immediately. Use Action:Continue when you are ready.");
+              url += "?option=hold";
+            }
 
+            var jsonBody = JSON.stringify(createMcisReq, undefined, 4);
             messageTextArea.value = " Creating MCIS ...";
             var spinnerId = addSpinnerTask(
               "Creating MCIS: " + createMcisReq.name
@@ -1246,6 +1254,9 @@ function getRecommendedSpec(idx, latitude, longitude) {
     var createMcisReqVm = $.extend({}, createMcisReqVmTmplt);
 
     createMcisReqVm.name = "g" + (recommendedSpecList.length + 1).toString();
+
+    osImage = document.getElementById("osImage");
+    diskSize = document.getElementById("diskSize");
 
     createMcisReqVm.commonSpec = res.data[0].id;
     createMcisReqVm.commonImage = osImage.value;
@@ -1451,10 +1462,12 @@ function controlMCIS(action) {
     case "resume":
     case "reboot":
     case "terminate":
+    case "continue":
+    case "withdraw":
       break;
     default:
       console.log(
-        `The actions ${action} is not supported. Supported actions: refine, suspend, resume, reboot, terminate.`
+        `The actions ${action} is not supported. Supported actions: refine, continue, withdraw, suspend, resume, reboot, terminate.`
       );
       return;
   }
@@ -1492,13 +1505,15 @@ function controlMCIS(action) {
           case "resume":
           case "reboot":
           case "terminate":
+          case "continue":
+          case "withdraw":
             infoAlert(
               JSON.stringify(res.data.message, null, 2).replace(/['",]+/g, "")
             );
             break;
           default:
             console.log(
-              `The actions ${action} is not supported. Supported actions: refine, suspend, resume, reboot, terminate.`
+              `The actions ${action} is not supported. Supported actions: refine, continue, withdraw, suspend, resume, reboot, terminate.`
             );
         }
       }

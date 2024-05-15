@@ -57,7 +57,7 @@ Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
 
    (출력 예시)
    ```
-   Server running at http://localhost:1324
+   Server running at http://0.0.0.0:1324
    ✨ Built in 6.32s
  
    # Access to http://x.x.x.x:1324/ (ex: http://localhost:1324/)
