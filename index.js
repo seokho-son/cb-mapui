@@ -3147,8 +3147,18 @@ window.onload = function () {
   getMcis();
 };
 
-// Draw
+let drawCounter = 0;
+const shuffleInterval = 100; // Shuffle every 100 draws
+let shuffledKeys = Object.keys(cspIconStyles); // Initialize with original keys
 
+function shuffleKeys() {
+  shuffledKeys = Object.keys(cspIconStyles)
+    .map((key) => ({ key, sort: Math.random() })) // Map to array of objects with random sort values
+    .sort((a, b) => a.sort - b.sort) // Sort by random values
+    .map(({ key }) => key); // Extract the keys
+}
+
+// Draw
 function drawObjects(event) {
   //event.frameState = event.frameState / 10;
   //console.log("event.frameState");
@@ -3158,11 +3168,17 @@ function drawObjects(event) {
   var frameState = event.frameState;
   var theta = (2 * Math.PI * frameState.time) / omegaTheta;
 
-  // Draw CSP location first
-  Object.keys(cspIconStyles).forEach((csp) => {
-    if (Array.isArray(geoCspPoints[csp]) && geoCspPoints[csp].length) {
-      vectorContext.setStyle(cspIconStyles[csp]); 
-      vectorContext.drawGeometry(geoCspPoints[csp][0]);
+  // Shuffle keys every shuffleInterval draws
+  drawCounter++;
+  if (drawCounter % shuffleInterval === 0) {
+    shuffleKeys();
+  }
+
+  // Draw CSP location first with the stored random order
+  shuffledKeys.forEach((key) => {
+    if (Array.isArray(geoCspPoints[key]) && geoCspPoints[key].length) {
+      vectorContext.setStyle(cspIconStyles[key]);
+      vectorContext.drawGeometry(geoCspPoints[key][0]);
     }
   });
 
