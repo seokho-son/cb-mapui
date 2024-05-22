@@ -3158,7 +3158,7 @@ function shuffleKeys() {
     .map(({ key }) => key); // Extract the keys
 }
 
-// Draw
+// Draw Objects
 function drawObjects(event) {
   //event.frameState = event.frameState / 10;
   //console.log("event.frameState");
