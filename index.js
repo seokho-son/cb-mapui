@@ -727,6 +727,7 @@ function outputAlert(jsonData, type) {
     html: '<div id="json-output" class="form-control" style="height: auto; background-color: black; text-align: left; white-space: pre-wrap; word-break: break-all; overflow-wrap: break-word; overflow-x: auto;"></div>',
     background: "#0e1746",
     showConfirmButton: true,
+    width: '30%',
     //backdrop: false,
     didOpen: () => {
       const container = document.getElementById("json-output");
@@ -1671,7 +1672,7 @@ function statusMCIS() {
   var namespace = namespaceElement.value;
   var mcisid = mcisidElement.value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=status`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}`;
 
   axios({
     method: "get",
