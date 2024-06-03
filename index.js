@@ -1102,10 +1102,13 @@ function createMcis() {
               "Creating MCIS: " + createMcisReq.name
             );
 
+            requestId = generateRandomRequestId("mcis-"+createMcisReq.name+"-", 15);
+            addRequestIdToSelect(requestId);
+
             axios({
               method: "post",
               url: url,
-              headers: { "Content-Type": "application/json" },
+              headers: { "Content-Type": "application/json", "x-request-id": requestId },
               data: jsonBody,
               auth: {
                 username: `${username}`,
@@ -2608,7 +2611,7 @@ function startApp() {
         defaultRemoteCommand01 = 
           "chmod +x ~/startServer.sh";
         defaultRemoteCommand02 =
-          "sudo ~/startServer.sh " + "Xonotic-by-Cloud-Barista-" + mcisid + " 26000" + " 8";
+          "sudo ~/startServer.sh " + "Xonotic-by-Cloud-Barista-" + mcisid + " 26000" + " 8"+ " 8";
       } else if (selectApp.value == "ELK") {
         defaultRemoteCommand =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/elastic-stack/startELK.sh";
@@ -2926,10 +2929,13 @@ function executeRemoteCmd() {
 
         spinnerId = addSpinnerTask("Remote command to " + mcisid);
 
+        requestId = generateRandomRequestId("cmd-"+mcisid+"-", 15);
+        addRequestIdToSelect(requestId);
+
         axios({
           method: "post",
           url: url,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "x-request-id": requestId },
           data: jsonBody,
           auth: {
             username: `${username}`,
@@ -3085,21 +3091,33 @@ function handleAxiosResponse(response) {
   const requestId = response.headers["x-request-id"];
   console.log("X-Request-Id:", requestId);
   if (requestId) {
-    // Add X-Request-Id to the global array if it's not already present
-    if (!xRequestIds.includes(requestId)) {
-      xRequestIds.push(requestId);
-      addRequestIdToSelect(requestId);
-    }
+    addRequestIdToSelect(requestId);
   }
 }
 
 // Function to add X-Request-Id to the select element
 function addRequestIdToSelect(requestId) {
-  const select = document.getElementById("xRequestIdSelect");
-  const option = document.createElement("option");
-  option.value = requestId;
-  option.text = requestId;
-  select.appendChild(option);
+  // Add X-Request-Id to the global array if it's not already present
+  if (!xRequestIds.includes(requestId)) {
+    xRequestIds.push(requestId);
+    const select = document.getElementById("xRequestIdSelect");
+    const option = document.createElement("option");
+    option.value = requestId;
+    option.text = requestId;
+    select.appendChild(option);
+  }
+}
+
+// Function to generate a random X-Request-Id with a prefix and specified total length
+function generateRandomRequestId(prefix, totalLength) {
+  const characters = '0123456789';
+  let result = prefix;
+  const charactersLength = characters.length;
+  const randomPartLength = totalLength - prefix.length;
+  for (let i = 0; i < randomPartLength; i++) {
+    result += characters.charAt(Math.floor(Math.random() * charactersLength));
+  }
+  return result;
 }
 
 // Function to handle selection of an X-Request-Id
