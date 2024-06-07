@@ -2564,12 +2564,10 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-var defaultRemoteCommand =
-  "client_ip=$(echo $SSH_CLIENT | awk '{print $1}'); my_ip=$(hostname -I)";
-var defaultRemoteCommand01 =
-  "echo SSH client (bastion) IP is: $client_ip";
-var defaultRemoteCommand02 =
-  "echo IPs of my network: $my_ip";
+var defaultRemoteCommand = [];
+defaultRemoteCommand.push("hostname -I");
+defaultRemoteCommand.push("echo $SSH_CLIENT");
+defaultRemoteCommand.push("");
 
 // function for startApp by startApp button item
 function startApp() {
@@ -2606,53 +2604,53 @@ function startApp() {
       }
 
       if (selectApp.value == "Xonotic") {
-        defaultRemoteCommand =
+        defaultRemoteCommand[0] =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh";
-        defaultRemoteCommand01 = 
+        defaultRemoteCommand[1] = 
           "chmod +x ~/startServer.sh";
-        defaultRemoteCommand02 =
+        defaultRemoteCommand[2] =
           "sudo ~/startServer.sh " + "Xonotic-by-Cloud-Barista-" + mcisid + " 26000" + " 8"+ " 8";
       } else if (selectApp.value == "ELK") {
-        defaultRemoteCommand =
+        defaultRemoteCommand[0] =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/elastic-stack/startELK.sh";
-        defaultRemoteCommand01 = 
+        defaultRemoteCommand[1] = 
           "chmod +x ~/startServer.sh";
-        defaultRemoteCommand02 =
+        defaultRemoteCommand[2] =
           "sudo ~/startServer.sh ";
       } else if (selectApp.value == "LLM") {
-        defaultRemoteCommand =
+        defaultRemoteCommand[0] =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/llmServer.py";
-        defaultRemoteCommand01 =
+        defaultRemoteCommand[1] =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/startServer.sh; chmod +x ~/startServer.sh";
-        defaultRemoteCommand02 =
+        defaultRemoteCommand[2] =
           "~/startServer.sh " + "--ip" + publicIPs + " --port 5000" + " --token 1024" + " --model tiiuae/falcon-7b-instruct";
       } else if (selectApp.value == "Westward") {
-        defaultRemoteCommand =
+        defaultRemoteCommand[0] =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh";
-        defaultRemoteCommand01 = 
+        defaultRemoteCommand[1] = 
           "chmod +x ~/setgame.sh; sudo ~/setgame.sh";
       } else if (selectApp.value == "WeaveScope") {
-        defaultRemoteCommand =
+        defaultRemoteCommand[0] =
         "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/weavescope/startServer.sh";
-        defaultRemoteCommand01 = 
+        defaultRemoteCommand[1] = 
           "chmod +x ~/startServer.sh";
-        defaultRemoteCommand02 =
+        defaultRemoteCommand[2] =
           "sudo ~/startServer.sh " + publicIPs + " " + privateIPs;
       } else if (selectApp.value == "Nginx") {
-        defaultRemoteCommand =
+        defaultRemoteCommand[0] =
           "wget -O ~/setweb.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setweb.sh; chmod +x ~/setweb.sh; sudo ~/setweb.sh";
       } else if (selectApp.value == "Jitsi") {
-        defaultRemoteCommand =
+        defaultRemoteCommand[0] =
         "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/jitsi/startServer.sh";
-        defaultRemoteCommand01 = 
+        defaultRemoteCommand[1] = 
           "chmod +x ~/startServer.sh";
-        defaultRemoteCommand02 =
+        defaultRemoteCommand[2] =
           "sudo ~/startServer.sh " + publicIPs + " " + "DNS EMAIL";
       } else if (selectApp.value == "Stress") {
-        defaultRemoteCommand =
+        defaultRemoteCommand[0] =
           "sudo apt install -y stress > /dev/null; stress -c 16 -t 60";
       } else {
-        defaultRemoteCommand = "ls -al";
+        defaultRemoteCommand[0] = "ls -al";
       }
 
       executeRemoteCmd();
@@ -2841,15 +2839,15 @@ function executeRemoteCmd() {
         <p><font size=4><b>[Commands]</b></font></p>
         <div id="cmdContainer" style="margin-bottom: 20px;">
           <div id="cmdDiv1" class="cmdRow">
-            Command 1: <input type="text" id="cmd1" style="width: 75%" value="${defaultRemoteCommand}">
+            Command 1: <input type="text" id="cmd1" style="width: 75%" value="${defaultRemoteCommand[0]}">
             <button onclick="document.getElementById('cmd1').value = ''">Clear</button>
           </div>
           <div id="cmdDiv2" class="cmdRow">
-            Command 2: <input type="text" id="cmd2" style="width: 75%" value="${defaultRemoteCommand01}">
+            Command 2: <input type="text" id="cmd2" style="width: 75%" value="${defaultRemoteCommand[1]}">
             <button onclick="document.getElementById('cmd2').value = ''">Clear</button>
           </div>
           <div id="cmdDiv3" class="cmdRow">
-            Command 3: <input type="text" id="cmd3" style="width: 75%" value="${defaultRemoteCommand02}">
+            Command 3: <input type="text" id="cmd3" style="width: 75%" value="${defaultRemoteCommand[2]}">
             <button onclick="document.getElementById('cmd3').value = ''">Clear</button>
           </div>
           <button id="addCmd" onclick="addCmd()" style="margin-left: 1px;"> + </button>
@@ -2894,6 +2892,7 @@ function executeRemoteCmd() {
         const commands = [];
         for (let i = 1; i <= cmdCount; i++) {
           const cmd = document.getElementById("cmd" + i).value;
+          defaultRemoteCommand[i-1] = cmd;
           if (cmd) {
             commands.push(cmd);
           }
