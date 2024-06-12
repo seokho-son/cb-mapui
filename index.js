@@ -155,6 +155,7 @@ function clearCircle(option) {
     messageTextArea.value = "";
   }
   latLonInputPairIdx = 0;
+  vmReqeustFromSpecList = [];
   recommendedSpecList = [];
   cspPointsCircle = [];
   geoCspPointsCircle = [];
@@ -180,6 +181,7 @@ function writeLatLonInputPair(idx, lat, lon) {
 }
 
 var latLonInputPairIdx = 0;
+var vmReqeustFromSpecList = new Array();
 var recommendedSpecList = new Array();
 
 map.on("singleclick", function (event) {
@@ -1008,7 +1010,7 @@ var createMcisReqVmTmplt = {
 };
 
 function createMcis() {
-  if (recommendedSpecList.length != 0) {
+  if (vmReqeustFromSpecList.length != 0) {
     var hostname = hostnameElement.value;
     var port = portElement.value;
     var username = usernameElement.value;
@@ -1021,36 +1023,67 @@ function createMcis() {
 
     var createMcisReq = createMcisReqTmplt;
     createMcisReq.name = "mc-" + `${randomString}`;
-    createMcisReq.vm = recommendedSpecList;
+    createMcisReq.vm = vmReqeustFromSpecList;
+    let totalCost = 0;
+    let totalNodeScale = 0;
 
     var subGroupReqString = "";
     for (i = 0; i < createMcisReq.vm.length; i++) {
-      createMcisReq.vm.name;
+
+      totalNodeScale += parseInt(createMcisReq.vm[i].subGroupSize);
+      let costPerHour = recommendedSpecList[i].costPerHour;
+      let subTotalCost = "unknown";
+      if (costPerHour == "100000000" || costPerHour == "") {
+        costPerHour = "unknown";
+        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($"+costPerHour+" * "+createMcisReq.vm[i].subGroupSize+")"+"</span></b></td></tr>" ;
+      } else {
+        totalCost += parseFloat(costPerHour) * createMcisReq.vm[i].subGroupSize;
+
+        subTotalCost = (parseFloat(costPerHour) * createMcisReq.vm[i].subGroupSize).toFixed(4);
+        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($"+costPerHour+" * "+createMcisReq.vm[i].subGroupSize+")"+"</span></b></td></tr>" ;
+      }
+      let acceleratorType = recommendedSpecList[i].acceleratorType;
+      let acceleratorModel = recommendedSpecList[i].acceleratorModel;
+      if (acceleratorType == "gpu" ) {
+        acceleratorType = "<tr><th style='width: 50%;'>Accelerator</th><td><b><span style='color: red; '>GPU ("+ acceleratorModel +")</span></b></td></tr>"
+      } else {
+        acceleratorType = "<tr><th style='width: 50%;'>Accelerator</th><td><b><span style='color: black;'>none</span></b></td></tr>"
+      }
 
       var html =
-        "<br><br></b> <b>[" +
-        (i + 1).toString() +
-        "]</b> <b>" +
-        createMcisReq.vm[i].name +
-        "</b> (size:  <b>" +
-        createMcisReq.vm[i].subGroupSize +
-        "</b>)" +
-        "<br> - Image: <b>" +
-        createMcisReq.vm[i].commonImage +
-        "<br></b> - Spec: <b>" +
-        createMcisReq.vm[i].commonSpec +
-        "<br></b> - DiskType: <b>" +
-        createMcisReq.vm[i].rootDiskType +
-        "</b> / DiskSize: <b>" +
-        createMcisReq.vm[i].rootDiskSize;
+      "<font size=3>" +
+      "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
+      "<tr><th style='width: 50%;'>[#"+ (i + 1).toString() +"] SubGroup Name</th><td><b><span style='color: black; '>" + createMcisReq.vm[i].name + " ("+createMcisReq.vm[i].subGroupSize+" node(s))</span></b></td></tr>" +
+      costPerHour +
+      "<tr><th style='width: 50%;'>Spec</th><td><b><span style='color: blue; '>" + createMcisReq.vm[i].commonSpec + "</span></b></td></tr>" +
+      "<tr><th style='width: 50%;'>vCPU</th><td><b>" + recommendedSpecList[i].vCPU + "</b></td></tr>" +
+      "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + recommendedSpecList[i].memoryGiB + "</b></td></tr>" +
+      acceleratorType +
+      "<tr><th style='width: 50%;'>RootDisk(GB)</th><td><b>" + recommendedSpecList[i].rootDiskSize +" (type: "+recommendedSpecList[i].rootDiskType+ ")</b></td></tr>" +
+      "<tr><th style='width: 50%;'>Selected Image OS Type</th><td><b><span style='color: green; '>" + createMcisReq.vm[i].commonImage + "</span></b></td></tr>" +
+
+      "</table>"+
+      "<hr>"
+      ;
 
       subGroupReqString = subGroupReqString + html;
     }
 
+
+    var costDetailsHtml =
+   
+    "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
+        "<tr><th><b>Usage Period</b></th><td><b>Estimated Cost</b></td></tr>" +
+        "<tr><th>Hourly</th><td><span style='color: red; '><b>$" + totalCost.toFixed(4) + "</span></td></tr>" +
+        "<tr><th>Daily</th><td><span style='color: red; '><b>$" + (totalCost * 24).toFixed(4) + "</span></td></tr>" +
+        "<tr><th>Monthly</th><td><span style='color: red; '><b>$" + (totalCost * 24 * 31).toFixed(4) + "</span></td></tr>" +
+        "</table> <br>(Do not rely on this estimated cost. It is just an estimation using spec price.)<br>";
+
+
     var hasUserConfirmed = false;
 
     Swal.fire({
-      title: "Please change the name of MCIS to create if you wish",
+      title: "Enter the name of the MCIS you wish to create",
       input: "text",
       inputAttributes: {
         autocapitalize: "off",
@@ -1063,12 +1096,14 @@ function createMcis() {
         createMcisReq.name = result.value;
 
         Swal.fire({
-          title: "Are you sure to create MCIS as follows:",
-          width: 600,
+          title: "Are you sure you want to create this MCIS?",
+          width: 750,
           html:
-            "<font size=3>" +
-            "MCIS name: <b>" +
-            createMcisReq.name +
+            "<font size=4>" +
+            "<br><b><span style='color: black; font-size: larger;'>" +  createMcisReq.name +" </b> ("+totalNodeScale+" node(s))" + "</span><br>"+
+            "<hr>" +
+            costDetailsHtml +
+            "<hr>" +
             subGroupReqString +
             "<br><br><input type='checkbox' id='hold-checkbox'> Hold VM provisioning of the MCIS"+
             "<br><input type='checkbox' id='monitoring-checkbox'> Deploy CB-Dragonfly monitoring agent",
@@ -1256,8 +1291,9 @@ function getRecommendedSpec(idx, latitude, longitude) {
     // }
 
     var createMcisReqVm = $.extend({}, createMcisReqVmTmplt);
+    var recommendedSpec = res.data[0];
 
-    createMcisReqVm.name = "g" + (recommendedSpecList.length + 1).toString();
+    createMcisReqVm.name = "g" + (vmReqeustFromSpecList.length + 1).toString();
 
     osImage = document.getElementById("osImage");
     diskSize = document.getElementById("diskSize");
@@ -1276,44 +1312,48 @@ function getRecommendedSpec(idx, latitude, longitude) {
       // need to validate requested disk size >= default disk size given by vm spec
     }
 
+    let costPerHour = res.data[0].costPerHour;
+    if (costPerHour == "100000000" || costPerHour == "") {
+        costPerHour = "unknown";
+    }
+    let acceleratorType = res.data[0].acceleratorType;
+    let acceleratorModel = res.data[0].acceleratorModel;
+    if (acceleratorType == "gpu" ) {
+      acceleratorType = "<tr><th style='width: 50%;'>AcceleratorType</th><td><b><span style='color: red; font-size: larger;'>GPU</span></b></td></tr>"
+      acceleratorModel = "<tr><th style='width: 50%;'>AcceleratorModel</th><td><b><span style='color: red; font-size: larger;'>" + acceleratorModel + "</span></b></td></tr>"
+    } else {
+      acceleratorType = "<tr><th style='width: 50%;'>AcceleratorType</th><td><b><span style='color: black;'>None</span></b></td></tr>"
+      acceleratorModel = "<tr><th style='width: 50%;'>AcceleratorModel</th><td><b><span style='color: black;'>" + acceleratorModel + "</span></b></td></tr>"
+    }
+
     Swal.fire({
-      title: "Please provide the number of VMs to create (1 ~ 10)",
-      width: 600,
+      title: "Recommended Spec and CSP region <br>(select the number for scaling VMs (1 ~ 10))",
+      width: 700,
       html:
-        "<font size=3>" +
-        "Recommended VM Spec <b>" +
-        res.data[0].cspSpecName +
-        "<br></b> OS Image Type: <b>" +
-        createMcisReqVm.commonImage +
+      "<font size=3>" +
+      "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
+      "<tr><th style='width: 50%;'>Recommended Spec</th><td><b><span style='color: black; font-size: larger;'>" + res.data[0].cspSpecName + "</span></b></td></tr>" +
+      "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; font-size: larger;'>$ " + costPerHour + "</span></b></td></tr>" +
+      "<tr><th style='width: 50%;'>Selected Image OS Type</th><td><b><span style='color: green; font-size: larger;'>" + createMcisReqVm.commonImage + "</span></b></td></tr>" +
 
-        "<br><br></b> vCPU: <b>" +
-        res.data[0].vCPU +
-        "<br></b> Mem(GiB): <b>" +
-        res.data[0].memoryGiB +
-        "<br></b> RootDiskType: <b>" +
-        res.data[0].rootDiskType +
-        "<br></b> RootDiskSize(GB): <b>" +
-        createMcisReqVm.rootDiskSize +
-        "<br></b> Cost($/1H): <b>" +
-        res.data[0].costPerHour +
-        "<br>"+
+      "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
+      "<tr><th style='width: 50%;'>Provider</th><td><b><span style='color: blue; font-size: larger;'>" + res.data[0].providerName.toUpperCase() + "</span></b></td></tr>" +
+      "<tr><th style='width: 50%;'>Region</th><td><b>" + res.data[0].regionName + "</b></td></tr>" +
+      "<tr><th style='width: 50%;'>ConnectionConfig</th><td><b>" + res.data[0].connectionName + "</b></td></tr>" +
 
-        "<br></b> AcceleratorType: <b>" +
-        res.data[0].acceleratorType +
-        "<br></b> AcceleratorModel: <b>" +
-        res.data[0].acceleratorModel +
-        "<br></b> AcceleratorCount: <b>" +
-        res.data[0].acceleratorCount +
-        "<br></b> AcceleratorMemoryGB: <b>" +
-        res.data[0].acceleratorMemoryGB +
-        "<br>"+
+      "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
+      "<tr><th style='width: 50%;'>vCPU</th><td><b>" + res.data[0].vCPU + "</b></td></tr>" +
+      "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + res.data[0].memoryGiB + "</b></td></tr>" +
+      "<tr><th style='width: 50%;'>RootDiskType</th><td><b>" + res.data[0].rootDiskType + "</b></td></tr>" +
+      "<tr><th style='width: 50%;'>RootDiskSize(GB)</th><td><b>" + createMcisReqVm.rootDiskSize + "</b></td></tr>" +
 
-        "<br></b> CSP: <b>" +
-        res.data[0].providerName +
-        "<br></b> Region: <b>" +
-        res.data[0].regionName +
-        "<br></b> ConnectionConfig: <b>" +
-        res.data[0].connectionName 
+      "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
+      acceleratorType +
+      acceleratorModel +
+      "<tr><th style='width: 50%;'>AcceleratorCount</th><td><b>" + res.data[0].acceleratorCount + "</b></td></tr>" +
+      "<tr><th style='width: 50%;'>AcceleratorMemoryGB</th><td><b>" + res.data[0].acceleratorMemoryGB + "</b></td></tr>" +
+
+      "</table>"
         ,
       input: "number",
       inputValue: 1,
@@ -1343,7 +1383,8 @@ function getRecommendedSpec(idx, latitude, longitude) {
         messageTextArea.value +=
           `${createMcisReqVm.commonSpec}` +
           `\t(${createMcisReqVm.subGroupSize})`;
-        recommendedSpecList.push(createMcisReqVm);
+        vmReqeustFromSpecList.push(createMcisReqVm);
+        recommendedSpecList.push(recommendedSpec);
       } else {
         messageTextArea.value = messageTextArea.value.replace(/\n.*$/, "");
         latLonInputPairIdx--;
@@ -3166,7 +3207,7 @@ window.onload = function () {
 };
 
 let drawCounter = 0;
-const shuffleInterval = 100; // Shuffle every 100 draws
+const shuffleInterval = 200; // Shuffle every shuffleInterval draws
 let shuffledKeys = Object.keys(cspIconStyles); // Initialize with original keys
 
 function shuffleKeys() {
