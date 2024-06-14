@@ -653,12 +653,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <select id="selectApp" name="selectApp" class="form-control" aria-label="Select Application"
                     aria-describedby="selectAppLabel">
                     <option value="Xonotic" selected="selected">FPSGame(Xonotic)</option>
-                    <option value="ELK">LogAnalisys(ELK)</option>
-                    <option value="LLM">AI-Server(LLM)</option>
+                    <option value="Nvidia">NvidiaDriver</option>
+                    <option value="vLLM">LLM(vLLM+SelfHostAPI)</option>
+                    <option value="Ollama">LLM(Ollama)</option>
+                    <option value="OllamaPull">LLM(Ollama PullModel)</option>
+                    <option value="OpenWebUI">LLMChat(Open WebUI)</option>
                     <option value="Westward">MMORPG(Westward)</option>
                     <option value="Nginx">WebServer(Nginx)</option>
                     <option value="WeaveScope">Monitor(WeaveScope)</option>
                     <option value="Jitsi">VideoConf(Jitsi)</option>
+                    <option value="ELK">LogAnalisys(ELK)</option>
                     <option value="Stress">LoadTest(Stress)</option>
                   </select>
                 </div>
@@ -672,9 +676,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 </button>
 
                 <div class="dropdown-menu" aria-labelledby="appControlDropdown">
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="startApp();">Start App</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="stopApp();">Stop App</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="statusApp();">Status App</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="startApp();">Start/Install</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="stopApp();">Stop</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="statusApp();">Status</a>
                 </div>
               </div>
 

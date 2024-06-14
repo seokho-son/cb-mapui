@@ -2658,13 +2658,41 @@ function startApp() {
           "chmod +x ~/startServer.sh";
         defaultRemoteCommand[2] =
           "sudo ~/startServer.sh ";
-      } else if (selectApp.value == "LLM") {
+      } else if (selectApp.value == "vLLM") {
         defaultRemoteCommand[0] =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/llmServer.py";
         defaultRemoteCommand[1] =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/startServer.sh; chmod +x ~/startServer.sh";
         defaultRemoteCommand[2] =
           "~/startServer.sh " + "--ip" + publicIPs + " --port 5000" + " --token 1024" + " --model tiiuae/falcon-7b-instruct";
+      } else if (selectApp.value == "Nvidia") {
+        defaultRemoteCommand[0] =
+          "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/installCudaDriver.sh | sh";
+        defaultRemoteCommand[1] =
+          "";
+        defaultRemoteCommand[2] =
+          "";
+      } else if (selectApp.value == "Ollama") {
+        defaultRemoteCommand[0] =
+          "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOllama.sh | sh";
+        defaultRemoteCommand[1] =
+          "echo 'Endpoint: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
+        defaultRemoteCommand[2] =
+          "";
+      } else if (selectApp.value == "OllamaPull") {
+        defaultRemoteCommand[0] =
+          "OLLAMA_HOST=0.0.0.0:3000 ollama pull $$Func(AssignTask(task='llama3, phi3, mistral, gemma, mixtral, llava, yi, falcon2, solar, llama2'))";
+        defaultRemoteCommand[1] =
+          "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))";
+        defaultRemoteCommand[2] =
+          "OLLAMA_HOST=0.0.0.0:3000 ollama list";
+      } else if (selectApp.value == "OpenWebUI") {
+        defaultRemoteCommand[0] =
+          "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh | bash -s -- ";
+        defaultRemoteCommand[1] =
+          "echo 'Endpoint: $$Func(GetPublicIP(target=this, prefix=http://))'";
+        defaultRemoteCommand[2] =
+          "";
       } else if (selectApp.value == "Westward") {
         defaultRemoteCommand[0] =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh";
