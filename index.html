@@ -67,6 +67,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <!-- json-formatter-js -->
   <script src="https://cdn.jsdelivr.net/npm/json-formatter-js@2.3.4/dist/json-formatter.umd.min.js"></script>
 
+  <!-- datatables -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/2.0.8/css/dataTables.dataTables.css" />
+  <script src="https://cdn.datatables.net/2.0.8/js/dataTables.js"></script>
+
   <style>
     .map {
       width: 100%;
@@ -239,7 +243,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
         <!-- MCIS Provisioning Card -->
         <div class="card mb-2">
-          <div class="card-header">MCIS Provisioning</div>
+          <div class="card-header">MC-Infra Provisioning</div>
           <div class="card-body d-flex flex-column">
             <form id="mcis-configuration-form" class="form-row">
               <!-- Recommendation Policy Field -->
@@ -415,7 +419,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
         <!-- MCIS Control Card -->
         <div class="card mb-2">
-          <div class="card-header">MCIS Control</div>
+          <div class="card-header">MC-Infra Control</div>
           <div class="card-body d-flex flex-column">
             <form id="mcis-control-form" class="form-row">
 
@@ -653,7 +657,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
         <!-- MCIS Application Card -->
         <div class="card mb-2">
-          <div class="card-header">MCIS Application</div>
+          <div class="card-header">MC-Infra Application</div>
           <div class="card-body d-flex flex-column">
             <form id="mcis-application-form" class="form-row">
 
@@ -667,10 +671,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                     aria-describedby="selectAppLabel">
                     <option value="Xonotic" selected="selected">FPSGame(Xonotic)</option>
                     <option value="Nvidia">NvidiaDriver</option>
-                    <option value="vLLM">LLM(vLLM+SelfHostAPI)</option>
                     <option value="Ollama">LLM(Ollama)</option>
                     <option value="OllamaPull">LLM(Ollama PullModel)</option>
                     <option value="OpenWebUI">LLMChat(Open WebUI)</option>
+                    <option value="vLLM">LLM(vLLM+SelfHostAPI)</option>
                     <option value="Westward">MMORPG(Westward)</option>
                     <option value="Nginx">WebServer(Nginx)</option>
                     <option value="WeaveScope">Monitor(WeaveScope)</option>

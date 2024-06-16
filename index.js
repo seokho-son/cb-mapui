@@ -730,7 +730,7 @@ function outputAlert(jsonData, type) {
     html: '<div id="json-output" class="form-control" style="height: auto; background-color: black; text-align: left; white-space: pre-wrap; word-break: break-all; overflow-wrap: break-word; overflow-x: auto;"></div>',
     background: "#0e1746",
     showConfirmButton: true,
-    width: '30%',
+    width: '40%',
     //backdrop: false,
     didOpen: () => {
       const container = document.getElementById("json-output");
@@ -1215,6 +1215,13 @@ function createMcis() {
 }
 window.createMcis = createMcis;
 
+
+// Define the toggleTable function in the global scope
+function toggleTable() {
+  var table = document.getElementById('fullTable');
+  table.style.display = table.style.display === 'none' ? 'block' : 'none';
+}
+
 function getRecommendedSpec(idx, latitude, longitude) {
   var hostname = hostnameElement.value;
   var port = portElement.value;
@@ -1279,7 +1286,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
   var struct = {
     filter: { policy: policies },
-    limit: "10",
+    limit: "30",
     priority: { policy: [priorities[recommendationPolicy]] }
   };
 
@@ -1298,24 +1305,13 @@ function getRecommendedSpec(idx, latitude, longitude) {
     console.log(res); // for debug
     handleAxiosResponse(res);
 
-    if (res.data == null) {
-      errorAlert("No recommended spec found with the given condition");
-      return;
-    }
-    if (res.data.length == 0) {
+    if (res.data == null || res.data.length == 0) {
       errorAlert("No recommended spec found with the given condition");
       return;
     }
 
     addRegionMarker(res.data[0].id);
-    //document.getElementById("latLonInputPairArea").innerHTML += `${res.data[0].id}<br>`;
 
-    //displayJsonData(res.data, typeInfo);
-    // messageJsonOutput.scrollTop = messageJsonOutput.scrollHeight;
-
-    // if (tableDisplayEnabled.checked){
-    //   jsonToTable(JSON.stringify(res.data));
-    // }
 
     var createMcisReqVm = $.extend({}, createMcisReqVmTmplt);
     var recommendedSpec = res.data[0];
@@ -1353,14 +1349,61 @@ function getRecommendedSpec(idx, latitude, longitude) {
       acceleratorModel = "<tr><th style='width: 50%;'>AcceleratorModel</th><td><b><span style='color: black;'>" + acceleratorModel + "</span></b></td></tr>"
     }
 
+
+    // Show all recommended specs in a table if needed
+    var tableContent = res.data.map((spec, index) => {
+      let costPerHour = spec.costPerHour === "100000000" || spec.costPerHour === "" ? "unknown" : spec.costPerHour;
+      let acceleratorType = spec.acceleratorType === "gpu"
+        ? `<span style='color: red; font-size: larger;'>GPU</span>`
+        : `<span style='color: black;'>None</span>`;
+      let acceleratorModel = spec.acceleratorModel === "gpu"
+        ? `<span style='color: red; font-size: larger;'>${spec.acceleratorModel}</span>`
+        : `<span style='color: black;'>${spec.acceleratorModel}</span>`;
+      
+      return `
+        <tr>
+          <th>${index + 1}</th>
+          <td>${spec.cspSpecName}</td>
+          <td>${spec.providerName.toUpperCase()}</td>
+          <td>${spec.regionName}</td>
+          <td>${spec.vCPU}</td>
+          <td>${spec.memoryGiB}</td>
+          <td>$ ${costPerHour}</td>
+          <td>${spec.acceleratorCount}</td>
+          <td>${acceleratorModel}</td>
+          <td>${spec.acceleratorMemoryGB}</td>
+        </tr>`;
+    }).join("");
+
+      var tableHTML = `
+      <table id="recommendationTable" class="display nowrap" style="width:100%; text-align:left;">
+        <thead>
+          <tr>
+            <th> </th>
+            <th>Spec</th>
+            <th>CSP</th>
+            <th>Region</th>
+            <th>vCPU</th>
+            <th>Mem</th>
+            <th>Price</th>
+            <th>GPUs</th>
+            <th>Model</th>
+            <th>Mem</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableContent}
+        </tbody>
+      </table>`;
+
     Swal.fire({
-      title: "Recommended Spec and CSP region <br>(select the number for scaling VMs (1 ~ 10))",
-      width: 700,
+      title: "Recommended Spec and CSP region <br>",
+      width: 800,
       html:
       "<font size=3>" +
       "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
       "<tr><th style='width: 50%;'>Recommended Spec</th><td><b><span style='color: black; font-size: larger;'>" + res.data[0].cspSpecName + "</span></b></td></tr>" +
-      "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; font-size: larger;'>$ " + costPerHour + "</span></b></td></tr>" +
+      "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; font-size: larger;'> $ " + costPerHour + " (at least)</span></b></td></tr>" +
       "<tr><th style='width: 50%;'>Selected Image OS Type</th><td><b><span style='color: green; font-size: larger;'>" + createMcisReqVm.commonImage + "</span></b></td></tr>" +
 
       "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
@@ -1379,14 +1422,22 @@ function getRecommendedSpec(idx, latitude, longitude) {
       acceleratorModel +
       "<tr><th style='width: 50%;'>AcceleratorCount</th><td><b>" + res.data[0].acceleratorCount + "</b></td></tr>" +
       "<tr><th style='width: 50%;'>AcceleratorMemoryGB</th><td><b>" + res.data[0].acceleratorMemoryGB + "</b></td></tr>" +
+      "</table><br>" +
 
-      "</table>"
-        ,
+      `<div style="margin-top: 10px;">` +
+      `<button id="toggleTableButton" class="btn btn-secondary dropdown-toggle w-100">Show All Recommendations</button>` +
+      `</div>` +
+      `<div id="fullTable" style="display:none">${tableHTML}</div>`,
+
+      inputLabel: 'Enter the number of VMs for scaling (1 ~ 10)',
       input: "number",
       inputValue: 1,
       didOpen: () => {
         const input = Swal.getInput();
-        //input.setSelectionRange(0, input.value.length)
+        const toggleButton = document.getElementById('toggleTableButton');
+        toggleButton.addEventListener('click', toggleTable);
+        
+        $('#recommendationTable').DataTable();
       },
       inputAttributes: {
         autocapitalize: "off",
@@ -1428,6 +1479,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
   });
 }
 window.getRecommendedSpec = getRecommendedSpec;
+
 
 function range_change(obj) {
   document.getElementById("myvalue").value = obj.value;
@@ -2710,12 +2762,12 @@ function startApp() {
         defaultRemoteCommand[0] =
           "OLLAMA_HOST=0.0.0.0:3000 ollama pull $$Func(AssignTask(task='llama3, phi3, mistral, gemma, mixtral, llava, yi, falcon2, solar, llama2'))";
         defaultRemoteCommand[1] =
-          "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))";
+          "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
         defaultRemoteCommand[2] =
           "OLLAMA_HOST=0.0.0.0:3000 ollama list";
       } else if (selectApp.value == "OpenWebUI") {
         defaultRemoteCommand[0] =
-          "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh | bash -s -- ";
+          "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh | bash -s -- $$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))";
         defaultRemoteCommand[1] =
           "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
         defaultRemoteCommand[2] =
@@ -2861,6 +2913,10 @@ function statusApp() {
       );
       cmd.push("chmod +x ~/setgame.sh");
       cmd.push("sudo ~/setgame.sh");
+    } else if (selectApp.value == "Nvidia") {
+      cmd.push(       "nvidia-smi"      );
+      cmd.push("");
+      cmd.push("");
     } else if (selectApp.value == "Nginx") {
       cmd.push(
         "wget wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setweb.sh -O ~/setweb.sh"
