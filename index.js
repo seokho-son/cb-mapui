@@ -114,6 +114,7 @@ var namespaceElement = document.getElementById("namespace");
 var mcisidElement = document.getElementById("mcisid");
 
 const typeStringConnection = "connection";
+const typeStringProvider = "provider";
 const typeStringImage = "image";
 const typeStringSpec = "spec";
 const typeStringSG = "securityGroup";
@@ -902,6 +903,20 @@ function getConnection() {
   //   }
   // });
 
+    // Initialize provider select element with "ALL"
+    var providerSelect = document.getElementById(typeStringProvider);
+    providerSelect.innerHTML = ''; // Clear existing options
+    var allOption = document.createElement("option");
+    allOption.value = "";
+    allOption.text = "ALL";
+    providerSelect.appendChild(allOption);
+
+    var separatorOption = document.createElement("option");
+    separatorOption.value = "";
+    separatorOption.text = "-----";
+    separatorOption.disabled = true; // Disable the separator option
+    providerSelect.appendChild(separatorOption);
+
   var hostname = hostnameElement.value;
   var port = portElement.value;
   var username = usernameElement.value;
@@ -961,6 +976,16 @@ function getConnection() {
           }
 
           cspPoints[providerName].push([longitude, latitude]);
+
+          // Add the provider to the provider select dropdown if it doesn't already exist
+          var providerSelect = document.getElementById(typeStringProvider);
+          var isDuplicate = Array.from(providerSelect.options).some(option => option.value === providerName);
+          if (!isDuplicate) {
+            var option = document.createElement("option");
+            option.value = providerName;
+            option.text = providerName.toUpperCase();
+            providerSelect.appendChild(option);
+          }
 
           if (!geoCspPoints[providerName]) {
             geoCspPoints[providerName] = [];
@@ -1201,6 +1226,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
   var minRAM = document.getElementById("minRAM").value;
   var maxRAM = document.getElementById("maxRAM").value;
   var specName = document.getElementById("specName").value;
+  var providerName = document.getElementById("provider").value;
   var acceleratorType = document.getElementById("acceleratorType").value;
   var acceleratorModel = document.getElementById("acceleratorModel").value;
   var minAcceleratorCount = document.getElementById("minAcceleratorCount").value;
@@ -1227,6 +1253,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
     createPolicyConditions("vCPU", { min: minVCPU, max: maxVCPU }, "range"),
     createPolicyConditions("MemoryGiB", { min: minRAM, max: maxRAM }, "range"),
     createPolicyConditions("CspSpecName", { value: specName }, "single"),
+    createPolicyConditions("ProviderName", { value: providerName }, "single"),
     createPolicyConditions("AcceleratorType", { value: acceleratorType }, "single"),
     createPolicyConditions("AcceleratorModel", { value: acceleratorModel }, "single"),
     createPolicyConditions("AcceleratorMemoryGB", { min: minAMEM, max: maxAMEM }, "range"),
@@ -2646,11 +2673,11 @@ function startApp() {
 
       if (selectApp.value == "Xonotic") {
         defaultRemoteCommand[0] =
-          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh";
+          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh; chmod +x ~/startServer.sh";
         defaultRemoteCommand[1] = 
-          "chmod +x ~/startServer.sh";
-        defaultRemoteCommand[2] =
           "sudo ~/startServer.sh " + "Xonotic-by-Cloud-Barista-" + mcisid + " 26000" + " 8"+ " 8";
+        defaultRemoteCommand[2] =
+          "echo '$$Func(GetPublicIP(target=this,postfix=:26000))'";
       } else if (selectApp.value == "ELK") {
         defaultRemoteCommand[0] =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/elastic-stack/startELK.sh";
@@ -2676,7 +2703,7 @@ function startApp() {
         defaultRemoteCommand[0] =
           "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOllama.sh | sh";
         defaultRemoteCommand[1] =
-          "echo 'Endpoint: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
+          "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
         defaultRemoteCommand[2] =
           "";
       } else if (selectApp.value == "OllamaPull") {
@@ -2690,7 +2717,7 @@ function startApp() {
         defaultRemoteCommand[0] =
           "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh | bash -s -- ";
         defaultRemoteCommand[1] =
-          "echo 'Endpoint: $$Func(GetPublicIP(target=this, prefix=http://))'";
+          "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
         defaultRemoteCommand[2] =
           "";
       } else if (selectApp.value == "Westward") {
@@ -2707,7 +2734,11 @@ function startApp() {
           "sudo ~/startServer.sh " + publicIPs + " " + privateIPs;
       } else if (selectApp.value == "Nginx") {
         defaultRemoteCommand[0] =
-          "wget -O ~/setweb.sh https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setweb.sh; chmod +x ~/setweb.sh; sudo ~/setweb.sh";
+          "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/nginx/startServer.sh | bash -s -- --ip $$Func(GetPublicIP(target=this))";
+        defaultRemoteCommand[1] =
+          "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
+        defaultRemoteCommand[2] =
+          "";
       } else if (selectApp.value == "Jitsi") {
         defaultRemoteCommand[0] =
         "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/jitsi/startServer.sh";
@@ -3261,11 +3292,16 @@ function drawObjects(event) {
     shuffleKeys();
   }
 
+  // Get the selected provider from the dropdown
+  var selectedProvider = document.getElementById(typeStringProvider).value;
+
   // Draw CSP location first with the stored random order
   shuffledKeys.forEach((key) => {
-    if (Array.isArray(geoCspPoints[key]) && geoCspPoints[key].length) {
-      vectorContext.setStyle(cspIconStyles[key]);
-      vectorContext.drawGeometry(geoCspPoints[key][0]);
+    if (selectedProvider === "" || selectedProvider === key) {
+      if (Array.isArray(geoCspPoints[key]) && geoCspPoints[key].length) {
+        vectorContext.setStyle(cspIconStyles[key]);
+        vectorContext.drawGeometry(geoCspPoints[key][0]);
+      }
     }
   });
 
