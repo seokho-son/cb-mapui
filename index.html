@@ -256,21 +256,18 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 </div>
               </div>
 
-              <!-- OS Image Type Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">OS Image</span>
-                  </div>
-                  <select id="osImage" name="osImage" class="form-control">
-                    <option value="Ubuntu18.04">Ubuntu 18.04</option>
-                    <option value="Ubuntu20.04">Ubuntu 20.04</option>
-                    <option value="Ubuntu22.04" selected="selected">Ubuntu 22.04</option>
-                    <option value="Debian10">Debian 10</option>
-                    <option value="WindowsServer2012R2">Windows 2012 R2</option>
-                  </select>
-                </div>
-              </div>
+                            <!-- Provider Field -->
+                            <div class="form-group col">
+                              <div class="input-group">
+                                <div class="input-group-prepend">
+                                  <span class="input-group-text" id="providerLabel">Provider</span>
+                                </div>
+                                <select id="provider" name="provider" class="form-control" aria-label="provider ID"
+                                  aria-describedby="providerLabel">
+                                  <!-- Options will be filled dynamically -->
+                                </select>
+                              </div>
+                            </div>
 
 
               <!-- CPU Range Field -->
@@ -279,9 +276,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <div class="input-group-prepend">
                     <span class="input-group-text">vCPU</span>
                   </div>
-                  <input type="number" class="form-control m-0" id='minVCPU' value="1" min="1" max="1447" step="1">
+                  <input type="number" class="form-control m-0" id='minVCPU' value="1" min="1" max="999447" step="1">
                   <span class="mx-1">.</span>
-                  <input type="number" class="form-control m-0" id='maxVCPU' value="8" min="1" max="1448" step="1">
+                  <input type="number" class="form-control m-0" id='maxVCPU' value="" min="1" max="999448" step="1">
                 </div>
               </div>
 
@@ -292,10 +289,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <div class="input-group-prepend">
                     <span class="input-group-text">Mem(Gi)</span>
                   </div>
-                  <input type="number" class="form-control m-0" id='minRAM' value="0.5" min="0.5" max="112288"
+                  <input type="number" class="form-control m-0" id='minRAM' value="0.5" min="0.5" max="99912288"
                     step="0.5">
                   <span class="mx-1">.</span>
-                  <input type="number" class="form-control m-0" id='maxRAM' value="16" min="0.5" max="112289" step="0.5">
+                  <input type="number" class="form-control m-0" id='maxRAM' value="" min="0.5" max="99912289" step="0.5">
                 </div>
               </div>
 
@@ -307,6 +304,22 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   </div>
                   <input type="text" class="form-control" id="specName" name="specName" value=""
                     placeholder="Ex: 2xlarge">
+                </div>
+              </div>
+
+              <!-- OS Image Type Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">Image(OS)</span>
+                  </div>
+                  <select id="osImage" name="osImage" class="form-control">
+                    <option value="Ubuntu18.04">Ubuntu 18.04</option>
+                    <option value="Ubuntu20.04">Ubuntu 20.04</option>
+                    <option value="Ubuntu22.04" selected="selected">Ubuntu 22.04</option>
+                    <option value="Debian10">Debian 10</option>
+                    <option value="WindowsServer2012R2">Windows 2012 R2</option>
+                  </select>
                 </div>
               </div>
 
