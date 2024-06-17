@@ -1286,7 +1286,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
   var struct = {
     filter: { policy: policies },
-    limit: "30",
+    limit: "200",
     priority: { policy: [priorities[recommendationPolicy]] }
   };
 
@@ -1353,7 +1353,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
     // Show all recommended specs in a table if needed
     var tableContent = res.data.map((spec, index) => {
       let costPerHour = spec.costPerHour === "100000000" || spec.costPerHour === "" ? "unknown" : spec.costPerHour;
-      let acceleratorType = spec.acceleratorType === "gpu"
+      let acceleratorCount = spec.acceleratorType === "gpu"
         ? `<span style='color: red; font-size: larger;'>GPU</span>`
         : `<span style='color: black;'>None</span>`;
       let acceleratorModel = spec.acceleratorModel === "gpu"
@@ -1383,10 +1383,10 @@ function getRecommendedSpec(idx, latitude, longitude) {
             <th>Spec</th>
             <th>CSP</th>
             <th>Region</th>
-            <th>vCPU</th>
+            <th>CPU</th>
             <th>Mem</th>
-            <th>Price</th>
-            <th>GPUs</th>
+            <th>Cost</th>
+            <th>GPU</th>
             <th>Model</th>
             <th>Mem</th>
           </tr>
