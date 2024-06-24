@@ -2760,18 +2760,18 @@ function startApp() {
           "";
       } else if (selectApp.value == "OllamaPull") {
         defaultRemoteCommand[0] =
-          "OLLAMA_HOST=0.0.0.0:3000 ollama pull $$Func(AssignTask(task='llama3, phi3, mistral, gemma, mixtral, llava, yi, falcon2, solar, llama2'))";
+          "OLLAMA_HOST=0.0.0.0:3000 ollama pull $$Func(AssignTask(task='llama3, solar, mistral, phi3, gemma, mixtral, llava, yi, falcon2, llama2'))";
         defaultRemoteCommand[1] =
           "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
         defaultRemoteCommand[2] =
           "OLLAMA_HOST=0.0.0.0:3000 ollama list";
       } else if (selectApp.value == "OpenWebUI") {
         defaultRemoteCommand[0] =
-          "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh | bash -s -- $$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))";
+          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh; chmod +x ~/deployOpenWebUI.sh; sudo ~/deployOpenWebUI.sh $$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))";
         defaultRemoteCommand[1] =
-          "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
+          "echo '$$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))'";
         defaultRemoteCommand[2] =
-          "";
+          "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
       } else if (selectApp.value == "Westward") {
         defaultRemoteCommand[0] =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh";
