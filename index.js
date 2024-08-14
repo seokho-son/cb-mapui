@@ -1162,7 +1162,7 @@ function createMcis() {
               "Creating MCIS: " + createMcisReq.name
             );
 
-            requestId = generateRandomRequestId("mcis-"+createMcisReq.name+"-", 15);
+            requestId = generateRandomRequestId("mcis-"+createMcisReq.name+"-", 10);
             addRequestIdToSelect(requestId);
 
             axios({
@@ -3084,7 +3084,7 @@ function executeRemoteCmd() {
 
         spinnerId = addSpinnerTask("Remote command to " + mcisid);
 
-        requestId = generateRandomRequestId("cmd-"+mcisid+"-", 15);
+        requestId = generateRandomRequestId("cmd-"+mcisid+"-", 10);
         addRequestIdToSelect(requestId);
 
         axios({
@@ -3268,7 +3268,7 @@ function generateRandomRequestId(prefix, totalLength) {
   const characters = '0123456789';
   let result = prefix;
   const charactersLength = characters.length;
-  const randomPartLength = totalLength - prefix.length;
+  const randomPartLength = totalLength;
   for (let i = 0; i < randomPartLength; i++) {
     result += characters.charAt(Math.floor(Math.random() * charactersLength));
   }
