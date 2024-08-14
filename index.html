@@ -225,7 +225,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 </button>
                 <div class="dropdown-menu" aria-labelledby="mapControlDropdown">
                   <a class="dropdown-item" href="javascript:void(0)" onclick="getConnection();">Show all Clouds</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onclick="hideMCIS();">Hide/Show MCIS</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onclick="hideMCI();">Hide/Show MCI</a>
                   <a class="dropdown-item" href="javascript:void(0)" onclick="clearMap();">Clear Map</a>
                   <a class="dropdown-item" href="javascript:void(0)" onclick="toggleView();">Toggle Map/API</a>
                 </div>
@@ -241,11 +241,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         </div>
 
 
-        <!-- MCIS Provisioning Card -->
+        <!-- MCI Provisioning Card -->
         <div class="card mb-2">
           <div class="card-header">MC-Infra Provisioning</div>
           <div class="card-body d-flex flex-column">
-            <form id="mcis-configuration-form" class="form-row">
+            <form id="mci-configuration-form" class="form-row">
               <!-- Recommendation Policy Field -->
               <div class="form-group col">
                 <div class="input-group">
@@ -343,7 +343,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <button class="btn btn-info w-100" type="button" data-toggle="collapse" data-target="#collapseAccelerator" aria-expanded="false" aria-controls="collapseAccelerator">
                     Accelerator Config
                 </div>
-                <div id="collapseAccelerator" class="collapse" aria-labelledby="headingAccelerator" data-parent="#mcis-configuration-form">
+                <div id="collapseAccelerator" class="collapse" aria-labelledby="headingAccelerator" data-parent="#mci-configuration-form">
                   <div class="px-0 py-0">
                     
                     <!-- Accelerator Type Field -->
@@ -405,10 +405,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   Configuration</button>
               </div>
 
-              <!-- Create MCIS Field -->
+              <!-- Create MCI Field -->
               <div class="form-group col">
-                <button type="button" id="createMcisButton" onClick="createMcis();" class="btn btn-primary w-100">Create
-                  MCIS</button>
+                <button type="button" id="createMciButton" onClick="createMci();" class="btn btn-primary w-100">Create
+                  MCI</button>
               </div>
 
 
@@ -417,11 +417,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           </div>
         </div>
 
-        <!-- MCIS Control Card -->
+        <!-- MCI Control Card -->
         <div class="card mb-2">
           <div class="card-header">MC-Infra Control</div>
           <div class="card-body d-flex flex-column">
-            <form id="mcis-control-form" class="form-row">
+            <form id="mci-control-form" class="form-row">
 
               <!-- Namespace ID Field -->
               <div class="form-group col">
@@ -437,14 +437,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               </div>
 
 
-              <!-- MCIS ID Field -->
+              <!-- MCI ID Field -->
               <div class="form-group col">
                 <div class="input-group">
                   <div class="input-group-prepend">
-                    <span class="input-group-text" id="mcisidLabel">MCIS ID</span>
+                    <span class="input-group-text" id="mciidLabel">MCI ID</span>
                   </div>
-                  <select id="mcisid" name="mcisid" class="form-control" aria-label="MCIS ID"
-                    aria-describedby="mcisidLabel">
+                  <select id="mciid" name="mciid" class="form-control" aria-label="MCI ID"
+                    aria-describedby="mciidLabel">
                     <!-- Options will be filled dynamically -->
                   </select>
                 </div>
@@ -509,13 +509,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   Actions
                 </button>
                 <div class="dropdown-menu" aria-labelledby="controlActionsDropdown">
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCIS('suspend');">Suspend</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCIS('resume');">Resume</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCIS('reboot');">Reboot</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCIS('refine');">Refine</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCIS('continue');">Continue</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCIS('withdraw');">Withdraw</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCIS('terminate');">Terminate</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCI('suspend');">Suspend</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCI('resume');">Resume</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCI('reboot');">Reboot</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCI('refine');">Refine</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCI('continue');">Continue</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCI('withdraw');">Withdraw</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCI('terminate');">Terminate</a>
                 </div>
               </div>
 
@@ -534,12 +534,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
               <!-- Status Field -->
               <div class="form-group col">
-                <input type="button" value="Status" onClick="statusMCIS();" class="btn btn-info w-100">
+                <input type="button" value="Status" onClick="statusMCI();" class="btn btn-info w-100">
               </div>
 
               <!-- Delete Field -->
               <div class="form-group col">
-                <input type="button" value="Delete" onClick="deleteMCIS();" class="btn btn-secondary w-100">
+                <input type="button" value="Delete" onClick="deleteMCI();" class="btn btn-secondary w-100">
               </div>
 
 
@@ -655,11 +655,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 
-        <!-- MCIS Application Card -->
+        <!-- MCI Application Card -->
         <div class="card mb-2">
           <div class="card-header">MC-Infra Application</div>
           <div class="card-body d-flex flex-column">
-            <form id="mcis-application-form" class="form-row">
+            <form id="mci-application-form" class="form-row">
 
               <!-- Select Application Field -->
               <div class="form-group col">
@@ -700,7 +700,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               </div>
 
 
-              <!-- MCIS Access Field -->
+              <!-- MCI Access Field -->
               <div class="form-group col dropdown">
                 <button class="btn btn-info dropdown-toggle w-100" type="button" id="accessDropdown"
                   data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">

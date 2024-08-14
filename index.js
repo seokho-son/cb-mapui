@@ -93,9 +93,9 @@ var cnt = cntInit;
 //var n = 1000;
 var geometries = new Array();
 var geometriesPoints = new Array();
-var mcisName = new Array();
-var mcisStatus = new Array();
-var mcisGeo = new Array();
+var mciName = new Array();
+var mciStatus = new Array();
+var mciGeo = new Array();
 
 var cspListDisplayEnabled = document.getElementById("displayOn");
 var tableDisplayEnabled = document.getElementById("tableOn");
@@ -111,7 +111,7 @@ var portElement = document.getElementById("port");
 var usernameElement = document.getElementById("username");
 var passwordElement = document.getElementById("password");
 var namespaceElement = document.getElementById("namespace");
-var mcisidElement = document.getElementById("mcisid");
+var mciidElement = document.getElementById("mciid");
 
 const typeStringConnection = "connection";
 const typeStringProvider = "provider";
@@ -173,7 +173,7 @@ function writeLatLonInputPair(idx, lat, lon) {
   //document.getElementById("latLonInputPairArea").innerHTML +=
   `VM ${idx + 1}: (${latf}, ${lonf}) / `;
   if (idx == 0) {
-    messageTextArea.value = `[Started MCIS configuration]\n`;
+    messageTextArea.value = `[Started MCI configuration]\n`;
   }
   messageTextArea.value += `\n - [VM-${
     idx + 1
@@ -305,7 +305,7 @@ function displayTableOn() {
 window.displayTableOn = displayTableOn;
 
 function endpointChanged() {
-  //getMcis();
+  //getMci();
   var hostname = document.getElementById('hostname').value;
   var iframe = document.getElementById('iframe');
   var iframe2 = document.getElementById('iframe2');
@@ -628,7 +628,7 @@ function makePolyArray(vmPoints) {
 
   geometries[cnt] = new Polygon([resourcePoints]);
 
-  mcisGeo[cnt] = new Polygon([resourcePoints]);
+  mciGeo[cnt] = new Polygon([resourcePoints]);
   //cnt++;
 }
 
@@ -697,7 +697,7 @@ function changePoints(ipFrom, ipTo) {
 }
 
 var refreshInterval = 5;
-// setTimeout(() => getMcis(), refreshInterval*1000);
+// setTimeout(() => getMci(), refreshInterval*1000);
 //setTimeout(() => console.log(getConnection()), refreshInterval*1000);
 
 function infoAlert(message) {
@@ -752,7 +752,7 @@ function displayJsonData(jsonData, type) {
   );
 }
 
-function getMcis() {
+function getMci() {
   var hostname = hostnameElement.value;
   var port = portElement.value;
   var username = usernameElement.value;
@@ -763,10 +763,10 @@ function getMcis() {
   var filteredRefreshInterval = isNormalInteger(refreshInterval)
     ? refreshInterval
     : 5;
-  setTimeout(() => getMcis(), filteredRefreshInterval * 1000);
+  setTimeout(() => getMci(), filteredRefreshInterval * 1000);
 
   if (namespace && namespace != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis?option=status`;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=status`;
 
     axios({
       method: "get",
@@ -784,14 +784,14 @@ function getMcis() {
         var radius = 4.0;
 
         cnt = cntInit;
-        if (obj.mcis != null) {
-          //console.log(obj.mcis);
-          for (let item of obj.mcis) {
-            //console.log("Index:[" + "]obj.mcis[i].name = " + item.name);
+        if (obj.mci != null) {
+          //console.log(obj.mci);
+          for (let item of obj.mci) {
+            //console.log("Index:[" + "]obj.mci[i].name = " + item.name);
             console.log(item);
 
             var hideFlag = false;
-            for (let hideName of mcisHideList) {
+            for (let hideName of mciHideList) {
               if (item.id == hideName) {
                 hideFlag = true;
                 break;
@@ -848,7 +848,7 @@ function getMcis() {
               makePolyDot(vmGeo);
               vmGeo = convexHull(vmGeo);
 
-              mcisStatus[cnt] = item.status;
+              mciStatus[cnt] = item.status;
 
               var newName = item.name;
               if (newName.includes("-nlb")) {
@@ -856,9 +856,9 @@ function getMcis() {
               }
 
               if (item.targetAction == "None" || item.targetAction == "") {
-                mcisName[cnt] = "[" + newName + "]";
+                mciName[cnt] = "[" + newName + "]";
               } else {
-                mcisName[cnt] = item.targetAction + "-> " + "[" + newName + "]";
+                mciName[cnt] = item.targetAction + "-> " + "[" + newName + "]";
               }
 
               //make poly with convexHull
@@ -1015,15 +1015,15 @@ function isNormalInteger(str) {
   return n !== Infinity && String(n) === str && n > 0;
 }
 
-var createMcisReqTmplt = {
+var createMciReqTmplt = {
   description: "Made via cb-mapui",
   installMonAgent: "no",
   label: "cb-mapui",
-  name: "mcis",
+  name: "mci",
   vm: [],
 };
 
-var createMcisReqVmTmplt = {
+var createMciReqVmTmplt = {
   commonImage: "ubuntu18.04",
   commonSpec: "",
   description: "mapui",
@@ -1034,7 +1034,7 @@ var createMcisReqVmTmplt = {
   name: "",
 };
 
-function createMcis() {
+function createMci() {
   if (vmReqeustFromSpecList.length != 0) {
     var hostname = hostnameElement.value;
     var port = portElement.value;
@@ -1042,30 +1042,30 @@ function createMcis() {
     var password = passwordElement.value;
     var namespace = namespaceElement.value;
 
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcisDynamic`;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mciDynamic`;
 
     var randomString = Math.random().toString(36).substr(2, 5);
 
-    var createMcisReq = createMcisReqTmplt;
-    createMcisReq.name = "mc-" + `${randomString}`;
-    createMcisReq.vm = vmReqeustFromSpecList;
+    var createMciReq = createMciReqTmplt;
+    createMciReq.name = "mc-" + `${randomString}`;
+    createMciReq.vm = vmReqeustFromSpecList;
     let totalCost = 0;
     let totalNodeScale = 0;
 
     var subGroupReqString = "";
-    for (i = 0; i < createMcisReq.vm.length; i++) {
+    for (i = 0; i < createMciReq.vm.length; i++) {
 
-      totalNodeScale += parseInt(createMcisReq.vm[i].subGroupSize);
+      totalNodeScale += parseInt(createMciReq.vm[i].subGroupSize);
       let costPerHour = recommendedSpecList[i].costPerHour;
       let subTotalCost = "unknown";
       if (costPerHour == "100000000" || costPerHour == "") {
         costPerHour = "unknown";
-        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($"+costPerHour+" * "+createMcisReq.vm[i].subGroupSize+")"+"</span></b></td></tr>" ;
+        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($"+costPerHour+" * "+createMciReq.vm[i].subGroupSize+")"+"</span></b></td></tr>" ;
       } else {
-        totalCost += parseFloat(costPerHour) * createMcisReq.vm[i].subGroupSize;
+        totalCost += parseFloat(costPerHour) * createMciReq.vm[i].subGroupSize;
 
-        subTotalCost = (parseFloat(costPerHour) * createMcisReq.vm[i].subGroupSize).toFixed(4);
-        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($"+costPerHour+" * "+createMcisReq.vm[i].subGroupSize+")"+"</span></b></td></tr>" ;
+        subTotalCost = (parseFloat(costPerHour) * createMciReq.vm[i].subGroupSize).toFixed(4);
+        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($"+costPerHour+" * "+createMciReq.vm[i].subGroupSize+")"+"</span></b></td></tr>" ;
       }
       let acceleratorType = recommendedSpecList[i].acceleratorType;
       let acceleratorModel = recommendedSpecList[i].acceleratorModel;
@@ -1078,14 +1078,14 @@ function createMcis() {
       var html =
       "<font size=3>" +
       "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
-      "<tr><th style='width: 50%;'>[#"+ (i + 1).toString() +"] SubGroup Name</th><td><b><span style='color: black; '>" + createMcisReq.vm[i].name + " ("+createMcisReq.vm[i].subGroupSize+" node(s))</span></b></td></tr>" +
+      "<tr><th style='width: 50%;'>[#"+ (i + 1).toString() +"] SubGroup Name</th><td><b><span style='color: black; '>" + createMciReq.vm[i].name + " ("+createMciReq.vm[i].subGroupSize+" node(s))</span></b></td></tr>" +
       costPerHour +
-      "<tr><th style='width: 50%;'>Spec</th><td><b><span style='color: blue; '>" + createMcisReq.vm[i].commonSpec + "</span></b></td></tr>" +
+      "<tr><th style='width: 50%;'>Spec</th><td><b><span style='color: blue; '>" + createMciReq.vm[i].commonSpec + "</span></b></td></tr>" +
       "<tr><th style='width: 50%;'>vCPU</th><td><b>" + recommendedSpecList[i].vCPU + "</b></td></tr>" +
       "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + recommendedSpecList[i].memoryGiB + "</b></td></tr>" +
       acceleratorType +
       "<tr><th style='width: 50%;'>RootDisk(GB)</th><td><b>" + recommendedSpecList[i].rootDiskSize +" (type: "+recommendedSpecList[i].rootDiskType+ ")</b></td></tr>" +
-      "<tr><th style='width: 50%;'>Selected Image OS Type</th><td><b><span style='color: green; '>" + createMcisReq.vm[i].commonImage + "</span></b></td></tr>" +
+      "<tr><th style='width: 50%;'>Selected Image OS Type</th><td><b><span style='color: green; '>" + createMciReq.vm[i].commonImage + "</span></b></td></tr>" +
 
       "</table>"+
       "<hr>"
@@ -1108,29 +1108,29 @@ function createMcis() {
     var hasUserConfirmed = false;
 
     Swal.fire({
-      title: "Enter the name of the MCIS you wish to create",
+      title: "Enter the name of the MCI you wish to create",
       input: "text",
       inputAttributes: {
         autocapitalize: "off",
       },
-      inputValue: createMcisReq.name,
+      inputValue: createMciReq.name,
       showCancelButton: true,
       confirmButtonText: "Confirm",
     }).then((result) => {
       if (result.value) {
-        createMcisReq.name = result.value;
+        createMciReq.name = result.value;
 
         Swal.fire({
-          title: "Are you sure you want to create this MCIS?",
+          title: "Are you sure you want to create this MCI?",
           width: 750,
           html:
             "<font size=4>" +
-            "<br><b><span style='color: black; font-size: larger;'>" +  createMcisReq.name +" </b> ("+totalNodeScale+" node(s))" + "</span><br>"+
+            "<br><b><span style='color: black; font-size: larger;'>" +  createMciReq.name +" </b> ("+totalNodeScale+" node(s))" + "</span><br>"+
             "<hr>" +
             costDetailsHtml +
             "<hr>" +
             subGroupReqString +
-            "<br><br><input type='checkbox' id='hold-checkbox'> Hold VM provisioning of the MCIS"+
+            "<br><br><input type='checkbox' id='hold-checkbox'> Hold VM provisioning of the MCI"+
             "<br><input type='checkbox' id='monitoring-checkbox'> Deploy CB-Dragonfly monitoring agent",
           showCancelButton: true,
           confirmButtonText: "Confirm",
@@ -1146,23 +1146,23 @@ function createMcis() {
 
         }).then((result) => {
           if (result.isConfirmed) {
-            createMcisReq.installMonAgent = "no";
+            createMciReq.installMonAgent = "no";
             if (result.value.monitoring) {
-              Swal.fire("Create MCIS with CB-Dragonfly monitoring agent");
-              createMcisReq.installMonAgent = "yes";
+              Swal.fire("Create MCI with CB-Dragonfly monitoring agent");
+              createMciReq.installMonAgent = "yes";
             }
             if (result.value.hold) {
-              Swal.fire("Create MCIS with hold option. It will not be deployed immediately. Use Action:Continue when you are ready.");
+              Swal.fire("Create MCI with hold option. It will not be deployed immediately. Use Action:Continue when you are ready.");
               url += "?option=hold";
             }
 
-            var jsonBody = JSON.stringify(createMcisReq, undefined, 4);
-            messageTextArea.value = " Creating MCIS ...";
+            var jsonBody = JSON.stringify(createMciReq, undefined, 4);
+            messageTextArea.value = " Creating MCI ...";
             var spinnerId = addSpinnerTask(
-              "Creating MCIS: " + createMcisReq.name
+              "Creating MCI: " + createMciReq.name
             );
 
-            requestId = generateRandomRequestId("mcis-"+createMcisReq.name+"-", 10);
+            requestId = generateRandomRequestId("mci-"+createMciReq.name+"-", 10);
             addRequestIdToSelect(requestId);
 
             axios({
@@ -1181,14 +1181,14 @@ function createMcis() {
                 displayJsonData(res.data, typeInfo);
                 handleAxiosResponse(res);
 
-                updateMcisList();
+                updateMciList();
 
                 clearCircle("none");
-                messageTextArea.value = "Created " + createMcisReq.name;
-                //infoAlert("Created " + createMcisReq.name);
+                messageTextArea.value = "Created " + createMciReq.name;
+                //infoAlert("Created " + createMciReq.name);
               })
               .catch(function (error) {
-                errorAlert("Failed to create MCIS: " + createMcisReq.name);
+                errorAlert("Failed to create MCI: " + createMciReq.name);
                 if (error.response) {
                   // status code is not 2xx
                   console.log(error.response.data);
@@ -1209,11 +1209,11 @@ function createMcis() {
     });
   } else {
     messageTextArea.value =
-      " To create a MCIS, VMs should be configured!\n Click the Map to add a config for VM request.";
-    errorAlert("Please configure MCIS first\n(Click the Map to add VMs)");
+      " To create a MCI, VMs should be configured!\n Click the Map to add a config for VM request.";
+    errorAlert("Please configure MCI first\n(Click the Map to add VMs)");
   }
 }
-window.createMcis = createMcis;
+window.createMci = createMci;
 
 
 // Define the toggleTable function in the global scope
@@ -1241,7 +1241,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
   var minAMEM = document.getElementById("minAMEM").value;
   var maxAMEM = document.getElementById("maxAMEM").value;
 
-  var url = `http://${hostname}:${port}/tumblebug/mcisRecommendVm`;
+  var url = `http://${hostname}:${port}/tumblebug/mciRecommendVm`;
 
   function createPolicyConditions(metric, values, type) {
     const conditions = [];
@@ -1313,25 +1313,25 @@ function getRecommendedSpec(idx, latitude, longitude) {
     addRegionMarker(res.data[0].id);
 
 
-    var createMcisReqVm = $.extend({}, createMcisReqVmTmplt);
+    var createMciReqVm = $.extend({}, createMciReqVmTmplt);
     var recommendedSpec = res.data[0];
 
-    createMcisReqVm.name = "g" + (vmReqeustFromSpecList.length + 1).toString();
+    createMciReqVm.name = "g" + (vmReqeustFromSpecList.length + 1).toString();
 
     osImage = document.getElementById("osImage");
     diskSize = document.getElementById("diskSize");
 
-    createMcisReqVm.commonSpec = res.data[0].id;
-    createMcisReqVm.commonImage = osImage.value;
-    createMcisReqVm.rootDiskType = res.data[0].rootDiskType;
+    createMciReqVm.commonSpec = res.data[0].id;
+    createMciReqVm.commonImage = osImage.value;
+    createMciReqVm.rootDiskType = res.data[0].rootDiskType;
 
     var diskSizeInput = diskSize.value;
     if (isNaN(diskSizeInput) || diskSizeInput == "") {
       diskSizeInput = "default";
     }
-    createMcisReqVm.rootDiskSize = diskSizeInput;
+    createMciReqVm.rootDiskSize = diskSizeInput;
     if (diskSizeInput == "default" && res.data[0].rootDiskSize != "default") {
-      createMcisReqVm.rootDiskSize = res.data[0].rootDiskSize;
+      createMciReqVm.rootDiskSize = res.data[0].rootDiskSize;
       // need to validate requested disk size >= default disk size given by vm spec
     }
 
@@ -1404,7 +1404,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
       "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
       "<tr><th style='width: 50%;'>Recommended Spec</th><td><b><span style='color: black; font-size: larger;'>" + res.data[0].cspSpecName + "</span></b></td></tr>" +
       "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; font-size: larger;'> $ " + costPerHour + " (at least)</span></b></td></tr>" +
-      "<tr><th style='width: 50%;'>Selected Image OS Type</th><td><b><span style='color: green; font-size: larger;'>" + createMcisReqVm.commonImage + "</span></b></td></tr>" +
+      "<tr><th style='width: 50%;'>Selected Image OS Type</th><td><b><span style='color: green; font-size: larger;'>" + createMciReqVm.commonImage + "</span></b></td></tr>" +
 
       "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
       "<tr><th style='width: 50%;'>Provider</th><td><b><span style='color: blue; font-size: larger;'>" + res.data[0].providerName.toUpperCase() + "</span></b></td></tr>" +
@@ -1415,7 +1415,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
       "<tr><th style='width: 50%;'>vCPU</th><td><b>" + res.data[0].vCPU + "</b></td></tr>" +
       "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + res.data[0].memoryGiB + "</b></td></tr>" +
       "<tr><th style='width: 50%;'>RootDiskType</th><td><b>" + res.data[0].rootDiskType + "</b></td></tr>" +
-      "<tr><th style='width: 50%;'>RootDiskSize(GB)</th><td><b>" + createMcisReqVm.rootDiskSize + "</b></td></tr>" +
+      "<tr><th style='width: 50%;'>RootDiskSize(GB)</th><td><b>" + createMciReqVm.rootDiskSize + "</b></td></tr>" +
 
       "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
       acceleratorType +
@@ -1451,17 +1451,17 @@ function getRecommendedSpec(idx, latitude, longitude) {
     }).then((result) => {
       // result.value is false if result.isDenied or another key such as result.isDismissed
       if (result.value) {
-        createMcisReqVm.subGroupSize = result.value;
+        createMciReqVm.subGroupSize = result.value;
         if (
-          isNaN(createMcisReqVm.subGroupSize) ||
-          createMcisReqVm.subGroupSize <= 0
+          isNaN(createMciReqVm.subGroupSize) ||
+          createMciReqVm.subGroupSize <= 0
         ) {
-          createMcisReqVm.subGroupSize = 1;
+          createMciReqVm.subGroupSize = 1;
         }
         messageTextArea.value +=
-          `${createMcisReqVm.commonSpec}` +
-          `\t(${createMcisReqVm.subGroupSize})`;
-        vmReqeustFromSpecList.push(createMcisReqVm);
+          `${createMciReqVm.commonSpec}` +
+          `\t(${createMciReqVm.subGroupSize})`;
+        vmReqeustFromSpecList.push(createMciReqVm);
         recommendedSpecList.push(recommendedSpec);
       } else {
         messageTextArea.value = messageTextArea.value.replace(/\n.*$/, "");
@@ -1579,7 +1579,7 @@ function addRegionMarker(spec) {
 }
 window.addRegionMarker = addRegionMarker;
 
-function controlMCIS(action) {
+function controlMCI(action) {
   switch (action) {
     case "refine":
     case "suspend":
@@ -1595,21 +1595,21 @@ function controlMCIS(action) {
       );
       return;
   }
-  //messageTextArea.value = "[MCIS " +action +"]";
+  //messageTextArea.value = "[MCI " +action +"]";
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
   var username = usernameElement.value;
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
-  var mcisid = mcisidElement.value;
+  var mciid = mciidElement.value;
 
-  var spinnerId = addSpinnerTask(action + ": " + mcisid);
-  infoAlert(action + ": " + mcisid);
+  var spinnerId = addSpinnerTask(action + ": " + mciid);
+  infoAlert(action + ": " + mciid);
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/control/mcis/${mcisid}?action=${action}`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/control/mci/${mciid}?action=${action}`;
 
-  console.log("MCIS control:[" + action + "]");
+  console.log("MCI control:[" + action + "]");
 
   axios({
     method: "get",
@@ -1660,20 +1660,20 @@ function controlMCIS(action) {
       removeSpinnerTask(spinnerId);
     });
 }
-window.controlMCIS = controlMCIS;
+window.controlMCI = controlMCI;
 
-function hideMCIS() {
+function hideMCI() {
   var hostname = hostnameElement.value;
   var port = portElement.value;
   var username = usernameElement.value;
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis?option=id`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
 
   var hideListString = "";
-  for (i = 0; i < mcisHideList.length; i++) {
-    var html = "<br>[" + i + "]" + ": <b>" + mcisHideList[i] + "</b> (hidden)";
+  for (i = 0; i < mciHideList.length; i++) {
+    var html = "<br>[" + i + "]" + ": <b>" + mciHideList[i] + "</b> (hidden)";
 
     hideListString = hideListString + html;
   }
@@ -1687,10 +1687,10 @@ function hideMCIS() {
     },
   }).then((res) => {
     if (res.data.output != null) {
-      mcisList = res.data.output;
+      mciList = res.data.output;
 
       Swal.fire({
-        title: "Hide/Show a MCIS from the Map",
+        title: "Hide/Show a MCI from the Map",
         html: "<font size=3>" + hideListString,
         showCancelButton: true,
         confirmButtonText: "Show",
@@ -1700,12 +1700,12 @@ function hideMCIS() {
         hideListString = "";
 
         if (result.isConfirmed) {
-          if (mcisHideList.length != 0) {
+          if (mciHideList.length != 0) {
             Swal.fire({
-              title: "Show a MCIS from the Map",
+              title: "Show a MCI from the Map",
               html: "<font size=3>" + hideListString,
               input: "select",
-              inputOptions: mcisHideList,
+              inputOptions: mciHideList,
               inputPlaceholder: "Select from dropdown",
               inputAttributes: {
                 autocapitalize: "off",
@@ -1714,39 +1714,39 @@ function hideMCIS() {
               confirmButtonText: "Show",
             }).then((result) => {
               if (result.isConfirmed) {
-                mcisHideList = mcisHideList.filter(
-                  (a) => a !== mcisHideList[result.value]
+                mciHideList = mciHideList.filter(
+                  (a) => a !== mciHideList[result.value]
                 );
 
-                for (i = 0; i < mcisHideList.length; i++) {
+                for (i = 0; i < mciHideList.length; i++) {
                   var html =
                     "<br>[" +
                     i +
                     "]" +
                     ": <b>" +
-                    mcisHideList[i] +
+                    mciHideList[i] +
                     "</b> (hidden)";
                   hideListString = hideListString + html;
                 }
                 infoAlert(
                   "Show: " +
-                    mcisHideList[result.value] +
+                    mciHideList[result.value] +
                     "<br>" +
                     hideListString
                 );
               }
             });
           } else {
-            infoAlert("There is no hidden MCIS yet");
+            infoAlert("There is no hidden MCI yet");
           }
         } else if (result.isDenied) {
-          if (mcisList.length != 0) {
+          if (mciList.length != 0) {
             Swal.fire({
-              title: "Hide a MCIS from the Map",
+              title: "Hide a MCI from the Map",
               html: "<font size=3>" + hideListString,
               input: "select",
-              inputOptions: mcisList.filter(
-                (val) => !mcisHideList.includes(val)
+              inputOptions: mciList.filter(
+                (val) => !mciHideList.includes(val)
               ),
               inputPlaceholder: "Select from dropdown",
               inputAttributes: {
@@ -1756,46 +1756,46 @@ function hideMCIS() {
               confirmButtonText: "Hide",
             }).then((result) => {
               if (result.isConfirmed) {
-                mcisHideList.push(mcisList[result.value]);
+                mciHideList.push(mciList[result.value]);
                 // remove duplicated items
-                mcisHideList = [...new Set(mcisHideList)];
+                mciHideList = [...new Set(mciHideList)];
 
-                for (i = 0; i < mcisHideList.length; i++) {
+                for (i = 0; i < mciHideList.length; i++) {
                   var html =
                     "<br>[" +
                     i +
                     "]" +
                     ": <b>" +
-                    mcisHideList[i] +
+                    mciHideList[i] +
                     "</b> (hidden)";
                   hideListString = hideListString + html;
                 }
                 infoAlert(
-                  "Hide: " + mcisList[result.value] + "<br>" + hideListString
+                  "Hide: " + mciList[result.value] + "<br>" + hideListString
                 );
               }
             });
           } else {
-            infoAlert("There is no MCIS yet");
+            infoAlert("There is no MCI yet");
           }
         }
       });
     }
   });
 }
-window.hideMCIS = hideMCIS;
+window.hideMCI = hideMCI;
 
-function statusMCIS() {
-  messageTextArea.value = "[Get MCIS status]";
+function statusMCI() {
+  messageTextArea.value = "[Get MCI status]";
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
   var username = usernameElement.value;
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
-  var mcisid = mcisidElement.value;
+  var mciid = mciidElement.value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}`;
 
   axios({
     method: "get",
@@ -1807,7 +1807,7 @@ function statusMCIS() {
     timeout: 60000,
   })
     .then((res) => {
-      console.log("[Status MCIS]");
+      console.log("[Status MCI]");
       displayJsonData(res.data, typeInfo);
     })
     .catch(function (error) {
@@ -1825,22 +1825,22 @@ function statusMCIS() {
       );
     });
 }
-window.statusMCIS = statusMCIS;
+window.statusMCI = statusMCI;
 
-function deleteMCIS() {
-  messageTextArea.value = "Deleting MCIS";
+function deleteMCI() {
+  messageTextArea.value = "Deleting MCI";
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
   var username = usernameElement.value;
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
-  var mcisid = mcisidElement.value;
+  var mciid = mciidElement.value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=terminate`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=terminate`;
 
-  var spinnerId = addSpinnerTask("Deleting MCIS: " + mcisid);
-  infoAlert("Delete: " + mcisid + " (option=terminate)");
+  var spinnerId = addSpinnerTask("Deleting MCI: " + mciid);
+  infoAlert("Delete: " + mciid + " (option=terminate)");
 
   axios({
     method: "delete",
@@ -1854,11 +1854,11 @@ function deleteMCIS() {
       console.log(res);
       displayJsonData(res.data, typeInfo);
       clearMap();
-      updateMcisList();
+      updateMciList();
     })
     .catch(function (error) {
       console.log(error);
-      errorAlert("Failed to delete MCIS: " + mcisid);
+      errorAlert("Failed to delete MCI: " + mciid);
       if (error.response && error.response.data) {
         displayJsonData(error.response.data, typeError);
       }
@@ -1867,7 +1867,7 @@ function deleteMCIS() {
       removeSpinnerTask(spinnerId);
     });
 }
-window.deleteMCIS = deleteMCIS;
+window.deleteMCI = deleteMCI;
 
 function releaseResources() {
   var spinnerId = addSpinnerTask("Removing associated default resources");
@@ -1941,10 +1941,10 @@ function registerCspResource() {
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
 
-  var url = `http://${hostname}:${port}/tumblebug/registerCspResourcesAll?mcisFlag=n`;
+  var url = `http://${hostname}:${port}/tumblebug/registerCspResourcesAll?mciFlag=n`;
 
   var commandReqTmp = {
-    mcisName: "csp",
+    mciName: "csp",
     nsId: `${namespace}`,
   };
   var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
@@ -1999,7 +1999,7 @@ function updateNsList() {
     })
       .then((res) => {
         if (res.data.output != null) {
-          // mcisList = res.data.output;
+          // mciList = res.data.output;
           for (let item of res.data.output) {
             var option = document.createElement("option");
             option.value = item;
@@ -2015,7 +2015,7 @@ function updateNsList() {
         }
       })
       .finally(function () {
-        updateMcisList();
+        updateMciList();
       });
   }
 }
@@ -2024,15 +2024,15 @@ document.getElementById("namespace").onmouseover = function () {
   updateNsList();
 };
 document.getElementById("namespace").onchange = function () {
-  updateMcisList();
+  updateMciList();
 };
 
-var mcisList = [];
-var mcisHideList = [];
+var mciList = [];
+var mciHideList = [];
 
-function updateMcisList() {
+function updateMciList() {
   // Clear options in 'select'
-  var selectElement = document.getElementById("mcisid");
+  var selectElement = document.getElementById("mciid");
   var previousSelection = selectElement.value;
   var i,
     L = selectElement.options.length - 1;
@@ -2047,7 +2047,7 @@ function updateMcisList() {
   var namespace = namespaceElement.value;
 
   if (namespace && namespace != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis?option=id`;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
 
     axios({
       method: "get",
@@ -2059,7 +2059,7 @@ function updateMcisList() {
     })
       .then((res) => {
         if (res.data.output != null) {
-          // mcisList = res.data.output;
+          // mciList = res.data.output;
           for (let item of res.data.output) {
             var option = document.createElement("option");
             option.value = item;
@@ -2086,12 +2086,12 @@ function updateMcisList() {
       });
   }
 }
-window.updateMcisList = updateMcisList;
+window.updateMciList = updateMciList;
 
-document.getElementById("mcisid").onmouseover = function () {
-  updateMcisList();
+document.getElementById("mciid").onmouseover = function () {
+  updateMciList();
 };
-document.getElementById("mcisid").onchange = function () {
+document.getElementById("mciid").onchange = function () {
   updateSubGroupList();
 };
 
@@ -2110,11 +2110,11 @@ function updateVmList() {
   var username = usernameElement.value;
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
-  var mcisid = mcisidElement.value;
+  var mciid = mciidElement.value;
   var subgroupid = document.getElementById("subgroupid").value;
 
-  if (namespace && namespace != "" && mcisid && mcisid != "" && subgroupid && subgroupid != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}/subgroup/${subgroupid}`;
+  if (namespace && namespace != "" && mciid && mciid != "" && subgroupid && subgroupid != "") {
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/subgroup/${subgroupid}`;
 
     axios({
       method: "get",
@@ -2173,18 +2173,18 @@ function updateIpList() {
   var username = usernameElement.value;
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
-  var mcisid = mcisidElement.value;
+  var mciid = mciidElement.value;
   var groupid = document.getElementById("subgroupid").value;
   var vmid = document.getElementById("vmid").value;
 
-  if (namespace && namespace != "" && mcisid && mcisid != "" && subgroupid && subgroupid != "" && vmid && vmid != "") {
+  if (namespace && namespace != "" && mciid && mciid != "" && subgroupid && subgroupid != "" && vmid && vmid != "") {
     while (pubip.options.length > 0) {
       pubip.remove(0);
     }
     while (priip.options.length > 0) {
       priip.remove(0);
     }
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=accessinfo`;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=accessinfo`;
 
     axios({
       method: "get",
@@ -2194,9 +2194,9 @@ function updateIpList() {
         password: `${password}`,
       },
     }).then((res) => {
-      for (let subGroupAccessInfo of res.data.McisSubGroupAccessInfo) {
+      for (let subGroupAccessInfo of res.data.MciSubGroupAccessInfo) {
         if (subGroupAccessInfo.SubGroupId == groupid) {
-          for (let vmAccessInfo of subGroupAccessInfo.McisVmAccessInfo) {
+          for (let vmAccessInfo of subGroupAccessInfo.MciVmAccessInfo) {
             if (vmAccessInfo.vmId == vmid) {
               var optionPublicIP = document.createElement("option");
               optionPublicIP.value = vmAccessInfo.publicIP;
@@ -2240,10 +2240,10 @@ function updateSubGroupList() {
   var username = usernameElement.value;
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
-  var mcisid = mcisidElement.value;
+  var mciid = mciidElement.value;
 
-  if (namespace && namespace != "" && mcisid && mcisid != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}/subgroup`;
+  if (namespace && namespace != "" && mciid && mciid != "") {
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/subgroup`;
 
     axios({
       method: "get",
@@ -2394,11 +2394,11 @@ document.getElementById(typeStringConnection).onmouseover = function () {
 };
 
 function AddMcNLB() {
-  var mcisid = document.getElementById("mcisid").value;
+  var mciid = document.getElementById("mciid").value;
   // var nlbport = document.getElementById("nlbport").value;
 
-  if (!mcisid) {
-    errorAlert("You need to specify the ID of MCIS");
+  if (!mciid) {
+    errorAlert("You need to specify the ID of MCI");
     return;
   }
 
@@ -2407,17 +2407,17 @@ function AddMcNLB() {
   var username = usernameElement.value;
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
-  var mcisid = mcisidElement.value;
+  var mciid = mciidElement.value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}/mcSwNlb`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/mcSwNlb`;
 
   Swal.fire({
     title: "Configuration for a new NLB",
     width: 600,
     html:
       "<font size=3>" +
-      "Target MCIS: <b>" +
-      mcisid +
+      "Target MCI: <b>" +
+      mciid +
       "<br></b> Protocol: <b>" +
       "TCP" +
       "<br></b> Port (listen/target): <b>",
@@ -2439,10 +2439,10 @@ function AddMcNLB() {
   }).then((result) => {
     // result.value is false if result.isDenied or another key such as result.isDismissed
     if (result.value) {
-      infoAlert("Creating MC-NLB(special MCIS) to : " + mcisid);
-      messageTextArea.value = " Creating Multi-Cloud NLB (special MCIS)";
+      infoAlert("Creating MC-NLB(special MCI) to : " + mciid);
+      messageTextArea.value = " Creating Multi-Cloud NLB (special MCI)";
       var spinnerId = addSpinnerTask(
-        "Creating MC-NLB(special MCIS) to : " + mcisid
+        "Creating MC-NLB(special MCI) to : " + mciid
       );
 
       var nlbport = result.value;
@@ -2514,13 +2514,13 @@ function AddNLB() {
   var username = usernameElement.value;
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
-  var mcisid = mcisidElement.value;
+  var mciid = mciidElement.value;
   var subgroupid = document.getElementById("subgroupid").value;
   // var nlbport = document.getElementById("nlbport").value;
 
-  if (!mcisid) {
+  if (!mciid) {
     messageTextArea.value =
-      " When calling AddNLB(), you must specify the mcisid.";
+      " When calling AddNLB(), you must specify the mciid.";
   }
 
   if (!subgroupid) {
@@ -2530,15 +2530,15 @@ function AddNLB() {
 
   messageTextArea.value = " Creating NLB " + subgroupid;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}/nlb`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/nlb`;
 
   Swal.fire({
     title: "Configuration for a new NLB",
     width: 600,
     html:
       "<font size=3>" +
-      "Target MCIS: <b>" +
-      mcisid +
+      "Target MCI: <b>" +
+      mciid +
       "<br></b> Target SubGroup: <b>" +
       subgroupid +
       "<br></b> Protocol: <b>" +
@@ -2630,12 +2630,12 @@ function DelNLB() {
   var username = usernameElement.value;
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
-  var mcisid = mcisidElement.value;
+  var mciid = mciidElement.value;
   var subgroupid = document.getElementById("subgroupid").value;
 
-  if (!mcisid) {
+  if (!mciid) {
     messageTextArea.value =
-      " When calling DelNLB(), you must specify the mcisid.";
+      " When calling DelNLB(), you must specify the mciid.";
   }
 
   if (!subgroupid) {
@@ -2645,7 +2645,7 @@ function DelNLB() {
 
   messageTextArea.value = " Deleting NLB " + subgroupid;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}/nlb/${subgroupid}`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/nlb/${subgroupid}`;
 
   axios({
     method: "delete",
@@ -2691,8 +2691,8 @@ defaultRemoteCommand.push("");
 
 // function for startApp by startApp button item
 function startApp() {
-  var mcisid = mcisidElement.value;
-  if (mcisid) {
+  var mciid = mciidElement.value;
+  if (mciid) {
     messageTextArea.value = " Starting " + selectApp.value;
 
     var hostname = hostnameElement.value;
@@ -2701,7 +2701,7 @@ function startApp() {
     var password = passwordElement.value;
     var namespace = namespaceElement.value;
 
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=accessinfo`;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=accessinfo`;
 
     axios({
       method: "get",
@@ -2716,8 +2716,8 @@ function startApp() {
       var publicIPs = "";
       var privateIPs = "";
 
-      for (let l1 of res2.data.McisSubGroupAccessInfo) {
-        for (let l2 of l1.McisVmAccessInfo) {
+      for (let l1 of res2.data.MciSubGroupAccessInfo) {
+        for (let l2 of l1.MciVmAccessInfo) {
           publicIPs = publicIPs + " " + l2.publicIP;
           privateIPs = privateIPs + " " + l2.privateIP;
         }
@@ -2727,7 +2727,7 @@ function startApp() {
         defaultRemoteCommand[0] =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh; chmod +x ~/startServer.sh";
         defaultRemoteCommand[1] = 
-          "sudo ~/startServer.sh " + "Xonotic-by-Cloud-Barista-" + mcisid + " 26000" + " 8"+ " 8";
+          "sudo ~/startServer.sh " + "Xonotic-by-Cloud-Barista-" + mciid + " 26000" + " 8"+ " 8";
         defaultRemoteCommand[2] =
           "echo '$$Func(GetPublicIP(target=this,postfix=:26000))'";
       } else if (selectApp.value == "ELK") {
@@ -2808,15 +2808,15 @@ function startApp() {
       executeRemoteCmd();
     });
   } else {
-    messageTextArea.value = " MCIS ID is not assigned";
+    messageTextArea.value = " MCI ID is not assigned";
   }
 }
 window.startApp = startApp;
 
 // function for stopApp by stopApp button item
 function stopApp() {
-  var mcisid = mcisidElement.value;
-  if (mcisid) {
+  var mciid = mciidElement.value;
+  if (mciid) {
     messageTextArea.value = " Stopping " + selectApp.value;
 
     var hostname = hostnameElement.value;
@@ -2825,7 +2825,7 @@ function stopApp() {
     var password = passwordElement.value;
     var namespace = namespaceElement.value;
 
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}`;
     var cmd = [];
     if (selectApp.value == "Xonotic") {
       cmd.push(
@@ -2882,7 +2882,7 @@ function stopApp() {
       displayJsonData(res.data, typeInfo);
     });
   } else {
-    messageTextArea.value = " MCIS ID is not assigned";
+    messageTextArea.value = " MCI ID is not assigned";
   }
 }
 window.stopApp = stopApp;
@@ -2894,12 +2894,12 @@ function statusApp() {
   var username = usernameElement.value;
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
-  var mcisid = mcisidElement.value;
+  var mciid = mciidElement.value;
 
-  if (mcisid) {
+  if (mciid) {
     messageTextArea.value = " Getting status " + selectApp.value;
 
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}`;
     var cmd = [];
     if (selectApp.value == "Xonotic") {
       cmd.push(
@@ -2960,7 +2960,7 @@ function statusApp() {
       displayJsonData(res.data, typeInfo);
     });
   } else {
-    messageTextArea.value = " MCIS ID is not assigned";
+    messageTextArea.value = " MCI ID is not assigned";
   }
 }
 window.statusApp = statusApp;
@@ -2972,19 +2972,19 @@ function executeRemoteCmd() {
   var username = usernameElement.value;
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
-  var mcisid = mcisidElement.value;
+  var mciid = mciidElement.value;
   var subgroupid = document.getElementById("subgroupid").value;
   var vmid = document.getElementById("vmid").value;
 
   let cmdCount = 3; // Initial number of textboxes
 
-  if (mcisid) {
+  if (mciid) {
     var spinnerId = ""
 
     messageTextArea.value =
-      "[Forward remote ssh command to MCIS:" + mcisid + "]\n";
+      "[Forward remote ssh command to MCI:" + mciid + "]\n";
 
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}`;
     var cmd = [];
 
     Swal.fire({
@@ -3012,8 +3012,8 @@ function executeRemoteCmd() {
         <p><font size=4><b>[Select target]</b></font></p>
         <div style="display: flex; align-items: center;">
           <div style="margin-right: 10px;">
-            <input type="radio" id="mcisOption" name="selectOption" value="MCIS" checked>
-            <label for="mcisOption">MCIS: <span style="color:blue;">${mcisid}</span></label>
+            <input type="radio" id="mciOption" name="selectOption" value="MCI" checked>
+            <label for="mciOption">MCI: <span style="color:blue;">${mciid}</span></label>
           </div>
           <div style="margin-right: 10px;">
             <input type="radio" id="subGroupOption" name="selectOption" value="SubGroup">
@@ -3062,14 +3062,14 @@ function executeRemoteCmd() {
         const radioValue = Swal.getPopup().querySelector(
           'input[name="selectOption"]:checked'
         ).value;
-        if (radioValue === "MCIS") {
-          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}`;
-          console.log("Performing tasks for MCIS");
+        if (radioValue === "MCI") {
+          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}`;
+          console.log("Performing tasks for MCI");
         } else if (radioValue === "SubGroup") {
-          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}?subGroupId=${subgroupid}`;
+          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}?subGroupId=${subgroupid}`;
           console.log("Performing tasks for SubGroup");
         } else if (radioValue === "VM") {
-          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mcis/${mcisid}?vmId=${vmid}`;
+          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}?vmId=${vmid}`;
           console.log("Performing tasks for VM");
         }
 
@@ -3082,9 +3082,9 @@ function executeRemoteCmd() {
 
         var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
 
-        spinnerId = addSpinnerTask("Remote command to " + mcisid);
+        spinnerId = addSpinnerTask("Remote command to " + mciid);
 
-        requestId = generateRandomRequestId("cmd-"+mcisid+"-", 10);
+        requestId = generateRandomRequestId("cmd-"+mciid+"-", 10);
         addRequestIdToSelect(requestId);
 
         axios({
@@ -3099,10 +3099,10 @@ function executeRemoteCmd() {
         }).then((res) => {
           console.log(res); // for debug
           displayJsonData(res.data, typeInfo);
-          let formattedOutput = "[Complete: remote ssh command to MCIS]\n\n";
+          let formattedOutput = "[Complete: remote ssh command to MCI]\n\n";
 
           res.data.results.forEach((result) => {
-            formattedOutput += `### MCIS ID: ${result.mcisId} | IP: ${result.vmId} | IP: ${result.vmIp} ###\n`;
+            formattedOutput += `### MCI ID: ${result.mciId} | IP: ${result.vmId} | IP: ${result.vmIp} ###\n`;
 
             Object.keys(result.command).forEach((key) => {
               formattedOutput += `\nCommand: ${result.command[key]}`;
@@ -3149,25 +3149,25 @@ function executeRemoteCmd() {
       }
     });
   } else {
-    messageTextArea.value = " MCIS ID is not assigned";
+    messageTextArea.value = " MCI ID is not assigned";
   }
 }
 window.executeRemoteCmd = executeRemoteCmd;
 
-// function for getAccessInfo of MCIS
+// function for getAccessInfo of MCI
 function getAccessInfo() {
   var hostname = hostnameElement.value;
   var port = portElement.value;
   var username = usernameElement.value;
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
-  var mcisid = mcisidElement.value;
+  var mciid = mciidElement.value;
 
-  if (mcisid) {
+  if (mciid) {
     messageTextArea.value =
-      "[Retrieve access information for MCIS:" + mcisid + "]\n";
+      "[Retrieve access information for MCI:" + mciid + "]\n";
 
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=accessinfo`;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=accessinfo`;
 
     axios({
       method: "get",
@@ -3181,7 +3181,7 @@ function getAccessInfo() {
       displayJsonData(res.data, typeInfo);
     });
   } else {
-    messageTextArea.value = " MCIS ID is not assigned";
+    messageTextArea.value = " MCI ID is not assigned";
   }
 }
 window.getAccessInfo = getAccessInfo;
@@ -3189,18 +3189,18 @@ window.getAccessInfo = getAccessInfo;
 // SSH Key save function
 const saveBtn = document.querySelector(".save-file");
 saveBtn.addEventListener("click", function () {
-  messageTextArea.value = " [Retrieve MCIS Access Information ...]\n";
+  messageTextArea.value = " [Retrieve MCI Access Information ...]\n";
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
   var username = usernameElement.value;
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
-  var mcisid = mcisidElement.value;
+  var mciid = mciidElement.value;
   var groupid = document.getElementById("subgroupid").value;
   var vmid = document.getElementById("vmid").value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mcis/${mcisid}?option=accessinfo&accessInfoOption=showSshKey`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=accessinfo&accessInfoOption=showSshKey`;
 
   axios({
     method: "get",
@@ -3214,9 +3214,9 @@ saveBtn.addEventListener("click", function () {
     displayJsonData(res.data, typeInfo);
     var privateKey = "";
 
-    for (let subGroupAccessInfo of res.data.McisSubGroupAccessInfo) {
+    for (let subGroupAccessInfo of res.data.MciSubGroupAccessInfo) {
       if (subGroupAccessInfo.SubGroupId == groupid) {
-        for (let vmAccessInfo of subGroupAccessInfo.McisVmAccessInfo) {
+        for (let vmAccessInfo of subGroupAccessInfo.MciVmAccessInfo) {
           if (vmAccessInfo.vmId == vmid) {
             privateKey = vmAccessInfo.privateKey.replace(/['",]+/g, "");
             break;
@@ -3229,7 +3229,7 @@ saveBtn.addEventListener("click", function () {
     var taBlob = new Blob([privateKey], { type: "text/plain" });
 
     tempLink.setAttribute("href", URL.createObjectURL(taBlob));
-    tempLink.setAttribute("download", `${namespace}-${mcisid}-${vmid}.pem`);
+    tempLink.setAttribute("download", `${namespace}-${mciid}-${vmid}.pem`);
     tempLink.click();
 
     URL.revokeObjectURL(tempLink.href);
@@ -3318,7 +3318,7 @@ window.onload = function () {
 
   updateNsList();
 
-  getMcis();
+  getMci();
 };
 
 let drawCounter = 0;
@@ -3383,27 +3383,27 @@ function drawObjects(event) {
     vectorContext.setStyle(polyStyle);
     vectorContext.drawGeometry(geometries[i]);
 
-    if (mcisName[i].includes("NLB")) {
+    if (mciName[i].includes("NLB")) {
       vectorContext.setStyle(iconStyleNlb);
     } else {
       vectorContext.setStyle(iconStyleVm);
     }
     vectorContext.drawGeometry(geometriesPoints[i]);
 
-    // MCIS status style
+    // MCI status style
     var polyStatusTextStyle = new Style({
-      // MCIS status text style
+      // MCI status text style
       text: new Text({
-        text: mcisStatus[i],
+        text: mciStatus[i],
         font: "bold 10px sans-serif",
-        scale: changeSizeStatus(mcisName[i] + mcisStatus[i]),
-        offsetY: 44 * changeSizeStatus(mcisName[i] + mcisStatus[i]),
+        scale: changeSizeStatus(mciName[i] + mciStatus[i]),
+        offsetY: 44 * changeSizeStatus(mciName[i] + mciStatus[i]),
         stroke: new Stroke({
           color: "white",
           width: 1,
         }),
         fill: new Fill({
-          color: changeColorStatus(mcisStatus[i]),
+          color: changeColorStatus(mciStatus[i]),
         }),
       }),
     });
@@ -3412,19 +3412,19 @@ function drawObjects(event) {
   }
 
   for (i = geometries.length - 1; i >= 0; --i) {
-    // MCIS text style
+    // MCI text style
     var polyNameTextStyle = new Style({
       text: new Text({
-        text: mcisName[i],
+        text: mciName[i],
         font: "bold 10px sans-serif",
-        scale: changeSizeByName(mcisName[i] + mcisStatus[i]) + 0.8,
-        offsetY: 32 * changeSizeByName(mcisName[i] + mcisStatus[i]),
+        scale: changeSizeByName(mciName[i] + mciStatus[i]) + 0.8,
+        offsetY: 32 * changeSizeByName(mciName[i] + mciStatus[i]),
         stroke: new Stroke({
           color: [255, 255, 255, 1], //white
           width: 1,
         }),
         fill: new Fill({
-          color: [0, 0, 0, 1], //black //changeColorStatus(mcisStatus[i])
+          color: [0, 0, 0, 1], //black //changeColorStatus(mciStatus[i])
         }),
       }),
     });
