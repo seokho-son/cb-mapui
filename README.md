@@ -76,9 +76,9 @@ Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
    - TB Username, Password: CB-Tumblebug REST API (BasicAuth) 호출에 필요한 Username 및 Password (ex: `default`, `default`)
    - NS ID: cb-mapui에 표시할 namespace를 지정
    - Display interval: 기본값은 10 (단위: 초)며, 정상적인 양의 정수를 입력했을 때에만 유효
- - MCIS 생성
-   - MCIS Provisioning에서 MCIS 구성을 위한 상세 정보를 설정. Location-based 를 지정한 경우 Map에 클릭하면, 추천 VM이 지정됨.
-   - 추천 VM들로 구성한 MCIS 요구사항이 마련되면, `Create MCIS` 버튼을 클릭하여 구성 정보 확인 후 MCIS 생성 요청.
+ - MCI 생성
+   - MCI Provisioning에서 MCI 구성을 위한 상세 정보를 설정. Location-based 를 지정한 경우 Map에 클릭하면, 추천 VM이 지정됨.
+   - 추천 VM들로 구성한 MCI 요구사항이 마련되면, `Create MCI` 버튼을 클릭하여 구성 정보 확인 후 MCI 생성 요청.
    - 생성 결과는 알림창 및 Text areabox에 표시됨.
 
 ## cb-mapui 동작 방식
@@ -86,15 +86,15 @@ Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
 index.js 에 포함된 로직이 수행되며, 이는 index.html 를 통해서 웹에 출력됨.
 
 아래 과정을 주기적으로 반복함.
-1. CB-Tumblebug을 통해 MCIS VM 조회
+1. CB-Tumblebug을 통해 MCI VM 조회
 1. 각VM의 기하학적 위치(longitude, latitude)를 획득
-1. Convex Hull을 통해 VM들을 폴리곤 형태로 구성 (MCIS 형태 표현)
-1. Map에 해당 MCIS 폴리곤들을 출력 (VM 라이프사이클 정보 아이콘 출력 포함)
+1. Convex Hull을 통해 VM들을 폴리곤 형태로 구성 (MCI 형태 표현)
+1. Map에 해당 MCI 폴리곤들을 출력 (VM 라이프사이클 정보 아이콘 출력 포함)
 
 ### index.js 처리 로직 상세
 
 index.js 는 Openlayers를 기반으로, 
 
-- CB-Tumblebug API를 콜하여 MCIS 및 VM 정보를 조회(function getMcis())하고,
-- MCIS를 생성 및 제어할 수 있는 기능을 버튼으로 제공함.
-- tileLayer.on('postrender', function (event) Openlayers에서 반복적으로 그래픽 출력을 수행하는 펑션이며, MCIS Polygon 객체들을 도형으로 출력. 이때 MCIS의 상태도 갱신하여, 정보를 함께 출력.
+- CB-Tumblebug API를 콜하여 MCI 및 VM 정보를 조회(function getMci())하고,
+- MCI를 생성 및 제어할 수 있는 기능을 버튼으로 제공함.
+- tileLayer.on('postrender', function (event) Openlayers에서 반복적으로 그래픽 출력을 수행하는 펑션이며, MCI Polygon 객체들을 도형으로 출력. 이때 MCI의 상태도 갱신하여, 정보를 함께 출력.
