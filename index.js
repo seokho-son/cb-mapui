@@ -2081,8 +2081,8 @@ function updateMciList() {
         updateResourceList(typeStringVNet);
         updateResourceList(typeStringSG);
         updateResourceList(typeStringSshKey);
-        updateResourceList(typeStringSpec);
-        updateResourceList(typeStringImage);
+        // updateResourceList(typeStringSpec);
+        // updateResourceList(typeStringImage);
       });
   }
 }
@@ -2335,10 +2335,10 @@ document.getElementById(typeStringSshKey).onmouseover = function () {
   updateResourceList(typeStringSshKey);
 };
 document.getElementById(typeStringImage).onmouseover = function () {
-  updateResourceList(typeStringImage);
+  //updateResourceList(typeStringImage);
 };
 document.getElementById(typeStringSpec).onmouseover = function () {
-  updateResourceList(typeStringSpec);
+  //updateResourceList(typeStringSpec);
 };
 
 function updateConnectionList() {
