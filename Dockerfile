@@ -2,39 +2,26 @@
 ## Stage 1 - Build static files
 #############################################################
 
-FROM node:16 AS builder
-
-# node-prune (https://github.com/tj/node-prune)
-# node-prune is a small tool to prune unnecessary files from 
-# ./node_modules, such as markdown, typescript source files, and so on.
-RUN wget https://github.com/tj/node-prune/releases/download/v1.0.1/node-prune_1.0.1_linux_amd64.tar.gz
-RUN tar xf node-prune_1.0.1_linux_amd64.tar.gz
-RUN mv node-prune /usr/local/bin/
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-COPY ./img ./img
-COPY ./index.html ./
-COPY ./index.js ./
-COPY ./package-lock.json ./
-COPY ./package.json ./
+COPY ./package.json ./package-lock.json ./
 
-RUN npm install
+RUN npm config set fetch-retries 5 \
+    && npm config set fetch-retry-mintimeout 20000 \
+    && npm config set fetch-retry-maxtimeout 120000 \
+    && npm install --production --silent --no-audit --prefer-offline
 
+COPY . .
 RUN npm run build
-
-# Remove dev dependencies
 RUN npm prune --production
-
-# Run node-prune
-RUN /usr/local/bin/node-prune
-
 
 #############################################################
 ## Stage 2 - App
 #############################################################
 
-FROM node:16-alpine AS prod
+FROM node:18-alpine AS prod
 
 WORKDIR /app
 
