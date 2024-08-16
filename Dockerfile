@@ -11,10 +11,12 @@ COPY ./package.json ./package-lock.json ./
 RUN npm config set fetch-retries 5 \
     && npm config set fetch-retry-mintimeout 20000 \
     && npm config set fetch-retry-maxtimeout 120000 \
-    && npm install --production --silent --no-audit --prefer-offline
+    && npm install --silent --no-audit --prefer-offline
 
 COPY . .
+
 RUN npm run build
+
 RUN npm prune --production
 
 #############################################################
@@ -29,6 +31,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/img ./dist/img
 COPY --from=builder /app/index.html ./
 COPY --from=builder /app/index.js ./
+COPY --from=builder /app/redoc-swagger-integration.html ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package-lock.json ./package-lock.json
 COPY --from=builder /app/package.json ./package.json
