@@ -32,6 +32,7 @@ COPY --from=builder /app/img ./dist/img
 COPY --from=builder /app/index.html ./
 COPY --from=builder /app/index.js ./
 COPY --from=builder /app/redoc-swagger.html ./
+COPY --from=builder /app/swagger.html ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package-lock.json ./package-lock.json
 COPY --from=builder /app/package.json ./package.json
