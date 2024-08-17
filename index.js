@@ -310,7 +310,7 @@ function endpointChanged() {
   var iframe = document.getElementById('iframe');
   var iframe2 = document.getElementById('iframe2');
 
-  iframe.src = "http://" + hostname + ":1323/tumblebug/api/index.html";
+  iframe.src = "http://" + hostname + ":1324/swagger.html";
   iframe2.src = "http://" + hostname + ":1024/spider/adminweb";
 }
 window.endpointChanged = endpointChanged;
@@ -1535,7 +1535,7 @@ function addRegionMarker(spec) {
   var username = usernameElement.value;
   var password = passwordElement.value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/system-purpose-common-ns/resources/spec/${spec}`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/system/resources/spec/${spec}`;
 
   axios({
     method: "get",
