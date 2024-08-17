@@ -120,9 +120,12 @@
                     SwaggerUIBundle.presets.apis,
                     SwaggerUIStandalonePreset
                 ],
+                docExpansion: "list",
                 layout: "BaseLayout",
                 deepLinking: true, // Enable deep linking
-                displayOperationId: true, // Display operationId in Swagger UI
+                //displayOperationId: true, // Display operationId in Swagger UI
+                tagsSorter: "alpha", 
+                operationsSorter: "alpha", 
                 requestInterceptor: (request) => {
                     request.headers['Authorization'] = authHeader;
                     return request;
@@ -139,20 +142,31 @@
             Redoc.init(spec, {
                 scrollYOffset: 50,
                 hideLoading: true,
+                suppressWarnings: true,
+                requiredPropsFirst: true,
+                sortPropsAlphabetically: true,
+                expandResponses: "200", 
+                // pathInMiddlePanel: true,
                 theme: {
-                    colors: {
-                        primary: {
-                            main: '#dd5522'
-                        }
-                    },
                     typography: {
-                        fontFamily: 'Arial, sans-serif',
-                        fontSize: '18px',
+                        fontFamily: '"Arial", Helvetica, Open Sans, sans-serif',
                         headings: {
-                            fontFamily: 'Arial, sans-serif'
+                            fontFamily: '"Arial", "Roboto Condensed", sans-serif'
+                        },
+                        code: {
+                            fontFamily: '"Arial", "Courier", monospace'
                         }
                     },
+                    rightPanel: {
+                        width: '40%',
+                        backgroundColor: '#6c757d',
+                        textColor: '#f8f9fa'
+                    },
+                    codeSample: {
+                        backgroundColor: '#343a40'
+                    }
                 }
+                            
             }, document.getElementById('redoc-container'));
 
             console.log('Redoc initialized');
