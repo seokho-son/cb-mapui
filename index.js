@@ -1879,7 +1879,7 @@ function releaseResources() {
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/defaultResources`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/sharedResources`;
 
   axios({
     method: "delete",
