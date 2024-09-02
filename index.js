@@ -175,9 +175,8 @@ function writeLatLonInputPair(idx, lat, lon) {
   if (idx == 0) {
     messageTextArea.value = `[Started MCI configuration]\n`;
   }
-  messageTextArea.value += `\n - [VM-${
-    idx + 1
-  }]  Location:  ${latf}, ${lonf}\t\t| Best Spec: `;
+  messageTextArea.value += `\n - [VM-${idx + 1
+    }]  Location:  ${latf}, ${lonf}\t\t| Best Spec: `;
   messageTextArea.scrollTop = messageTextArea.scrollHeight;
 }
 
@@ -818,9 +817,9 @@ function getMci() {
               } else {
                 vmGeo.push([
                   item.vm[j].location.longitude * 1 +
-                    (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
+                  (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
                   item.vm[j].location.latitude * 1 +
-                    (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
+                  (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
                 ]);
               }
               validateNum++;
@@ -903,19 +902,19 @@ function getConnection() {
   //   }
   // });
 
-    // Initialize provider select element with "ALL"
-    var providerSelect = document.getElementById(typeStringProvider);
-    providerSelect.innerHTML = ''; // Clear existing options
-    var allOption = document.createElement("option");
-    allOption.value = "";
-    allOption.text = "ALL";
-    providerSelect.appendChild(allOption);
+  // Initialize provider select element with "ALL"
+  var providerSelect = document.getElementById(typeStringProvider);
+  providerSelect.innerHTML = ''; // Clear existing options
+  var allOption = document.createElement("option");
+  allOption.value = "";
+  allOption.text = "ALL";
+  providerSelect.appendChild(allOption);
 
-    var separatorOption = document.createElement("option");
-    separatorOption.value = "";
-    separatorOption.text = "-----";
-    separatorOption.disabled = true; // Disable the separator option
-    providerSelect.appendChild(separatorOption);
+  var separatorOption = document.createElement("option");
+  separatorOption.value = "";
+  separatorOption.text = "-----";
+  separatorOption.disabled = true; // Disable the separator option
+  providerSelect.appendChild(separatorOption);
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
@@ -1060,49 +1059,49 @@ function createMci() {
       let subTotalCost = "unknown";
       if (costPerHour == "100000000" || costPerHour == "") {
         costPerHour = "unknown";
-        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($"+costPerHour+" * "+createMciReq.vm[i].subGroupSize+")"+"</span></b></td></tr>" ;
+        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($" + costPerHour + " * " + createMciReq.vm[i].subGroupSize + ")" + "</span></b></td></tr>";
       } else {
         totalCost += parseFloat(costPerHour) * createMciReq.vm[i].subGroupSize;
 
         subTotalCost = (parseFloat(costPerHour) * createMciReq.vm[i].subGroupSize).toFixed(4);
-        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($"+costPerHour+" * "+createMciReq.vm[i].subGroupSize+")"+"</span></b></td></tr>" ;
+        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($" + costPerHour + " * " + createMciReq.vm[i].subGroupSize + ")" + "</span></b></td></tr>";
       }
       let acceleratorType = recommendedSpecList[i].acceleratorType;
       let acceleratorModel = recommendedSpecList[i].acceleratorModel;
-      if (acceleratorType == "gpu" ) {
-        acceleratorType = "<tr><th style='width: 50%;'>Accelerator</th><td><b><span style='color: red; '>GPU ("+ acceleratorModel +")</span></b></td></tr>"
+      if (acceleratorType == "gpu") {
+        acceleratorType = "<tr><th style='width: 50%;'>Accelerator</th><td><b><span style='color: red; '>GPU (" + acceleratorModel + ")</span></b></td></tr>"
       } else {
         acceleratorType = "<tr><th style='width: 50%;'>Accelerator</th><td><b><span style='color: black;'>none</span></b></td></tr>"
       }
 
       var html =
-      "<font size=3>" +
-      "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
-      "<tr><th style='width: 50%;'>[#"+ (i + 1).toString() +"] SubGroup Name</th><td><b><span style='color: black; '>" + createMciReq.vm[i].name + " ("+createMciReq.vm[i].subGroupSize+" node(s))</span></b></td></tr>" +
-      costPerHour +
-      "<tr><th style='width: 50%;'>Spec</th><td><b><span style='color: blue; '>" + createMciReq.vm[i].commonSpec + "</span></b></td></tr>" +
-      "<tr><th style='width: 50%;'>vCPU</th><td><b>" + recommendedSpecList[i].vCPU + "</b></td></tr>" +
-      "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + recommendedSpecList[i].memoryGiB + "</b></td></tr>" +
-      acceleratorType +
-      "<tr><th style='width: 50%;'>RootDisk(GB)</th><td><b>" + recommendedSpecList[i].rootDiskSize +" (type: "+recommendedSpecList[i].rootDiskType+ ")</b></td></tr>" +
-      "<tr><th style='width: 50%;'>Selected Image OS Type</th><td><b><span style='color: green; '>" + createMciReq.vm[i].commonImage + "</span></b></td></tr>" +
+        "<font size=3>" +
+        "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
+        "<tr><th style='width: 50%;'>[#" + (i + 1).toString() + "] SubGroup Name</th><td><b><span style='color: black; '>" + createMciReq.vm[i].name + " (" + createMciReq.vm[i].subGroupSize + " node(s))</span></b></td></tr>" +
+        costPerHour +
+        "<tr><th style='width: 50%;'>Spec</th><td><b><span style='color: blue; '>" + createMciReq.vm[i].commonSpec + "</span></b></td></tr>" +
+        "<tr><th style='width: 50%;'>vCPU</th><td><b>" + recommendedSpecList[i].vCPU + "</b></td></tr>" +
+        "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + recommendedSpecList[i].memoryGiB + "</b></td></tr>" +
+        acceleratorType +
+        "<tr><th style='width: 50%;'>RootDisk(GB)</th><td><b>" + recommendedSpecList[i].rootDiskSize + " (type: " + recommendedSpecList[i].rootDiskType + ")</b></td></tr>" +
+        "<tr><th style='width: 50%;'>Selected Image OS Type</th><td><b><span style='color: green; '>" + createMciReq.vm[i].commonImage + "</span></b></td></tr>" +
 
-      "</table>"+
-      "<hr>"
-      ;
+        "</table>" +
+        "<hr>"
+        ;
 
       subGroupReqString = subGroupReqString + html;
     }
 
 
     var costDetailsHtml =
-   
-    "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
-        "<tr><th><b>Usage Period</b></th><td><b>Estimated Cost</b></td></tr>" +
-        "<tr><th>Hourly</th><td><span style='color: red; '><b>$" + totalCost.toFixed(4) + "</span></td></tr>" +
-        "<tr><th>Daily</th><td><span style='color: red; '><b>$" + (totalCost * 24).toFixed(4) + "</span></td></tr>" +
-        "<tr><th>Monthly</th><td><span style='color: red; '><b>$" + (totalCost * 24 * 31).toFixed(4) + "</span></td></tr>" +
-        "</table> <br>(Do not rely on this estimated cost. It is just an estimation using spec price.)<br>";
+
+      "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
+      "<tr><th><b>Usage Period</b></th><td><b>Estimated Cost</b></td></tr>" +
+      "<tr><th>Hourly</th><td><span style='color: red; '><b>$" + totalCost.toFixed(4) + "</span></td></tr>" +
+      "<tr><th>Daily</th><td><span style='color: red; '><b>$" + (totalCost * 24).toFixed(4) + "</span></td></tr>" +
+      "<tr><th>Monthly</th><td><span style='color: red; '><b>$" + (totalCost * 24 * 31).toFixed(4) + "</span></td></tr>" +
+      "</table> <br>(Do not rely on this estimated cost. It is just an estimation using spec price.)<br>";
 
 
     var hasUserConfirmed = false;
@@ -1125,12 +1124,12 @@ function createMci() {
           width: 750,
           html:
             "<font size=4>" +
-            "<br><b><span style='color: black; font-size: larger;'>" +  createMciReq.name +" </b> ("+totalNodeScale+" node(s))" + "</span><br>"+
+            "<br><b><span style='color: black; font-size: larger;'>" + createMciReq.name + " </b> (" + totalNodeScale + " node(s))" + "</span><br>" +
             "<hr>" +
             costDetailsHtml +
             "<hr>" +
             subGroupReqString +
-            "<br><br><input type='checkbox' id='hold-checkbox'> Hold VM provisioning of the MCI"+
+            "<br><br><input type='checkbox' id='hold-checkbox'> Hold VM provisioning of the MCI" +
             "<br><input type='checkbox' id='monitoring-checkbox'> Deploy CB-Dragonfly monitoring agent",
           showCancelButton: true,
           confirmButtonText: "Confirm",
@@ -1162,7 +1161,7 @@ function createMci() {
               "Creating MCI: " + createMciReq.name
             );
 
-            requestId = generateRandomRequestId("mci-"+createMciReq.name+"-", 10);
+            requestId = generateRandomRequestId("mci-" + createMciReq.name + "-", 10);
             addRequestIdToSelect(requestId);
 
             axios({
@@ -1196,7 +1195,7 @@ function createMci() {
                   console.log(error.response.headers);
                   displayJsonData(error.response.data, typeError);
                 } else {
-                  console.log("Error", error.message);              
+                  console.log("Error", error.message);
                 }
                 console.log(error.config);
               })
@@ -1245,17 +1244,17 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
   function createPolicyConditions(metric, values, type) {
     const conditions = [];
-  
+
     if (type === 'range') {
       if (values.min) conditions.push({ operand: `${values.min}`, operator: ">=" });
       if (values.max) conditions.push({ operand: `${values.max}`, operator: "<=" });
     } else if (type === 'single') {
       if (values.value) conditions.push({ operand: `${values.value}` });
     }
-  
+
     return { metric: metric, condition: conditions };
   }
-  
+
   var policies = [
     createPolicyConditions("vCPU", { min: minVCPU, max: maxVCPU }, "range"),
     createPolicyConditions("MemoryGiB", { min: minRAM, max: maxRAM }, "range"),
@@ -1337,11 +1336,11 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
     let costPerHour = res.data[0].costPerHour;
     if (costPerHour == "100000000" || costPerHour == "") {
-        costPerHour = "unknown";
+      costPerHour = "unknown";
     }
     let acceleratorType = res.data[0].acceleratorType;
     let acceleratorModel = res.data[0].acceleratorModel;
-    if (acceleratorType == "gpu" ) {
+    if (acceleratorType == "gpu") {
       acceleratorType = "<tr><th style='width: 50%;'>AcceleratorType</th><td><b><span style='color: red; font-size: larger;'>GPU</span></b></td></tr>"
       acceleratorModel = "<tr><th style='width: 50%;'>AcceleratorModel</th><td><b><span style='color: red; font-size: larger;'>" + acceleratorModel + "</span></b></td></tr>"
     } else {
@@ -1359,7 +1358,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
       let acceleratorModel = spec.acceleratorModel === "gpu"
         ? `<span style='color: red; font-size: larger;'>${spec.acceleratorModel}</span>`
         : `<span style='color: black;'>${spec.acceleratorModel}</span>`;
-      
+
       return `
         <tr>
           <th>${index + 1}</th>
@@ -1375,7 +1374,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
         </tr>`;
     }).join("");
 
-      var tableHTML = `
+    var tableHTML = `
       <table id="recommendationTable" class="display nowrap" style="width:100%; text-align:left;">
         <thead>
           <tr>
@@ -1400,34 +1399,34 @@ function getRecommendedSpec(idx, latitude, longitude) {
       title: "Recommended Spec and CSP region <br>",
       width: 800,
       html:
-      "<font size=3>" +
-      "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
-      "<tr><th style='width: 50%;'>Recommended Spec</th><td><b><span style='color: black; font-size: larger;'>" + res.data[0].cspSpecName + "</span></b></td></tr>" +
-      "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; font-size: larger;'> $ " + costPerHour + " (at least)</span></b></td></tr>" +
-      "<tr><th style='width: 50%;'>Selected Image OS Type</th><td><b><span style='color: green; font-size: larger;'>" + createMciReqVm.commonImage + "</span></b></td></tr>" +
+        "<font size=3>" +
+        "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
+        "<tr><th style='width: 50%;'>Recommended Spec</th><td><b><span style='color: black; font-size: larger;'>" + res.data[0].cspSpecName + "</span></b></td></tr>" +
+        "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; font-size: larger;'> $ " + costPerHour + " (at least)</span></b></td></tr>" +
+        "<tr><th style='width: 50%;'>Selected Image OS Type</th><td><b><span style='color: green; font-size: larger;'>" + createMciReqVm.commonImage + "</span></b></td></tr>" +
 
-      "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
-      "<tr><th style='width: 50%;'>Provider</th><td><b><span style='color: blue; font-size: larger;'>" + res.data[0].providerName.toUpperCase() + "</span></b></td></tr>" +
-      "<tr><th style='width: 50%;'>Region</th><td><b>" + res.data[0].regionName + "</b></td></tr>" +
-      "<tr><th style='width: 50%;'>ConnectionConfig</th><td><b>" + res.data[0].connectionName + "</b></td></tr>" +
+        "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
+        "<tr><th style='width: 50%;'>Provider</th><td><b><span style='color: blue; font-size: larger;'>" + res.data[0].providerName.toUpperCase() + "</span></b></td></tr>" +
+        "<tr><th style='width: 50%;'>Region</th><td><b>" + res.data[0].regionName + "</b></td></tr>" +
+        "<tr><th style='width: 50%;'>ConnectionConfig</th><td><b>" + res.data[0].connectionName + "</b></td></tr>" +
 
-      "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
-      "<tr><th style='width: 50%;'>vCPU</th><td><b>" + res.data[0].vCPU + "</b></td></tr>" +
-      "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + res.data[0].memoryGiB + "</b></td></tr>" +
-      "<tr><th style='width: 50%;'>RootDiskType</th><td><b>" + res.data[0].rootDiskType + "</b></td></tr>" +
-      "<tr><th style='width: 50%;'>RootDiskSize(GB)</th><td><b>" + createMciReqVm.rootDiskSize + "</b></td></tr>" +
+        "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
+        "<tr><th style='width: 50%;'>vCPU</th><td><b>" + res.data[0].vCPU + "</b></td></tr>" +
+        "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + res.data[0].memoryGiB + "</b></td></tr>" +
+        "<tr><th style='width: 50%;'>RootDiskType</th><td><b>" + res.data[0].rootDiskType + "</b></td></tr>" +
+        "<tr><th style='width: 50%;'>RootDiskSize(GB)</th><td><b>" + createMciReqVm.rootDiskSize + "</b></td></tr>" +
 
-      "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
-      acceleratorType +
-      acceleratorModel +
-      "<tr><th style='width: 50%;'>AcceleratorCount</th><td><b>" + res.data[0].acceleratorCount + "</b></td></tr>" +
-      "<tr><th style='width: 50%;'>AcceleratorMemoryGB</th><td><b>" + res.data[0].acceleratorMemoryGB + "</b></td></tr>" +
-      "</table><br>" +
+        "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
+        acceleratorType +
+        acceleratorModel +
+        "<tr><th style='width: 50%;'>AcceleratorCount</th><td><b>" + res.data[0].acceleratorCount + "</b></td></tr>" +
+        "<tr><th style='width: 50%;'>AcceleratorMemoryGB</th><td><b>" + res.data[0].acceleratorMemoryGB + "</b></td></tr>" +
+        "</table><br>" +
 
-      `<div style="margin-top: 10px;">` +
-      `<button id="toggleTableButton" class="btn btn-secondary dropdown-toggle w-100">Show All Recommendations</button>` +
-      `</div>` +
-      `<div id="fullTable" style="display:none">${tableHTML}</div>`,
+        `<div style="margin-top: 10px;">` +
+        `<button id="toggleTableButton" class="btn btn-secondary dropdown-toggle w-100">Show All Recommendations</button>` +
+        `</div>` +
+        `<div id="fullTable" style="display:none">${tableHTML}</div>`,
 
       inputLabel: 'Enter the number of VMs for scaling (1 ~ 10)',
       input: "number",
@@ -1436,7 +1435,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
         const input = Swal.getInput();
         const toggleButton = document.getElementById('toggleTableButton');
         toggleButton.addEventListener('click', toggleTable);
-        
+
         $('#recommendationTable').DataTable();
       },
       inputAttributes: {
@@ -1562,10 +1561,10 @@ function addRegionMarker(spec) {
     }).then((res2) => {
       console.log(
         "Best cloud location: [" +
-          res2.data.regionDetail.location.latitude +
-          "," +
-          res2.data.regionDetail.location.longitude +
-          "]"
+        res2.data.regionDetail.location.latitude +
+        "," +
+        res2.data.regionDetail.location.longitude +
+        "]"
       ); // for debug
 
       // push order [longitute, latitude]
@@ -1730,9 +1729,9 @@ function hideMCI() {
                 }
                 infoAlert(
                   "Show: " +
-                    mciHideList[result.value] +
-                    "<br>" +
-                    hideListString
+                  mciHideList[result.value] +
+                  "<br>" +
+                  hideListString
                 );
               }
             });
@@ -2001,10 +2000,12 @@ function updateNsList() {
         if (res.data.output != null) {
           // mciList = res.data.output;
           for (let item of res.data.output) {
-            var option = document.createElement("option");
-            option.value = item;
-            option.text = item;
-            document.getElementById("namespace").appendChild(option);
+            if (item && item.trim() !== "") {
+              var option = document.createElement("option");
+              option.value = item;
+              option.text = item;
+              document.getElementById("namespace").appendChild(option);
+            }
           }
           for (let i = 0; i < selectElement.options.length; i++) {
             if (selectElement.options[i].value == previousSelection) {
@@ -2061,10 +2062,12 @@ function updateMciList() {
         if (res.data.output != null) {
           // mciList = res.data.output;
           for (let item of res.data.output) {
-            var option = document.createElement("option");
-            option.value = item;
-            option.text = item;
-            selectElement.appendChild(option);
+            if (item && item.trim() !== "") {
+              var option = document.createElement("option");
+              option.value = item;
+              option.text = item;
+              selectElement.appendChild(option);
+            }
           }
           for (let i = 0; i < selectElement.options.length; i++) {
             if (selectElement.options[i].value == previousSelection) {
@@ -2127,10 +2130,12 @@ function updateVmList() {
       .then((res) => {
         if (res.data.output != null) {
           for (let item of res.data.output) {
-            var option = document.createElement("option");
-            option.value = item;
-            option.text = item;
-            selectElement.appendChild(option);
+            if (item && item.trim() !== "") {
+              var option = document.createElement("option");
+              option.value = item;
+              option.text = item;
+              selectElement.appendChild(option);
+            }
           }
           for (let i = 0; i < selectElement.options.length; i++) {
             if (selectElement.options[i].value == previousSelection) {
@@ -2257,10 +2262,12 @@ function updateSubGroupList() {
         if (res.data.output != null) {
           // console.log("in updateSubGroupList(); res.data.output: " + res.data.output);
           for (let item of res.data.output) {
-            var option = document.createElement("option");
-            option.value = item;
-            option.text = item;
-            document.getElementById("subgroupid").appendChild(option);
+            if (item && item.trim() !== "") {
+              var option = document.createElement("option");
+              option.value = item;
+              option.text = item;
+              document.getElementById("subgroupid").appendChild(option);
+            }
           }
           for (let i = 0; i < selectElement.options.length; i++) {
             if (selectElement.options[i].value == previousSelection) {
@@ -2309,10 +2316,12 @@ function updateResourceList(resourceType) {
     }).then((res) => {
       if (res.data.output != null) {
         for (let item of res.data.output) {
-          var option = document.createElement("option");
-          option.value = item;
-          option.text = item;
-          document.getElementById(resourceType).appendChild(option);
+          if (item && item.trim() !== "") {
+            var option = document.createElement("option");
+            option.value = item;
+            option.text = item;
+            document.getElementById(resourceType).appendChild(option);
+          }
         }
         for (let i = 0; i < selectElement.options.length; i++) {
           if (selectElement.options[i].value == previousSelection) {
@@ -2726,14 +2735,14 @@ function startApp() {
       if (selectApp.value == "Xonotic") {
         defaultRemoteCommand[0] =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh; chmod +x ~/startServer.sh";
-        defaultRemoteCommand[1] = 
-          "sudo ~/startServer.sh " + "Xonotic-by-Cloud-Barista-" + mciid + " 26000" + " 8"+ " 8";
+        defaultRemoteCommand[1] =
+          "sudo ~/startServer.sh " + "Xonotic-by-Cloud-Barista-" + mciid + " 26000" + " 8" + " 8";
         defaultRemoteCommand[2] =
           "echo '$$Func(GetPublicIP(target=this,postfix=:26000))'";
       } else if (selectApp.value == "ELK") {
         defaultRemoteCommand[0] =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/elastic-stack/startELK.sh";
-        defaultRemoteCommand[1] = 
+        defaultRemoteCommand[1] =
           "chmod +x ~/startServer.sh";
         defaultRemoteCommand[2] =
           "sudo ~/startServer.sh ";
@@ -2775,12 +2784,12 @@ function startApp() {
       } else if (selectApp.value == "Westward") {
         defaultRemoteCommand[0] =
           "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh";
-        defaultRemoteCommand[1] = 
+        defaultRemoteCommand[1] =
           "chmod +x ~/setgame.sh; sudo ~/setgame.sh";
       } else if (selectApp.value == "WeaveScope") {
         defaultRemoteCommand[0] =
-        "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/weavescope/startServer.sh";
-        defaultRemoteCommand[1] = 
+          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/weavescope/startServer.sh";
+        defaultRemoteCommand[1] =
           "chmod +x ~/startServer.sh";
         defaultRemoteCommand[2] =
           "sudo ~/startServer.sh " + publicIPs + " " + privateIPs;
@@ -2793,8 +2802,8 @@ function startApp() {
           "";
       } else if (selectApp.value == "Jitsi") {
         defaultRemoteCommand[0] =
-        "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/jitsi/startServer.sh";
-        defaultRemoteCommand[1] = 
+          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/jitsi/startServer.sh";
+        defaultRemoteCommand[1] =
           "chmod +x ~/startServer.sh";
         defaultRemoteCommand[2] =
           "sudo ~/startServer.sh " + publicIPs + " " + "DNS EMAIL";
@@ -2914,7 +2923,7 @@ function statusApp() {
       cmd.push("chmod +x ~/setgame.sh");
       cmd.push("sudo ~/setgame.sh");
     } else if (selectApp.value == "Nvidia") {
-      cmd.push(       "nvidia-smi"      );
+      cmd.push("nvidia-smi");
       cmd.push("");
       cmd.push("");
     } else if (selectApp.value == "Nginx") {
@@ -3048,7 +3057,7 @@ function executeRemoteCmd() {
         const commands = [];
         for (let i = 1; i <= cmdCount; i++) {
           const cmd = document.getElementById("cmd" + i).value;
-          defaultRemoteCommand[i-1] = cmd;
+          defaultRemoteCommand[i - 1] = cmd;
           if (cmd) {
             commands.push(cmd);
           }
@@ -3084,7 +3093,7 @@ function executeRemoteCmd() {
 
         spinnerId = addSpinnerTask("Remote command to " + mciid);
 
-        requestId = generateRandomRequestId("cmd-"+mciid+"-", 10);
+        requestId = generateRandomRequestId("cmd-" + mciid + "-", 10);
         addRequestIdToSelect(requestId);
 
         axios({
@@ -3121,27 +3130,27 @@ function executeRemoteCmd() {
 
           messageTextArea.value = formattedOutput;
         })
-        .catch(function (error) {
-          if (error.response) {
-            // status code is not 2xx
-            console.log(error.response.data);
-            console.log(error.response.status);
-            console.log(error.response.headers);
-          } else {
-            console.log("Error", error.message);
-          }
-          console.log(error.config);
+          .catch(function (error) {
+            if (error.response) {
+              // status code is not 2xx
+              console.log(error.response.data);
+              console.log(error.response.status);
+              console.log(error.response.headers);
+            } else {
+              console.log("Error", error.message);
+            }
+            console.log(error.config);
 
-          errorAlert(
-            JSON.stringify(error.response.data, null, 2).replace(
-              /['",]+/g,
-              ""
-            )
-          );
-        })
-        .finally(function () {
-          removeSpinnerTask(spinnerId);
-        });
+            errorAlert(
+              JSON.stringify(error.response.data, null, 2).replace(
+                /['",]+/g,
+                ""
+              )
+            );
+          })
+          .finally(function () {
+            removeSpinnerTask(spinnerId);
+          });
 
       } else {
         messageTextArea.value = "Cannot set command";
