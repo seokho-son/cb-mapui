@@ -227,7 +227,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <a class="dropdown-item" href="javascript:void(0)" onclick="getConnection();">Show all Clouds</a>
                   <a class="dropdown-item" href="javascript:void(0)" onclick="hideMCI();">Hide/Show MCI</a>
                   <a class="dropdown-item" href="javascript:void(0)" onclick="clearMap();">Clear Map</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onclick="window.open('redoc-swagger.html', '_blank');">API Dashboard</a>
+                  <a class="dropdown-item" href="javascript:void(0)"
+                    onclick="window.open('redoc-swagger.html', '_blank');">API Dashboard</a>
                   <a class="dropdown-item" href="javascript:void(0)" onclick="toggleView();">Toggle Map/API</a>
                 </div>
               </div>
@@ -262,18 +263,18 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 </div>
               </div>
 
-                            <!-- Provider Field -->
-                            <div class="form-group col">
-                              <div class="input-group">
-                                <div class="input-group-prepend">
-                                  <span class="input-group-text" id="providerLabel">Provider</span>
-                                </div>
-                                <select id="provider" name="provider" class="form-control" aria-label="provider ID"
-                                  aria-describedby="providerLabel">
-                                  <!-- Options will be filled dynamically -->
-                                </select>
-                              </div>
-                            </div>
+              <!-- Provider Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text" id="providerLabel">Provider</span>
+                  </div>
+                  <select id="provider" name="provider" class="form-control" aria-label="provider ID"
+                    aria-describedby="providerLabel">
+                    <!-- Options will be filled dynamically -->
+                  </select>
+                </div>
+              </div>
 
 
               <!-- CPU Range Field -->
@@ -298,7 +299,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <input type="number" class="form-control m-0" id='minRAM' value="0.5" min="0.5" max="99912288"
                     step="0.5">
                   <span class="mx-1">.</span>
-                  <input type="number" class="form-control m-0" id='maxRAM' value="" min="0.5" max="99912289" step="0.5">
+                  <input type="number" class="form-control m-0" id='maxRAM' value="" min="0.5" max="99912289"
+                    step="0.5">
                 </div>
               </div>
 
@@ -342,12 +344,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               <!-- Accelerator Configuration Field -->
               <div class="form-group col">
                 <div id="headingAccelerator">
-                  <button class="btn btn-info w-100" type="button" data-toggle="collapse" data-target="#collapseAccelerator" aria-expanded="false" aria-controls="collapseAccelerator">
+                  <button class="btn btn-info w-100" type="button" data-toggle="collapse"
+                    data-target="#collapseAccelerator" aria-expanded="false" aria-controls="collapseAccelerator">
                     Accelerator Config
                 </div>
-                <div id="collapseAccelerator" class="collapse" aria-labelledby="headingAccelerator" data-parent="#mci-configuration-form">
+                <div id="collapseAccelerator" class="collapse" aria-labelledby="headingAccelerator"
+                  data-parent="#mci-configuration-form">
                   <div class="px-0 py-0">
-                    
+
                     <!-- Accelerator Type Field -->
                     <div class="form-group">
                       <div class="input-group">
@@ -360,26 +364,29 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                         </select>
                       </div>
                     </div>
-              
+
                     <!-- Accelerator Model Field -->
                     <div class="form-group">
                       <div class="input-group">
                         <div class="input-group-prepend">
                           <span class="input-group-text">Model</span>
                         </div>
-                        <input type="text" class="form-control" id="acceleratorModel" name="acceleratorModel" value="" placeholder="Ex: A100">
+                        <input type="text" class="form-control" id="acceleratorModel" name="acceleratorModel" value=""
+                          placeholder="Ex: A100">
                       </div>
                     </div>
-              
+
                     <!-- Accelerator Count Range Field -->
                     <div class="form-group">
                       <div class="input-group">
                         <div class="input-group-prepend">
                           <span class="input-group-text">Count</span>
                         </div>
-                        <input type="number" class="form-control" id='minAcceleratorCount'  min="1" max="999998" step="1">
+                        <input type="number" class="form-control" id='minAcceleratorCount' min="1" max="999998"
+                          step="1">
                         <span class="mx-1">.</span>
-                        <input type="number" class="form-control" id='maxAcceleratorCount'  min="1" max="999999" step="1">
+                        <input type="number" class="form-control" id='maxAcceleratorCount' min="1" max="999999"
+                          step="1">
                       </div>
                     </div>
 
@@ -389,9 +396,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                         <div class="input-group-prepend">
                           <span class="input-group-text">Mem(GB)</span>
                         </div>
-                        <input type="number" class="form-control" id='minAMEM'  min="1" max="999998" step="1">
+                        <input type="number" class="form-control" id='minAMEM' min="1" max="999998" step="1">
                         <span class="mx-1">.</span>
-                        <input type="number" class="form-control" id='maxAMEM'  min="1" max="999999" step="1">
+                        <input type="number" class="form-control" id='maxAMEM' min="1" max="999999" step="1">
                       </div>
                     </div>
 
@@ -720,6 +727,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               <div class="form-group col">
                 <button type="button" id="remoteCmd" onClick="executeRemoteCmd();" class="btn btn-warning w-100">Remote
                   Command</button>
+              </div>
+
+              <!-- File Transfer Field -->
+              <div class="form-group col">
+                <button type="button" id="filetransfer" onClick="transferFileToMci();"
+                  class="btn btn-warning w-100">Remote File Transfer</button>
               </div>
 
             </form>

@@ -3156,10 +3156,153 @@ function executeRemoteCmd() {
       }
     });
   } else {
+    errorAlert("MCI ID is not assigned");
     messageTextArea.value = " MCI ID is not assigned";
   }
 }
 window.executeRemoteCmd = executeRemoteCmd;
+
+// Function for transferFileToMci by remoteCmd button item
+function transferFileToMci() {
+    var hostname = hostnameElement.value;
+    var port = portElement.value;
+    var username = usernameElement.value;
+    var password = passwordElement.value;
+    var namespace = namespaceElement.value;
+    var mciid = mciidElement.value;
+    var subgroupid = document.getElementById("subgroupid").value;
+    var vmid = document.getElementById("vmid").value;
+  
+    if (mciid) {
+      messageTextArea.value = "[Transfer file to MCI:" + mciid + "]\n";
+  
+      // Swal popup for selecting file and target path
+      Swal.fire({
+        title: "<font size=5><b>Transfer File to MCI</b></font>",
+        width: 900,
+        html: 
+        `<div style="text-align: left; padding: 10px;">
+        <p><font size=4><b>Select File to Transfer</b></font></p>
+        <div style="display: flex; justify-content: flex-start; margin-bottom: 20px;">
+            <input type="file" id="fileInput" style="width: 300px; padding: 5px;" />
+        </div>
+
+        <p><font size=4><b>File Path on VM (existing path only)</b></font></p>
+        <div style="display: flex; justify-content: flex-start; margin-bottom: 20px;">
+            <input type="text" id="targetPathInput" style="width: 80%; padding: 5px;" value="/home/cb-user/" placeholder="/home/cb-user/">
+        </div>
+
+        <p style="text-align: left;"><font size=4><b>Select Target Group</b></font></p>
+        <div style="display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 20px; margin-bottom: 10px;">
+            <div>
+                <input type="radio" id="mciOption" name="selectOption" value="MCI" checked>
+                <label for="mciOption">MCI: <span style="color:blue;">${mciid}</span></label>
+            </div>
+            <div>
+                <input type="radio" id="subGroupOption" name="selectOption" value="SubGroup">
+                <label for="subGroupOption">SUBGROUP: <span style="color:green;">${subgroupid}</span></label>
+            </div>
+            <div>
+                <input type="radio" id="vmOption" name="selectOption" value="VM">
+                <label for="vmOption">VM: <span style="color:red;">${vmid}</span></label>
+            </div>
+        </div>
+        </div>`,
+        showCancelButton: true,
+        confirmButtonText: "Transfer",
+        didOpen: () => {
+          document.getElementById("fileInput").addEventListener("change", function (e) {
+            console.log("File selected:", e.target.files[0]);
+          });
+        },
+        preConfirm: () => {
+          // Get the file and target path from the input fields
+          const fileInput = document.getElementById("fileInput");
+          const targetPath = document.getElementById("targetPathInput").value;
+  
+          // Check if a file is selected
+          if (!fileInput.files[0]) {
+            Swal.showValidationMessage("Please select a file to transfer.");
+            return false;
+          }
+  
+          // Return the file and targetPath
+          return {
+            file: fileInput.files[0],
+            targetPath: targetPath,
+          };
+        },
+      }).then((result) => {
+        if (result.value) {
+          const file = result.value.file;
+          const targetPath = result.value.targetPath;
+  
+          // Handle radio button value
+          const radioValue = Swal.getPopup().querySelector('input[name="selectOption"]:checked').value;
+          let url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/transferFile/mci/${mciid}`;
+          if (radioValue === "SubGroup") {
+            url += `?subGroupId=${subgroupid}`;
+          } else if (radioValue === "VM") {
+            url += `?vmId=${vmid}`;
+          }
+  
+          // Prepare the formData to transfer the file
+          var formData = new FormData();
+          formData.append("file", file);
+          formData.append("path", targetPath);
+  
+          // Show loading spinner
+          Swal.fire({
+            title: 'Transferring...',
+            html: `Transferring ${file.name} to ${targetPath}...`,
+            allowOutsideClick: false,
+            didOpen: () => {
+              Swal.showLoading();
+            },
+          });
+  
+          axios({
+            method: "post",
+            url: url,
+            headers: {
+              "Authorization": `Basic ${btoa(`${username}:${password}`)}`, // Basic Auth
+              "Content-Type": "multipart/form-data",
+            },
+            data: formData,
+          })
+          .then((res) => {
+            // Success message
+            Swal.fire({
+              icon: 'success',
+              title: 'File transferred',
+              text: `The file "${file.name}" was transferred successfully.`,
+            });
+            messageTextArea.value = `[Complete: File transfer to MCI ${mciid}]\n`;
+            displayJsonData(res.data, typeInfo);
+          })
+          .catch((error) => {
+            // Error message
+            console.error("File transfer error:", error);
+            errorAlert(
+                JSON.stringify(error.response.data, null, 2).replace(
+                  /['",]+/g,
+                  ""
+                )
+              );
+          })
+          .finally(() => {
+            Swal.hideLoading();
+          });
+        } else {
+          messageTextArea.value = "File transfer was canceled.";
+        }
+      });
+    } else {
+      errorAlert("MCI ID is not assigned");
+      messageTextArea.value = "MCI ID is not assigned.";
+    }
+}
+window.transferFileToMci = transferFileToMci;
 
 // function for getAccessInfo of MCI
 function getAccessInfo() {
