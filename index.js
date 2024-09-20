@@ -1017,7 +1017,6 @@ function isNormalInteger(str) {
 var createMciReqTmplt = {
   description: "Made via cb-mapui",
   installMonAgent: "no",
-  label: "cb-mapui",
   name: "mci",
   vm: [],
 };
@@ -1026,7 +1025,6 @@ var createMciReqVmTmplt = {
   commonImage: "ubuntu18.04",
   commonSpec: "",
   description: "mapui",
-  label: "DynamicVM",
   rootDiskType: "default",
   rootDiskSize: "default",
   subGroupSize: "",
