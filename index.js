@@ -1388,6 +1388,20 @@ function getRecommendedSpec(idx, latitude, longitude) {
             <th>Mem</th>
           </tr>
         </thead>
+          <tfoot>
+    <tr>
+      <th></th>
+      <th>Spec</th>
+      <th>CSP</th>
+      <th>Region</th>
+      <th>CPU</th>
+      <th>Mem</th>
+      <th>Cost</th>
+      <th>GPU</th>
+      <th>Model</th>
+      <th>Mem</th>
+    </tr>
+  </tfoot>
         <tbody>
           ${tableContent}
         </tbody>
@@ -1433,9 +1447,64 @@ function getRecommendedSpec(idx, latitude, longitude) {
         const input = Swal.getInput();
         const toggleButton = document.getElementById('toggleTableButton');
         toggleButton.addEventListener('click', toggleTable);
-
-        $('#recommendationTable').DataTable();
+        
+        $('#recommendationTable').DataTable({
+          initComplete: function () {
+            this.api().columns().every(function (index) {
+              if (index === 0) {
+                return;
+              }
+              var column = this;
+              var columnData = column.data().unique().sort();
+      
+              var select = $('<div class="filter-container" style="height:100px; overflow:auto;"></div>')
+                .appendTo($(column.footer()).empty())
+                .on('change', 'input:checkbox', function () {
+                  var checkedValues = [];
+                  $('input:checkbox:checked', select).each(function () {
+                    checkedValues.push($(this).val());
+                  });
+      
+                  var regex = checkedValues.join('|');
+                  column
+                    .search(checkedValues.length ? '^(' + regex + ')$' : '', true, false)
+                    .draw();
+                });
+              columnData.each(function (d, j) {
+                var checkbox = $('<label><input type="checkbox" value=" ' + d + '">' + d + '</label><br>');
+                select.append(checkbox);
+              });
+            });
+          },
+        });
       },
+
+      // // Simple string filter input
+      // didOpen: () => {
+      //   const input = Swal.getInput();
+      //   const toggleButton = document.getElementById('toggleTableButton');
+      //   toggleButton.addEventListener('click', toggleTable);
+      
+      //   $('#recommendationTable').DataTable({
+      //     initComplete: function () {
+      //       // Add filtering input for each column (except the first column)
+      //       this.api().columns().every(function (index) {
+      //         if (index === 0) {
+      //           return;
+      //         }
+      //         var column = this;
+      //         var input = $('<input type="text" placeholder="filter" style="width:100%" />')
+      //           .appendTo($(column.footer()).empty())
+      //           .on('keyup change clear', function () {
+      //             if (column.search() !== this.value) {
+      //               column.search(this.value).draw();
+      //             }
+      //           });
+      //       });
+      //     },
+      //   });
+      // },
+      
       inputAttributes: {
         autocapitalize: "off",
       },
