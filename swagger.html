@@ -58,10 +58,16 @@
         const credentials = btoa(username + ':' + password);
         const authHeader = 'Basic ' + credentials;
 
-        console.log('Starting to fetch YAML');
+        const protocol = window.location.protocol;
+        const hostname = window.location.hostname;
+        const apiPort = '1323';
+        const apiDocPath = '/tumblebug/api/doc.yaml';
+        const apiDocUrl = `${protocol}//${hostname}:${apiPort}${apiDocPath}`;
+
+        console.log('API Document URL:', apiDocUrl);
 
         // Fetch the YAML file with authentication
-        fetch('http://localhost:1323/tumblebug/api/doc.yaml', {
+        fetch(apiDocUrl, {
             headers: {
                 'Authorization': authHeader
             }
@@ -81,7 +87,7 @@
 
             // Initialize Swagger UI
             const ui = SwaggerUIBundle({
-                url: 'http://localhost:1323/tumblebug/api/doc.yaml',
+                url: apiDocUrl,
                 dom_id: '#swagger-ui-container',
                 presets: [
                     SwaggerUIBundle.presets.apis,
