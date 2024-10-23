@@ -2410,12 +2410,12 @@ document.getElementById(typeStringSG).onmouseover = function () {
 document.getElementById(typeStringSshKey).onmouseover = function () {
   updateResourceList(typeStringSshKey);
 };
-document.getElementById(typeStringImage).onmouseover = function () {
-  //updateResourceList(typeStringImage);
-};
-document.getElementById(typeStringSpec).onmouseover = function () {
-  //updateResourceList(typeStringSpec);
-};
+// document.getElementById(typeStringImage).onmouseover = function () {
+//   //updateResourceList(typeStringImage);
+// };
+// document.getElementById(typeStringSpec).onmouseover = function () {
+//   //updateResourceList(typeStringSpec);
+// };
 
 function updateConnectionList() {
   var selectElement = document.getElementById(typeStringConnection);
