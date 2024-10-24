@@ -247,6 +247,12 @@ const csvPath =
 var cloudLocation = [];
 var cspPointsCircle = [];
 var geoCspPointsCircle = new Array();
+var geoResourceLocation = {
+  sshKey: [],
+  sg: [],
+  k8s: [],
+  vnet: []
+};
 
 var cspPoints = {};
 var geoCspPoints = {};
@@ -393,6 +399,43 @@ var iconStyleNlb = new Style({
     src: "img/iconNlb.png",
     opacity: 1.0,
     scale: 0.7,
+  }),
+});
+
+addIconToMap("img/iconVnet.png", pnt, "001");
+var iconStyleVnet = new Style({
+  image: new Icon({
+    crossOrigin: "anonymous",
+    src: "img/iconVnet.png",
+    opacity: 1.0,
+    scale: 0.8,
+  }),
+});
+addIconToMap("img/iconSG.png", pnt, "001");
+var iconStyleSG = new Style({
+  image: new Icon({
+    crossOrigin: "anonymous",
+    src: "img/iconSG.png",
+    opacity: 1.0,
+    scale: 1.0,
+  }),
+});
+addIconToMap("img/iconKey.png", pnt, "001");
+var iconStyleKey = new Style({
+  image: new Icon({
+    crossOrigin: "anonymous",
+    src: "img/iconKey.png",
+    opacity: 1.0,
+    scale: 0.7,
+  }),
+});
+addIconToMap("img/iconK8s.png", pnt, "001");
+var iconStyleK8s = new Style({
+  image: new Icon({
+    crossOrigin: "anonymous",
+    src: "img/iconK8s.png",
+    opacity: 1.0,
+    scale: 1.0,
   }),
 });
 
@@ -764,7 +807,11 @@ function getMci() {
     : 5;
   setTimeout(() => getMci(), filteredRefreshInterval * 1000);
 
+  var zoomLevel = map.getView().getZoom() * 2.0;
+  var radius = 4.0;
+
   if (namespace && namespace != "") {
+    // get mci list and put them on the map
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=status`;
 
     axios({
@@ -779,14 +826,9 @@ function getMci() {
       .then((res) => {
         var obj = res.data;
 
-        var zoomLevel = map.getView().getZoom() * 2.0;
-        var radius = 4.0;
-
         cnt = cntInit;
         if (obj.mci != null) {
-          //console.log(obj.mci);
           for (let item of obj.mci) {
-            //console.log("Index:[" + "]obj.mci[i].name = " + item.name);
             console.log(item);
 
             var hideFlag = false;
@@ -873,6 +915,134 @@ function getMci() {
       .catch(function (error) {
         console.log(error);
       });
+
+    // get vnet list and put them on the map
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/vNet`;
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+      timeout: 10000,
+    }).then((res) => {
+        var obj = res.data;
+        if (obj.vNet != null) {
+          var resourceLocation = [];
+          for (let item of obj.vNet) {
+            resourceLocation.push([
+              item.connectionConfig.regionDetail.location.longitude * 1 +
+              (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
+              item.connectionConfig.regionDetail.location.latitude * 1 - 0.1 +
+              (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
+            ]);
+            geoResourceLocation.vnet[0] = new MultiPoint([resourceLocation]);        
+            //console.log("geoResourceLocation.vnet[0]");
+            //console.log(geoResourceLocation.vnet[0]);
+          }
+        } else {
+          geoResourceLocation.vnet = [];
+        }
+      })
+      .catch(function (error) {
+        console.log(error);
+      });      
+
+      // get securityGroup list and put them on the map
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/securityGroup`;
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+      timeout: 10000,
+    }).then((res) => {
+        var obj = res.data;
+        if (obj.securityGroup != null) {
+          var resourceLocation = [];
+          for (let item of obj.securityGroup) {
+            resourceLocation.push([
+              item.connectionConfig.regionDetail.location.longitude * 1 - 0.1 +
+              (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
+              item.connectionConfig.regionDetail.location.latitude * 1 - 0.1 +
+              (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
+            ]);
+            geoResourceLocation.sg[0] = new MultiPoint([resourceLocation]);        
+          }
+        } else {
+          geoResourceLocation.sg = [];
+        }
+      })
+      .catch(function (error) {
+        console.log(error);
+      });     
+
+
+    // get sshKey list and put them on the map
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/sshKey`;
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+      timeout: 10000,
+    }).then((res) => {
+        var obj = res.data;
+        if (obj.sshKey != null) {
+          var resourceLocation = [];
+          for (let item of obj.sshKey) {
+            resourceLocation.push([
+              item.connectionConfig.regionDetail.location.longitude * 1 + 0.1 +
+              (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
+              item.connectionConfig.regionDetail.location.latitude * 1 - 0.1 +
+              (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
+            ]);
+            geoResourceLocation.sshKey[0] = new MultiPoint([resourceLocation]);        
+          }
+        } else {
+          geoResourceLocation.sshKey = [];
+        }
+      })
+      .catch(function (error) {
+        console.log(error);
+      });     
+
+    // get sshKey list and put them on the map
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8scluster`;
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+      timeout: 10000,
+    }).then((res) => {
+        var obj = res.data;
+        if (obj.cluster != null) {
+          var resourceLocation = [];
+          for (let item of obj.cluster) {
+            resourceLocation.push([
+              item.connectionConfig.regionDetail.location.longitude * 1 +
+              (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
+              item.connectionConfig.regionDetail.location.latitude * 1 - 0.5 +
+              (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
+            ]);
+            geoResourceLocation.k8s[0] = new MultiPoint([resourceLocation]);        
+          }
+        } else {
+          geoResourceLocation.k8s = [];
+        }
+      })
+      .catch(function (error) {
+        console.log(error);
+      });     
+
   }
 }
 
@@ -2410,12 +2580,12 @@ document.getElementById(typeStringSG).onmouseover = function () {
 document.getElementById(typeStringSshKey).onmouseover = function () {
   updateResourceList(typeStringSshKey);
 };
-document.getElementById(typeStringImage).onmouseover = function () {
-  //updateResourceList(typeStringImage);
-};
-document.getElementById(typeStringSpec).onmouseover = function () {
-  //updateResourceList(typeStringSpec);
-};
+// document.getElementById(typeStringImage).onmouseover = function () {
+//   //updateResourceList(typeStringImage);
+// };
+// document.getElementById(typeStringSpec).onmouseover = function () {
+//   //updateResourceList(typeStringSpec);
+// };
 
 function updateConnectionList() {
   var selectElement = document.getElementById(typeStringConnection);
@@ -3585,6 +3755,23 @@ function drawObjects(event) {
     //geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
     vectorContext.setStyle(iconStyleCircle);
     vectorContext.drawGeometry(geoCspPointsCircle[0]);
+  }
+
+  if (geoResourceLocation.vnet[0]) {
+    vectorContext.setStyle(iconStyleVnet); 
+    vectorContext.drawGeometry(geoResourceLocation.vnet[0]);
+  }
+  if (geoResourceLocation.sg[0]) {
+    vectorContext.setStyle(iconStyleSG); 
+    vectorContext.drawGeometry(geoResourceLocation.sg[0]);
+  }
+  if (geoResourceLocation.sshKey[0]) {
+    vectorContext.setStyle(iconStyleKey); 
+    vectorContext.drawGeometry(geoResourceLocation.sshKey[0]);
+  }
+  if (geoResourceLocation.k8s[0]) {
+    vectorContext.setStyle(iconStyleK8s); 
+    vectorContext.drawGeometry(geoResourceLocation.k8s[0]);
   }
 
   //console.log( geometries );

@@ -603,29 +603,27 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               </div>
 
               <!-- image Field -->
-              <div class="form-group col">
+              <!-- <div class="form-group col">
                 <div class="input-group">
                   <div class="input-group-prepend">
                     <span class="input-group-text" id="imageLabel">Image</span>
                   </div>
                   <select id="image" name="image" class="form-control" aria-label="image ID"
                     aria-describedby="imageLabel">
-                    <!-- Options will be filled dynamically -->
                   </select>
                 </div>
-              </div>
+              </div> -->
 
               <!-- spec Field -->
-              <div class="form-group col">
+              <!-- <div class="form-group col">
                 <div class="input-group">
                   <div class="input-group-prepend">
                     <span class="input-group-text" id="specLabel">Spec</span>
                   </div>
                   <select id="spec" name="spec" class="form-control" aria-label="spec ID" aria-describedby="specLabel">
-                    <!-- Options will be filled dynamically -->
                   </select>
                 </div>
-              </div>
+              </div> -->
 
               <!-- connection Field -->
               <div class="form-group col">
@@ -640,6 +638,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 </div>
               </div>
 
+              <!-- Release Resources Field -->
+              <div class="form-group col">
+                <button type="button" id="delResources" onClick="releaseResources();" class="btn btn-warning w-100">Release Resources</button>
+              </div>
+
+
               <!-- Resource Control Field -->
               <div class="form-group col dropdown">
                 <button class="btn btn-primary dropdown-toggle w-100" type="button" id="resourceControlDropdown"
@@ -647,8 +651,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   Resource Control
                 </button>
                 <div class="dropdown-menu" aria-labelledby="resourceControlDropdown">
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="releaseResources();">Release Used
-                    Resources</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="releaseResources();">Release Resources</a>
                   <a class="dropdown-item" href="javascript:void(0)" onClick="resourceOverview();">Overview
                     Resources</a>
                   <a class="dropdown-item" href="javascript:void(0)" onClick="registerCspResource();">Register Existing
