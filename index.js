@@ -435,7 +435,7 @@ var iconStyleK8s = new Style({
     crossOrigin: "anonymous",
     src: "img/iconK8s.png",
     opacity: 1.0,
-    scale: 1.0,
+    scale: 0.7,
   }),
 });
 
@@ -1024,16 +1024,18 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
         var obj = res.data;
-        if (obj.cluster != null) {
+        if (obj.K8sClusterInfo != null) {
           var resourceLocation = [];
-          for (let item of obj.cluster) {
+          for (let item of obj.K8sClusterInfo) {
             resourceLocation.push([
               item.connectionConfig.regionDetail.location.longitude * 1 +
               (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
-              item.connectionConfig.regionDetail.location.latitude * 1 - 0.5 +
+              item.connectionConfig.regionDetail.location.latitude * 1 +
               (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
             ]);
-            geoResourceLocation.k8s[0] = new MultiPoint([resourceLocation]);        
+            geoResourceLocation.k8s[0] = new MultiPoint([resourceLocation]);   
+            console.log("geoResourceLocation.k8s[0]");
+            console.log(geoResourceLocation.k8s[0]);     
           }
         } else {
           geoResourceLocation.k8s = [];
