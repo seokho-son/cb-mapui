@@ -146,6 +146,12 @@ function clearMap() {
   messageJsonOutput.value = "";
   messageTextArea.value = "";
   geometries = [];
+  geoResourceLocation.k8s = [];
+  geoResourceLocation.sg = [];
+  geoResourceLocation.sshKey = [];
+  geoResourceLocation.vnet = [];
+
+
   map.render();
 }
 window.clearMap = clearMap;
@@ -602,8 +608,8 @@ function returnAdjustmentPoint(num) {
     ax = Math.random() - Math.random();
     ay = Math.random() - Math.random();
   }
-  ax = Math.random() * 0.1 + ax;
-  ay = Math.random() * 0.1 + ay;
+  ax = Math.random() * 0.01 + ax;
+  ay = Math.random() * 0.01 + ay;
   ay = ay * 0.78;
 
   return { ax, ay };
@@ -2135,6 +2141,7 @@ function releaseResources() {
     })
     .finally(function () {
       removeSpinnerTask(spinnerId);
+      clearMap();
     });
 }
 window.releaseResources = releaseResources;
