@@ -1238,6 +1238,8 @@ function getConnection() {
           usernameElement.value = username;
           passwordElement.value = password;
           getConnection();
+          updateNsList();
+          getMci();
         }
       });
 
