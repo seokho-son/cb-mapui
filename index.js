@@ -397,6 +397,16 @@ var iconStyleVm = new Style({
     scale: 0.7,
   }),
 });
+addIconToMap("img/iconK8s.png", pnt, "001");
+var iconStyleK8s = new Style({
+  image: new Icon({
+    crossOrigin: "anonymous",
+    src: "img/iconK8s.png",
+    opacity: 1.0,
+    scale: 0.7,
+  }),
+});
+
 
 addIconToMap("img/iconNlb.png", pnt, "001");
 var iconStyleNlb = new Style({
@@ -404,7 +414,7 @@ var iconStyleNlb = new Style({
     crossOrigin: "anonymous",
     src: "img/iconNlb.png",
     opacity: 1.0,
-    scale: 0.7,
+    scale: 0.6,
   }),
 });
 
@@ -414,7 +424,7 @@ var iconStyleVnet = new Style({
     crossOrigin: "anonymous",
     src: "img/iconVnet.png",
     opacity: 1.0,
-    scale: 0.8,
+    scale: 0.6,
   }),
 });
 addIconToMap("img/iconSG.png", pnt, "001");
@@ -423,7 +433,7 @@ var iconStyleSG = new Style({
     crossOrigin: "anonymous",
     src: "img/iconSG.png",
     opacity: 1.0,
-    scale: 1.0,
+    scale: 0.6,
   }),
 });
 addIconToMap("img/iconKey.png", pnt, "001");
@@ -432,16 +442,7 @@ var iconStyleKey = new Style({
     crossOrigin: "anonymous",
     src: "img/iconKey.png",
     opacity: 1.0,
-    scale: 0.7,
-  }),
-});
-addIconToMap("img/iconK8s.png", pnt, "001");
-var iconStyleK8s = new Style({
-  image: new Icon({
-    crossOrigin: "anonymous",
-    src: "img/iconK8s.png",
-    opacity: 1.0,
-    scale: 0.7,
+    scale: 0.6,
   }),
 });
 
