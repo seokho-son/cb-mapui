@@ -1184,6 +1184,64 @@ function getConnection() {
       }
       console.log(error);
       errorAlert("Cannot load cloud info\n\n - check dashboard config \n - check the server is ready");
+
+      Swal.fire({
+        title: 'Cannot load Cloud inforation',
+        html: `
+        <style>
+          .swal2-input-container {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            margin-bottom: 10px;
+          }
+          .swal2-label {
+            margin-bottom: 5px;
+            font-weight: bold;
+          }
+          .swal2-input {
+            width: 80%;
+          }
+        </style>
+        <p>- Check the server is ready</p>
+        <p>- Update API endpoint if needed</p>
+        <div class="swal2-input-container">
+          <label for="hostname-input" class="swal2-label">Hostname:</label>
+          <input id="hostname-input" class="swal2-input" placeholder="Enter the hostname" value="${hostnameElement.value}">
+        </div>
+        <div class="swal2-input-container">
+          <label for="port-input" class="swal2-label">Port:</label>
+          <input id="port-input" class="swal2-input" placeholder="Enter the port number" value="${portElement.value}">
+        </div>
+        <div class="swal2-input-container">
+          <label for="username-input" class="swal2-label">Username:</label>
+          <input id="username-input" class="swal2-input" placeholder="Enter the username" value="${usernameElement.value}">
+        </div>
+        <div class="swal2-input-container">
+          <label for="password-input" class="swal2-label">Password:</label>
+          <input id="password-input" class="swal2-input" type="password" placeholder="Enter the password" value="${passwordElement.value}">
+        </div>
+      `,
+        showCancelButton: true,
+        confirmButtonText: 'confirm',
+        preConfirm: () => {
+          const hostname = document.getElementById('hostname-input').value;
+          const port = document.getElementById('port-input').value;
+          const username = document.getElementById('username-input').value;
+          const password = document.getElementById('password-input').value;
+          return { hostname, port, username, password };
+        }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          const { hostname, port, username, password } = result.value;
+          hostnameElement.value = hostname;
+          portElement.value = port;
+          usernameElement.value = username;
+          passwordElement.value = password;
+          getConnection();
+        }
+      });
+
     });
 }
 window.getConnection = getConnection;
