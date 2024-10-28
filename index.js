@@ -1183,10 +1183,9 @@ function getConnection() {
         document.getElementById("port").style.color = "#FF0000";
       }
       console.log(error);
-      errorAlert("Cannot load cloud info\n\n - check dashboard config \n - check the server is ready");
 
       Swal.fire({
-        title: 'Cannot load Cloud inforation',
+        title: 'Cannot Get the Cloud information',
         html: `
         <style>
           .swal2-input-container {
@@ -1203,8 +1202,8 @@ function getConnection() {
             width: 80%;
           }
         </style>
-        <p>- Check the server is ready</p>
-        <p>- Update API endpoint if needed</p>
+        <p>- Please check the server is ready</p>
+        <p>- Update the API endpoint if needed</p>
         <div class="swal2-input-container">
           <label for="hostname-input" class="swal2-label">Hostname:</label>
           <input id="hostname-input" class="swal2-input" placeholder="Enter the hostname" value="${hostnameElement.value}">
