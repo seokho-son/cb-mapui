@@ -877,19 +877,17 @@ function getMci() {
               } else {
                 var groupCnt = 0;
                 if ((item.vm[j].location.longitude == item.vm[j - 1].location.longitude) && (item.vm[j].location.latitude == item.vm[j - 1].location.latitude)) {
-                  groupCnt++;
                   vmGeo.push([
                     item.vm[j].location.longitude * 1 +
-                    (returnAdjustmentPoint(groupCnt).ax / zoomLevel) * radius,
+                    (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
                     item.vm[j].location.latitude * 1 +
-                    (returnAdjustmentPoint(groupCnt).ay / zoomLevel) * radius,
+                    (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
                   ]);
                 } else {
                   vmGeo.push([
                     item.vm[j].location.longitude * 1,
                     item.vm[j].location.latitude * 1,
                   ]);
-                  groupCnt = 0;
                 }
               }
               validateNum++;
