@@ -594,28 +594,28 @@ function returnAdjustmentPoint(num) {
   ay = 0.0;
   if (num == 1) {
     ax = 0;
-    ay = 1;
+    ay = 0.75;
   } else if (num == 2) {
-    ax = 0.8;
-    ay = 0.8;
+    ax = 0.5;
+    ay = 0.5;
   } else if (num == 3) {
-    ax = 1;
+    ax = 0.75;
     ay = 0;
   } else if (num == 4) {
-    ax = 0.8;
-    ay = -0.8;
+    ax = 0.5;
+    ay = -0.5;
   } else if (num == 5) {
     ax = 0;
-    ay = -1;
+    ay = -0.75;
   } else if (num == 6) {
-    ax = -0.8;
-    ay = -0.8;
+    ax = -0.5;
+    ay = -0.5;
   } else if (num == 7) {
-    ax = -1;
+    ax = -0.75;
     ay = -0;
   } else if (num == 8) {
-    ax = -0.8;
-    ay = 0.8;
+    ax = -0.5;
+    ay = 0.5;
   } else {
     ax = Math.random() - Math.random();
     ay = Math.random() - Math.random();
@@ -875,18 +875,21 @@ function getMci() {
                   item.vm[j].location.latitude * 1,
                 ]);
               } else {
+                var groupCnt = 0;
                 if ((item.vm[j].location.longitude == item.vm[j - 1].location.longitude) && (item.vm[j].location.latitude == item.vm[j - 1].location.latitude)) {
+                  groupCnt++;
                   vmGeo.push([
                     item.vm[j].location.longitude * 1 +
-                    (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
+                    (returnAdjustmentPoint(groupCnt).ax / zoomLevel) * radius,
                     item.vm[j].location.latitude * 1 +
-                    (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
+                    (returnAdjustmentPoint(groupCnt).ay / zoomLevel) * radius,
                   ]);
                 } else {
                   vmGeo.push([
                     item.vm[j].location.longitude * 1,
                     item.vm[j].location.latitude * 1,
                   ]);
+                  groupCnt = 0;
                 }
               }
               validateNum++;
