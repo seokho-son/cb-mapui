@@ -150,6 +150,7 @@ function clearMap() {
   geoResourceLocation.sg = [];
   geoResourceLocation.sshKey = [];
   geoResourceLocation.vnet = [];
+  geoResourceLocation.vpn = [];
 
 
   map.render();
@@ -257,7 +258,8 @@ var geoResourceLocation = {
   sshKey: [],
   sg: [],
   k8s: [],
-  vnet: []
+  vnet: [],
+  vpn: []
 };
 
 var cspPoints = {};
@@ -414,7 +416,16 @@ var iconStyleNlb = new Style({
     crossOrigin: "anonymous",
     src: "img/iconNlb.png",
     opacity: 1.0,
-    scale: 0.6,
+    scale: 0.8,
+  }),
+});
+addIconToMap("img/iconVPN.png", pnt, "001");
+var iconStyleVPN = new Style({
+  image: new Icon({
+    crossOrigin: "anonymous",
+    src: "img/iconVPN.png",
+    opacity: 1.0,
+    scale: 0.8,
   }),
 });
 
@@ -424,7 +435,7 @@ var iconStyleVnet = new Style({
     crossOrigin: "anonymous",
     src: "img/iconVnet.png",
     opacity: 1.0,
-    scale: 0.6,
+    scale: 0.8,
   }),
 });
 addIconToMap("img/iconSG.png", pnt, "001");
@@ -433,7 +444,7 @@ var iconStyleSG = new Style({
     crossOrigin: "anonymous",
     src: "img/iconSG.png",
     opacity: 1.0,
-    scale: 0.6,
+    scale: 0.8,
   }),
 });
 addIconToMap("img/iconKey.png", pnt, "001");
@@ -442,7 +453,7 @@ var iconStyleKey = new Style({
     crossOrigin: "anonymous",
     src: "img/iconKey.png",
     opacity: 1.0,
-    scale: 0.6,
+    scale: 0.8,
   }),
 });
 
@@ -583,28 +594,28 @@ function returnAdjustmentPoint(num) {
   ay = 0.0;
   if (num == 1) {
     ax = 0;
-    ay = 1;
+    ay = 0.75;
   } else if (num == 2) {
-    ax = 0.8;
-    ay = 0.8;
+    ax = 0.5;
+    ay = 0.5;
   } else if (num == 3) {
-    ax = 1;
+    ax = 0.75;
     ay = 0;
   } else if (num == 4) {
-    ax = 0.8;
-    ay = -0.8;
+    ax = 0.5;
+    ay = -0.5;
   } else if (num == 5) {
     ax = 0;
-    ay = -1;
+    ay = -0.75;
   } else if (num == 6) {
-    ax = -0.8;
-    ay = -0.8;
+    ax = -0.5;
+    ay = -0.5;
   } else if (num == 7) {
-    ax = -1;
+    ax = -0.75;
     ay = -0;
   } else if (num == 8) {
-    ax = -0.8;
-    ay = 0.8;
+    ax = -0.5;
+    ay = 0.5;
   } else {
     ax = Math.random() - Math.random();
     ay = Math.random() - Math.random();
@@ -864,12 +875,20 @@ function getMci() {
                   item.vm[j].location.latitude * 1,
                 ]);
               } else {
-                vmGeo.push([
-                  item.vm[j].location.longitude * 1 +
-                  (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
-                  item.vm[j].location.latitude * 1 +
-                  (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
-                ]);
+                var groupCnt = 0;
+                if ((item.vm[j].location.longitude == item.vm[j - 1].location.longitude) && (item.vm[j].location.latitude == item.vm[j - 1].location.latitude)) {
+                  vmGeo.push([
+                    item.vm[j].location.longitude * 1 +
+                    (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
+                    item.vm[j].location.latitude * 1 +
+                    (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
+                  ]);
+                } else {
+                  vmGeo.push([
+                    item.vm[j].location.longitude * 1,
+                    item.vm[j].location.latitude * 1,
+                  ]);
+                }
               }
               validateNum++;
             }
@@ -939,10 +958,8 @@ function getMci() {
           var resourceLocation = [];
           for (let item of obj.vNet) {
             resourceLocation.push([
-              item.connectionConfig.regionDetail.location.longitude * 1 +
-              (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
-              item.connectionConfig.regionDetail.location.latitude * 1 - 0.1 +
-              (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
+              item.connectionConfig.regionDetail.location.longitude * 1 ,
+              item.connectionConfig.regionDetail.location.latitude * 1 - 0.05 ,
             ]);
             geoResourceLocation.vnet[0] = new MultiPoint([resourceLocation]);        
             //console.log("geoResourceLocation.vnet[0]");
@@ -972,10 +989,8 @@ function getMci() {
           var resourceLocation = [];
           for (let item of obj.securityGroup) {
             resourceLocation.push([
-              item.connectionConfig.regionDetail.location.longitude * 1 - 0.1 +
-              (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
-              item.connectionConfig.regionDetail.location.latitude * 1 - 0.1 +
-              (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
+              item.connectionConfig.regionDetail.location.longitude * 1 - 0.05 ,
+              item.connectionConfig.regionDetail.location.latitude * 1  ,
             ]);
             geoResourceLocation.sg[0] = new MultiPoint([resourceLocation]);        
           }
@@ -1004,10 +1019,8 @@ function getMci() {
           var resourceLocation = [];
           for (let item of obj.sshKey) {
             resourceLocation.push([
-              item.connectionConfig.regionDetail.location.longitude * 1 + 0.1 +
-              (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
-              item.connectionConfig.regionDetail.location.latitude * 1 - 0.1 +
-              (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
+              item.connectionConfig.regionDetail.location.longitude * 1 + 0.05 ,
+              item.connectionConfig.regionDetail.location.latitude * 1  ,
             ]);
             geoResourceLocation.sshKey[0] = new MultiPoint([resourceLocation]);        
           }
@@ -1019,7 +1032,7 @@ function getMci() {
         console.log(error);
       });     
 
-    // get sshKey list and put them on the map
+    // get k8scluster list and put them on the map
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8scluster`;
     axios({
       method: "get",
@@ -1037,7 +1050,7 @@ function getMci() {
             resourceLocation.push([
               item.connectionConfig.regionDetail.location.longitude * 1 +
               (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
-              item.connectionConfig.regionDetail.location.latitude * 1 +
+              item.connectionConfig.regionDetail.location.latitude * 1  +
               (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
             ]);
             geoResourceLocation.k8s[0] = new MultiPoint([resourceLocation]);   
@@ -1052,6 +1065,38 @@ function getMci() {
         console.log(error);
       });     
 
+    // get VPN list and put them on the map
+    var url = `http://${hostname}:${port}/tumblebug/resources/vpn?labelSelector=togetall%20!exists`;
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+      timeout: 10000,
+    }).then((res) => {
+        var obj = res.data;
+        if (obj != null) {
+          var resourceLocation = [];
+          for (let result of obj.results) {
+            for (let item of result.vpnGatewayInfo) {
+              resourceLocation.push([
+                item.connectionConfig.regionDetail.location.longitude * 1 ,
+                item.connectionConfig.regionDetail.location.latitude * 1 + 0.05  ,
+              ]);
+              geoResourceLocation.vpn[0] = new MultiPoint([resourceLocation]);   
+              console.log("geoResourceLocation.vpn[0]");
+              console.log(geoResourceLocation.vpn[0]);     
+            }
+          }
+        } else {
+          geoResourceLocation.vpn = [];
+        }
+      })
+      .catch(function (error) {
+        console.log(error);
+      });     
   }
 }
 
@@ -3819,6 +3864,22 @@ function drawObjects(event) {
     }
   });
 
+  // Draw MCI Geometry
+  for (i = geometries.length - 1; i >= 0; --i) {
+    var polyStyle = new Style({
+      stroke: new Stroke({
+        width: 1,
+        color: cororLineList[i % cororList.length],
+      }),
+      fill: new Fill({
+        color: cororList[i % cororList.length],
+      }),
+    });
+
+    vectorContext.setStyle(polyStyle);
+    vectorContext.drawGeometry(geometries[i]);
+  }
+
   if (cspPointsCircle.length) {
     //console.log("cspPointsCircle.length:" +cspPointsCircle.length + "cspPointsCircle["+cspPointsCircle+"]")
     //geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
@@ -3842,21 +3903,13 @@ function drawObjects(event) {
     vectorContext.setStyle(iconStyleK8s); 
     vectorContext.drawGeometry(geoResourceLocation.k8s[0]);
   }
+  if (geoResourceLocation.vpn[0]) {
+    vectorContext.setStyle(iconStyleVPN); 
+    vectorContext.drawGeometry(geoResourceLocation.vpn[0]);
+  }
 
-  //console.log( geometries );
+  // Draw MCI Points and Text
   for (i = geometries.length - 1; i >= 0; --i) {
-    var polyStyle = new Style({
-      stroke: new Stroke({
-        width: 1,
-        color: cororLineList[i % cororList.length],
-      }),
-      fill: new Fill({
-        color: cororList[i % cororList.length],
-      }),
-    });
-
-    vectorContext.setStyle(polyStyle);
-    vectorContext.drawGeometry(geometries[i]);
 
     if (mciName[i].includes("NLB")) {
       vectorContext.setStyle(iconStyleNlb);
