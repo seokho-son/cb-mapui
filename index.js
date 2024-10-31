@@ -2153,7 +2153,7 @@ function statusMCI() {
       username: `${username}`,
       password: `${password}`,
     },
-    timeout: 60000,
+    timeout: 260000,
   })
     .then((res) => {
       console.log("[Status MCI]");
