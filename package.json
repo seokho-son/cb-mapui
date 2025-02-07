@@ -1,6 +1,7 @@
 {
   "name": "cb-mapui",
   "dependencies": {
+    "@parcel/watcher": "^2.5.1",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "axios": "^1.6.0",
@@ -11,13 +12,13 @@
     "jquery": "^3.7.1",
     "json-formatter-js": "^2.3.4",
     "ol": "^8.1.0",
-    "parcel": "^2.10.1",
+    "parcel": "^2.13.3",
     "process": "^0.11.10",
-    "punycode": "^1.4.1",
+    "punycode": "^2.3.1",
     "querystring-es3": "^0.2.1",
     "stream-browserify": "^3.0.0",
     "stream-http": "^3.2.0",
-    "sweetalert2": "^11.4.14",
+    "sweetalert2": "^11.15.10",
     "url": "^0.11.0"
   },
   "devDependencies": {
