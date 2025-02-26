@@ -953,27 +953,27 @@ function getMci() {
       },
       timeout: 10000,
     }).then((res) => {
-        var obj = res.data;
-        if (obj.vNet != null) {
-          var resourceLocation = [];
-          for (let item of obj.vNet) {
-            resourceLocation.push([
-              item.connectionConfig.regionDetail.location.longitude * 1 ,
-              item.connectionConfig.regionDetail.location.latitude * 1 - 0.05 ,
-            ]);
-            geoResourceLocation.vnet[0] = new MultiPoint([resourceLocation]);        
-            //console.log("geoResourceLocation.vnet[0]");
-            //console.log(geoResourceLocation.vnet[0]);
-          }
-        } else {
-          geoResourceLocation.vnet = [];
+      var obj = res.data;
+      if (obj.vNet != null) {
+        var resourceLocation = [];
+        for (let item of obj.vNet) {
+          resourceLocation.push([
+            item.connectionConfig.regionDetail.location.longitude * 1,
+            item.connectionConfig.regionDetail.location.latitude * 1 - 0.05,
+          ]);
+          geoResourceLocation.vnet[0] = new MultiPoint([resourceLocation]);
+          //console.log("geoResourceLocation.vnet[0]");
+          //console.log(geoResourceLocation.vnet[0]);
         }
-      })
+      } else {
+        geoResourceLocation.vnet = [];
+      }
+    })
       .catch(function (error) {
         console.log(error);
-      });      
+      });
 
-      // get securityGroup list and put them on the map
+    // get securityGroup list and put them on the map
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/securityGroup`;
     axios({
       method: "get",
@@ -984,23 +984,23 @@ function getMci() {
       },
       timeout: 10000,
     }).then((res) => {
-        var obj = res.data;
-        if (obj.securityGroup != null) {
-          var resourceLocation = [];
-          for (let item of obj.securityGroup) {
-            resourceLocation.push([
-              item.connectionConfig.regionDetail.location.longitude * 1 - 0.05 ,
-              item.connectionConfig.regionDetail.location.latitude * 1  ,
-            ]);
-            geoResourceLocation.sg[0] = new MultiPoint([resourceLocation]);        
-          }
-        } else {
-          geoResourceLocation.sg = [];
+      var obj = res.data;
+      if (obj.securityGroup != null) {
+        var resourceLocation = [];
+        for (let item of obj.securityGroup) {
+          resourceLocation.push([
+            item.connectionConfig.regionDetail.location.longitude * 1 - 0.05,
+            item.connectionConfig.regionDetail.location.latitude * 1,
+          ]);
+          geoResourceLocation.sg[0] = new MultiPoint([resourceLocation]);
         }
-      })
+      } else {
+        geoResourceLocation.sg = [];
+      }
+    })
       .catch(function (error) {
         console.log(error);
-      });     
+      });
 
 
     // get sshKey list and put them on the map
@@ -1014,26 +1014,26 @@ function getMci() {
       },
       timeout: 10000,
     }).then((res) => {
-        var obj = res.data;
-        if (obj.sshKey != null) {
-          var resourceLocation = [];
-          for (let item of obj.sshKey) {
-            resourceLocation.push([
-              item.connectionConfig.regionDetail.location.longitude * 1 + 0.05 ,
-              item.connectionConfig.regionDetail.location.latitude * 1  ,
-            ]);
-            geoResourceLocation.sshKey[0] = new MultiPoint([resourceLocation]);        
-          }
-        } else {
-          geoResourceLocation.sshKey = [];
+      var obj = res.data;
+      if (obj.sshKey != null) {
+        var resourceLocation = [];
+        for (let item of obj.sshKey) {
+          resourceLocation.push([
+            item.connectionConfig.regionDetail.location.longitude * 1 + 0.05,
+            item.connectionConfig.regionDetail.location.latitude * 1,
+          ]);
+          geoResourceLocation.sshKey[0] = new MultiPoint([resourceLocation]);
         }
-      })
+      } else {
+        geoResourceLocation.sshKey = [];
+      }
+    })
       .catch(function (error) {
         console.log(error);
-      });     
+      });
 
-    // get k8scluster list and put them on the map
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8scluster`;
+    // get k8sCluster list and put them on the map
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster`;
     axios({
       method: "get",
       url: url,
@@ -1043,27 +1043,27 @@ function getMci() {
       },
       timeout: 10000,
     }).then((res) => {
-        var obj = res.data;
-        if (obj.K8sClusterInfo != null) {
-          var resourceLocation = [];
-          for (let item of obj.K8sClusterInfo) {
-            resourceLocation.push([
-              item.connectionConfig.regionDetail.location.longitude * 1 +
-              (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
-              item.connectionConfig.regionDetail.location.latitude * 1  +
-              (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
-            ]);
-            geoResourceLocation.k8s[0] = new MultiPoint([resourceLocation]);   
-            console.log("geoResourceLocation.k8s[0]");
-            console.log(geoResourceLocation.k8s[0]);     
-          }
-        } else {
-          geoResourceLocation.k8s = [];
+      var obj = res.data;
+      if (obj.K8sClusterInfo != null) {
+        var resourceLocation = [];
+        for (let item of obj.K8sClusterInfo) {
+          resourceLocation.push([
+            item.connectionConfig.regionDetail.location.longitude * 1 +
+            (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
+            item.connectionConfig.regionDetail.location.latitude * 1 +
+            (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
+          ]);
+          geoResourceLocation.k8s[0] = new MultiPoint([resourceLocation]);
+          console.log("geoResourceLocation.k8s[0]");
+          console.log(geoResourceLocation.k8s[0]);
         }
-      })
+      } else {
+        geoResourceLocation.k8s = [];
+      }
+    })
       .catch(function (error) {
         console.log(error);
-      });     
+      });
 
     // get VPN list and put them on the map
     var url = `http://${hostname}:${port}/tumblebug/resources/vpn?labelSelector=togetall%20!exists`;
@@ -1076,27 +1076,31 @@ function getMci() {
       },
       timeout: 10000,
     }).then((res) => {
-        var obj = res.data;
-        if (obj != null) {
-          var resourceLocation = [];
+      var obj = res.data;
+      if (obj != null) {
+        var resourceLocation = [];
+        if (obj.results != null) {
           for (let result of obj.results) {
-            for (let item of result.vpnGatewayInfo) {
-              resourceLocation.push([
-                item.connectionConfig.regionDetail.location.longitude * 1 ,
-                item.connectionConfig.regionDetail.location.latitude * 1 + 0.05  ,
-              ]);
-              geoResourceLocation.vpn[0] = new MultiPoint([resourceLocation]);   
-              console.log("geoResourceLocation.vpn[0]");
-              console.log(geoResourceLocation.vpn[0]);     
+            if (result.vpnGatewayInfo != null) {
+              for (let item of result.vpnGatewayInfo) {
+                resourceLocation.push([
+                  item.connectionConfig.regionDetail.location.longitude * 1,
+                  item.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
+                ]);
+                geoResourceLocation.vpn[0] = new MultiPoint([resourceLocation]);
+                console.log("geoResourceLocation.vpn[0]");
+                console.log(geoResourceLocation.vpn[0]);
+              }
             }
           }
-        } else {
-          geoResourceLocation.vpn = [];
         }
-      })
+      } else {
+        geoResourceLocation.vpn = [];
+      }
+    })
       .catch(function (error) {
         console.log(error);
-      });     
+      });
   }
 }
 
@@ -1411,7 +1415,8 @@ function createMci() {
             "<hr>" +
             subGroupReqString +
             "<br><br><input type='checkbox' id='hold-checkbox'> Hold VM provisioning of the MCI" +
-            "<br><input type='checkbox' id='monitoring-checkbox'> Deploy CB-Dragonfly monitoring agent",
+            "<br><input type='checkbox' id='monitoring-checkbox'> Deploy a monitoring agent" +
+            "<br><input type='checkbox' id='postcommand-checkbox'> Add post-deployment commands",
           showCancelButton: true,
           confirmButtonText: "Confirm",
           scrollbarPadding: false,
@@ -1419,7 +1424,8 @@ function createMci() {
           preConfirm: () => {
             return {
               monitoring: document.getElementById('monitoring-checkbox').checked,
-              hold: document.getElementById('hold-checkbox').checked
+              hold: document.getElementById('hold-checkbox').checked,
+              addPostCommand: document.getElementById('postcommand-checkbox').checked
             };
           }
 
@@ -1428,7 +1434,7 @@ function createMci() {
           if (result.isConfirmed) {
             createMciReq.installMonAgent = "no";
             if (result.value.monitoring) {
-              Swal.fire("Create MCI with CB-Dragonfly monitoring agent");
+              Swal.fire("Create MCI with a monitoring agent");
               createMciReq.installMonAgent = "yes";
             }
             if (result.value.hold) {
@@ -1436,53 +1442,125 @@ function createMci() {
               url += "?option=hold";
             }
 
-            var jsonBody = JSON.stringify(createMciReq, undefined, 4);
-            messageTextArea.value = " Creating MCI ...";
-            var spinnerId = addSpinnerTask(
-              "Creating MCI: " + createMciReq.name
-            );
-
-            requestId = generateRandomRequestId("mci-" + createMciReq.name + "-", 10);
-            addRequestIdToSelect(requestId);
-
-            axios({
-              method: "post",
-              url: url,
-              headers: { "Content-Type": "application/json", "x-request-id": requestId },
-              data: jsonBody,
-              auth: {
-                username: `${username}`,
-                password: `${password}`,
-              },
-            })
-              .then((res) => {
-                console.log(res); // for debug
-
-                displayJsonData(res.data, typeInfo);
-                handleAxiosResponse(res);
-
-                updateMciList();
-
-                clearCircle("none");
-                messageTextArea.value = "Created " + createMciReq.name;
-                //infoAlert("Created " + createMciReq.name);
-              })
-              .catch(function (error) {
-                errorAlert("Failed to create MCI: " + createMciReq.name);
-                if (error.response) {
-                  // status code is not 2xx
-                  console.log(error.response.data);
-                  console.log(error.response.status);
-                  console.log(error.response.headers);
-                  displayJsonData(error.response.data, typeError);
-                } else {
-                  console.log("Error", error.message);
+            if (result.value.addPostCommand) {
+              // Show postCommand input popup
+              Swal.fire({
+                title: "<font size=5><b>Add post-deployment commands</b></font>",
+                width: 900,
+                html: `
+                  <div id="dynamicContainer" style="text-align: left;">
+                    <p><font size=4><b>[Commands]</b></font></p>
+                    <div id="cmdContainer" style="margin-bottom: 20px;">
+                      <div id="cmdDiv1" class="cmdRow">
+                        Command 1: <input type="text" id="cmd1" style="width: 75%" value="${defaultRemoteCommand[0]}">
+                        <button onclick="document.getElementById('cmd1').value = ''">Clear</button>
+                      </div>
+                      <div id="cmdDiv2" class="cmdRow">
+                        Command 2: <input type="text" id="cmd2" style="width: 75%" value="${defaultRemoteCommand[1]}">
+                        <button onclick="document.getElementById('cmd2').value = ''">Clear</button>
+                      </div>
+                      <div id="cmdDiv3" class="cmdRow">
+                        Command 3: <input type="text" id="cmd3" style="width: 75%" value="${defaultRemoteCommand[2]}">
+                        <button onclick="document.getElementById('cmd3').value = ''">Clear</button>
+                      </div>
+                      <button id="addCmd" onclick="addCmd()" style="margin-left: 1px;"> + </button>
+                    </div>
+                  </div>`,
+                showCancelButton: true,
+                confirmButtonText: "Confirm",
+                didOpen: () => {
+                  window.addCmd = () => {
+                    const cmdContainer = document.getElementById('cmdContainer');
+                    const cmdCount = cmdContainer.children.length;
+                    if (cmdCount >= 10) {
+                      Swal.showValidationMessage('Maximum 10 commands allowed');
+                      return;
+                    }
+                    const newCmdDiv = document.createElement('div');
+                    newCmdDiv.id = `cmdDiv${cmdCount}`;
+                    newCmdDiv.className = 'cmdRow';
+                    newCmdDiv.innerHTML = `
+                      Command ${cmdCount}: <input type="text" id="cmd${cmdCount}" style="width: 75%">
+                      <button onclick="document.getElementById('cmd${cmdCount}').value = ''">Clear</button>
+                    `;
+                    cmdContainer.appendChild(newCmdDiv);
+                  };
+                },
+                preConfirm: () => {
+                  const commands = [];
+                  const cmdContainer = document.getElementById('cmdContainer');
+                  for (let i = 1; i <= cmdContainer.children.length - 1; i++) {
+                    const cmdInput = document.getElementById(`cmd${i}`);
+                    if (cmdInput && cmdInput.value.trim()) {
+                      commands.push(cmdInput.value.trim());
+                    }
+                  }
+                  return commands;
+                },
+              }).then((cmdResult) => {
+                if (cmdResult.isConfirmed && cmdResult.value && cmdResult.value.length > 0) {
+                  createMciReq.postCommand = {
+                    command: cmdResult.value,
+                    userName: "cb-user"
+                  };
+                  proceedWithMciCreation(createMciReq, url, username, password);
                 }
-                console.log(error.config);
-              })
-              .finally(function () {
-                removeSpinnerTask(spinnerId);
+                // User cancelled the postCommand dialog or no commands were entered
               });
+            } else {
+              // No postCommand needed, proceed with MCI creation
+              proceedWithMciCreation(createMciReq, url, username, password);
+            }
+
+            // Extracted the MCI creation process into a function to avoid code duplication
+            function proceedWithMciCreation(createMciReq, url, username, password) {
+              var jsonBody = JSON.stringify(createMciReq, undefined, 4);
+              messageTextArea.value = " Creating MCI ...";
+              var spinnerId = addSpinnerTask(
+                "Creating MCI: " + createMciReq.name
+              );
+
+              var requestId = generateRandomRequestId("mci-" + createMciReq.name + "-", 10);
+              addRequestIdToSelect(requestId);
+
+              axios({
+                method: "post",
+                url: url,
+                headers: { "Content-Type": "application/json", "x-request-id": requestId },
+                data: jsonBody,
+                auth: {
+                  username: `${username}`,
+                  password: `${password}`,
+                },
+              })
+                .then((res) => {
+                  console.log(res); // for debug
+
+                  displayJsonData(res.data, typeInfo);
+                  handleAxiosResponse(res);
+
+                  updateMciList();
+
+                  clearCircle("none");
+                  messageTextArea.value = "Created " + createMciReq.name;
+                })
+                .catch(function (error) {
+                  errorAlert("Failed to create MCI: " + createMciReq.name);
+                  if (error.response) {
+                    // status code is not 2xx
+                    console.log(error.response.data);
+                    console.log(error.response.status);
+                    console.log(error.response.headers);
+                    displayJsonData(error.response.data, typeError);
+                  } else {
+                    console.log("Error", error.message);
+                  }
+                  console.log(error.config);
+                })
+                .finally(function () {
+                  removeSpinnerTask(spinnerId);
+                });
+            }
           }
         });
       }
@@ -1730,7 +1808,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
         const input = Swal.getInput();
         const toggleButton = document.getElementById('toggleTableButton');
         toggleButton.addEventListener('click', toggleTable);
-        
+
         $('#recommendationTable').DataTable({
           initComplete: function () {
             this.api().columns().every(function (index) {
@@ -1739,7 +1817,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
               }
               var column = this;
               var columnData = column.data().unique().sort();
-      
+
               var select = $('<div class="filter-container" style="height:100px; overflow:auto;"></div>')
                 .appendTo($(column.footer()).empty())
                 .on('change', 'input:checkbox', function () {
@@ -1747,7 +1825,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
                   $('input:checkbox:checked', select).each(function () {
                     checkedValues.push($(this).val());
                   });
-      
+
                   var regex = checkedValues.join('|');
                   column
                     .search(checkedValues.length ? '^(' + regex + ')$' : '', true, false)
@@ -1767,7 +1845,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
       //   const input = Swal.getInput();
       //   const toggleButton = document.getElementById('toggleTableButton');
       //   toggleButton.addEventListener('click', toggleTable);
-      
+
       //   $('#recommendationTable').DataTable({
       //     initComplete: function () {
       //       // Add filtering input for each column (except the first column)
@@ -1787,7 +1865,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
       //     },
       //   });
       // },
-      
+
       inputAttributes: {
         autocapitalize: "off",
       },
@@ -3517,23 +3595,23 @@ window.executeRemoteCmd = executeRemoteCmd;
 
 // Function for transferFileToMci by remoteCmd button item
 function transferFileToMci() {
-    var hostname = hostnameElement.value;
-    var port = portElement.value;
-    var username = usernameElement.value;
-    var password = passwordElement.value;
-    var namespace = namespaceElement.value;
-    var mciid = mciidElement.value;
-    var subgroupid = document.getElementById("subgroupid").value;
-    var vmid = document.getElementById("vmid").value;
-  
-    if (mciid) {
-      messageTextArea.value = "[Transfer file to MCI:" + mciid + "]\n";
-  
-      // Swal popup for selecting file and target path
-      Swal.fire({
-        title: "<font size=5><b>Transfer File to MCI</b></font>",
-        width: 900,
-        html: 
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+  var username = usernameElement.value;
+  var password = passwordElement.value;
+  var namespace = namespaceElement.value;
+  var mciid = mciidElement.value;
+  var subgroupid = document.getElementById("subgroupid").value;
+  var vmid = document.getElementById("vmid").value;
+
+  if (mciid) {
+    messageTextArea.value = "[Transfer file to MCI:" + mciid + "]\n";
+
+    // Swal popup for selecting file and target path
+    Swal.fire({
+      title: "<font size=5><b>Transfer File to MCI</b></font>",
+      width: 900,
+      html:
         `<div style="text-align: left; padding: 10px;">
         <p><font size=4><b>Select File to Transfer</b></font></p>
         <div style="display: flex; justify-content: flex-start; margin-bottom: 20px;">
@@ -3561,68 +3639,68 @@ function transferFileToMci() {
             </div>
         </div>
         </div>`,
-        showCancelButton: true,
-        confirmButtonText: "Transfer",
-        didOpen: () => {
-          document.getElementById("fileInput").addEventListener("change", function (e) {
-            console.log("File selected:", e.target.files[0]);
-          });
-        },
-        preConfirm: () => {
-          // Get the file and target path from the input fields
-          const fileInput = document.getElementById("fileInput");
-          const targetPath = document.getElementById("targetPathInput").value;
-  
-          // Check if a file is selected
-          if (!fileInput.files[0]) {
-            Swal.showValidationMessage("Please select a file to transfer.");
-            return false;
-          }
-  
-          // Return the file and targetPath
-          return {
-            file: fileInput.files[0],
-            targetPath: targetPath,
-          };
-        },
-      }).then((result) => {
-        if (result.value) {
-          const file = result.value.file;
-          const targetPath = result.value.targetPath;
-  
-          // Handle radio button value
-          const radioValue = Swal.getPopup().querySelector('input[name="selectOption"]:checked').value;
-          let url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/transferFile/mci/${mciid}`;
-          if (radioValue === "SubGroup") {
-            url += `?subGroupId=${subgroupid}`;
-          } else if (radioValue === "VM") {
-            url += `?vmId=${vmid}`;
-          }
-  
-          // Prepare the formData to transfer the file
-          var formData = new FormData();
-          formData.append("file", file);
-          formData.append("path", targetPath);
-  
-          // Show loading spinner
-          Swal.fire({
-            title: 'Transferring...',
-            html: `Transferring ${file.name} to ${targetPath}...`,
-            allowOutsideClick: false,
-            didOpen: () => {
-              Swal.showLoading();
-            },
-          });
-  
-          axios({
-            method: "post",
-            url: url,
-            headers: {
-              "Authorization": `Basic ${btoa(`${username}:${password}`)}`, // Basic Auth
-              "Content-Type": "multipart/form-data",
-            },
-            data: formData,
-          })
+      showCancelButton: true,
+      confirmButtonText: "Transfer",
+      didOpen: () => {
+        document.getElementById("fileInput").addEventListener("change", function (e) {
+          console.log("File selected:", e.target.files[0]);
+        });
+      },
+      preConfirm: () => {
+        // Get the file and target path from the input fields
+        const fileInput = document.getElementById("fileInput");
+        const targetPath = document.getElementById("targetPathInput").value;
+
+        // Check if a file is selected
+        if (!fileInput.files[0]) {
+          Swal.showValidationMessage("Please select a file to transfer.");
+          return false;
+        }
+
+        // Return the file and targetPath
+        return {
+          file: fileInput.files[0],
+          targetPath: targetPath,
+        };
+      },
+    }).then((result) => {
+      if (result.value) {
+        const file = result.value.file;
+        const targetPath = result.value.targetPath;
+
+        // Handle radio button value
+        const radioValue = Swal.getPopup().querySelector('input[name="selectOption"]:checked').value;
+        let url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/transferFile/mci/${mciid}`;
+        if (radioValue === "SubGroup") {
+          url += `?subGroupId=${subgroupid}`;
+        } else if (radioValue === "VM") {
+          url += `?vmId=${vmid}`;
+        }
+
+        // Prepare the formData to transfer the file
+        var formData = new FormData();
+        formData.append("file", file);
+        formData.append("path", targetPath);
+
+        // Show loading spinner
+        Swal.fire({
+          title: 'Transferring...',
+          html: `Transferring ${file.name} to ${targetPath}...`,
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          },
+        });
+
+        axios({
+          method: "post",
+          url: url,
+          headers: {
+            "Authorization": `Basic ${btoa(`${username}:${password}`)}`, // Basic Auth
+            "Content-Type": "multipart/form-data",
+          },
+          data: formData,
+        })
           .then((res) => {
             // Success message
             Swal.fire({
@@ -3637,23 +3715,23 @@ function transferFileToMci() {
             // Error message
             console.error("File transfer error:", error);
             errorAlert(
-                JSON.stringify(error.response.data, null, 2).replace(
-                  /['",]+/g,
-                  ""
-                )
-              );
+              JSON.stringify(error.response.data, null, 2).replace(
+                /['",]+/g,
+                ""
+              )
+            );
           })
           .finally(() => {
             Swal.hideLoading();
           });
-        } else {
-          messageTextArea.value = "File transfer was canceled.";
-        }
-      });
-    } else {
-      errorAlert("MCI ID is not assigned");
-      messageTextArea.value = "MCI ID is not assigned.";
-    }
+      } else {
+        messageTextArea.value = "File transfer was canceled.";
+      }
+    });
+  } else {
+    errorAlert("MCI ID is not assigned");
+    messageTextArea.value = "MCI ID is not assigned.";
+  }
 }
 window.transferFileToMci = transferFileToMci;
 
@@ -3889,23 +3967,23 @@ function drawObjects(event) {
   }
 
   if (geoResourceLocation.vnet[0]) {
-    vectorContext.setStyle(iconStyleVnet); 
+    vectorContext.setStyle(iconStyleVnet);
     vectorContext.drawGeometry(geoResourceLocation.vnet[0]);
   }
   if (geoResourceLocation.sg[0]) {
-    vectorContext.setStyle(iconStyleSG); 
+    vectorContext.setStyle(iconStyleSG);
     vectorContext.drawGeometry(geoResourceLocation.sg[0]);
   }
   if (geoResourceLocation.sshKey[0]) {
-    vectorContext.setStyle(iconStyleKey); 
+    vectorContext.setStyle(iconStyleKey);
     vectorContext.drawGeometry(geoResourceLocation.sshKey[0]);
   }
   if (geoResourceLocation.k8s[0]) {
-    vectorContext.setStyle(iconStyleK8s); 
+    vectorContext.setStyle(iconStyleK8s);
     vectorContext.drawGeometry(geoResourceLocation.k8s[0]);
   }
   if (geoResourceLocation.vpn[0]) {
-    vectorContext.setStyle(iconStyleVPN); 
+    vectorContext.setStyle(iconStyleVPN);
     vectorContext.drawGeometry(geoResourceLocation.vpn[0]);
   }
 
