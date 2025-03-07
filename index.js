@@ -1309,7 +1309,7 @@ var createMciReqTmplt = {
 };
 
 var createMciReqVmTmplt = {
-  commonImage: "ubuntu18.04",
+  commonImage: "ubuntu22.04",
   commonSpec: "",
   description: "mapui",
   rootDiskType: "default",
@@ -1368,8 +1368,15 @@ function createMci() {
         "<tr><th style='width: 50%;'>vCPU</th><td><b>" + recommendedSpecList[i].vCPU + "</b></td></tr>" +
         "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + recommendedSpecList[i].memoryGiB + "</b></td></tr>" +
         acceleratorType +
-        "<tr><th style='width: 50%;'>RootDisk(GB)</th><td><b>" + recommendedSpecList[i].rootDiskSize + " (type: " + recommendedSpecList[i].rootDiskType + ")</b></td></tr>" +
+        "<tr><th style='width: 50%;'>RootDisk(GB)</th><td><b>" + createMciReq.vm[i].rootDiskSize + " (type: " + createMciReq.vm[i].rootDiskType + ")</b></td></tr>" +
         "<tr><th style='width: 50%;'>Selected Image OS Type</th><td><b><span style='color: green; '>" + createMciReq.vm[i].commonImage + "</span></b></td></tr>" +
+
+        ((createMciReq.vm[i].label && Object.keys(createMciReq.vm[i].label).length > 0) ?
+          "<tr><th style='width: 50%;'>Labels</th><td><b><span style='color: purple; '>" +
+          Object.entries(createMciReq.vm[i].label).map(([key, value]) =>
+            `${key}=${value}`
+          ).join(", ") +
+          "</span></b></td></tr>" : "") +
 
         "</table>" +
         "<hr>"
@@ -1668,57 +1675,120 @@ function getRecommendedSpec(idx, latitude, longitude) {
       return;
     }
 
-    addRegionMarker(res.data[0].id);
+    const checkReqURL = `http://${hostname}:${port}/tumblebug/mciDynamicCheckRequest`;
+    const checkReqBody = {
+      commonSpec: [
+        res.data[0].id
+      ]
+    };
+
+    console.log("Calling mciDynamicCheckRequest with spec:", res.data[0].id);
+
+    // mciDynamicCheckRequest API call
+    axios({
+      method: "post",
+      url: checkReqURL,
+      headers: { "Content-Type": "application/json" },
+      data: JSON.stringify(checkReqBody),
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+    }).then((checkRes) => {
+      console.log("mciDynamicCheckRequest response:", checkRes.data);
+
+      // 이미지 정보를 추출
+      let availableImages = [];
+      if (checkRes.data && checkRes.data.reqCheck && checkRes.data.reqCheck.length > 0) {
+        availableImages = checkRes.data.reqCheck[0].image.map(img => ({
+          id: img.id,
+          cspImageName: img.cspImageName,
+          guestOS: img.guestOS
+        }));
+
+        console.log("Available images for this spec:");
+        console.table(availableImages);
+        console.log("Connection candidates:", checkRes.data.reqCheck[0].connectionConfigCandidates);
+        console.log("Region info:", checkRes.data.reqCheck[0].region);
+      }
 
 
-    var createMciReqVm = $.extend({}, createMciReqVmTmplt);
-    var recommendedSpec = res.data[0];
-
-    createMciReqVm.name = "g" + (vmReqeustFromSpecList.length + 1).toString();
-
-    osImage = document.getElementById("osImage");
-    diskSize = document.getElementById("diskSize");
-
-    createMciReqVm.commonSpec = res.data[0].id;
-    createMciReqVm.commonImage = osImage.value;
-    createMciReqVm.rootDiskType = res.data[0].rootDiskType;
-
-    var diskSizeInput = diskSize.value;
-    if (isNaN(diskSizeInput) || diskSizeInput == "") {
-      diskSizeInput = "default";
-    }
-    createMciReqVm.rootDiskSize = diskSizeInput;
-    if (diskSizeInput == "default" && res.data[0].rootDiskSize != "default") {
-      createMciReqVm.rootDiskSize = res.data[0].rootDiskSize;
-      // need to validate requested disk size >= default disk size given by vm spec
-    }
-
-    let costPerHour = res.data[0].costPerHour;
-    if (costPerHour == "100000000" || costPerHour == "") {
-      costPerHour = "unknown";
-    }
-    let acceleratorType = res.data[0].acceleratorType;
-    let acceleratorModel = res.data[0].acceleratorModel;
-    if (acceleratorType == "gpu") {
-      acceleratorType = "<tr><th style='width: 50%;'>AcceleratorType</th><td><b><span style='color: red; font-size: larger;'>GPU</span></b></td></tr>"
-      acceleratorModel = "<tr><th style='width: 50%;'>AcceleratorModel</th><td><b><span style='color: red; font-size: larger;'>" + acceleratorModel + "</span></b></td></tr>"
-    } else {
-      acceleratorType = "<tr><th style='width: 50%;'>AcceleratorType</th><td><b><span style='color: black;'>None</span></b></td></tr>"
-      acceleratorModel = "<tr><th style='width: 50%;'>AcceleratorModel</th><td><b><span style='color: black;'>" + acceleratorModel + "</span></b></td></tr>"
-    }
+      addRegionMarker(res.data[0].id);
 
 
-    // Show all recommended specs in a table if needed
-    var tableContent = res.data.map((spec, index) => {
-      let costPerHour = spec.costPerHour === "100000000" || spec.costPerHour === "" ? "unknown" : spec.costPerHour;
-      let acceleratorCount = spec.acceleratorType === "gpu"
-        ? `<span style='color: red; font-size: larger;'>GPU</span>`
-        : `<span style='color: black;'>None</span>`;
-      let acceleratorModel = spec.acceleratorModel === "gpu"
-        ? `<span style='color: red; font-size: larger;'>${spec.acceleratorModel}</span>`
-        : `<span style='color: black;'>${spec.acceleratorModel}</span>`;
+      var createMciReqVm = $.extend({}, createMciReqVmTmplt);
+      var recommendedSpec = res.data[0];
 
-      return `
+      createMciReqVm.name = "g" + (vmReqeustFromSpecList.length + 1).toString();
+
+      osImage = document.getElementById("osImage");
+      diskSize = document.getElementById("diskSize");
+
+      createMciReqVm.commonSpec = res.data[0].id;
+      createMciReqVm.commonImage = osImage.value;
+      createMciReqVm.rootDiskType = res.data[0].rootDiskType;
+
+      var diskSizeInput = diskSize.value;
+      if (isNaN(diskSizeInput) || diskSizeInput == "") {
+        diskSizeInput = "default";
+      }
+      createMciReqVm.rootDiskSize = diskSizeInput;
+      if (diskSizeInput == "default" && res.data[0].rootDiskSize != "default") {
+        createMciReqVm.rootDiskSize = res.data[0].rootDiskSize;
+        // need to validate requested disk size >= default disk size given by vm spec
+      }
+
+      // OS Image select dropdown
+      let imageSelectHTML = '';
+      if (availableImages && availableImages.length > 0) {
+        imageSelectHTML = `
+      <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: green;">
+    `;
+        let currentImageFound = false;
+        for (let img of availableImages) {
+          const selected = (img.guestOS === createMciReqVm.commonImage) ? 'selected' : '';
+          if (selected) currentImageFound = true;
+          imageSelectHTML += `<option value="${img.guestOS}" ${selected}>${img.guestOS} (${img.cspImageName})</option>`;
+        }
+        if (!currentImageFound && createMciReqVm.commonImage) {
+          imageSelectHTML = `<option value="${createMciReqVm.commonImage}" selected>${createMciReqVm.commonImage} (not available)</option>` + imageSelectHTML;
+        }
+        imageSelectHTML += `</select>`;
+      } else {
+        imageSelectHTML = `
+      <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: red;">
+        <option disabled selected>No available image</option>
+      </select>
+    `;
+      }
+
+
+      let costPerHour = res.data[0].costPerHour;
+      if (costPerHour == "100000000" || costPerHour == "") {
+        costPerHour = "unknown";
+      }
+      let acceleratorType = res.data[0].acceleratorType;
+      let acceleratorModel = res.data[0].acceleratorModel;
+      if (acceleratorType == "gpu") {
+        acceleratorType = "<tr><th style='width: 50%;'>AcceleratorType</th><td><b><span style='color: red; font-size: larger;'>GPU</span></b></td></tr>"
+        acceleratorModel = "<tr><th style='width: 50%;'>AcceleratorModel</th><td><b><span style='color: red; font-size: larger;'>" + acceleratorModel + "</span></b></td></tr>"
+      } else {
+        acceleratorType = "<tr><th style='width: 50%;'>AcceleratorType</th><td><b><span style='color: black;'>None</span></b></td></tr>"
+        acceleratorModel = "<tr><th style='width: 50%;'>AcceleratorModel</th><td><b><span style='color: black;'>" + acceleratorModel + "</span></b></td></tr>"
+      }
+
+
+      // Show all recommended specs in a table if needed
+      var tableContent = res.data.map((spec, index) => {
+        let costPerHour = spec.costPerHour === "100000000" || spec.costPerHour === "" ? "unknown" : spec.costPerHour;
+        let acceleratorCount = spec.acceleratorType === "gpu"
+          ? `<span style='color: red; font-size: larger;'>GPU</span>`
+          : `<span style='color: black;'>None</span>`;
+        let acceleratorModel = spec.acceleratorModel === "gpu"
+          ? `<span style='color: red; font-size: larger;'>${spec.acceleratorModel}</span>`
+          : `<span style='color: black;'>${spec.acceleratorModel}</span>`;
+
+        return `
         <tr>
           <th>${index + 1}</th>
           <td>${spec.cspSpecName}</td>
@@ -1731,9 +1801,9 @@ function getRecommendedSpec(idx, latitude, longitude) {
           <td>${acceleratorModel}</td>
           <td>${spec.acceleratorMemoryGB}</td>
         </tr>`;
-    }).join("");
+      }).join("");
 
-    var tableHTML = `
+      var tableHTML = `
       <table id="recommendationTable" class="display nowrap" style="width:100%; text-align:left;">
         <thead>
           <tr>
@@ -1768,134 +1838,210 @@ function getRecommendedSpec(idx, latitude, longitude) {
         </tbody>
       </table>`;
 
-    Swal.fire({
-      title: "Recommended Spec and CSP region <br>",
-      width: 800,
-      html:
-        "<font size=3>" +
-        "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
-        "<tr><th style='width: 50%;'>Recommended Spec</th><td><b><span style='color: black; font-size: larger;'>" + res.data[0].cspSpecName + "</span></b></td></tr>" +
-        "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; font-size: larger;'> $ " + costPerHour + " (at least)</span></b></td></tr>" +
-        "<tr><th style='width: 50%;'>Selected Image OS Type</th><td><b><span style='color: green; font-size: larger;'>" + createMciReqVm.commonImage + "</span></b></td></tr>" +
+      Swal.fire({
+        title: "Recommended Spec and CSP region <br>",
+        width: 800,
+        html:
+          "<font size=3>" +
+          "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
+          "<tr><th style='width: 50%;'>Recommended Spec</th><td><b><span style='color: black; font-size: larger;'>" + res.data[0].cspSpecName + "</span></b></td></tr>" +
+          "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; font-size: larger;'> $ " + costPerHour + " (at least)</span></b></td></tr>" +
+          "<tr><th style='width: 50%;'>Image Type</th><td>" + imageSelectHTML + "</td></tr>" +
 
-        "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
-        "<tr><th style='width: 50%;'>Provider</th><td><b><span style='color: blue; font-size: larger;'>" + res.data[0].providerName.toUpperCase() + "</span></b></td></tr>" +
-        "<tr><th style='width: 50%;'>Region</th><td><b>" + res.data[0].regionName + "</b></td></tr>" +
-        "<tr><th style='width: 50%;'>ConnectionConfig</th><td><b>" + res.data[0].connectionName + "</b></td></tr>" +
+          "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
+          "<tr><th style='width: 50%;'>Provider</th><td><b><span style='color: blue; font-size: larger;'>" + res.data[0].providerName.toUpperCase() + "</span></b></td></tr>" +
+          "<tr><th style='width: 50%;'>Region</th><td><b>" + res.data[0].regionName + "</b></td></tr>" +
+          "<tr><th style='width: 50%;'>ConnectionConfig</th><td><b>" + res.data[0].connectionName + "</b></td></tr>" +
 
-        "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
-        "<tr><th style='width: 50%;'>vCPU</th><td><b>" + res.data[0].vCPU + "</b></td></tr>" +
-        "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + res.data[0].memoryGiB + "</b></td></tr>" +
-        "<tr><th style='width: 50%;'>RootDiskType</th><td><b>" + res.data[0].rootDiskType + "</b></td></tr>" +
-        "<tr><th style='width: 50%;'>RootDiskSize(GB)</th><td><b>" + createMciReqVm.rootDiskSize + "</b></td></tr>" +
+          "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
+          "<tr><th style='width: 50%;'>vCPU</th><td><b>" + res.data[0].vCPU + "</b></td></tr>" +
+          "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + res.data[0].memoryGiB + "</b></td></tr>" +
+          "<tr><th style='width: 50%;'>RootDiskType</th><td><b>" + res.data[0].rootDiskType + "</b></td></tr>" +
 
-        "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
-        acceleratorType +
-        acceleratorModel +
-        "<tr><th style='width: 50%;'>AcceleratorCount</th><td><b>" + res.data[0].acceleratorCount + "</b></td></tr>" +
-        "<tr><th style='width: 50%;'>AcceleratorMemoryGB</th><td><b>" + res.data[0].acceleratorMemoryGB + "</b></td></tr>" +
-        "</table><br>" +
+          "<tr><th style='width: 50%;'>RootDiskSize(GB)</th><td>" +
+          "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Enter disk size in GB or 'default'</span>" +
+          "<input type='text' id='rootDiskSizeCustom' style='width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px;' value='" + createMciReqVm.rootDiskSize + "'>" +
+          "</td></tr>" +
 
-        `<div style="margin-top: 10px;">` +
-        `<button id="toggleTableButton" class="btn btn-secondary dropdown-toggle w-100">Show All Recommendations</button>` +
-        `</div>` +
-        `<div id="fullTable" style="display:none">${tableHTML}</div>`,
+          "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
+          acceleratorModel +
+          "<tr><th style='width: 50%;'>AcceleratorCount</th><td><b>" + res.data[0].acceleratorCount + "</b></td></tr>" +
+          "<tr><th style='width: 50%;'>AcceleratorMemoryGB</th><td><b>" + res.data[0].acceleratorMemoryGB + "</b></td></tr>" +
 
-      inputLabel: 'Enter the number of VMs for scaling (1 ~ 10)',
-      input: "number",
-      inputValue: 1,
-      didOpen: () => {
-        const input = Swal.getInput();
-        const toggleButton = document.getElementById('toggleTableButton');
-        toggleButton.addEventListener('click', toggleTable);
+          // Label input field
+          "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
+          "<tr><th style='width: 50%;'>User Labels</th><td>" +
+          "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Enter in key=value, separated by commas</span>" +
+          "<input type='text' id='vmLabels' style='width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px;' placeholder='role=worker,env=prod,tier=frontend'>" +
+          "</td></tr>" +
 
-        $('#recommendationTable').DataTable({
-          initComplete: function () {
-            this.api().columns().every(function (index) {
-              if (index === 0) {
-                return;
-              }
-              var column = this;
-              var columnData = column.data().unique().sort();
+          // vm count input field
+          "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
+          "<tr><th style='width: 50%;'>SubGroup Scale</th><td>" +
+          "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Enter the number of VMs for scaling (1 ~ 100)</span>" +
+          "<input type='number' id='vmCount' style='width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px;' min='1' max='10' value='1'>" +
+          "</td></tr>" +
+          "</table><br>" +
 
-              var select = $('<div class="filter-container" style="height:100px; overflow:auto;"></div>')
-                .appendTo($(column.footer()).empty())
-                .on('change', 'input:checkbox', function () {
-                  var checkedValues = [];
-                  $('input:checkbox:checked', select).each(function () {
-                    checkedValues.push($(this).val());
+          `<div style="margin-top: 10px;">` +
+          `<button id="toggleTableButton" class="btn btn-secondary dropdown-toggle w-100">Show All Recommendations</button>` +
+          `</div>` +
+          `<div id="fullTable" style="display:none">${tableHTML}</div>`,
+
+        didOpen: () => {
+
+          const toggleButton = document.getElementById('toggleTableButton');
+          toggleButton.addEventListener('click', toggleTable);
+
+          $('#recommendationTable').DataTable({
+            initComplete: function () {
+              this.api().columns().every(function (index) {
+                if (index === 0) {
+                  return;
+                }
+                var column = this;
+                var columnData = column.data().unique().sort();
+
+                var select = $('<div class="filter-container" style="height:100px; overflow:auto;"></div>')
+                  .appendTo($(column.footer()).empty())
+                  .on('change', 'input:checkbox', function () {
+                    var checkedValues = [];
+                    $('input:checkbox:checked', select).each(function () {
+                      checkedValues.push($(this).val());
+                    });
+
+                    var regex = checkedValues.join('|');
+                    column
+                      .search(checkedValues.length ? '^(' + regex + ')$' : '', true, false)
+                      .draw();
                   });
-
-                  var regex = checkedValues.join('|');
-                  column
-                    .search(checkedValues.length ? '^(' + regex + ')$' : '', true, false)
-                    .draw();
+                columnData.each(function (d, j) {
+                  var checkbox = $('<label><input type="checkbox" value=" ' + d + '">' + d + '</label><br>');
+                  select.append(checkbox);
                 });
-              columnData.each(function (d, j) {
-                var checkbox = $('<label><input type="checkbox" value=" ' + d + '">' + d + '</label><br>');
-                select.append(checkbox);
               });
+            },
+          });
+        },
+
+        // // Simple string filter input
+        // didOpen: () => {
+        //   const input = Swal.getInput();
+        //   const toggleButton = document.getElementById('toggleTableButton');
+        //   toggleButton.addEventListener('click', toggleTable);
+
+        //   $('#recommendationTable').DataTable({
+        //     initComplete: function () {
+        //       // Add filtering input for each column (except the first column)
+        //       this.api().columns().every(function (index) {
+        //         if (index === 0) {
+        //           return;
+        //         }
+        //         var column = this;
+        //         var input = $('<input type="text" placeholder="filter" style="width:100%" />')
+        //           .appendTo($(column.footer()).empty())
+        //           .on('keyup change clear', function () {
+        //             if (column.search() !== this.value) {
+        //               column.search(this.value).draw();
+        //             }
+        //           });
+        //       });
+        //     },
+        //   });
+        // },
+
+        inputAttributes: {
+          autocapitalize: "off",
+        },
+        showCancelButton: true,
+        confirmButtonText: "Confirm",
+        //showLoaderOnConfirm: true,
+        position: "top-end",
+        //back(disabled section)ground color
+        backdrop: `rgba(0, 0, 0, 0.08)`,
+        preConfirm: () => {
+          // vmCount input validation
+          const vmCountInput = document.getElementById('vmCount');
+          let vmCount = parseInt(vmCountInput.value, 10);
+          if (isNaN(vmCount) || vmCount < 1 || vmCount > 100) {
+            Swal.showValidationMessage('Enter a valid number between 1 and 100');
+            return false;
+          }
+
+          // rootDiskSize input validation
+          const rootDiskSizeInput = document.getElementById('rootDiskSizeCustom');
+          const rootDiskSizeValue = rootDiskSizeInput.value.trim();
+          if (rootDiskSizeValue !== "default" && rootDiskSizeValue !== "") {
+            if (!/^\d+$/.test(rootDiskSizeValue)) {
+              Swal.showValidationMessage('Disk size must be "default", empty, or a number');
+              return false;
+            }
+          }
+
+          const osImageSelect = document.getElementById('osImageSelect');
+          if (osImageSelect && osImageSelect.value) {
+            createMciReqVm.commonImage = osImageSelect.value;
+          }
+          if (!createMciReqVm.commonImage) {
+            Swal.showValidationMessage('Select an OS image');
+            return false;
+          }
+
+          return vmCount;
+        },
+
+
+      }).then((result) => {
+        // result.value is false if result.isDenied or another key such as result.isDismissed
+        if (result.value) {
+
+          createMciReqVm.subGroupSize = String(result.value);
+          if (
+            isNaN(parseFloat(createMciReqVm.subGroupSize)) ||
+            parseFloat(createMciReqVm.subGroupSize) <= 0
+          ) {
+            createMciReqVm.subGroupSize = "1";
+          }
+
+          const rootDiskSizeInput = document.getElementById('rootDiskSizeCustom').value.trim();
+          if (rootDiskSizeInput) {
+            console.log(rootDiskSizeInput);
+            createMciReqVm.rootDiskSize = rootDiskSizeInput;
+          } else {
+            createMciReqVm.rootDiskSize = "default";
+          }
+
+          const vmLabelsInput = document.getElementById('vmLabels').value.trim();
+          if (vmLabelsInput) {
+
+            const labels = {};
+            vmLabelsInput.split(',').forEach(pair => {
+              const [key, value] = pair.trim().split('=');
+              if (key && value) {
+                labels[key] = value;
+              }
             });
-          },
-        });
-      },
 
-      // // Simple string filter input
-      // didOpen: () => {
-      //   const input = Swal.getInput();
-      //   const toggleButton = document.getElementById('toggleTableButton');
-      //   toggleButton.addEventListener('click', toggleTable);
+            if (Object.keys(labels).length > 0) {
+              createMciReqVm.label = labels;
+            }
+          }
 
-      //   $('#recommendationTable').DataTable({
-      //     initComplete: function () {
-      //       // Add filtering input for each column (except the first column)
-      //       this.api().columns().every(function (index) {
-      //         if (index === 0) {
-      //           return;
-      //         }
-      //         var column = this;
-      //         var input = $('<input type="text" placeholder="filter" style="width:100%" />')
-      //           .appendTo($(column.footer()).empty())
-      //           .on('keyup change clear', function () {
-      //             if (column.search() !== this.value) {
-      //               column.search(this.value).draw();
-      //             }
-      //           });
-      //       });
-      //     },
-      //   });
-      // },
 
-      inputAttributes: {
-        autocapitalize: "off",
-      },
-      showCancelButton: true,
-      confirmButtonText: "Confirm",
-      //showLoaderOnConfirm: true,
-      position: "top-end",
-      //back(disabled section)ground color
-      backdrop: `rgba(0, 0, 0, 0.08)`,
-    }).then((result) => {
-      // result.value is false if result.isDenied or another key such as result.isDismissed
-      if (result.value) {
-        createMciReqVm.subGroupSize = result.value;
-        if (
-          isNaN(createMciReqVm.subGroupSize) ||
-          createMciReqVm.subGroupSize <= 0
-        ) {
-          createMciReqVm.subGroupSize = 1;
+          messageTextArea.value +=
+            `${createMciReqVm.commonSpec}` +
+            `\t(${createMciReqVm.subGroupSize})`;
+          vmReqeustFromSpecList.push(createMciReqVm);
+          recommendedSpecList.push(recommendedSpec);
+        } else {
+          messageTextArea.value = messageTextArea.value.replace(/\n.*$/, "");
+          latLonInputPairIdx--;
+          cspPointsCircle.pop();
+          geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
         }
-        messageTextArea.value +=
-          `${createMciReqVm.commonSpec}` +
-          `\t(${createMciReqVm.subGroupSize})`;
-        vmReqeustFromSpecList.push(createMciReqVm);
-        recommendedSpecList.push(recommendedSpec);
-      } else {
-        messageTextArea.value = messageTextArea.value.replace(/\n.*$/, "");
-        latLonInputPairIdx--;
-        cspPointsCircle.pop();
-        geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
-      }
+      });
+    }).catch(error => {
+      console.error("Failed to get image information:", error);
     });
   }).catch(function (error) {
     console.log(error);
@@ -3127,124 +3273,89 @@ defaultRemoteCommand.push("hostname -I");
 defaultRemoteCommand.push("echo $SSH_CLIENT");
 defaultRemoteCommand.push("");
 
+/**
+ * Sets default remote commands based on application type
+ * 
+ * @param {string} appName - The name of the application to configure commands for
+ * @returns {void} - Modifies the defaultRemoteCommand array directly
+ */
+function setDefaultRemoteCommandsByApp(appName) {
+  switch (appName) {
+    case "Xonotic":
+      defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh; chmod +x ~/startServer.sh";
+      defaultRemoteCommand[1] = "sudo ~/startServer.sh " + "Cloud-Barista-$$Func(GetMciId())" + " 26000" + " 8" + " 8";
+      defaultRemoteCommand[2] = "echo '$$Func(GetPublicIP(target=this,postfix=:26000))'";
+      break;
+    case "ELK":
+      defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/elastic-stack/startELK.sh";
+      defaultRemoteCommand[1] = "chmod +x ~/startServer.sh";
+      defaultRemoteCommand[2] = "sudo ~/startServer.sh ";
+      break;
+    case "vLLM":
+      defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/llmServer.py";
+      defaultRemoteCommand[1] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/startServer.sh; chmod +x ~/startServer.sh";
+      defaultRemoteCommand[2] = "~/startServer.sh " + "--ip " + "$$Func(GetPublicIPs(separator=' '))" + " --port 5000" + " --token 1024" + " --model tiiuae/falcon-7b-instruct";
+      break;
+    case "Nvidia":
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/installCudaDriver.sh | sh";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "Ollama":
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOllama.sh | sh";
+      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "OllamaPull":
+      defaultRemoteCommand[0] = "OLLAMA_HOST=0.0.0.0:3000 ollama pull $$Func(AssignTask(task='llama3, solar, mistral, phi3, gemma, mixtral, llava, yi, falcon2, llama2'))";
+      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
+      defaultRemoteCommand[2] = "OLLAMA_HOST=0.0.0.0:3000 ollama list";
+      break;
+    case "OpenWebUI":
+      defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh; chmod +x ~/deployOpenWebUI.sh; sudo ~/deployOpenWebUI.sh $$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))";
+      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))'";
+      defaultRemoteCommand[2] = "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
+      break;
+    case "Westward":
+      defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh";
+      defaultRemoteCommand[1] = "chmod +x ~/setgame.sh; sudo ~/setgame.sh";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "WeaveScope":
+      defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/weavescope/startServer.sh";
+      defaultRemoteCommand[1] = "chmod +x ~/startServer.sh";
+      defaultRemoteCommand[2] = "sudo ~/startServer.sh " + "$$Func(GetPublicIPs(separator=' '))" + " " + "$$Func(GetPrivateIPs(separator=' '))";
+      break;
+    case "Nginx":
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/nginx/startServer.sh | bash -s -- --ip $$Func(GetPublicIP(target=this))";
+      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "Jitsi":
+      defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/jitsi/startServer.sh";
+      defaultRemoteCommand[1] = "chmod +x ~/startServer.sh";
+      defaultRemoteCommand[2] = "sudo ~/startServer.sh " + "$$Func(GetPublicIPs(separator=' '))" + " " + "DNS EMAIL";
+      break;
+    case "Stress":
+      defaultRemoteCommand[0] = "sudo apt install -y stress > /dev/null; stress -c 16 -t 60";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    default:
+      defaultRemoteCommand[0] = "ls -al";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+  }
+}
+
+
 // function for startApp by startApp button item
 function startApp() {
   var mciid = mciidElement.value;
   if (mciid) {
-    messageTextArea.value = " Starting " + selectApp.value;
-
-    var hostname = hostnameElement.value;
-    var port = portElement.value;
-    var username = usernameElement.value;
-    var password = passwordElement.value;
-    var namespace = namespaceElement.value;
-
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=accessinfo`;
-
-    axios({
-      method: "get",
-      url: url,
-      auth: {
-        username: `${username}`,
-        password: `${password}`,
-      },
-    }).then((res2) => {
-      console.log(res2); // for debug
-
-      var publicIPs = "";
-      var privateIPs = "";
-
-      for (let l1 of res2.data.MciSubGroupAccessInfo) {
-        for (let l2 of l1.MciVmAccessInfo) {
-          publicIPs = publicIPs + " " + l2.publicIP;
-          privateIPs = privateIPs + " " + l2.privateIP;
-        }
-      }
-
-      if (selectApp.value == "Xonotic") {
-        defaultRemoteCommand[0] =
-          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh; chmod +x ~/startServer.sh";
-        defaultRemoteCommand[1] =
-          "sudo ~/startServer.sh " + "Xonotic-by-Cloud-Barista-" + mciid + " 26000" + " 8" + " 8";
-        defaultRemoteCommand[2] =
-          "echo '$$Func(GetPublicIP(target=this,postfix=:26000))'";
-      } else if (selectApp.value == "ELK") {
-        defaultRemoteCommand[0] =
-          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/elastic-stack/startELK.sh";
-        defaultRemoteCommand[1] =
-          "chmod +x ~/startServer.sh";
-        defaultRemoteCommand[2] =
-          "sudo ~/startServer.sh ";
-      } else if (selectApp.value == "vLLM") {
-        defaultRemoteCommand[0] =
-          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/llmServer.py";
-        defaultRemoteCommand[1] =
-          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/startServer.sh; chmod +x ~/startServer.sh";
-        defaultRemoteCommand[2] =
-          "~/startServer.sh " + "--ip" + publicIPs + " --port 5000" + " --token 1024" + " --model tiiuae/falcon-7b-instruct";
-      } else if (selectApp.value == "Nvidia") {
-        defaultRemoteCommand[0] =
-          "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/installCudaDriver.sh | sh";
-        defaultRemoteCommand[1] =
-          "";
-        defaultRemoteCommand[2] =
-          "";
-      } else if (selectApp.value == "Ollama") {
-        defaultRemoteCommand[0] =
-          "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOllama.sh | sh";
-        defaultRemoteCommand[1] =
-          "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
-        defaultRemoteCommand[2] =
-          "";
-      } else if (selectApp.value == "OllamaPull") {
-        defaultRemoteCommand[0] =
-          "OLLAMA_HOST=0.0.0.0:3000 ollama pull $$Func(AssignTask(task='llama3, solar, mistral, phi3, gemma, mixtral, llava, yi, falcon2, llama2'))";
-        defaultRemoteCommand[1] =
-          "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
-        defaultRemoteCommand[2] =
-          "OLLAMA_HOST=0.0.0.0:3000 ollama list";
-      } else if (selectApp.value == "OpenWebUI") {
-        defaultRemoteCommand[0] =
-          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh; chmod +x ~/deployOpenWebUI.sh; sudo ~/deployOpenWebUI.sh $$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))";
-        defaultRemoteCommand[1] =
-          "echo '$$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))'";
-        defaultRemoteCommand[2] =
-          "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
-      } else if (selectApp.value == "Westward") {
-        defaultRemoteCommand[0] =
-          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh";
-        defaultRemoteCommand[1] =
-          "chmod +x ~/setgame.sh; sudo ~/setgame.sh";
-      } else if (selectApp.value == "WeaveScope") {
-        defaultRemoteCommand[0] =
-          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/weavescope/startServer.sh";
-        defaultRemoteCommand[1] =
-          "chmod +x ~/startServer.sh";
-        defaultRemoteCommand[2] =
-          "sudo ~/startServer.sh " + publicIPs + " " + privateIPs;
-      } else if (selectApp.value == "Nginx") {
-        defaultRemoteCommand[0] =
-          "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/nginx/startServer.sh | bash -s -- --ip $$Func(GetPublicIP(target=this))";
-        defaultRemoteCommand[1] =
-          "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
-        defaultRemoteCommand[2] =
-          "";
-      } else if (selectApp.value == "Jitsi") {
-        defaultRemoteCommand[0] =
-          "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/jitsi/startServer.sh";
-        defaultRemoteCommand[1] =
-          "chmod +x ~/startServer.sh";
-        defaultRemoteCommand[2] =
-          "sudo ~/startServer.sh " + publicIPs + " " + "DNS EMAIL";
-      } else if (selectApp.value == "Stress") {
-        defaultRemoteCommand[0] =
-          "sudo apt install -y stress > /dev/null; stress -c 16 -t 60";
-      } else {
-        defaultRemoteCommand[0] = "ls -al";
-      }
-
-      executeRemoteCmd();
-    });
+    setDefaultRemoteCommandsByApp(selectApp.value);
+    executeRemoteCmd();
   } else {
     messageTextArea.value = " MCI ID is not assigned";
   }
@@ -3462,6 +3573,15 @@ function executeRemoteCmd() {
             <label for="vmOption">VM: <span style="color:red;">${vmid}</span></label>
           </div>
         </div>
+
+        <p><font size=4><b>[Label Selector]</b></font></p>
+        <div style="margin-bottom: 15px;">
+          <input type="text" id="labelSelector" style="width: 75%" placeholder="예: role=worker,env=production">
+          <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
+            ex: Optional: set targets by the label (ex: role=worker,env=production,sys.id=g1-2)
+          </div>
+        </div>
+
       </div>`,
       showCancelButton: true,
       confirmButtonText: "Execute",
@@ -3509,6 +3629,13 @@ function executeRemoteCmd() {
         } else if (radioValue === "VM") {
           var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}?vmId=${vmid}`;
           console.log("Performing tasks for VM");
+        }
+
+        // Get label selector value and add to URL if provided
+        const labelSelector = Swal.getPopup().querySelector('#labelSelector').value;
+        if (labelSelector && labelSelector.trim() !== '') {
+          url += (url.includes('?') ? '&' : '?') + `labelSelector=${encodeURIComponent(labelSelector)}`;
+          console.log("Added labelSelector:", labelSelector);
         }
 
         cmd = result.value;
