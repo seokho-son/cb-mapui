@@ -589,39 +589,38 @@ function changeSizeByName(status) {
   }
 }
 
-function returnAdjustmentPoint(num) {
-  ax = 0.0;
-  ay = 0.0;
-  if (num == 1) {
+function returnAdjustmentPoint(index, totalVMs) {
+  // Initialize coordinates
+  let ax = 0.0;
+  let ay = 0.0;
+
+  // First VM (index 0) is placed at center
+  if (index === 0) {
     ax = 0;
-    ay = 0.75;
-  } else if (num == 2) {
-    ax = 0.5;
-    ay = 0.5;
-  } else if (num == 3) {
-    ax = 0.75;
     ay = 0;
-  } else if (num == 4) {
-    ax = 0.5;
-    ay = -0.5;
-  } else if (num == 5) {
-    ax = 0;
-    ay = -0.75;
-  } else if (num == 6) {
-    ax = -0.5;
-    ay = -0.5;
-  } else if (num == 7) {
-    ax = -0.75;
-    ay = -0;
-  } else if (num == 8) {
-    ax = -0.5;
-    ay = 0.5;
   } else {
-    ax = Math.random() - Math.random();
-    ay = Math.random() - Math.random();
+    // Circle radius
+    const radius = 0.75;
+
+    // Calculate angle step (divide 360° by total VMs)
+    const angleStep = 2 * Math.PI / totalVMs;
+
+    // Start at 12 o'clock position
+    const startAngle = 3 * Math.PI / 2;
+
+    // Calculate angle for current VM
+    const angle = startAngle + (angleStep * index);
+
+    // Convert polar coordinates to Cartesian
+    ax = radius * Math.cos(angle);
+    ay = radius * Math.sin(angle);
   }
-  ax = Math.random() * 0.01 + ax;
-  ay = Math.random() * 0.01 + ay;
+
+  // Add small random offset to prevent exact overlapping
+  ax = ax + (Math.random() * 0.01);
+  ay = ay + (Math.random() * 0.01);
+
+  // Compress y-axis for better map projection appearance
   ay = ay * 0.78;
 
   return { ax, ay };
@@ -879,9 +878,9 @@ function getMci() {
                 if ((item.vm[j].location.longitude == item.vm[j - 1].location.longitude) && (item.vm[j].location.latitude == item.vm[j - 1].location.latitude)) {
                   vmGeo.push([
                     item.vm[j].location.longitude * 1 +
-                    (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
+                    (returnAdjustmentPoint(j, item.vm.length).ax / zoomLevel) * radius,
                     item.vm[j].location.latitude * 1 +
-                    (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
+                    (returnAdjustmentPoint(j, item.vm.length).ay / zoomLevel) * radius,
                   ]);
                 } else {
                   vmGeo.push([
@@ -1472,6 +1471,37 @@ function createMci() {
                       </div>
                       <button id="addCmd" onclick="addCmd()" style="margin-left: 1px;"> + </button>
                     </div>
+
+                    <p><font size=4><b>[Predefined Scripts]</b></font></p>
+                    <div style="margin-bottom: 15px;">
+                      <select id="predefinedScripts" style="width: 75%; padding: 5px;" onchange="loadPredefinedScript()">
+                        <option value="">-- Select a predefined script --</option>
+                        <option value="Nvidia">Nvidia CUDA Driver</option>
+                        <option value="vLLM">vLLM Server</option>
+                        <option value="Ollama">Ollama LLM Server</option>
+                        <option value="OllamaPull">Ollama Model Pull</option>
+                        <option value="OpenWebUI">Open WebUI for Ollama</option>
+                        <option value="WeaveScope">Weave Scope</option>
+                        <option value="ELK">ELK Stack</option>
+                        <option value="Jitsi">Jitsi Meet</option>
+                        <option value="Nginx">Nginx Web Server</option>
+                        <option value="Xonotic">Xonotic Game Server</option>
+                        <option value="Westward">Westward Game</option>
+                        <option value="Stress">Stress Test</option>
+                      </select>
+                      <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
+                        Select a predefined script to auto-fill the command fields
+                      </div>
+                    </div>        
+
+                    <p><font size=4><b>[Label Selector]</b></font></p>
+                    <div style="margin-bottom: 15px;">
+                      <input type="text" id="labelSelector" style="width: 75%" placeholder="ex: role=worker,env=production">
+                      <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
+                        ex: Optional: set targets by the label (ex: role=worker,env=production,sys.id=g1-2)
+                      </div>
+                    </div>
+                    
                   </div>`,
                 showCancelButton: true,
                 confirmButtonText: "Confirm",
@@ -1492,6 +1522,17 @@ function createMci() {
                     `;
                     cmdContainer.appendChild(newCmdDiv);
                   };
+
+                  // Use predefined script dropdown to load default commands
+                  const scriptSelect = document.getElementById('predefinedScripts');
+                  if (scriptSelect) {
+                    scriptSelect.removeEventListener('change', window.loadPredefinedScript);
+                    scriptSelect.addEventListener('change', window.loadPredefinedScript);
+                    if (scriptSelect.value) {
+                      window.loadPredefinedScript();
+                    }
+                  }
+
                 },
                 preConfirm: () => {
                   const commands = [];
@@ -3514,7 +3555,30 @@ function statusApp() {
 }
 window.statusApp = statusApp;
 
-// function for executeRemoteCmd by remoteCmd button item
+// loadPredefinedScript function for loading predefined script
+window.loadPredefinedScript = function () {
+  const scriptTypeSelect = document.getElementById("predefinedScripts");
+  if (!scriptTypeSelect) return;
+
+  const scriptType = scriptTypeSelect.value;
+  console.log("Loading predefined script:", scriptType);
+
+  if (scriptType) {
+    setDefaultRemoteCommandsByApp(scriptType);
+    console.log("Updated defaultRemoteCommand:", defaultRemoteCommand);
+
+    // update the command fields
+    for (let i = 0; i < defaultRemoteCommand.length; i++) {
+      const cmdField = document.getElementById(`cmd${i + 1}`);
+      if (cmdField) {
+        cmdField.value = defaultRemoteCommand[i] || "";
+        console.log(`Set cmd${i + 1} to:`, cmdField.value);
+      }
+    }
+  }
+};
+
+
 function executeRemoteCmd() {
   var hostname = hostnameElement.value;
   var port = portElement.value;
@@ -3528,7 +3592,7 @@ function executeRemoteCmd() {
   let cmdCount = 3; // Initial number of textboxes
 
   if (mciid) {
-    var spinnerId = ""
+    var spinnerId = "";
 
     messageTextArea.value =
       "[Forward remote ssh command to MCI:" + mciid + "]\n";
@@ -3557,7 +3621,29 @@ function executeRemoteCmd() {
           </div>
           <button id="addCmd" onclick="addCmd()" style="margin-left: 1px;"> + </button>
         </div>
-        
+
+        <p><font size=4><b>[Predefined Scripts]</b></font></p>
+        <div style="margin-bottom: 15px;">
+          <select id="predefinedScripts" style="width: 75%; padding: 5px;" onchange="loadPredefinedScript()">
+            <option value="">-- Select a predefined script --</option>
+            <option value="Nvidia">Nvidia CUDA Driver</option>
+            <option value="vLLM">vLLM Server</option>
+            <option value="Ollama">Ollama LLM Server</option>
+            <option value="OllamaPull">Ollama Model Pull</option>
+            <option value="OpenWebUI">Open WebUI for Ollama</option>
+            <option value="WeaveScope">Weave Scope</option>
+            <option value="ELK">ELK Stack</option>
+            <option value="Jitsi">Jitsi Meet</option>
+            <option value="Nginx">Nginx Web Server</option>
+            <option value="Xonotic">Xonotic Game Server</option>
+            <option value="Westward">Westward Game</option>
+            <option value="Stress">Stress Test</option>
+          </select>
+          <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
+            Select a predefined script to auto-fill the command fields
+          </div>
+        </div>
+
         <p><font size=4><b>[Select target]</b></font></p>
         <div style="display: flex; align-items: center;">
           <div style="margin-right: 10px;">
@@ -3576,7 +3662,7 @@ function executeRemoteCmd() {
 
         <p><font size=4><b>[Label Selector]</b></font></p>
         <div style="margin-bottom: 15px;">
-          <input type="text" id="labelSelector" style="width: 75%" placeholder="예: role=worker,env=production">
+          <input type="text" id="labelSelector" style="width: 75%" placeholder="ex: role=worker,env=production">
           <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
             ex: Optional: set targets by the label (ex: role=worker,env=production,sys.id=g1-2)
           </div>
@@ -3600,6 +3686,17 @@ function executeRemoteCmd() {
           const lastCmd = document.getElementById(`cmdDiv${cmdCount}`);
           lastCmd.appendChild(document.getElementById("addCmd"));
         };
+
+        // Use predefined script dropdown to load default commands
+        const scriptSelect = document.getElementById('predefinedScripts');
+        if (scriptSelect) {
+          scriptSelect.removeEventListener('change', window.loadPredefinedScript);
+          scriptSelect.addEventListener('change', window.loadPredefinedScript);
+          if (scriptSelect.value) {
+            window.loadPredefinedScript();
+          }
+        }
+
       },
       preConfirm: () => {
         // Collect commands from textboxes
@@ -3649,7 +3746,7 @@ function executeRemoteCmd() {
 
         spinnerId = addSpinnerTask("Remote command to " + mciid);
 
-        requestId = generateRandomRequestId("cmd-" + mciid + "-", 10);
+        var requestId = generateRandomRequestId("cmd-" + mciid + "-", 10);
         addRequestIdToSelect(requestId);
 
         axios({
