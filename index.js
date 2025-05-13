@@ -1080,8 +1080,8 @@ function getMci() {
         var resourceLocation = [];
         if (obj.results != null) {
           for (let result of obj.results) {
-            if (result.vpnGatewayInfo != null) {
-              for (let item of result.vpnGatewayInfo) {
+            if (result.vpnSites != null) {
+              for (let item of result.vpnSites) {
                 resourceLocation.push([
                   item.connectionConfig.regionDetail.location.longitude * 1,
                   item.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
@@ -1097,9 +1097,9 @@ function getMci() {
         geoResourceLocation.vpn = [];
       }
     })
-      .catch(function (error) {
-        console.log(error);
-      });
+    .catch(function (error) {
+      console.log(error);
+    });
   }
 }
 
