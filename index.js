@@ -1716,11 +1716,14 @@ function getRecommendedSpec(idx, latitude, longitude) {
       return;
     }
 
-    const checkReqURL = `http://${hostname}:${port}/tumblebug/mciDynamicCheckRequest`;
-    const checkReqBody = {
-      commonSpec: [
-        res.data[0].id
-      ]
+    const searchImageURL = `http://${hostname}:${port}/tumblebug/ns/system/resources/searchImage`;
+    const searchImageBody = {
+      providerName: res.data[0].providerName,
+      regionName: res.data[0].regionName,
+      osType: document.getElementById("osImage").value,
+      // isGPUImage: res.data[0].acceleratorType === "gpu",
+      // isKubernetesImage: false,
+      // detailSearchKeys: [],
     };
 
     console.log("Calling mciDynamicCheckRequest with spec:", res.data[0].id);
@@ -1728,31 +1731,28 @@ function getRecommendedSpec(idx, latitude, longitude) {
     // mciDynamicCheckRequest API call
     axios({
       method: "post",
-      url: checkReqURL,
+      url: searchImageURL,
       headers: { "Content-Type": "application/json" },
-      data: JSON.stringify(checkReqBody),
+      data: JSON.stringify(searchImageBody),
       auth: {
         username: `${username}`,
         password: `${password}`,
       },
-    }).then((checkRes) => {
-      console.log("mciDynamicCheckRequest response:", checkRes.data);
+    }).then((searchRes) => {
+      console.log("searchImage response:", searchRes.data);
 
-      // 이미지 정보를 추출
       let availableImages = [];
-      if (checkRes.data && checkRes.data.reqCheck && checkRes.data.reqCheck.length > 0) {
-        availableImages = checkRes.data.reqCheck[0].image.map(img => ({
+      if (searchRes.data && searchRes.data.imageList && searchRes.data.imageList.length > 0) {
+        availableImages = searchRes.data.imageList.map(img => ({
           id: img.id,
           cspImageName: img.cspImageName,
-          guestOS: img.guestOS
+          osType: img.osType || "unknown",
+          osDistribution: img.osDistribution || "unknown"
         }));
 
         console.log("Available images for this spec:");
         console.table(availableImages);
-        console.log("Connection candidates:", checkRes.data.reqCheck[0].connectionConfigCandidates);
-        console.log("Region info:", checkRes.data.reqCheck[0].region);
       }
-
 
       addRegionMarker(res.data[0].id);
 
@@ -1783,25 +1783,34 @@ function getRecommendedSpec(idx, latitude, longitude) {
       let imageSelectHTML = '';
       if (availableImages && availableImages.length > 0) {
         imageSelectHTML = `
-      <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: green;">
-    `;
-        let currentImageFound = false;
-        for (let img of availableImages) {
-          const selected = (img.guestOS === createMciReqVm.commonImage) ? 'selected' : '';
-          if (selected) currentImageFound = true;
-          imageSelectHTML += `<option value="${img.guestOS}" ${selected}>${img.guestOS} (${img.cspImageName})</option>`;
+          <div>
+            <input type="text" id="imageSearchKeyword" placeholder="keyword for filtering" 
+                   style="width:100%; padding: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;">
+            <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: green;">
+        `;
+
+        // Sort the available images by osDistribution in descending order
+        // and add them to the select options
+        for (let img of availableImages.sort((a, b) => {
+          const aDistro = a.osDistribution || '';
+          const bDistro = b.osDistribution || '';
+          return bDistro.localeCompare(aDistro);
+        })) {
+          imageSelectHTML += `<option value="${img.cspImageName}" data-cspname="${img.cspImageName}">${img.osDistribution} // (ID: ${img.cspImageName || 'N/A'})</option>`;
         }
-        if (!currentImageFound && createMciReqVm.commonImage) {
-          imageSelectHTML = `<option value="${createMciReqVm.commonImage}" selected>${createMciReqVm.commonImage} (not available)</option>` + imageSelectHTML;
-        }
-        imageSelectHTML += `</select>`;
+
       } else {
         imageSelectHTML = `
-      <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: red;">
-        <option disabled selected>No available image</option>
-      </select>
-    `;
+          <div>
+            <input type="text" id="imageSearchKeyword" placeholder="keyword for filtering" 
+                   style="width:100%; padding: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;" disabled>
+            <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: red;">
+              <option disabled selected>${createMciReqVm.commonImage} is not available</option>
+            </select>
+          </div>
+        `;
       }
+
 
 
       let costPerHour = res.data[0].costPerHour;
@@ -1887,7 +1896,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
           "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
           "<tr><th style='width: 50%;'>Recommended Spec</th><td><b><span style='color: black; font-size: larger;'>" + res.data[0].cspSpecName + "</span></b></td></tr>" +
           "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; font-size: larger;'> $ " + costPerHour + " (at least)</span></b></td></tr>" +
-          "<tr><th style='width: 50%;'>Image Type</th><td>" + imageSelectHTML + "</td></tr>" +
+          "<tr><th style='width: 50%;'>Image</th><td>" + imageSelectHTML + "</td></tr>" +
 
           "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
           "<tr><th style='width: 50%;'>Provider</th><td><b><span style='color: blue; font-size: larger;'>" + res.data[0].providerName.toUpperCase() + "</span></b></td></tr>" +
@@ -1963,6 +1972,50 @@ function getRecommendedSpec(idx, latitude, longitude) {
               });
             },
           });
+
+          // Add image filtering input
+          const imageSearchKeyword = document.getElementById('imageSearchKeyword');
+          if (imageSearchKeyword) {
+            imageSearchKeyword.addEventListener('input', function () {
+              const keyword = this.value.toLowerCase();
+              const select = document.getElementById('osImageSelect');
+              const options = select.options;
+              let matchCount = 0;
+
+              for (let i = 0; i < options.length; i++) {
+                const optionText = options[i].text.toLowerCase();
+                const optionValue = options[i].value.toLowerCase();
+
+                if (keyword === '' || optionText.includes(keyword) || optionValue.includes(keyword)) {
+                  options[i].style.display = '';
+                  matchCount++;
+                } else {
+                  options[i].style.display = 'none';
+                }
+              }
+
+              const noMatchMessage = document.getElementById('noMatchMessage');
+              if (noMatchMessage) {
+                if (matchCount === 0 && keyword !== '') {
+                  noMatchMessage.style.display = 'block';
+                  if (select.options.length > 0) {
+                    select.selectedIndex = -1;
+                  }
+                } else {
+                  noMatchMessage.style.display = 'none';
+                  if (select.selectedIndex === -1 && matchCount > 0) {
+                    for (let i = 0; i < options.length; i++) {
+                      if (options[i].style.display !== 'none') {
+                        select.selectedIndex = i;
+                        break;
+                      }
+                    }
+                  }
+                }
+              }
+            });
+          }
+
         },
 
         // // Simple string filter input
@@ -2021,6 +2074,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
           const osImageSelect = document.getElementById('osImageSelect');
           if (osImageSelect && osImageSelect.value) {
+            console.log(osImageSelect.value);
             createMciReqVm.commonImage = osImageSelect.value;
           }
           if (!createMciReqVm.commonImage) {
