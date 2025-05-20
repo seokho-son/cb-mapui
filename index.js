@@ -1747,7 +1747,8 @@ function getRecommendedSpec(idx, latitude, longitude) {
           id: img.id,
           cspImageName: img.cspImageName,
           osType: img.osType || "unknown",
-          osDistribution: img.osDistribution || "unknown"
+          osDistribution: img.osDistribution || "unknown",
+          osArchitecture: img.osArchitecture || "unknown"
         }));
 
         console.log("Available images for this spec:");
@@ -1785,25 +1786,37 @@ function getRecommendedSpec(idx, latitude, longitude) {
         imageSelectHTML = `
           <div>
             <input type="text" id="imageSearchKeyword" placeholder="keyword for filtering" 
-                   style="width:100%; padding: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;">
+                  style="width:100%; padding: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;">
+            <div style="margin-bottom: 5px;">
+              <input type="checkbox" id="filterX86" checked>
+              <label for="filterX86">x86</label>
+            </div>
             <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: green;">
         `;
 
         // Sort the available images by osDistribution in descending order
-        // and add them to the select options
-        for (let img of availableImages.sort((a, b) => {
+        const sortedImages = availableImages.sort((a, b) => {
           const aDistro = a.osDistribution || '';
           const bDistro = b.osDistribution || '';
           return bDistro.localeCompare(aDistro);
-        })) {
-          imageSelectHTML += `<option value="${img.cspImageName}" data-cspname="${img.cspImageName}">${img.osDistribution} // (ID: ${img.cspImageName || 'N/A'})</option>`;
+        });
+
+        // Populate the select options with sorted images
+        for (let img of sortedImages) {
+          imageSelectHTML += `<option value="${img.cspImageName}" data-cspname="${img.cspImageName}" 
+                        data-architecture="${img.osArchitecture}">${img.osDistribution} // (ID: ${img.cspImageName || 'N/A'}) [${img.osArchitecture || 'unknown'}]</option>`;
         }
+
 
       } else {
         imageSelectHTML = `
           <div>
             <input type="text" id="imageSearchKeyword" placeholder="keyword for filtering" 
-                   style="width:100%; padding: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;" disabled>
+                  style="width:100%; padding: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;" disabled>
+            <div style="margin-bottom: 5px;">
+              <input type="checkbox" id="filterX86" checked disabled>
+              <label for="filterX86">x86</label>
+            </div>
             <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: red;">
               <option disabled selected>${createMciReqVm.commonImage} is not available</option>
             </select>
@@ -1974,47 +1987,56 @@ function getRecommendedSpec(idx, latitude, longitude) {
           });
 
           // Add image filtering input
-          const imageSearchKeyword = document.getElementById('imageSearchKeyword');
-          if (imageSearchKeyword) {
-            imageSearchKeyword.addEventListener('input', function () {
-              const keyword = this.value.toLowerCase();
-              const select = document.getElementById('osImageSelect');
-              const options = select.options;
-              let matchCount = 0;
+          const filterX86Checkbox = document.getElementById('filterX86');
+          const imageSelect = document.getElementById('osImageSelect');
+          const searchKeyword = document.getElementById('imageSearchKeyword');
 
+          function filterImages() {
+            const keyword = searchKeyword ? searchKeyword.value.toLowerCase() : '';
+            const filterX86Only = filterX86Checkbox.checked;
+
+            let matchCount = 0;
+            const options = imageSelect.options;
+
+            for (let i = 0; i < options.length; i++) {
+              const optionText = options[i].text.toLowerCase();
+              const optionValue = options[i].value.toLowerCase();
+              const architecture = options[i].dataset.architecture?.toLowerCase() || '';
+
+              const matchesKeyword = keyword === '' || optionText.includes(keyword) || optionValue.includes(keyword);
+              const matchesArchitecture = !filterX86Only || architecture.includes('x86');
+
+              if (matchesKeyword && matchesArchitecture) {
+                options[i].style.display = '';
+                matchCount++;
+              } else {
+                options[i].style.display = 'none';
+              }
+            }
+
+            if (matchCount === 0 && (keyword !== '' || filterX86Only)) {
+              if (imageSelect.options.length > 0) {
+                imageSelect.selectedIndex = -1;
+              }
+            } else if (imageSelect.selectedIndex === -1 && matchCount > 0) {
               for (let i = 0; i < options.length; i++) {
-                const optionText = options[i].text.toLowerCase();
-                const optionValue = options[i].value.toLowerCase();
-
-                if (keyword === '' || optionText.includes(keyword) || optionValue.includes(keyword)) {
-                  options[i].style.display = '';
-                  matchCount++;
-                } else {
-                  options[i].style.display = 'none';
+                if (options[i].style.display !== 'none') {
+                  imageSelect.selectedIndex = i;
+                  break;
                 }
               }
-
-              const noMatchMessage = document.getElementById('noMatchMessage');
-              if (noMatchMessage) {
-                if (matchCount === 0 && keyword !== '') {
-                  noMatchMessage.style.display = 'block';
-                  if (select.options.length > 0) {
-                    select.selectedIndex = -1;
-                  }
-                } else {
-                  noMatchMessage.style.display = 'none';
-                  if (select.selectedIndex === -1 && matchCount > 0) {
-                    for (let i = 0; i < options.length; i++) {
-                      if (options[i].style.display !== 'none') {
-                        select.selectedIndex = i;
-                        break;
-                      }
-                    }
-                  }
-                }
-              }
-            });
+            }
           }
+
+          if (filterX86Checkbox) {
+            filterX86Checkbox.addEventListener('change', filterImages);
+          }
+
+          if (searchKeyword) {
+            searchKeyword.addEventListener('input', filterImages);
+          }
+
+          filterImages();
 
         },
 
