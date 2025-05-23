@@ -1097,9 +1097,9 @@ function getMci() {
         geoResourceLocation.vpn = [];
       }
     })
-    .catch(function (error) {
-      console.log(error);
-    });
+      .catch(function (error) {
+        console.log(error);
+      });
   }
 }
 
@@ -1368,7 +1368,7 @@ function createMci() {
         "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + recommendedSpecList[i].memoryGiB + "</b></td></tr>" +
         acceleratorType +
         "<tr><th style='width: 50%;'>RootDisk(GB)</th><td><b>" + createMciReq.vm[i].rootDiskSize + " (type: " + createMciReq.vm[i].rootDiskType + ")</b></td></tr>" +
-        "<tr><th style='width: 50%;'>Selected Image OS Type</th><td><b><span style='color: green; '>" + createMciReq.vm[i].commonImage + "</span></b></td></tr>" +
+        "<tr><th style='width: 50%;'>Selected Image</th><td><b><span style='color: green; '>" + createMciReq.vm[i].commonImage + "</span></b></td></tr>" +
 
         ((createMciReq.vm[i].label && Object.keys(createMciReq.vm[i].label).length > 0) ?
           "<tr><th style='width: 50%;'>Labels</th><td><b><span style='color: purple; '>" +
@@ -1996,6 +1996,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
             const filterX86Only = filterX86Checkbox.checked;
 
             let matchCount = 0;
+            let firstMatchIndex = -1;
             const options = imageSelect.options;
 
             for (let i = 0; i < options.length; i++) {
@@ -2009,22 +2010,19 @@ function getRecommendedSpec(idx, latitude, longitude) {
               if (matchesKeyword && matchesArchitecture) {
                 options[i].style.display = '';
                 matchCount++;
+
+                if (firstMatchIndex === -1) {
+                  firstMatchIndex = i;
+                }
               } else {
                 options[i].style.display = 'none';
               }
             }
 
-            if (matchCount === 0 && (keyword !== '' || filterX86Only)) {
-              if (imageSelect.options.length > 0) {
-                imageSelect.selectedIndex = -1;
-              }
-            } else if (imageSelect.selectedIndex === -1 && matchCount > 0) {
-              for (let i = 0; i < options.length; i++) {
-                if (options[i].style.display !== 'none') {
-                  imageSelect.selectedIndex = i;
-                  break;
-                }
-              }
+            if (matchCount > 0 && firstMatchIndex >= 0) {
+              imageSelect.selectedIndex = firstMatchIndex;
+            } else if (matchCount === 0) {
+              imageSelect.selectedIndex = -1;
             }
           }
 
