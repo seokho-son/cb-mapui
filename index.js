@@ -1045,16 +1045,14 @@ function getMci() {
       var obj = res.data;
       if (obj.K8sClusterInfo != null) {
         var resourceLocation = [];
+        console.log("resourceLocation k8s[0]");
         for (let item of obj.K8sClusterInfo) {
-          resourceLocation.push([
-            item.connectionConfig.regionDetail.location.longitude * 1 +
-            (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
-            item.connectionConfig.regionDetail.location.latitude * 1 +
-            (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
-          ]);
+                resourceLocation.push([
+                  item.connectionConfig.regionDetail.location.longitude * 1,
+                  item.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
+                ]);
+          console.log(resourceLocation);
           geoResourceLocation.k8s[0] = new MultiPoint([resourceLocation]);
-          console.log("geoResourceLocation.k8s[0]");
-          console.log(geoResourceLocation.k8s[0]);
         }
       } else {
         geoResourceLocation.k8s = [];
