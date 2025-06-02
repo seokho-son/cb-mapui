@@ -1765,8 +1765,8 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
       createMciReqVm.name = "g" + (vmReqeustFromSpecList.length + 1).toString();
 
-      osImage = document.getElementById("osImage");
-      diskSize = document.getElementById("diskSize");
+      var osImage = document.getElementById("osImage");
+      var diskSize = document.getElementById("diskSize");
 
       createMciReqVm.commonSpec = res.data[0].id;
       createMciReqVm.commonImage = osImage.value;
