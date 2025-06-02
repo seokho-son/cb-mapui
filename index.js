@@ -1043,16 +1043,20 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
-      if (obj.K8sClusterInfo != null) {
+      if (obj.K8sClusterInfo != null && obj.K8sClusterInfo.length > 0) {
         var resourceLocation = [];
         console.log("resourceLocation k8s[0]");
         for (let item of obj.K8sClusterInfo) {
-                resourceLocation.push([
-                  item.connectionConfig.regionDetail.location.longitude * 1,
-                  item.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
-                ]);
-          console.log(resourceLocation);
+          resourceLocation.push([
+            item.connectionConfig.regionDetail.location.longitude * 1,
+            item.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
+          ]);
+        }
+        console.log(resourceLocation);
+        if (resourceLocation.length > 0) {
           geoResourceLocation.k8s[0] = new MultiPoint([resourceLocation]);
+        } else {
+          geoResourceLocation.k8s = [];
         }
       } else {
         geoResourceLocation.k8s = [];
