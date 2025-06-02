@@ -1043,18 +1043,20 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
-      if (obj.K8sClusterInfo != null) {
+      if (obj.K8sClusterInfo != null && obj.K8sClusterInfo.length > 0) {
         var resourceLocation = [];
+        console.log("resourceLocation k8s[0]");
         for (let item of obj.K8sClusterInfo) {
           resourceLocation.push([
-            item.connectionConfig.regionDetail.location.longitude * 1 +
-            (returnAdjustmentPoint(j).ax / zoomLevel) * radius,
-            item.connectionConfig.regionDetail.location.latitude * 1 +
-            (returnAdjustmentPoint(j).ay / zoomLevel) * radius,
+            item.connectionConfig.regionDetail.location.longitude * 1,
+            item.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
           ]);
+        }
+        console.log(resourceLocation);
+        if (resourceLocation.length > 0) {
           geoResourceLocation.k8s[0] = new MultiPoint([resourceLocation]);
-          console.log("geoResourceLocation.k8s[0]");
-          console.log(geoResourceLocation.k8s[0]);
+        } else {
+          geoResourceLocation.k8s = [];
         }
       } else {
         geoResourceLocation.k8s = [];
@@ -1097,9 +1099,9 @@ function getMci() {
         geoResourceLocation.vpn = [];
       }
     })
-    .catch(function (error) {
-      console.log(error);
-    });
+      .catch(function (error) {
+        console.log(error);
+      });
   }
 }
 
@@ -1368,7 +1370,7 @@ function createMci() {
         "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + recommendedSpecList[i].memoryGiB + "</b></td></tr>" +
         acceleratorType +
         "<tr><th style='width: 50%;'>RootDisk(GB)</th><td><b>" + createMciReq.vm[i].rootDiskSize + " (type: " + createMciReq.vm[i].rootDiskType + ")</b></td></tr>" +
-        "<tr><th style='width: 50%;'>Selected Image OS Type</th><td><b><span style='color: green; '>" + createMciReq.vm[i].commonImage + "</span></b></td></tr>" +
+        "<tr><th style='width: 50%;'>Selected Image</th><td><b><span style='color: green; '>" + createMciReq.vm[i].commonImage + "</span></b></td></tr>" +
 
         ((createMciReq.vm[i].label && Object.keys(createMciReq.vm[i].label).length > 0) ?
           "<tr><th style='width: 50%;'>Labels</th><td><b><span style='color: purple; '>" +
@@ -1716,11 +1718,14 @@ function getRecommendedSpec(idx, latitude, longitude) {
       return;
     }
 
-    const checkReqURL = `http://${hostname}:${port}/tumblebug/mciDynamicCheckRequest`;
-    const checkReqBody = {
-      commonSpec: [
-        res.data[0].id
-      ]
+    const searchImageURL = `http://${hostname}:${port}/tumblebug/ns/system/resources/searchImage`;
+    const searchImageBody = {
+      providerName: res.data[0].providerName,
+      regionName: res.data[0].regionName,
+      osType: document.getElementById("osImage").value,
+      // isGPUImage: res.data[0].acceleratorType === "gpu",
+      // isKubernetesImage: false,
+      // detailSearchKeys: [],
     };
 
     console.log("Calling mciDynamicCheckRequest with spec:", res.data[0].id);
@@ -1728,31 +1733,29 @@ function getRecommendedSpec(idx, latitude, longitude) {
     // mciDynamicCheckRequest API call
     axios({
       method: "post",
-      url: checkReqURL,
+      url: searchImageURL,
       headers: { "Content-Type": "application/json" },
-      data: JSON.stringify(checkReqBody),
+      data: JSON.stringify(searchImageBody),
       auth: {
         username: `${username}`,
         password: `${password}`,
       },
-    }).then((checkRes) => {
-      console.log("mciDynamicCheckRequest response:", checkRes.data);
+    }).then((searchRes) => {
+      console.log("searchImage response:", searchRes.data);
 
-      // 이미지 정보를 추출
       let availableImages = [];
-      if (checkRes.data && checkRes.data.reqCheck && checkRes.data.reqCheck.length > 0) {
-        availableImages = checkRes.data.reqCheck[0].image.map(img => ({
+      if (searchRes.data && searchRes.data.imageList && searchRes.data.imageList.length > 0) {
+        availableImages = searchRes.data.imageList.map(img => ({
           id: img.id,
           cspImageName: img.cspImageName,
-          guestOS: img.guestOS
+          osType: img.osType || "unknown",
+          osDistribution: img.osDistribution || "unknown",
+          osArchitecture: img.osArchitecture || "unknown"
         }));
 
         console.log("Available images for this spec:");
         console.table(availableImages);
-        console.log("Connection candidates:", checkRes.data.reqCheck[0].connectionConfigCandidates);
-        console.log("Region info:", checkRes.data.reqCheck[0].region);
       }
-
 
       addRegionMarker(res.data[0].id);
 
@@ -1783,25 +1786,46 @@ function getRecommendedSpec(idx, latitude, longitude) {
       let imageSelectHTML = '';
       if (availableImages && availableImages.length > 0) {
         imageSelectHTML = `
-      <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: green;">
-    `;
-        let currentImageFound = false;
-        for (let img of availableImages) {
-          const selected = (img.guestOS === createMciReqVm.commonImage) ? 'selected' : '';
-          if (selected) currentImageFound = true;
-          imageSelectHTML += `<option value="${img.guestOS}" ${selected}>${img.guestOS} (${img.cspImageName})</option>`;
+          <div>
+            <input type="text" id="imageSearchKeyword" placeholder="keyword for filtering" 
+                  style="width:100%; padding: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;">
+            <div style="margin-bottom: 5px;">
+              <input type="checkbox" id="filterX86" checked>
+              <label for="filterX86">x86</label>
+            </div>
+            <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: green;">
+        `;
+
+        // Sort the available images by osDistribution in descending order
+        const sortedImages = availableImages.sort((a, b) => {
+          const aDistro = a.osDistribution || '';
+          const bDistro = b.osDistribution || '';
+          return bDistro.localeCompare(aDistro);
+        });
+
+        // Populate the select options with sorted images
+        for (let img of sortedImages) {
+          imageSelectHTML += `<option value="${img.cspImageName}" data-cspname="${img.cspImageName}" 
+                        data-architecture="${img.osArchitecture}">${img.osDistribution} // (ID: ${img.cspImageName || 'N/A'}) [${img.osArchitecture || 'unknown'}]</option>`;
         }
-        if (!currentImageFound && createMciReqVm.commonImage) {
-          imageSelectHTML = `<option value="${createMciReqVm.commonImage}" selected>${createMciReqVm.commonImage} (not available)</option>` + imageSelectHTML;
-        }
-        imageSelectHTML += `</select>`;
+
+
       } else {
         imageSelectHTML = `
-      <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: red;">
-        <option disabled selected>No available image</option>
-      </select>
-    `;
+          <div>
+            <input type="text" id="imageSearchKeyword" placeholder="keyword for filtering" 
+                  style="width:100%; padding: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;" disabled>
+            <div style="margin-bottom: 5px;">
+              <input type="checkbox" id="filterX86" checked disabled>
+              <label for="filterX86">x86</label>
+            </div>
+            <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: red;">
+              <option disabled selected>${createMciReqVm.commonImage} is not available</option>
+            </select>
+          </div>
+        `;
       }
+
 
 
       let costPerHour = res.data[0].costPerHour;
@@ -1887,7 +1911,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
           "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
           "<tr><th style='width: 50%;'>Recommended Spec</th><td><b><span style='color: black; font-size: larger;'>" + res.data[0].cspSpecName + "</span></b></td></tr>" +
           "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; font-size: larger;'> $ " + costPerHour + " (at least)</span></b></td></tr>" +
-          "<tr><th style='width: 50%;'>Image Type</th><td>" + imageSelectHTML + "</td></tr>" +
+          "<tr><th style='width: 50%;'>Image</th><td>" + imageSelectHTML + "</td></tr>" +
 
           "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
           "<tr><th style='width: 50%;'>Provider</th><td><b><span style='color: blue; font-size: larger;'>" + res.data[0].providerName.toUpperCase() + "</span></b></td></tr>" +
@@ -1963,6 +1987,57 @@ function getRecommendedSpec(idx, latitude, longitude) {
               });
             },
           });
+
+          // Add image filtering input
+          const filterX86Checkbox = document.getElementById('filterX86');
+          const imageSelect = document.getElementById('osImageSelect');
+          const searchKeyword = document.getElementById('imageSearchKeyword');
+
+          function filterImages() {
+            const keyword = searchKeyword ? searchKeyword.value.toLowerCase() : '';
+            const filterX86Only = filterX86Checkbox.checked;
+
+            let matchCount = 0;
+            let firstMatchIndex = -1;
+            const options = imageSelect.options;
+
+            for (let i = 0; i < options.length; i++) {
+              const optionText = options[i].text.toLowerCase();
+              const optionValue = options[i].value.toLowerCase();
+              const architecture = options[i].dataset.architecture?.toLowerCase() || '';
+
+              const matchesKeyword = keyword === '' || optionText.includes(keyword) || optionValue.includes(keyword);
+              const matchesArchitecture = !filterX86Only || architecture.includes('x86');
+
+              if (matchesKeyword && matchesArchitecture) {
+                options[i].style.display = '';
+                matchCount++;
+
+                if (firstMatchIndex === -1) {
+                  firstMatchIndex = i;
+                }
+              } else {
+                options[i].style.display = 'none';
+              }
+            }
+
+            if (matchCount > 0 && firstMatchIndex >= 0) {
+              imageSelect.selectedIndex = firstMatchIndex;
+            } else if (matchCount === 0) {
+              imageSelect.selectedIndex = -1;
+            }
+          }
+
+          if (filterX86Checkbox) {
+            filterX86Checkbox.addEventListener('change', filterImages);
+          }
+
+          if (searchKeyword) {
+            searchKeyword.addEventListener('input', filterImages);
+          }
+
+          filterImages();
+
         },
 
         // // Simple string filter input
@@ -2021,6 +2096,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
           const osImageSelect = document.getElementById('osImageSelect');
           if (osImageSelect && osImageSelect.value) {
+            console.log(osImageSelect.value);
             createMciReqVm.commonImage = osImageSelect.value;
           }
           if (!createMciReqVm.commonImage) {
