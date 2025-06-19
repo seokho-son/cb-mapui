@@ -1699,6 +1699,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
   };
 
   var jsonBody = JSON.stringify(struct);
+  console.log("Request body for mciDynamicCheckRequest:", jsonBody);
 
   axios({
     method: "post",
@@ -1863,7 +1864,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
           <td>${spec.memoryGiB}</td>
           <td>$ ${costPerHour}</td>
           <td>${spec.acceleratorCount}</td>
-          <td>${acceleratorModel}</td>
+          <td>${spec.acceleratorModel}</td>
           <td>${spec.acceleratorMemoryGB}</td>
         </tr>`;
       }).join("");
@@ -1957,37 +1958,78 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
           const toggleButton = document.getElementById('toggleTableButton');
           toggleButton.addEventListener('click', toggleTable);
-
+          
           $('#recommendationTable').DataTable({
             initComplete: function () {
               this.api().columns().every(function (index) {
+                // Skip filtering for the first column (index column)
                 if (index === 0) {
                   return;
                 }
+                
                 var column = this;
-                var columnData = column.data().unique().sort();
-
+                
+                // Get column data, extract text only (remove HTML tags), and sort
+                var columnData = column.data().map(function(d) {
+                  // Extract plain text from HTML content
+                  return $('<div>').html(d).text().trim();
+                }).unique().sort();
+                
+                // Create filter container with scrollable area
                 var select = $('<div class="filter-container" style="height:100px; overflow:auto;"></div>')
-                  .appendTo($(column.footer()).empty())
-                  .on('change', 'input:checkbox', function () {
-                    var checkedValues = [];
-                    $('input:checkbox:checked', select).each(function () {
-                      checkedValues.push($(this).val());
-                    });
-
-                    var regex = checkedValues.join('|');
-                    column
-                      .search(checkedValues.length ? '^(' + regex + ')$' : '', true, false)
-                      .draw();
+                  .appendTo($(column.footer()).empty());
+                
+                // Handle checkbox change events for filtering
+                select.on('change', 'input:checkbox', function () {
+                  var checkedValues = [];
+                  $('input:checkbox:checked', select).each(function () {
+                    // Get trimmed checkbox value
+                    checkedValues.push($(this).val().trim());
                   });
+                  
+                  // Create regex pattern from checked values
+                  var regex = checkedValues.length ? 
+                    checkedValues.map(function(val) {
+                      // Escape special regex characters to prevent errors
+                      return val.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                    }).join('|') : '';
+                  
+                  // Apply filter using regex
+                  column
+                    .search(checkedValues.length ? regex : '', true, false)
+                    .draw();
+                    
+                  console.log("Applied filter for column " + index + ": " + regex);
+                });
+                
+                // Create checkboxes for each unique value in the column
                 columnData.each(function (d, j) {
-                  var checkbox = $('<label><input type="checkbox" value=" ' + d + '">' + d + '</label><br>');
-                  select.append(checkbox);
+                  if (d) { // Skip empty values
+                    // Clean the value and create checkbox with label
+                    var cleanValue = d.trim();
+                    var checkbox = $('<label><input type="checkbox" value="' + cleanValue + '"> ' + cleanValue + '</label><br>');
+                    select.append(checkbox);
+                  }
                 });
               });
             },
+            // Enable pagination
+            "paging": true,
+            // Set default sorting (first column ascending)
+            "order": [[0, 'asc']],
+            // Enable responsive behavior
+            "responsive": true,
+            // Enable horizontal scrolling if needed
+            "scrollX": true,
+            // Customize language settings
+            "language": {
+              "search": "Search:",
+              "lengthMenu": "Show _MENU_ entries",
+              "info": "Showing _START_ to _END_ of _TOTAL_ entries",
+              "infoEmpty": "Showing 0 to 0 of 0 entries",
+              "infoFiltered": "(filtered from _MAX_ total entries)"
+            }
           });
-
           // Add image filtering input
           const filterX86Checkbox = document.getElementById('filterX86');
           const imageSelect = document.getElementById('osImageSelect');
