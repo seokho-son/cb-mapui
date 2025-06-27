@@ -1343,7 +1343,7 @@ function createMci() {
       totalNodeScale += parseInt(createMciReq.vm[i].subGroupSize);
       let costPerHour = recommendedSpecList[i].costPerHour;
       let subTotalCost = "unknown";
-      if (costPerHour == "100000000" || costPerHour == "") {
+      if (costPerHour == "-1" || costPerHour == "") {
         costPerHour = "unknown";
         costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($" + costPerHour + " * " + createMciReq.vm[i].subGroupSize + ")" + "</span></b></td></tr>";
       } else {
@@ -1478,18 +1478,22 @@ function createMci() {
                     <div style="margin-bottom: 15px;">
                       <select id="predefinedScripts" style="width: 75%; padding: 5px;" onchange="loadPredefinedScript()">
                         <option value="">-- Select a predefined script --</option>
-                        <option value="Nvidia">Nvidia CUDA Driver</option>
-                        <option value="vLLM">vLLM Server</option>
-                        <option value="Ollama">Ollama LLM Server</option>
-                        <option value="OllamaPull">Ollama Model Pull</option>
-                        <option value="OpenWebUI">Open WebUI for Ollama</option>
-                        <option value="WeaveScope">Weave Scope</option>
-                        <option value="ELK">ELK Stack</option>
-                        <option value="Jitsi">Jitsi Meet</option>
-                        <option value="Nginx">Nginx Web Server</option>
-                        <option value="Xonotic">Xonotic Game Server</option>
-                        <option value="Westward">Westward Game</option>
-                        <option value="Stress">Stress Test</option>
+            <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
+            <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
+            <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
+            <option value="vLLM">[LLM vLLM] vLLM Server</option>
+            <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
+            <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
+            <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
+            <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
+            <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
+            <option value="WeaveScope">[Observability] Weave Scope</option>
+            <option value="ELK">[Observability] ELK Stack</option>
+            <option value="Jitsi">[Video Conference] Jitsi Meet</option>
+            <option value="Xonotic">[Game:FPS] Xonotic Game Server</option>
+            <option value="Westward">[Game:MMORPG] Westward Game</option>
+            <option value="Nginx">[Web:Server] Nginx Web Server</option>
+            <option value="Stress">[Web:Stress] Stress Test</option>
                       </select>
                       <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
                         Select a predefined script to auto-fill the command fields
@@ -1689,7 +1693,11 @@ function getRecommendedSpec(idx, latitude, longitude) {
     "performance": {
       metric: "performance",
       weight: "1.0"
-    }
+    },
+    "random": {
+      metric: "random",
+      weight: "1.0"
+    }    
   };
 
   var struct = {
@@ -1719,492 +1727,732 @@ function getRecommendedSpec(idx, latitude, longitude) {
       return;
     }
 
-    const searchImageURL = `http://${hostname}:${port}/tumblebug/ns/system/resources/searchImage`;
-    const searchImageBody = {
-      providerName: res.data[0].providerName,
-      regionName: res.data[0].regionName,
-      osType: document.getElementById("osImage").value,
-      // isGPUImage: res.data[0].acceleratorType === "gpu",
-      // isKubernetesImage: false,
-      // detailSearchKeys: [],
-    };
+    // Spec selection popup
+    Swal.fire({
+      title: "Select Recommended VM Spec",
+      width: 900,
 
-    console.log("Calling mciDynamicCheckRequest with spec:", res.data[0].id);
-
-    // mciDynamicCheckRequest API call
-    axios({
-      method: "post",
-      url: searchImageURL,
-      headers: { "Content-Type": "application/json" },
-      data: JSON.stringify(searchImageBody),
-      auth: {
-        username: `${username}`,
-        password: `${password}`,
-      },
-    }).then((searchRes) => {
-      console.log("searchImage response:", searchRes.data);
-
-      let availableImages = [];
-      if (searchRes.data && searchRes.data.imageList && searchRes.data.imageList.length > 0) {
-        availableImages = searchRes.data.imageList.map(img => ({
-          id: img.id,
-          cspImageName: img.cspImageName,
-          osType: img.osType || "unknown",
-          osDistribution: img.osDistribution || "unknown",
-          osArchitecture: img.osArchitecture || "unknown"
-        }));
-
-        console.log("Available images for this spec:");
-        console.table(availableImages);
-      }
-
-      addRegionMarker(res.data[0].id);
-
-
-      var createMciReqVm = $.extend({}, createMciReqVmTmplt);
-      var recommendedSpec = res.data[0];
-
-      createMciReqVm.name = "g" + (vmReqeustFromSpecList.length + 1).toString();
-
-      var osImage = document.getElementById("osImage");
-      var diskSize = document.getElementById("diskSize");
-
-      createMciReqVm.commonSpec = res.data[0].id;
-      createMciReqVm.commonImage = osImage.value;
-      createMciReqVm.rootDiskType = res.data[0].rootDiskType;
-
-      var diskSizeInput = diskSize.value;
-      if (isNaN(diskSizeInput) || diskSizeInput == "") {
-        diskSizeInput = "default";
-      }
-      createMciReqVm.rootDiskSize = diskSizeInput;
-      if (diskSizeInput == "default" && res.data[0].rootDiskSize != "default") {
-        createMciReqVm.rootDiskSize = res.data[0].rootDiskSize;
-        // need to validate requested disk size >= default disk size given by vm spec
-      }
-
-      // OS Image select dropdown
-      let imageSelectHTML = '';
-      if (availableImages && availableImages.length > 0) {
-        imageSelectHTML = `
-          <div>
-            <input type="text" id="imageSearchKeyword" placeholder="keyword for filtering" 
-                  style="width:100%; padding: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;">
-            <div style="margin-bottom: 5px;">
-              <input type="checkbox" id="filterX86" checked>
-              <label for="filterX86">x86</label>
-            </div>
-            <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: green;">
-        `;
-
-        // Sort the available images by osDistribution in descending order
-        const sortedImages = availableImages.sort((a, b) => {
-          const aDistro = a.osDistribution || '';
-          const bDistro = b.osDistribution || '';
-          return bDistro.localeCompare(aDistro);
-        });
-
-        // Populate the select options with sorted images
-        for (let img of sortedImages) {
-          imageSelectHTML += `<option value="${img.cspImageName}" data-cspname="${img.cspImageName}" 
-                        data-architecture="${img.osArchitecture}">${img.osDistribution} // (ID: ${img.cspImageName || 'N/A'}) [${img.osArchitecture || 'unknown'}]</option>`;
-        }
-
-
-      } else {
-        imageSelectHTML = `
-          <div>
-            <input type="text" id="imageSearchKeyword" placeholder="keyword for filtering" 
-                  style="width:100%; padding: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;" disabled>
-            <div style="margin-bottom: 5px;">
-              <input type="checkbox" id="filterX86" checked disabled>
-              <label for="filterX86">x86</label>
-            </div>
-            <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: red;">
-              <option disabled selected>${createMciReqVm.commonImage} is not available</option>
-            </select>
-          </div>
-        `;
-      }
-
-
-
-      let costPerHour = res.data[0].costPerHour;
-      if (costPerHour == "100000000" || costPerHour == "") {
-        costPerHour = "unknown";
-      }
-      let acceleratorType = res.data[0].acceleratorType;
-      let acceleratorModel = res.data[0].acceleratorModel;
-      if (acceleratorType == "gpu") {
-        acceleratorType = "<tr><th style='width: 50%;'>AcceleratorType</th><td><b><span style='color: red; font-size: larger;'>GPU</span></b></td></tr>"
-        acceleratorModel = "<tr><th style='width: 50%;'>AcceleratorModel</th><td><b><span style='color: red; font-size: larger;'>" + acceleratorModel + "</span></b></td></tr>"
-      } else {
-        acceleratorType = "<tr><th style='width: 50%;'>AcceleratorType</th><td><b><span style='color: black;'>None</span></b></td></tr>"
-        acceleratorModel = "<tr><th style='width: 50%;'>AcceleratorModel</th><td><b><span style='color: black;'>" + acceleratorModel + "</span></b></td></tr>"
-      }
-
-
-      // Show all recommended specs in a table if needed
-      var tableContent = res.data.map((spec, index) => {
-        let costPerHour = spec.costPerHour === "100000000" || spec.costPerHour === "" ? "unknown" : spec.costPerHour;
-        let acceleratorCount = spec.acceleratorType === "gpu"
-          ? `<span style='color: red; font-size: larger;'>GPU</span>`
-          : `<span style='color: black;'>None</span>`;
-        let acceleratorModel = spec.acceleratorModel === "gpu"
-          ? `<span style='color: red; font-size: larger;'>${spec.acceleratorModel}</span>`
-          : `<span style='color: black;'>${spec.acceleratorModel}</span>`;
-
-        return `
-        <tr>
-          <th>${index + 1}</th>
-          <td>${spec.cspSpecName}</td>
-          <td>${spec.providerName.toUpperCase()}</td>
-          <td>${spec.regionName}</td>
-          <td>${spec.vCPU}</td>
-          <td>${spec.memoryGiB}</td>
-          <td>$ ${costPerHour}</td>
-          <td>${spec.acceleratorCount}</td>
-          <td>${spec.acceleratorModel}</td>
-          <td>${spec.acceleratorMemoryGB}</td>
-        </tr>`;
-      }).join("");
-
-      var tableHTML = `
-      <table id="recommendationTable" class="display nowrap" style="width:100%; text-align:left;">
+      // Spec selection popup HTML part with row selection instead of buttons
+html: `
+  <div class="compact-datatable">
+    <div class="table-responsive">
+      <table id="specSelectionTable" class="display nowrap" style="width:100%">
         <thead>
           <tr>
-            <th> </th>
-            <th>Spec</th>
+            <th>Rank</th>
             <th>CSP</th>
             <th>Region</th>
-            <th>CPU</th>
-            <th>Mem</th>
-            <th>Cost</th>
-            <th>GPU</th>
-            <th>Model</th>
-            <th>Mem</th>
+            <th>SpecName</th>
+            <th>Arch</th>
+            <th>vCPU</th>
+            <th>Mem(GiB)</th>
+            <th>Cost($/h)</th>
+            <th>Accelerator</th>
           </tr>
         </thead>
-          <tfoot>
-    <tr>
-      <th></th>
-      <th>Spec</th>
-      <th>CSP</th>
-      <th>Region</th>
-      <th>CPU</th>
-      <th>Mem</th>
-      <th>Cost</th>
-      <th>GPU</th>
-      <th>Model</th>
-      <th>Mem</th>
-    </tr>
-  </tfoot>
         <tbody>
-          ${tableContent}
+          ${res.data.map((spec, index) => {
+            let costPerHour = spec.costPerHour === "-1" || spec.costPerHour === "" 
+              ? "unknown" 
+              : `$${spec.costPerHour}`;
+            
+            let acceleratorInfo;
+            if (spec.acceleratorModel && spec.acceleratorModel !== "undefined" && spec.acceleratorModel !== "") {
+              acceleratorInfo = `<span style="color:red;font-weight:bold">${spec.acceleratorModel} (C:${spec.acceleratorCount} ${spec.acceleratorMemoryGB})</span>`;
+            } else {
+              acceleratorInfo = "None";
+            }
+            
+            return `
+              <tr id="spec-row-${index}" class="${index === 0 ? 'selected-spec' : ''}" data-index="${index}">
+                <td class="text-left">${index + 1}</td>
+                <td class="text-left">${spec.providerName.toUpperCase()}</td>
+                <td class="text-left">${spec.regionName}</td>
+                <td class="text-left">${spec.cspSpecName}</td>
+                <td>${spec.architecture}</td>
+                <td>${spec.vCPU}</td>
+                <td>${spec.memoryGiB}</td>
+                <td>${costPerHour}</td>
+                <td class="text-left">${acceleratorInfo}</td>
+              </tr>
+            `;
+          }).join('')}
         </tbody>
-      </table>`;
+      </table>
+    </div>
+    <div id="specDetailsContainer" style="margin-top:15px;padding:8px;border:1px solid #ddd;border-radius:5px;">
+      <h5 style="font-size: 0.85rem;margin-bottom:5px;">Selected Spec Details</h5>
+      <div id="specDetailsContent"></div>
+    </div>
+    <input type="hidden" id="selectedSpecIndex" value="0">
+  </div>
+  <style>
+    /* Apply compact styling to all DataTable elements */
+    .compact-datatable {
+      font-size: 0.8rem;
+    }
+    
+    /* Stronger highlight for selected row */
+    .selected-spec {
+      background-color: rgba(40, 167, 69, 0.35) !important;
+      border-left: 5px solid rgb(40, 167, 69) !important;
+      font-weight: bold;
+    }
+    table.dataTable tbody tr.selected-spec {
+      background-color: rgba(40, 167, 69, 0.35) !important;
+      border-left: 5px solid rgb(40, 167, 69) !important;
+    }
+    
+    /* Make rows clickable */
+    #specSelectionTable tbody tr {
+      cursor: pointer;
+    }
+    #specSelectionTable tbody tr:hover {
+      background-color: rgba(0, 123, 255, 0.08) !important;
+    }
+    
+    /* Reduce spacing in details section */
+    #specDetailsContent .row p {
+      margin-bottom: 0.2rem;
+    }
+  </style>
+`,
+      didOpen: () => {
+        // Set up row click event for the table
+        $('#specSelectionTable tbody').on('click', 'tr', function () {
+          const index = $(this).data('index');
+          selectSpecRow(index);
+        });
 
-      Swal.fire({
-        title: "Recommended Spec and CSP region <br>",
-        width: 800,
-        html:
-          "<font size=3>" +
-          "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
-          "<tr><th style='width: 50%;'>Recommended Spec</th><td><b><span style='color: black; font-size: larger;'>" + res.data[0].cspSpecName + "</span></b></td></tr>" +
-          "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; font-size: larger;'> $ " + costPerHour + " (at least)</span></b></td></tr>" +
-          "<tr><th style='width: 50%;'>Image</th><td>" + imageSelectHTML + "</td></tr>" +
-
-          "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
-          "<tr><th style='width: 50%;'>Provider</th><td><b><span style='color: blue; font-size: larger;'>" + res.data[0].providerName.toUpperCase() + "</span></b></td></tr>" +
-          "<tr><th style='width: 50%;'>Region</th><td><b>" + res.data[0].regionName + "</b></td></tr>" +
-          "<tr><th style='width: 50%;'>ConnectionConfig</th><td><b>" + res.data[0].connectionName + "</b></td></tr>" +
-
-          "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
-          "<tr><th style='width: 50%;'>vCPU</th><td><b>" + res.data[0].vCPU + "</b></td></tr>" +
-          "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + res.data[0].memoryGiB + "</b></td></tr>" +
-          "<tr><th style='width: 50%;'>RootDiskType</th><td><b>" + res.data[0].rootDiskType + "</b></td></tr>" +
-
-          "<tr><th style='width: 50%;'>RootDiskSize(GB)</th><td>" +
-          "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Enter disk size in GB or 'default'</span>" +
-          "<input type='text' id='rootDiskSizeCustom' style='width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px;' value='" + createMciReqVm.rootDiskSize + "'>" +
-          "</td></tr>" +
-
-          "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
-          acceleratorModel +
-          "<tr><th style='width: 50%;'>AcceleratorCount</th><td><b>" + res.data[0].acceleratorCount + "</b></td></tr>" +
-          "<tr><th style='width: 50%;'>AcceleratorMemoryGB</th><td><b>" + res.data[0].acceleratorMemoryGB + "</b></td></tr>" +
-
-          // Label input field
-          "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
-          "<tr><th style='width: 50%;'>User Labels</th><td>" +
-          "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Enter in key=value, separated by commas</span>" +
-          "<input type='text' id='vmLabels' style='width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px;' placeholder='role=worker,env=prod,tier=frontend'>" +
-          "</td></tr>" +
-
-          // vm count input field
-          "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
-          "<tr><th style='width: 50%;'>SubGroup Scale</th><td>" +
-          "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Enter the number of VMs for scaling (1 ~ 100)</span>" +
-          "<input type='number' id='vmCount' style='width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px;' min='1' max='10' value='1'>" +
-          "</td></tr>" +
-          "</table><br>" +
-
-          `<div style="margin-top: 10px;">` +
-          `<button id="toggleTableButton" class="btn btn-secondary dropdown-toggle w-100">Show All Recommendations</button>` +
-          `</div>` +
-          `<div id="fullTable" style="display:none">${tableHTML}</div>`,
-
-        didOpen: () => {
-
-          const toggleButton = document.getElementById('toggleTableButton');
-          toggleButton.addEventListener('click', toggleTable);
-          
-          $('#recommendationTable').DataTable({
-            initComplete: function () {
-              this.api().columns().every(function (index) {
-                // Skip filtering for the first column (index column)
-                if (index === 0) {
-                  return;
-                }
-                
-                var column = this;
-                
-                // Get column data, extract text only (remove HTML tags), and sort
-                var columnData = column.data().map(function(d) {
-                  // Extract plain text from HTML content
-                  return $('<div>').html(d).text().trim();
-                }).unique().sort();
-                
-                // Create filter container with scrollable area
-                var select = $('<div class="filter-container" style="height:100px; overflow:auto;"></div>')
-                  .appendTo($(column.footer()).empty());
-                
-                // Handle checkbox change events for filtering
-                select.on('change', 'input:checkbox', function () {
-                  var checkedValues = [];
-                  $('input:checkbox:checked', select).each(function () {
-                    // Get trimmed checkbox value
-                    checkedValues.push($(this).val().trim());
-                  });
-                  
-                  // Create regex pattern from checked values
-                  var regex = checkedValues.length ? 
-                    checkedValues.map(function(val) {
-                      // Escape special regex characters to prevent errors
-                      return val.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-                    }).join('|') : '';
-                  
-                  // Apply filter using regex
-                  column
-                    .search(checkedValues.length ? regex : '', true, false)
-                    .draw();
-                    
-                  console.log("Applied filter for column " + index + ": " + regex);
-                });
-                
-                // Create checkboxes for each unique value in the column
-                columnData.each(function (d, j) {
-                  if (d) { // Skip empty values
-                    // Clean the value and create checkbox with label
-                    var cleanValue = d.trim();
-                    var checkbox = $('<label><input type="checkbox" value="' + cleanValue + '"> ' + cleanValue + '</label><br>');
-                    select.append(checkbox);
-                  }
-                });
-              });
-            },
-            // Enable pagination
-            "paging": true,
-            // Set default sorting (first column ascending)
-            "order": [[0, 'asc']],
-            // Enable responsive behavior
-            "responsive": true,
-            // Enable horizontal scrolling if needed
-            "scrollX": true,
-            // Customize language settings
-            "language": {
-              "search": "Search:",
-              "lengthMenu": "Show _MENU_ entries",
-              "info": "Showing _START_ to _END_ of _TOTAL_ entries",
-              "infoEmpty": "Showing 0 to 0 of 0 entries",
-              "infoFiltered": "(filtered from _MAX_ total entries)"
-            }
+        // Spec selection function
+        window.selectSpecRow = function (index) {
+          // Reset previous selection
+          document.querySelectorAll('#specSelectionTable tbody tr').forEach(row => {
+            row.classList.remove('selected-spec');
           });
-          // Add image filtering input
-          const filterX86Checkbox = document.getElementById('filterX86');
-          const imageSelect = document.getElementById('osImageSelect');
-          const searchKeyword = document.getElementById('imageSearchKeyword');
 
-          function filterImages() {
-            const keyword = searchKeyword ? searchKeyword.value.toLowerCase() : '';
-            const filterX86Only = filterX86Checkbox.checked;
+          // Select new row
+          const selectedRow = document.getElementById(`spec-row-${index}`);
+          if (selectedRow) {
+            selectedRow.classList.add('selected-spec');
+          }
 
-            let matchCount = 0;
-            let firstMatchIndex = -1;
-            const options = imageSelect.options;
+          // Save selected index and update details
+          document.getElementById('selectedSpecIndex').value = index;
+          updateSpecDetails(index);
+        };
 
-            for (let i = 0; i < options.length; i++) {
-              const optionText = options[i].text.toLowerCase();
-              const optionValue = options[i].value.toLowerCase();
-              const architecture = options[i].dataset.architecture?.toLowerCase() || '';
+        // Update spec details function
+        function updateSpecDetails(index) {
+          const spec = res.data[index];
+          let costPerHour = spec.costPerHour === "-1" || spec.costPerHour === "" ? "unknown" : `$${spec.costPerHour}`;
 
-              const matchesKeyword = keyword === '' || optionText.includes(keyword) || optionValue.includes(keyword);
-              const matchesArchitecture = !filterX86Only || architecture.includes('x86');
+          let acceleratorDetails = "";
+          if (spec.acceleratorType === "gpu") {
+            acceleratorDetails = `
+              <div class="row">
+                <div class="col-md-6">
+                  <p><strong>Accelerator Type:</strong> <span style="color:red">GPU</span></p>
+                  <p><strong>Accelerator Model:</strong> <span style="color:red">${spec.acceleratorModel}</span></p>
+                </div>
+                <div class="col-md-6">
+                  <p><strong>Accelerator Count:</strong> ${spec.acceleratorCount}</p>
+                  <p><strong>Accelerator Memory:</strong> ${spec.acceleratorMemoryGB} GB</p>
+                </div>
+              </div>
+            `;
+          }
+          
+          // Format the details as key-value pairs
+          let specDetailsHTML = "";
+          if (spec.details && Array.isArray(spec.details) && spec.details.length > 0) {
+            specDetailsHTML = `
+              <div class="mt-2">
+                <div style="max-height: 140px; overflow-y: auto; font-size: 0.75rem;">
+                  <table class="table table-sm table-bordered">
+                    <tbody>
+                      ${spec.details.map(item => 
+                        `<tr>
+                          <td style="width: 40%"><strong>${item.key}</strong></td>
+                          <td>${item.value}</td>
+                        </tr>`
+                      ).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            `;
+          }
+          const detailsHTML = `
+            ${acceleratorDetails}
+            ${specDetailsHTML}
+          `;
 
-              if (matchesKeyword && matchesArchitecture) {
-                options[i].style.display = '';
-                matchCount++;
+          document.getElementById('specDetailsContent').innerHTML = detailsHTML;
+        }
 
-                if (firstMatchIndex === -1) {
-                  firstMatchIndex = i;
-                }
-              } else {
-                options[i].style.display = 'none';
-              }
+        // Initialize DataTable
+        $('#specSelectionTable').DataTable({
+          "paging": true,
+          "searching": true,
+          "ordering": true,
+          "info": true,
+          "responsive": true,
+          "scrollX": true,
+          "pageLength": 5,
+          "lengthMenu": [5, 10, 25, 50],
+          "order": [[0, 'asc']],
+          "columnDefs": [
+            {
+              "targets": -1,
+              "orderable": false
             }
-
-            if (matchCount > 0 && firstMatchIndex >= 0) {
-              imageSelect.selectedIndex = firstMatchIndex;
-            } else if (matchCount === 0) {
-              imageSelect.selectedIndex = -1;
-            }
-          }
-
-          if (filterX86Checkbox) {
-            filterX86Checkbox.addEventListener('change', filterImages);
-          }
-
-          if (searchKeyword) {
-            searchKeyword.addEventListener('input', filterImages);
-          }
-
-          filterImages();
-
-        },
-
-        // // Simple string filter input
-        // didOpen: () => {
-        //   const input = Swal.getInput();
-        //   const toggleButton = document.getElementById('toggleTableButton');
-        //   toggleButton.addEventListener('click', toggleTable);
-
-        //   $('#recommendationTable').DataTable({
-        //     initComplete: function () {
-        //       // Add filtering input for each column (except the first column)
-        //       this.api().columns().every(function (index) {
-        //         if (index === 0) {
-        //           return;
-        //         }
-        //         var column = this;
-        //         var input = $('<input type="text" placeholder="filter" style="width:100%" />')
-        //           .appendTo($(column.footer()).empty())
-        //           .on('keyup change clear', function () {
-        //             if (column.search() !== this.value) {
-        //               column.search(this.value).draw();
-        //             }
-        //           });
-        //       });
-        //     },
-        //   });
-        // },
-
-        inputAttributes: {
-          autocapitalize: "off",
-        },
-        showCancelButton: true,
-        confirmButtonText: "Confirm",
-        //showLoaderOnConfirm: true,
-        position: "top-end",
-        //back(disabled section)ground color
-        backdrop: `rgba(0, 0, 0, 0.08)`,
-        preConfirm: () => {
-          // vmCount input validation
-          const vmCountInput = document.getElementById('vmCount');
-          let vmCount = parseInt(vmCountInput.value, 10);
-          if (isNaN(vmCount) || vmCount < 1 || vmCount > 100) {
-            Swal.showValidationMessage('Enter a valid number between 1 and 100');
-            return false;
-          }
-
-          // rootDiskSize input validation
-          const rootDiskSizeInput = document.getElementById('rootDiskSizeCustom');
-          const rootDiskSizeValue = rootDiskSizeInput.value.trim();
-          if (rootDiskSizeValue !== "default" && rootDiskSizeValue !== "") {
-            if (!/^\d+$/.test(rootDiskSizeValue)) {
-              Swal.showValidationMessage('Disk size must be "default", empty, or a number');
-              return false;
+          ],
+          "language": {
+            "search": "Search:",
+            "lengthMenu": "Show _MENU_ entries",
+            "info": "_START_ - _END_ of _TOTAL_",
+            "infoEmpty": "No data available",
+            "paginate": {
+              "first": "First",
+              "last": "Last",
+              "next": "Next",
+              "previous": "Previous"
             }
           }
+        });
 
-          const osImageSelect = document.getElementById('osImageSelect');
-          if (osImageSelect && osImageSelect.value) {
-            console.log(osImageSelect.value);
-            createMciReqVm.commonImage = osImageSelect.value;
+        // Initialize spec details
+        updateSpecDetails(0);
+      },
+      showCancelButton: true,
+      confirmButtonText: "Continue",
+      cancelButtonText: "Cancel",
+      preConfirm: () => {
+        return parseInt(document.getElementById('selectedSpecIndex').value);
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        // User selected a spec and confirmed
+        var selectedSpec = res.data[result.value];
+        console.log("User selected spec:", selectedSpec);
+
+        // Continue with existing code
+        const searchImageURL = `http://${hostname}:${port}/tumblebug/ns/system/resources/searchImage`;
+        const searchImageBody = {
+          providerName: selectedSpec.providerName,
+          regionName: selectedSpec.regionName,
+          osType: document.getElementById("osImage").value,
+          // isGPUImage: selectedSpec.acceleratorType === "gpu",
+          // isKubernetesImage: false,
+          // detailSearchKeys: [],
+        };
+
+        console.log("Calling mciDynamicCheckRequest with spec:", selectedSpec.id);
+
+        // mciDynamicCheckRequest API call
+        axios({
+          method: "post",
+          url: searchImageURL,
+          headers: { "Content-Type": "application/json" },
+          data: JSON.stringify(searchImageBody),
+          auth: {
+            username: `${username}`,
+            password: `${password}`,
+          },
+        }).then((searchRes) => {
+          console.log("searchImage response:", searchRes.data);
+
+          let availableImages = [];
+          if (searchRes.data && searchRes.data.imageList && searchRes.data.imageList.length > 0) {
+            availableImages = searchRes.data.imageList.map(img => ({
+              id: img.id,
+              cspImageName: img.cspImageName,
+              osType: img.osType || "unknown",
+              osDistribution: img.osDistribution || "unknown",
+              osArchitecture: img.osArchitecture || "unknown"
+            }));
+
+            console.log("Available images for this spec:");
+            console.table(availableImages);
           }
-          if (!createMciReqVm.commonImage) {
-            Swal.showValidationMessage('Select an OS image');
-            return false;
+
+          addRegionMarker(selectedSpec.id);
+
+
+          var createMciReqVm = $.extend({}, createMciReqVmTmplt);
+          var recommendedSpec = selectedSpec;
+
+          createMciReqVm.name = "g" + (vmReqeustFromSpecList.length + 1).toString();
+
+          var osImage = document.getElementById("osImage");
+          var diskSize = document.getElementById("diskSize");
+
+          createMciReqVm.commonSpec = selectedSpec.id;
+          createMciReqVm.commonImage = osImage.value;
+          createMciReqVm.rootDiskType = selectedSpec.rootDiskType;
+
+          var diskSizeInput = diskSize.value;
+          if (isNaN(diskSizeInput) || diskSizeInput == "") {
+            diskSizeInput = "default";
+          }
+          createMciReqVm.rootDiskSize = diskSizeInput;
+          if (diskSizeInput == "default" && selectedSpec.rootDiskSize != "default") {
+            createMciReqVm.rootDiskSize = selectedSpec.rootDiskSize;
+            // need to validate requested disk size >= default disk size given by vm spec
           }
 
-          return vmCount;
-        },
+          // OS Image select dropdown
+          let imageSelectHTML = '';
+          if (availableImages && availableImages.length > 0) {
+            imageSelectHTML = `
+              <div>
+                <input type="text" id="imageSearchKeyword" placeholder="keyword for filtering" 
+                      style="width:100%; padding: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;">
+                <div style="margin-bottom: 5px;">
+                  <input type="checkbox" id="filterX86" checked>
+                  <label for="filterX86">x86</label>
+                </div>
+                <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: green;">
+            `;
 
-
-      }).then((result) => {
-        // result.value is false if result.isDenied or another key such as result.isDismissed
-        if (result.value) {
-
-          createMciReqVm.subGroupSize = String(result.value);
-          if (
-            isNaN(parseFloat(createMciReqVm.subGroupSize)) ||
-            parseFloat(createMciReqVm.subGroupSize) <= 0
-          ) {
-            createMciReqVm.subGroupSize = "1";
-          }
-
-          const rootDiskSizeInput = document.getElementById('rootDiskSizeCustom').value.trim();
-          if (rootDiskSizeInput) {
-            console.log(rootDiskSizeInput);
-            createMciReqVm.rootDiskSize = rootDiskSizeInput;
-          } else {
-            createMciReqVm.rootDiskSize = "default";
-          }
-
-          const vmLabelsInput = document.getElementById('vmLabels').value.trim();
-          if (vmLabelsInput) {
-
-            const labels = {};
-            vmLabelsInput.split(',').forEach(pair => {
-              const [key, value] = pair.trim().split('=');
-              if (key && value) {
-                labels[key] = value;
-              }
+            // Sort the available images by osDistribution in descending order
+            const sortedImages = availableImages.sort((a, b) => {
+              const aDistro = a.osDistribution || '';
+              const bDistro = b.osDistribution || '';
+              return bDistro.localeCompare(aDistro);
             });
 
-            if (Object.keys(labels).length > 0) {
-              createMciReqVm.label = labels;
+            // Filter to keep only latest 3 versions of similar images
+            const filteredImages = (() => {
+              const imageGroups = {};
+
+              // Group images by their base name (excluding date)
+              sortedImages.forEach(img => {
+                const distro = img.osDistribution || '';
+                // Extract date pattern (supports YYYYMMDD, YYYY-MM-DD, YYYY/MM/DD)
+                const dateMatch = distro.match(/\b(20\d{2}[-/]?\d{2}[-/]?\d{2}|20\d{6})\b/);
+
+                if (dateMatch) {
+                  // Use everything except the date as the base name
+                  const baseName = distro.replace(dateMatch[0], '').trim();
+                  if (!imageGroups[baseName]) imageGroups[baseName] = [];
+
+                  // Store image with its date
+                  imageGroups[baseName].push({
+                    image: img,
+                    date: dateMatch[0].replace(/[-/]/g, '') // Normalize date format
+                  });
+                } else {
+                  // For images without date pattern
+                  if (!imageGroups[distro]) imageGroups[distro] = [];
+                  imageGroups[distro].push({ image: img, date: '0' });
+                }
+              });
+
+              // Select top latest images from each group
+              const result = [];
+              const topCount = 1; // Change this to get more or fewer images
+              Object.values(imageGroups).forEach(group => {
+                // Sort by date in descending order
+                group.sort((a, b) => b.date.localeCompare(a.date));
+                // Take top 
+                group.slice(0, topCount).forEach(item => result.push(item.image));
+              });
+
+              return result;
+            })();
+
+            // Populate the select options with filtered images
+            for (let img of filteredImages) {
+              imageSelectHTML += `<option value="${img.cspImageName}" data-cspname="${img.cspImageName}" 
+                    data-architecture="${img.osArchitecture}">${img.osDistribution} // (ID: ${img.cspImageName || 'N/A'}) [${img.osArchitecture || 'unknown'}]</option>`;
             }
+
+
+          } else {
+            imageSelectHTML = `
+              <div>
+                <input type="text" id="imageSearchKeyword" placeholder="keyword for filtering" 
+                      style="width:100%; padding: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;" disabled>
+                <div style="margin-bottom: 5px;">
+                  <input type="checkbox" id="filterX86" checked disabled>
+                  <label for="filterX86">x86</label>
+                </div>
+                <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: red;">
+                  <option disabled selected>${createMciReqVm.commonImage} is not available</option>
+                </select>
+              </div>
+            `;
           }
 
 
-          messageTextArea.value +=
-            `${createMciReqVm.commonSpec}` +
-            `\t(${createMciReqVm.subGroupSize})`;
-          vmReqeustFromSpecList.push(createMciReqVm);
-          recommendedSpecList.push(recommendedSpec);
-        } else {
-          messageTextArea.value = messageTextArea.value.replace(/\n.*$/, "");
-          latLonInputPairIdx--;
-          cspPointsCircle.pop();
-          geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
-        }
-      });
-    }).catch(error => {
-      console.error("Failed to get image information:", error);
+
+          let costPerHour = selectedSpec.costPerHour;
+          if (costPerHour == "100000000" || costPerHour == "") {
+            costPerHour = "unknown";
+          }
+          let acceleratorType = selectedSpec.acceleratorType;
+          let acceleratorModel = selectedSpec.acceleratorModel;
+          if (acceleratorType == "gpu") {
+            acceleratorType = "<tr><th style='width: 50%;'>AcceleratorType</th><td><b><span style='color: red; font-size: larger;'>GPU</span></b></td></tr>"
+            acceleratorModel = "<tr><th style='width: 50%;'>AcceleratorModel</th><td><b><span style='color: red; font-size: larger;'>" + acceleratorModel + "</span></b></td></tr>"
+          } else {
+            acceleratorType = "<tr><th style='width: 50%;'>AcceleratorType</th><td><b><span style='color: black;'>None</span></b></td></tr>"
+            acceleratorModel = "<tr><th style='width: 50%;'>AcceleratorModel</th><td><b><span style='color: black;'>" + acceleratorModel + "</span></b></td></tr>"
+          }
+
+
+          // Show all recommended specs in a table if needed
+          var tableContent = res.data.map((spec, index) => {
+            let costPerHour = spec.costPerHour === "100000000" || spec.costPerHour === "" ? "unknown" : spec.costPerHour;
+            let acceleratorCount = spec.acceleratorType === "gpu"
+              ? `<span style='color: red; font-size: larger;'>GPU</span>`
+              : `<span style='color: black;'>None</span>`;
+            let acceleratorModel = spec.acceleratorModel === "gpu"
+              ? `<span style='color: red; font-size: larger;'>${spec.acceleratorModel}</span>`
+              : `<span style='color: black;'>${spec.acceleratorModel}</span>`;
+
+            return `
+            <tr>
+              <th>${index + 1}</th>
+              <td>${spec.cspSpecName}</td>
+              <td>${spec.providerName.toUpperCase()}</td>
+              <td>${spec.regionName}</td>
+              <td>${spec.vCPU}</td>
+              <td>${spec.memoryGiB}</td>
+              <td>$ ${costPerHour}</td>
+              <td>${spec.acceleratorCount}</td>
+              <td>${spec.acceleratorModel}</td>
+              <td>${spec.acceleratorMemoryGB}</td>
+            </tr>`;
+          }).join("");
+
+          var tableHTML = `
+          <table id="recommendationTable" class="display nowrap" style="width:100%; text-align:left;">
+            <thead>
+              <tr>
+                <th> </th>
+                <th>Spec</th>
+                <th>CSP</th>
+                <th>Region</th>
+                <th>CPU</th>
+                <th>Mem</th>
+                <th>Cost</th>
+                <th>GPU</th>
+                <th>Model</th>
+                <th>Mem</th>
+              </tr>
+            </thead>
+              <tfoot>
+                <tr>
+                  <th></th>
+                  <th>Spec</th>
+                  <th>CSP</th>
+                  <th>Region</th>
+                  <th>CPU</th>
+                  <th>Mem</th>
+                  <th>Cost</th>
+                  <th>GPU</th>
+                  <th>Model</th>
+                  <th>Mem</th>
+                </tr>
+              </tfoot>
+            <tbody>
+              ${tableContent}
+            </tbody>
+          </table>`;
+
+          Swal.fire({
+            title: "Recommended Spec and CSP region <br>",
+            width: 800,
+            html:
+              "<font size=3>" +
+              "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
+              "<tr><th style='width: 50%;'>Recommended Spec</th><td><b><span style='color: black; font-size: larger;'>" + selectedSpec.cspSpecName + "</span></b></td></tr>" +
+              "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; font-size: larger;'> $ " + costPerHour + " (at least)</span></b></td></tr>" +
+              "<tr><th style='width: 50%;'>Image</th><td>" + imageSelectHTML + "</td></tr>" +
+
+              "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
+              "<tr><th style='width: 50%;'>Provider</th><td><b><span style='color: blue; font-size: larger;'>" + selectedSpec.providerName.toUpperCase() + "</span></b></td></tr>" +
+              "<tr><th style='width: 50%;'>Region</th><td><b>" + selectedSpec.regionName + "</b></td></tr>" +
+              "<tr><th style='width: 50%;'>ConnectionConfig</th><td><b>" + selectedSpec.connectionName + "</b></td></tr>" +
+
+              "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
+              "<tr><th style='width: 50%;'>vCPU</th><td><b>" + selectedSpec.vCPU + "</b></td></tr>" +
+              "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + selectedSpec.memoryGiB + "</b></td></tr>" +
+              "<tr><th style='width: 50%;'>RootDiskType</th><td><b>" + selectedSpec.rootDiskType + "</b></td></tr>" +
+
+              "<tr><th style='width: 50%;'>RootDiskSize(GB)</th><td>" +
+              "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Enter disk size in GB or 'default'</span>" +
+              "<input type='text' id='rootDiskSizeCustom' style='width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px;' value='" + createMciReqVm.rootDiskSize + "'>" +
+              "</td></tr>" +
+
+              "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
+              acceleratorModel +
+              "<tr><th style='width: 50%;'>AcceleratorCount</th><td><b>" + selectedSpec.acceleratorCount + "</b></td></tr>" +
+              "<tr><th style='width: 50%;'>AcceleratorMemoryGB</th><td><b>" + selectedSpec.acceleratorMemoryGB + "</b></td></tr>" +
+
+              // Label input field
+              "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
+              "<tr><th style='width: 50%;'>User Labels</th><td>" +
+              "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Enter in key=value, separated by commas</span>" +
+              "<input type='text' id='vmLabels' style='width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px;' placeholder='role=worker,env=prod,tier=frontend'>" +
+              "</td></tr>" +
+
+              // vm count input field
+              "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
+              "<tr><th style='width: 50%;'>SubGroup Scale</th><td>" +
+              "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Enter the number of VMs for scaling (1 ~ 100)</span>" +
+              "<input type='number' id='vmCount' style='width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px;' min='1' max='10' value='1'>" +
+              "</td></tr>" +
+              "</table><br>" +
+
+              `<div style="margin-top: 10px;">` +
+              `<button id="toggleTableButton" class="btn btn-secondary dropdown-toggle w-100">Show All Recommendations</button>` +
+              `</div>` +
+              `<div id="fullTable" style="display:none">${tableHTML}</div>`,
+
+            didOpen: () => {
+
+              const toggleButton = document.getElementById('toggleTableButton');
+              toggleButton.addEventListener('click', toggleTable);
+
+              $('#recommendationTable').DataTable({
+                initComplete: function () {
+                  this.api().columns().every(function (index) {
+                    // Skip filtering for the first column (index column)
+                    if (index === 0) {
+                      return;
+                    }
+
+                    var column = this;
+
+                    // Get column data, extract text only (remove HTML tags), and sort
+                    var columnData = column.data().map(function (d) {
+                      // Extract plain text from HTML content
+                      return $('<div>').html(d).text().trim();
+                    }).unique().sort();
+
+                    // Create filter container with scrollable area
+                    var select = $('<div class="filter-container" style="height:100px; overflow:auto;"></div>')
+                      .appendTo($(column.footer()).empty());
+
+                    // Handle checkbox change events for filtering
+                    select.on('change', 'input:checkbox', function () {
+                      var checkedValues = [];
+                      $('input:checkbox:checked', select).each(function () {
+                        // Get trimmed checkbox value
+                        checkedValues.push($(this).val().trim());
+                      });
+
+                      // Create regex pattern from checked values
+                      var regex = checkedValues.length ?
+                        checkedValues.map(function (val) {
+                          // Escape special regex characters to prevent errors
+                          return val.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                        }).join('|') : '';
+
+                      // Apply filter using regex
+                      column
+                        .search(checkedValues.length ? regex : '', true, false)
+                        .draw();
+
+                      console.log("Applied filter for column " + index + ": " + regex);
+                    });
+
+                    // Create checkboxes for each unique value in the column
+                    columnData.each(function (d, j) {
+                      if (d) { // Skip empty values
+                        // Clean the value and create checkbox with label
+                        var cleanValue = d.trim();
+                        var checkbox = $('<label><input type="checkbox" value="' + cleanValue + '"> ' + cleanValue + '</label><br>');
+                        select.append(checkbox);
+                      }
+                    });
+                  });
+                },
+                // Enable pagination
+                "paging": true,
+                // Set default sorting (first column ascending)
+                "order": [[0, 'asc']],
+                // Enable responsive behavior
+                "responsive": true,
+                // Enable horizontal scrolling if needed
+                "scrollX": true,
+                // Customize language settings
+                "language": {
+                  "search": "Search:",
+                  "lengthMenu": "Show _MENU_ entries",
+                  "info": "Showing _START_ to _END_ of _TOTAL_ entries",
+                  "infoEmpty": "Showing 0 to 0 of 0 entries",
+                  "infoFiltered": "(filtered from _MAX_ total entries)"
+                }
+              });
+              // Add image filtering input
+              const filterX86Checkbox = document.getElementById('filterX86');
+              const imageSelect = document.getElementById('osImageSelect');
+              const searchKeyword = document.getElementById('imageSearchKeyword');
+
+              function filterImages() {
+                const keyword = searchKeyword ? searchKeyword.value.toLowerCase() : '';
+                const filterX86Only = filterX86Checkbox.checked;
+
+                let matchCount = 0;
+                let firstMatchIndex = -1;
+                const options = imageSelect.options;
+
+                for (let i = 0; i < options.length; i++) {
+                  const optionText = options[i].text.toLowerCase();
+                  const optionValue = options[i].value.toLowerCase();
+                  const architecture = options[i].dataset.architecture?.toLowerCase() || '';
+
+                  const matchesKeyword = keyword === '' || optionText.includes(keyword) || optionValue.includes(keyword);
+                  const matchesArchitecture = !filterX86Only || architecture.includes('x86');
+
+                  if (matchesKeyword && matchesArchitecture) {
+                    options[i].style.display = '';
+                    matchCount++;
+
+                    if (firstMatchIndex === -1) {
+                      firstMatchIndex = i;
+                    }
+                  } else {
+                    options[i].style.display = 'none';
+                  }
+                }
+
+                if (matchCount > 0 && firstMatchIndex >= 0) {
+                  imageSelect.selectedIndex = firstMatchIndex;
+                } else if (matchCount === 0) {
+                  imageSelect.selectedIndex = -1;
+                }
+              }
+
+              if (filterX86Checkbox) {
+                filterX86Checkbox.addEventListener('change', filterImages);
+              }
+
+              if (searchKeyword) {
+                searchKeyword.addEventListener('input', filterImages);
+              }
+
+              filterImages();
+
+            },
+
+            inputAttributes: {
+              autocapitalize: "off",
+            },
+            showCancelButton: true,
+            confirmButtonText: "Confirm",
+            //showLoaderOnConfirm: true,
+            position: "top-end",
+            //back(disabled section)ground color
+            backdrop: `rgba(0, 0, 0, 0.08)`,
+            preConfirm: () => {
+              // vmCount input validation
+              const vmCountInput = document.getElementById('vmCount');
+              let vmCount = parseInt(vmCountInput.value, 10);
+              if (isNaN(vmCount) || vmCount < 1 || vmCount > 100) {
+                Swal.showValidationMessage('Enter a valid number between 1 and 100');
+                return false;
+              }
+
+              // rootDiskSize input validation
+              const rootDiskSizeInput = document.getElementById('rootDiskSizeCustom');
+              const rootDiskSizeValue = rootDiskSizeInput.value.trim();
+              if (rootDiskSizeValue !== "default" && rootDiskSizeValue !== "") {
+                if (!/^\d+$/.test(rootDiskSizeValue)) {
+                  Swal.showValidationMessage('Disk size must be "default", empty, or a number');
+                  return false;
+                }
+              }
+
+              const osImageSelect = document.getElementById('osImageSelect');
+              if (osImageSelect && osImageSelect.value) {
+                console.log(osImageSelect.value);
+                createMciReqVm.commonImage = osImageSelect.value;
+              }
+              if (!createMciReqVm.commonImage) {
+                Swal.showValidationMessage('Select an OS image');
+                return false;
+              }
+
+              return vmCount;
+            },
+
+
+          }).then((result) => {
+            // result.value is false if result.isDenied or another key such as result.isDismissed
+            if (result.value) {
+
+              createMciReqVm.subGroupSize = String(result.value);
+              if (
+                isNaN(parseFloat(createMciReqVm.subGroupSize)) ||
+                parseFloat(createMciReqVm.subGroupSize) <= 0
+              ) {
+                createMciReqVm.subGroupSize = "1";
+              }
+
+              const rootDiskSizeInput = document.getElementById('rootDiskSizeCustom').value.trim();
+              if (rootDiskSizeInput) {
+                console.log(rootDiskSizeInput);
+                createMciReqVm.rootDiskSize = rootDiskSizeInput;
+              } else {
+                createMciReqVm.rootDiskSize = "default";
+              }
+
+              const vmLabelsInput = document.getElementById('vmLabels').value.trim();
+              if (vmLabelsInput) {
+
+                const labels = {};
+                vmLabelsInput.split(',').forEach(pair => {
+                  const [key, value] = pair.trim().split('=');
+                  if (key && value) {
+                    labels[key] = value;
+                  }
+                });
+
+                if (Object.keys(labels).length > 0) {
+                  createMciReqVm.label = labels;
+                }
+              }
+
+
+              messageTextArea.value +=
+                `${createMciReqVm.commonSpec}` +
+                `\t(${createMciReqVm.subGroupSize})`;
+              vmReqeustFromSpecList.push(createMciReqVm);
+              recommendedSpecList.push(recommendedSpec);
+            } else {
+              messageTextArea.value = messageTextArea.value.replace(/\n.*$/, "");
+              latLonInputPairIdx--;
+              cspPointsCircle.pop();
+              geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+            }
+          });
+        }).catch(error => {
+          console.error("Failed to get image information:", error);
+        });
+      } else {
+        // User canceled spec selection
+        messageTextArea.value = messageTextArea.value.replace(/\n.*$/, "");
+        latLonInputPairIdx--;
+        cspPointsCircle.pop();
+        geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+        return;
+      }
+    }).catch(function (error) {
+      console.log(error);
+      errorAlert("Cannot show spec selection dialog (Check log for details)");
+      if (error.response && error.response.data) {
+        displayJsonData(error.response.data, typeError);
+      }
     });
   }).catch(function (error) {
     console.log(error);
-    errorAlert("Cannnot recommend a spec (Check log for details)");
+    errorAlert("Cannot recommend a spec (Check log for details)");
     if (error.response && error.response.data) {
       displayJsonData(error.response.data, typeError);
     }
@@ -3460,6 +3708,16 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
+    case "Nvidia-Status":
+      defaultRemoteCommand[0] = "nvidia-smi";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "Setup-CrossNAT":
+      defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setup-cross-cloud-nat.sh";
+      defaultRemoteCommand[1] = "chmod +x ~/setup-cross-cloud-nat.sh";
+      defaultRemoteCommand[2] = "~/setup-cross-cloud-nat.sh pub=$$Func(GetPublicIPs(target=this)) priv=$$Func(GetPrivateIPs(target=this))";
+      break;
     case "Ollama":
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOllama.sh | sh";
       defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
@@ -3474,6 +3732,16 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh; chmod +x ~/deployOpenWebUI.sh; sudo ~/deployOpenWebUI.sh $$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))";
       defaultRemoteCommand[1] = "echo '$$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))'";
       defaultRemoteCommand[2] = "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
+      break;
+    case "RayHead-Deploy":
+      defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/ray/ray-head-setup.sh";
+      defaultRemoteCommand[1] = "chmod +x ~/ray-head-setup.sh";
+      defaultRemoteCommand[2] = "~/ray-head-setup.sh -i $$Func(GetPublicIP(target=this))";
+      break;
+    case "RayWorker-Deploy":
+      defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/ray/ray-worker-setup.sh";
+      defaultRemoteCommand[1] = "chmod +x ~/ray-worker-setup.sh";
+      defaultRemoteCommand[2] = "~/ray-worker-setup.sh -i $$Func(GetPublicIP(target=this)) -h $$Func(GetPublicIP(target=mc-ray.g1-1))";
       break;
     case "Westward":
       defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh";
@@ -3744,18 +4012,22 @@ function executeRemoteCmd() {
         <div style="margin-bottom: 15px;">
           <select id="predefinedScripts" style="width: 75%; padding: 5px;" onchange="loadPredefinedScript()">
             <option value="">-- Select a predefined script --</option>
-            <option value="Nvidia">Nvidia CUDA Driver</option>
-            <option value="vLLM">vLLM Server</option>
-            <option value="Ollama">Ollama LLM Server</option>
-            <option value="OllamaPull">Ollama Model Pull</option>
-            <option value="OpenWebUI">Open WebUI for Ollama</option>
-            <option value="WeaveScope">Weave Scope</option>
-            <option value="ELK">ELK Stack</option>
-            <option value="Jitsi">Jitsi Meet</option>
-            <option value="Nginx">Nginx Web Server</option>
-            <option value="Xonotic">Xonotic Game Server</option>
-            <option value="Westward">Westward Game</option>
-            <option value="Stress">Stress Test</option>
+            <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
+            <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
+            <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
+            <option value="vLLM">[LLM vLLM] vLLM Server</option>
+            <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
+            <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
+            <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
+            <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
+            <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
+            <option value="WeaveScope">[Observability] Weave Scope</option>
+            <option value="ELK">[Observability] ELK Stack</option>
+            <option value="Jitsi">[Video Conference] Jitsi Meet</option>
+            <option value="Xonotic">[Game:FPS] Xonotic Game Server</option>
+            <option value="Westward">[Game:MMORPG] Westward Game</option>
+            <option value="Nginx">[Web:Server] Nginx Web Server</option>
+            <option value="Stress">[Web:Stress] Stress Test</option>
           </select>
           <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
             Select a predefined script to auto-fill the command fields

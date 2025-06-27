@@ -259,6 +259,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                     <option value="location" selected="selected">Location-based</option>
                     <option value="price">Cost-based</option>
                     <option value="performance">Performance-based</option>
+                    <option value="random">Random-based</option>
                   </select>
                 </div>
               </div>
@@ -322,7 +323,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                     <span class="input-group-text">Image(OS)</span>
                   </div>
                   <select id="osImage" name="osImage" class="form-control">
-                    <option value="Ubuntu 18.04">Ubuntu 18.04</option>
+                    <option value="">Any</option>
                     <option value="Ubuntu 20.04">Ubuntu 20.04</option>
                     <option value="Ubuntu 22.04" selected="selected">Ubuntu 22.04</option>
                     <option value="Ubuntu 24.04">Ubuntu 24.04</option>                   
@@ -549,6 +550,31 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 <input type="button" value="Status" onClick="statusMCI();" class="btn btn-info w-100">
               </div>
 
+              
+              <!-- MCI Access Field -->
+              <div class="form-group col dropdown">
+                <button class="btn btn-info dropdown-toggle w-100" type="button" id="accessDropdown"
+                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                  Get Access
+                </button>
+                <div class="dropdown-menu" aria-labelledby="accessDropdown">
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="getAccessInfo();">Get Access Info</a>
+                  <a class="dropdown-item save-file" href="javascript:void(0)">Save SSH Key</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="executeRemoteCmd();">Remote Command</a>
+                </div>
+              </div>
+
+              <!-- Remote Command Field -->
+              <div class="form-group col">
+                <button type="button" id="remoteCmd" onClick="executeRemoteCmd();" class="btn btn-warning w-100">Remote Command</button>
+              </div>
+
+              <!-- File Transfer Field -->
+              <div class="form-group col">
+                <button type="button" id="filetransfer" onClick="transferFileToMci();"
+                  class="btn btn-warning w-100">Remote File Transfer</button>
+              </div>
+
               <!-- Delete Field -->
               <div class="form-group col">
                 <input type="button" value="Delete" onClick="deleteMCI();" class="btn btn-secondary w-100">
@@ -672,13 +698,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
         <!-- MCI Application Card -->
-        <div class="card mb-2">
+        <!-- <div class="card mb-2">
           <div class="card-header">MC-Infra Application</div>
           <div class="card-body d-flex flex-column">
-            <form id="mci-application-form" class="form-row">
+            <form id="mci-application-form" class="form-row"> -->
 
               <!-- Select Application Field -->
-              <div class="form-group col">
+              <!-- <div class="form-group col">
                 <div class="input-group">
                   <div class="input-group-prepend">
                     <span class="input-group-text" id="selectAppLabel">App</span>
@@ -699,10 +725,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                     <option value="Stress">LoadTest(Stress)</option>
                   </select>
                 </div>
-              </div>
+              </div> -->
 
               <!-- Application Control Buttons -->
-              <div class="form-group col dropdown">
+              <!-- <div class="form-group col dropdown">
                 <button class="btn btn-primary dropdown-toggle w-100" type="button" id="appControlDropdown"
                   data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                   App Control
@@ -713,41 +739,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <a class="dropdown-item" href="javascript:void(0)" onClick="stopApp();">Stop</a>
                   <a class="dropdown-item" href="javascript:void(0)" onClick="statusApp();">Status</a>
                 </div>
-              </div>
-
-
-              <!-- MCI Access Field -->
-              <div class="form-group col dropdown">
-                <button class="btn btn-info dropdown-toggle w-100" type="button" id="accessDropdown"
-                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                  Get Access
-                </button>
-                <div class="dropdown-menu" aria-labelledby="accessDropdown">
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="getAccessInfo();">Get Access Info</a>
-                  <a class="dropdown-item save-file" href="javascript:void(0)">Save SSH Key</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="executeRemoteCmd();">Remote Command</a>
-                </div>
-              </div>
-
-              <!-- VM terminal Field
-              <div class="form-group col">
-                <button type="button" id="remoteTerminal" onClick="executeRemoteTerminal();" class="btn btn-warning w-100">Remote Terminal</button>
               </div> -->
 
-              <!-- Remote Command Field -->
-              <div class="form-group col">
-                <button type="button" id="remoteCmd" onClick="executeRemoteCmd();" class="btn btn-warning w-100">Remote Command</button>
-              </div>
 
-              <!-- File Transfer Field -->
-              <div class="form-group col">
-                <button type="button" id="filetransfer" onClick="transferFileToMci();"
-                  class="btn btn-warning w-100">Remote File Transfer</button>
-              </div>
 
-            </form>
+            <!-- </form>
           </div>
-        </div>
+        </div> -->
         <!-- Message Area -->
         <div class="card mb-2">
           <div class="card-header">Message Area</div>
