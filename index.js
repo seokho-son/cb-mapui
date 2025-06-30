@@ -1697,7 +1697,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
     "random": {
       metric: "random",
       weight: "1.0"
-    }    
+    }
   };
 
   var struct = {
@@ -1729,41 +1729,42 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
     // Spec selection popup
     Swal.fire({
-      title: "Select Recommended VM Spec",
+      title: "Select a Spec from the Recommendation List",
       width: 900,
 
       // Spec selection popup HTML part with row selection instead of buttons
-html: `
+      html: `
   <div class="compact-datatable">
     <div class="table-responsive">
       <table id="specSelectionTable" class="display nowrap" style="width:100%">
         <thead>
           <tr>
-            <th>Rank</th>
+            <th>#</th>
             <th>CSP</th>
             <th>Region</th>
             <th>SpecName</th>
             <th>Arch</th>
             <th>vCPU</th>
-            <th>Mem(GiB)</th>
+            <th>Mem(Gi)</th>
             <th>Cost($/h)</th>
             <th>Accelerator</th>
           </tr>
         </thead>
         <tbody>
           ${res.data.map((spec, index) => {
-            let costPerHour = spec.costPerHour === "-1" || spec.costPerHour === "" 
-              ? "unknown" 
-              : `$${spec.costPerHour}`;
-            
-            let acceleratorInfo;
-            if (spec.acceleratorModel && spec.acceleratorModel !== "undefined" && spec.acceleratorModel !== "") {
-              acceleratorInfo = `<span style="color:red;font-weight:bold">${spec.acceleratorModel} (C:${spec.acceleratorCount} ${spec.acceleratorMemoryGB})</span>`;
-            } else {
-              acceleratorInfo = "None";
-            }
-            
-            return `
+        let costPerHour = spec.costPerHour === "-1" || spec.costPerHour === ""
+          ? "unknown"
+          : `$${spec.costPerHour}`;
+
+
+        let acceleratorInfo;
+        if (spec.acceleratorModel && spec.acceleratorModel !== "undefined" && spec.acceleratorModel !== "") {
+          acceleratorInfo = `<span style="color:red;font-weight:bold">${spec.acceleratorModel} (C:${spec.acceleratorCount} ${spec.acceleratorMemoryGB})</span>`;
+        } else {
+          acceleratorInfo = "None";
+        }
+
+        return `
               <tr id="spec-row-${index}" class="${index === 0 ? 'selected-spec' : ''}" data-index="${index}">
                 <td class="text-left">${index + 1}</td>
                 <td class="text-left">${spec.providerName.toUpperCase()}</td>
@@ -1776,7 +1777,7 @@ html: `
                 <td class="text-left">${acceleratorInfo}</td>
               </tr>
             `;
-          }).join('')}
+      }).join('')}
         </tbody>
       </table>
     </div>
@@ -1862,7 +1863,7 @@ html: `
               </div>
             `;
           }
-          
+
           // Format the details as key-value pairs
           let specDetailsHTML = "";
           if (spec.details && Array.isArray(spec.details) && spec.details.length > 0) {
@@ -1871,12 +1872,12 @@ html: `
                 <div style="max-height: 140px; overflow-y: auto; font-size: 0.75rem;">
                   <table class="table table-sm table-bordered">
                     <tbody>
-                      ${spec.details.map(item => 
-                        `<tr>
+                      ${spec.details.map(item =>
+              `<tr>
                           <td style="width: 40%"><strong>${item.key}</strong></td>
                           <td>${item.value}</td>
                         </tr>`
-                      ).join('')}
+            ).join('')}
                     </tbody>
                   </table>
                 </div>
@@ -1909,7 +1910,7 @@ html: `
             }
           ],
           "language": {
-            "search": "Search:",
+            "search": "Filtering Keyword:",
             "lengthMenu": "Show _MENU_ entries",
             "info": "_START_ - _END_ of _TOTAL_",
             "infoEmpty": "No data available",
@@ -2005,12 +2006,17 @@ html: `
           // OS Image select dropdown
           let imageSelectHTML = '';
           if (availableImages && availableImages.length > 0) {
+            // Check if the selected spec's architecture is x86_64 or not
+            const isX86Architecture = selectedSpec.architecture === "x86_64" ||
+              selectedSpec.architecture === "x86" ||
+              !selectedSpec.architecture; // default to x86 if undefined
+
             imageSelectHTML = `
               <div>
                 <input type="text" id="imageSearchKeyword" placeholder="keyword for filtering" 
                       style="width:100%; padding: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;">
                 <div style="margin-bottom: 5px;">
-                  <input type="checkbox" id="filterX86" checked>
+                  <input type="checkbox" id="filterX86" ${isX86Architecture ? 'checked' : ''}>
                   <label for="filterX86">x86</label>
                 </div>
                 <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: green;">
@@ -2089,7 +2095,7 @@ html: `
 
 
           let costPerHour = selectedSpec.costPerHour;
-          if (costPerHour == "100000000" || costPerHour == "") {
+          if (costPerHour == "-1" || costPerHour == "") {
             costPerHour = "unknown";
           }
           let acceleratorType = selectedSpec.acceleratorType;
@@ -2105,7 +2111,7 @@ html: `
 
           // Show all recommended specs in a table if needed
           var tableContent = res.data.map((spec, index) => {
-            let costPerHour = spec.costPerHour === "100000000" || spec.costPerHour === "" ? "unknown" : spec.costPerHour;
+            let costPerHour = spec.costPerHour === "-1" || spec.costPerHour === "" ? "unknown" : spec.costPerHour;
             let acceleratorCount = spec.acceleratorType === "gpu"
               ? `<span style='color: red; font-size: larger;'>GPU</span>`
               : `<span style='color: black;'>None</span>`;
@@ -2308,7 +2314,10 @@ html: `
                   const architecture = options[i].dataset.architecture?.toLowerCase() || '';
 
                   const matchesKeyword = keyword === '' || optionText.includes(keyword) || optionValue.includes(keyword);
-                  const matchesArchitecture = !filterX86Only || architecture.includes('x86');
+
+                  const matchesArchitecture = filterX86Only 
+                        ? architecture.includes('x86')
+                        : !architecture.includes('x86'); 
 
                   if (matchesKeyword && matchesArchitecture) {
                     options[i].style.display = '';
