@@ -1645,6 +1645,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
   var minRAM = document.getElementById("minRAM").value;
   var maxRAM = document.getElementById("maxRAM").value;
   var specName = document.getElementById("specName").value;
+  var architecture = document.getElementById("architecture").value;
   var providerName = document.getElementById("provider").value;
   var acceleratorType = document.getElementById("acceleratorType").value;
   var acceleratorModel = document.getElementById("acceleratorModel").value;
@@ -1673,6 +1674,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
     createPolicyConditions("MemoryGiB", { min: minRAM, max: maxRAM }, "range"),
     createPolicyConditions("CspSpecName", { value: specName }, "single"),
     createPolicyConditions("ProviderName", { value: providerName }, "single"),
+    createPolicyConditions("Architecture", { value: architecture }, "single"),
     createPolicyConditions("AcceleratorType", { value: acceleratorType }, "single"),
     createPolicyConditions("AcceleratorModel", { value: acceleratorModel }, "single"),
     createPolicyConditions("AcceleratorMemoryGB", { min: minAMEM, max: maxAMEM }, "range"),
@@ -1944,6 +1946,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
           providerName: selectedSpec.providerName,
           regionName: selectedSpec.regionName,
           osType: document.getElementById("osImage").value,
+          osArchitecture: selectedSpec.architecture,
           // isGPUImage: selectedSpec.acceleratorType === "gpu",
           // isKubernetesImage: false,
           // detailSearchKeys: [],
@@ -3733,13 +3736,13 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "";
       break;
     case "OllamaPull":
-      defaultRemoteCommand[0] = "OLLAMA_HOST=0.0.0.0:3000 ollama pull $$Func(AssignTask(task='llama3, solar, mistral, phi3, gemma, mixtral, llava, yi, falcon2, llama2'))";
+      defaultRemoteCommand[0] = "OLLAMA_HOST=0.0.0.0:3000 ollama pull $$Func(AssignTask(task='deepseek-r1, gemma3n, gemma3, qwen3, llama3.3, mistral, phi4-reasoning'))";
       defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
       defaultRemoteCommand[2] = "OLLAMA_HOST=0.0.0.0:3000 ollama list";
       break;
     case "OpenWebUI":
-      defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh; chmod +x ~/deployOpenWebUI.sh; sudo ~/deployOpenWebUI.sh $$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))";
-      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))'";
+      defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh; chmod +x ~/deployOpenWebUI.sh";
+      defaultRemoteCommand[1] = "sudo ~/deployOpenWebUI.sh \"$$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))\"";
       defaultRemoteCommand[2] = "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
       break;
     case "RayHead-Deploy":
