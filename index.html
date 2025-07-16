@@ -316,6 +316,34 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 </div>
               </div>
 
+              <!-- Spec Architecture Type Field -->
+                 <!-- "osArchitecture": [
+                    "arm64",
+                    "arm64_mac",
+                    "na",
+                    "s390x",
+                    "x86_32",
+                    "x86_64",
+                    "x86_64_mac"
+                  ], -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text">SpecArch</span>
+                  </div>
+                  <select id="architecture" name="architecture" class="form-control">
+                    <option value="">Any</option>
+                    <option value="x86_64" selected="selected">x86_64</option>
+                    <option value="x86_64_mac">x86_64_mac</option>
+                    <option value="x86_32">x86_32</option>
+                    <option value="arm64">arm64</option>
+                    <option value="arm64_mac">arm64_mac</option>
+                    <option value="s390x">s390x</option>
+                    <option value="na">Undefined</option>
+                  </select>
+                </div>
+              </div>               
+
               <!-- OS Image Type Field -->
               <div class="form-group col">
                 <div class="input-group">
