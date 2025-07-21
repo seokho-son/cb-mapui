@@ -1940,21 +1940,18 @@ function getRecommendedSpec(idx, latitude, longitude) {
         var selectedSpec = res.data[result.value];
         console.log("User selected spec:", selectedSpec);
 
-        // Continue with existing code
+        // Search for images based on the selected spec
         const searchImageURL = `http://${hostname}:${port}/tumblebug/ns/system/resources/searchImage`;
         const searchImageBody = {
           providerName: selectedSpec.providerName,
           regionName: selectedSpec.regionName,
           osType: document.getElementById("osImage").value,
           osArchitecture: selectedSpec.architecture,
-          // isGPUImage: selectedSpec.acceleratorType === "gpu",
-          // isKubernetesImage: false,
-          // detailSearchKeys: [],
         };
 
-        console.log("Calling mciDynamicCheckRequest with spec:", selectedSpec.id);
+        console.log("Searching images for selected spec:", selectedSpec.id);
 
-        // mciDynamicCheckRequest API call
+        // Search images API call
         axios({
           method: "post",
           url: searchImageURL,
@@ -1970,134 +1967,374 @@ function getRecommendedSpec(idx, latitude, longitude) {
           let availableImages = [];
           if (searchRes.data && searchRes.data.imageList && searchRes.data.imageList.length > 0) {
             availableImages = searchRes.data.imageList.map(img => ({
-              id: img.id,
-              cspImageName: img.cspImageName,
+              id: img.id || "unknown",
+              cspImageName: img.cspImageName || "unknown",
               osType: img.osType || "unknown",
               osDistribution: img.osDistribution || "unknown",
-              osArchitecture: img.osArchitecture || "unknown"
+              osArchitecture: img.osArchitecture || "unknown",
+              creationDate: img.creationDate || "unknown",
+              description: img.description || "No description",
+              imageStatus: img.imageStatus || "unknown",
+              osPlatform: img.osPlatform || "unknown",
+              osDiskType: img.osDiskType || "unknown",
+              osDiskSizeGB: img.osDiskSizeGB || "unknown",
+              providerName: img.providerName || "unknown",
+              connectionName: img.connectionName || "unknown",
+              infraType: img.infraType || "unknown",
+              isGPUImage: img.isGPUImage || false,
+              isKubernetesImage: img.isKubernetesImage || false,
+              details: img.details || []
             }));
 
             console.log("Available images for this spec:");
             console.table(availableImages);
           }
 
-          addRegionMarker(selectedSpec.id);
-
-
-          var createMciReqVm = $.extend({}, createMciReqVmTmplt);
-          var recommendedSpec = selectedSpec;
-
-          createMciReqVm.name = "g" + (vmReqeustFromSpecList.length + 1).toString();
-
-          var osImage = document.getElementById("osImage");
-          var diskSize = document.getElementById("diskSize");
-
-          createMciReqVm.commonSpec = selectedSpec.id;
-          createMciReqVm.commonImage = osImage.value;
-          createMciReqVm.rootDiskType = selectedSpec.rootDiskType;
-
-          var diskSizeInput = diskSize.value;
-          if (isNaN(diskSizeInput) || diskSizeInput == "") {
-            diskSizeInput = "default";
-          }
-          createMciReqVm.rootDiskSize = diskSizeInput;
-          if (diskSizeInput == "default" && selectedSpec.rootDiskSize != "default") {
-            createMciReqVm.rootDiskSize = selectedSpec.rootDiskSize;
-            // need to validate requested disk size >= default disk size given by vm spec
+          if (availableImages.length === 0) {
+            errorAlert("No images found for the selected specification");
+            return;
           }
 
-          // OS Image select dropdown
-          let imageSelectHTML = '';
-          if (availableImages && availableImages.length > 0) {
-            // Check if the selected spec's architecture is x86_64 or not
-            const isX86Architecture = selectedSpec.architecture === "x86_64" ||
-              selectedSpec.architecture === "x86" ||
-              !selectedSpec.architecture; // default to x86 if undefined
-
-            imageSelectHTML = `
-              <div>
-                <input type="text" id="imageSearchKeyword" placeholder="keyword for filtering" 
-                      style="width:100%; padding: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;">
-                <div style="margin-bottom: 5px;">
-                  <input type="checkbox" id="filterX86" ${isX86Architecture ? 'checked' : ''}>
-                  <label for="filterX86">x86</label>
+          // Image selection popup
+          Swal.fire({
+            title: "Select an Image from the Image Search List",
+            width: 1200,
+            html: `
+              <div class="compact-datatable">
+                <div class="table-responsive">
+                  <table id="imageSelectionTable" class="display nowrap" style="width:100%">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>OS Type</th>
+                        <th>Image Name</th>
+                        <th>Distribution</th>
+                        <th>Arch</th>
+                        <th>ML</th>
+                        <th>K8s</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${availableImages.map((image, index) => {
+                        // Simple T/F display for GPU and Kubernetes support
+                        const gpuSupport = image.isGPUImage ? 'T' : 'F';
+                        const k8sSupport = image.isKubernetesImage ? 'T' : 'F';
+                        
+                        // Truncate long text for better table layout - increased limits for more space
+                        const truncateText = (text, maxLength) => {
+                          if (text.length <= maxLength) return text;
+                          return text.substring(0, maxLength) + '..';
+                        };
+                        
+                        const truncatedImageName = truncateText(image.cspImageName, 70);
+                        const truncatedDistribution = truncateText(image.osDistribution, 70);
+                        
+                        return `
+                          <tr id="image-row-${index}" class="${index === 0 ? 'selected-image' : ''}" data-index="${index}">
+                            <td class="text-center">${index + 1}</td>
+                            <td class="text-left">${image.osType}</td>
+                            <td class="text-left" style="font-size: 0.85em; color: #0066cc;" title="${image.cspImageName}">${truncatedImageName}</td>
+                            <td class="text-left" style="font-size: 0.9em;" title="${image.osDistribution}">${truncatedDistribution}</td>
+                            <td class="text-center">${image.osArchitecture}</td>
+                            <td class="text-center"><span style="color: ${image.isGPUImage ? '#e74c3c' : '#95a5a6'}; font-weight: bold;">${gpuSupport}</span></td>
+                            <td class="text-center"><span style="color: ${image.isKubernetesImage ? '#3498db' : '#95a5a6'}; font-weight: bold;">${k8sSupport}</span></td>
+                          </tr>
+                        `;
+                      }).join('')}
+                    </tbody>
+                  </table>
                 </div>
-                <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: green;">
-            `;
+                <div id="imageDetailsContainer" style="margin-top:15px;padding:8px;border:1px solid #ddd;border-radius:5px;">
+                  <div id="imageDetailsContent"></div>
+                </div>
+                <input type="hidden" id="selectedImageIndex" value="0">
+              </div>
+              <style>
+                /* Apply compact styling to all DataTable elements */
+                .compact-datatable {
+                  font-size: 0.8rem;
+                }
+                
+                /* Fix table layout for consistent column widths */
+                #imageSelectionTable {
+                  table-layout: fixed !important;
+                  width: 100% !important;
+                }
+                
+                /* Set specific column widths */
+                #imageSelectionTable th:nth-child(1),  /* # */
+                #imageSelectionTable td:nth-child(1) {
+                  width: 2%;
+                }
+                
+                #imageSelectionTable th:nth-child(2),  /* OS Type */
+                #imageSelectionTable td:nth-child(2) {
+                  width: 13%;
+                }
+                
+                #imageSelectionTable th:nth-child(3),  /* Image Name */
+                #imageSelectionTable td:nth-child(3) {
+                  width: 35% !important;
+                  max-width: 35% !important;
+                  min-width: 35% !important;
+                }
+                
+                #imageSelectionTable th:nth-child(4),  /* OS Distribution */
+                #imageSelectionTable td:nth-child(4) {
+                  width: 35% !important;
+                  max-width: 35% !important;
+                  min-width: 35% !important;
+                }
+                
+                #imageSelectionTable th:nth-child(5),  /* Architecture */
+                #imageSelectionTable td:nth-child(5) {
+                  width: 8%;
+                }
+                
+                #imageSelectionTable th:nth-child(6),  /* ML */
+                #imageSelectionTable td:nth-child(6) {
+                  width: 4%;
+                }
+                
+                #imageSelectionTable th:nth-child(7),  /* K8s */
+                #imageSelectionTable td:nth-child(7) {
+                  width: 4%;
+                }
+                
+                #imageSelectionTable th,
+                #imageSelectionTable td {
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: nowrap;
+                }
+                
+                /* Allow text wrapping only for specific columns that need it */
+                #imageSelectionTable td:nth-child(3),  /* Image Name */
+                #imageSelectionTable td:nth-child(4) { /* OS Distribution */
+                  white-space: normal;
+                  word-wrap: break-word;
+                  word-break: break-all;
+                }
+                
+                /* Stronger highlight for selected row */
+                .selected-image {
+                  background-color: rgba(40, 167, 69, 0.35) !important;
+                  border-left: 5px solid rgb(40, 167, 69) !important;
+                  font-weight: bold;
+                }
+                table.dataTable tbody tr.selected-image {
+                  background-color: rgba(40, 167, 69, 0.35) !important;
+                  border-left: 5px solid rgb(40, 167, 69) !important;
+                }
+                
+                /* Make rows clickable */
+                #imageSelectionTable tbody tr {
+                  cursor: pointer;
+                }
+                #imageSelectionTable tbody tr:hover {
+                  background-color: rgba(0, 123, 255, 0.08) !important;
+                }
+                
+                /* Reduce spacing in details section */
+                #imageDetailsContent .row p {
+                  margin-bottom: 0.15rem;
+                }
+                #imageDetailsContent .row {
+                  margin-bottom: 0.3rem;
+                }
+                
+                /* Details table styling */
+                .image-details-table {
+                  font-size: 0.75rem;
+                  max-height: 200px;
+                  overflow-y: auto;
+                }
+                .image-details-table td {
+                  padding: 0.25rem 0.5rem;
+                  border: 1px solid #dee2e6;
+                }
+                .image-details-table th {
+                  padding: 0.25rem 0.5rem;
+                  background-color: #f8f9fa;
+                  border: 1px solid #dee2e6;
+                  font-weight: bold;
+                }
+              </style>
+            `,
+            didOpen: () => {
+              // Set up row click event for the table
+              $('#imageSelectionTable tbody').on('click', 'tr', function () {
+                const index = $(this).data('index');
+                selectImageRow(index);
+              });
 
-            // Sort the available images by osDistribution in descending order
-            const sortedImages = availableImages.sort((a, b) => {
-              const aDistro = a.osDistribution || '';
-              const bDistro = b.osDistribution || '';
-              return bDistro.localeCompare(aDistro);
-            });
+              // Image selection function
+              window.selectImageRow = function (index) {
+                // Reset previous selection
+                document.querySelectorAll('#imageSelectionTable tbody tr').forEach(row => {
+                  row.classList.remove('selected-image');
+                });
 
-            // Filter to keep only latest 3 versions of similar images
-            const filteredImages = (() => {
-              const imageGroups = {};
+                // Select new row
+                const selectedRow = document.getElementById(`image-row-${index}`);
+                if (selectedRow) {
+                  selectedRow.classList.add('selected-image');
+                }
 
-              // Group images by their base name (excluding date)
-              sortedImages.forEach(img => {
-                const distro = img.osDistribution || '';
-                // Extract date pattern (supports YYYYMMDD, YYYY-MM-DD, YYYY/MM/DD)
-                const dateMatch = distro.match(/\b(20\d{2}[-/]?\d{2}[-/]?\d{2}|20\d{6})\b/);
+                // Save selected index and update details
+                document.getElementById('selectedImageIndex').value = index;
+                updateImageDetails(index);
+              };
 
-                if (dateMatch) {
-                  // Use everything except the date as the base name
-                  const baseName = distro.replace(dateMatch[0], '').trim();
-                  if (!imageGroups[baseName]) imageGroups[baseName] = [];
+              // Update image details function
+              function updateImageDetails(index) {
+                const image = availableImages[index];
+                
+                // Combined image information in 2 columns
+                const imageInfoHTML = `
+                  <div class="row">
+                    <div class="col-md-10" style="text-align: left;">
+                      <p style="text-align: left;"><strong>Name:</strong> ${image.cspImageName}</p>
+                      <p style="text-align: left;"><strong>Distribution:</strong> ${image.osDistribution}</p>
+                      <p style="text-align: left;"><strong>Description:</strong> ${image.description}</p>
+                    </div>
+                    <div class="col-md-2" style="text-align: left;">
+                      <p style="text-align: left;"><strong>Image Status:</strong> <span style="color: ${image.imageStatus === 'Available' || image.imageStatus === 'available' ? 'green' : 'orange'};">${image.imageStatus}</span></p>
+                      <p style="text-align: left;"><strong>Created Date:</strong> ${image.creationDate}</p>
+                      ${image.isKubernetesImage ? `<p style="text-align: left;"><strong>K8s Support:</strong> <span style="color: blue; font-weight: bold;">✓ Yes</span></p>` : ''}
+                      ${image.isGPUImage ? `<p style="text-align: left;"><strong>GPU Support:</strong> <span style="color: red; font-weight: bold;">✓ Yes</span></p>` : ''}
+                    </div>
+                  </div>
+                `;
 
-                  // Store image with its date
-                  imageGroups[baseName].push({
-                    image: img,
-                    date: dateMatch[0].replace(/[-/]/g, '') // Normalize date format
-                  });
-                } else {
-                  // For images without date pattern
-                  if (!imageGroups[distro]) imageGroups[distro] = [];
-                  imageGroups[distro].push({ image: img, date: '0' });
+                // Details table (similar to spec details)
+                let detailsTableHTML = "";
+                if (image.details && Array.isArray(image.details) && image.details.length > 0) {
+                  detailsTableHTML = `
+                    <div class="mt-2">
+                      <div class="image-details-table">
+                        <table class="table table-sm table-bordered">
+                          <thead>
+                            <tr>
+                              <th style="width: 35%;">Property</th>
+                              <th>Value</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            ${image.details.map(item =>
+                              `<tr>
+                                <td><strong>${item.key}</strong></td>
+                                <td style="word-wrap: break-word; max-width: 300px;">${item.value}</td>
+                              </tr>`
+                            ).join('')}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  `;
+                }
+
+                const detailsHTML = imageInfoHTML + detailsTableHTML;
+
+                document.getElementById('imageDetailsContent').innerHTML = detailsHTML;
+              }
+
+              // Initialize DataTable
+              $('#imageSelectionTable').DataTable({
+                "paging": true,
+                "searching": true,
+                "ordering": true,
+                "info": true,
+                "responsive": true,
+                "scrollX": true,
+                "pageLength": 5,
+                "lengthMenu": [5, 10, 25, 50],
+                "order": [[0, 'asc']],
+                "columnDefs": [
+                  {
+                    "targets": -1,
+                    "orderable": false
+                  }
+                ],
+                "language": {
+                  "search": "Filtering Keyword:",
+                  "lengthMenu": "Show _MENU_ entries",
+                  "info": "_START_ - _END_ of _TOTAL_",
+                  "infoEmpty": "No data available",
+                  "paginate": {
+                    "first": "First",
+                    "last": "Last",
+                    "next": "Next",
+                    "previous": "Previous"
+                  }
                 }
               });
 
-              // Select top latest images from each group
-              const result = [];
-              const topCount = 1; // Change this to get more or fewer images
-              Object.values(imageGroups).forEach(group => {
-                // Sort by date in descending order
-                group.sort((a, b) => b.date.localeCompare(a.date));
-                // Take top 
-                group.slice(0, topCount).forEach(item => result.push(item.image));
-              });
-
-              return result;
-            })();
-
-            // Populate the select options with filtered images
-            for (let img of filteredImages) {
-              imageSelectHTML += `<option value="${img.cspImageName}" data-cspname="${img.cspImageName}" 
-                    data-architecture="${img.osArchitecture}">${img.osDistribution} // (ID: ${img.cspImageName || 'N/A'}) [${img.osArchitecture || 'unknown'}]</option>`;
+              // Initialize image details
+              updateImageDetails(0);
+            },
+            showCancelButton: true,
+            confirmButtonText: "Continue",
+            cancelButtonText: "Cancel",
+            preConfirm: () => {
+              return parseInt(document.getElementById('selectedImageIndex').value);
             }
+          }).then((imageResult) => {
+            if (imageResult.isConfirmed) {
+              // User selected an image and confirmed
+              var selectedImage = availableImages[imageResult.value];
+              console.log("User selected image:", selectedImage);
 
+              // Now proceed to the final spec confirmation step
+              addRegionMarker(selectedSpec.id);
 
-          } else {
-            imageSelectHTML = `
-              <div>
-                <input type="text" id="imageSearchKeyword" placeholder="keyword for filtering" 
-                      style="width:100%; padding: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;" disabled>
-                <div style="margin-bottom: 5px;">
-                  <input type="checkbox" id="filterX86" checked disabled>
-                  <label for="filterX86">x86</label>
+              var createMciReqVm = $.extend({}, createMciReqVmTmplt);
+              var recommendedSpec = selectedSpec;
+
+              createMciReqVm.name = "g" + (vmReqeustFromSpecList.length + 1).toString();
+
+              var osImage = document.getElementById("osImage");
+              var diskSize = document.getElementById("diskSize");
+
+              createMciReqVm.commonSpec = selectedSpec.id;
+              createMciReqVm.commonImage = selectedImage.cspImageName; // Use selected image instead of osImage.value
+              createMciReqVm.rootDiskType = selectedSpec.rootDiskType;
+
+              var diskSizeInput = diskSize.value;
+              if (isNaN(diskSizeInput) || diskSizeInput == "") {
+                diskSizeInput = "default";
+              }
+              createMciReqVm.rootDiskSize = diskSizeInput;
+              if (diskSizeInput == "default" && selectedSpec.rootDiskSize != "default" && selectedSpec.rootDiskSize != "-1") {
+                createMciReqVm.rootDiskSize = selectedSpec.rootDiskSize;
+                // need to validate requested disk size >= default disk size given by vm spec
+              }
+
+              // Create a visually appealing image display for the final confirmation
+              const truncateImageText = (text, maxLength) => {
+                if (text.length <= maxLength) return text;
+                return text.substring(0, maxLength) + '..';
+              };
+
+              const truncatedDistribution = truncateImageText(selectedImage.osDistribution, 60);
+              const truncatedImageName = truncateImageText(selectedImage.cspImageName, 40);
+
+              let imageSelectHTML = `
+                <div style="padding: 10px; border: 1px solid #ddd; border-radius: 6px; background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                  <div style="margin-bottom: 8px;">
+                    <div style="font-size: 0.8em; color: #6c757d; line-height: 1.4;">
+                      <div style="margin-bottom: 3px;" title="(${selectedImage.cspImageName})">
+                        <code style="background-color: #e9ecef; padding: 2px 4px; border-radius: 3px; font-size: 0.75em;">${truncatedImageName}</code>
+                      </div>
+                    </div>
+                    <div style="font-size: 0.9em; font-weight: bold; color: #28a745; margin-bottom: 4px;" title="${selectedImage.osDistribution}">
+                    ${truncatedDistribution}
+                    </div>
+                  </div>
                 </div>
-                <select id="osImageSelect" style="width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 1px; color: red;">
-                  <option disabled selected>${createMciReqVm.commonImage} is not available</option>
-                </select>
-              </div>
-            `;
-          }
+              `;
 
-
-
-          let costPerHour = selectedSpec.costPerHour;
+              let costPerHour = selectedSpec.costPerHour;
           if (costPerHour == "-1" || costPerHour == "") {
             costPerHour = "unknown";
           }
@@ -2373,7 +2610,10 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
               // rootDiskSize input validation
               const rootDiskSizeInput = document.getElementById('rootDiskSizeCustom');
-              const rootDiskSizeValue = rootDiskSizeInput.value.trim();
+              let rootDiskSizeValue = rootDiskSizeInput.value.trim();
+              if (rootDiskSizeValue === "-1") {
+                rootDiskSizeValue = "";
+              }
               if (rootDiskSizeValue !== "default" && rootDiskSizeValue !== "") {
                 if (!/^\d+$/.test(rootDiskSizeValue)) {
                   Swal.showValidationMessage('Disk size must be "default", empty, or a number');
@@ -2438,6 +2678,14 @@ function getRecommendedSpec(idx, latitude, longitude) {
               vmReqeustFromSpecList.push(createMciReqVm);
               recommendedSpecList.push(recommendedSpec);
             } else {
+              messageTextArea.value = messageTextArea.value.replace(/\n.*$/, "");
+              latLonInputPairIdx--;
+              cspPointsCircle.pop();
+              geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+            }
+          });
+            } else {
+              // User canceled image selection
               messageTextArea.value = messageTextArea.value.replace(/\n.*$/, "");
               latLonInputPairIdx--;
               cspPointsCircle.pop();
