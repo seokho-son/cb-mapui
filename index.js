@@ -1983,6 +1983,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
               infraType: img.infraType || "unknown",
               isGPUImage: img.isGPUImage || false,
               isKubernetesImage: img.isKubernetesImage || false,
+              isBasicImage: img.isBasicImage || false,
               details: img.details || []
             }));
 
@@ -2009,9 +2010,8 @@ function getRecommendedSpec(idx, latitude, longitude) {
                         <th>OS Type</th>
                         <th>Image Name</th>
                         <th>Distribution</th>
+                        <th>Support</th>
                         <th>Arch</th>
-                        <th>ML</th>
-                        <th>K8s</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2019,6 +2019,12 @@ function getRecommendedSpec(idx, latitude, longitude) {
                         // Simple T/F display for GPU and Kubernetes support
                         const gpuSupport = image.isGPUImage ? 'T' : 'F';
                         const k8sSupport = image.isKubernetesImage ? 'T' : 'F';
+                        
+                        // Add special styling for basic images
+                        const isBasicClass = image.isBasicImage ? 'basic-image-row' : '';
+                        const basicIcon = image.isBasicImage ? ' <span class="basic-image-icon" title="Basic OS Image">⭐</span>' : '';
+                        const mlIcon = image.isGPUImage ? ' <span class="ml-image-icon" title="GPU Support">🧮</span>' : '';
+                        const k8sIcon = image.isKubernetesImage ? ' <span class="k8s-image-icon" title="Kubernetes Support">☸️</span>' : '';
                         
                         // Truncate long text for better table layout - increased limits for more space
                         const truncateText = (text, maxLength) => {
@@ -2030,14 +2036,13 @@ function getRecommendedSpec(idx, latitude, longitude) {
                         const truncatedDistribution = truncateText(image.osDistribution, 70);
                         
                         return `
-                          <tr id="image-row-${index}" class="${index === 0 ? 'selected-image' : ''}" data-index="${index}">
-                            <td class="text-center">${index + 1}</td>
+                          <tr id="image-row-${index}" class="${index === 0 ? 'selected-image' : ''} ${isBasicClass}" data-index="${index}">
+                            <td class="text-left">${index + 1}${basicIcon}</td>
                             <td class="text-left">${image.osType}</td>
                             <td class="text-left" style="font-size: 0.85em; color: #0066cc;" title="${image.cspImageName}">${truncatedImageName}</td>
                             <td class="text-left" style="font-size: 0.9em;" title="${image.osDistribution}">${truncatedDistribution}</td>
+                            <td class="text-center">${mlIcon}${k8sIcon}</td>
                             <td class="text-center">${image.osArchitecture}</td>
-                            <td class="text-center"><span style="color: ${image.isGPUImage ? '#e74c3c' : '#95a5a6'}; font-weight: bold;">${gpuSupport}</span></td>
-                            <td class="text-center"><span style="color: ${image.isKubernetesImage ? '#3498db' : '#95a5a6'}; font-weight: bold;">${k8sSupport}</span></td>
                           </tr>
                         `;
                       }).join('')}
@@ -2064,12 +2069,12 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 /* Set specific column widths */
                 #imageSelectionTable th:nth-child(1),  /* # */
                 #imageSelectionTable td:nth-child(1) {
-                  width: 2%;
+                  width: 8%;
                 }
                 
                 #imageSelectionTable th:nth-child(2),  /* OS Type */
                 #imageSelectionTable td:nth-child(2) {
-                  width: 13%;
+                  width: 12%;
                 }
                 
                 #imageSelectionTable th:nth-child(3),  /* Image Name */
@@ -2086,19 +2091,14 @@ function getRecommendedSpec(idx, latitude, longitude) {
                   min-width: 35% !important;
                 }
                 
-                #imageSelectionTable th:nth-child(5),  /* Architecture */
+                #imageSelectionTable th:nth-child(5),  /* Support */
                 #imageSelectionTable td:nth-child(5) {
-                  width: 8%;
+                  width: 10%;
                 }
                 
-                #imageSelectionTable th:nth-child(6),  /* ML */
+                #imageSelectionTable th:nth-child(6),  /* Architecture */
                 #imageSelectionTable td:nth-child(6) {
-                  width: 4%;
-                }
-                
-                #imageSelectionTable th:nth-child(7),  /* K8s */
-                #imageSelectionTable td:nth-child(7) {
-                  width: 4%;
+                  width: 10%;
                 }
                 
                 #imageSelectionTable th,
@@ -2133,6 +2133,39 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 }
                 #imageSelectionTable tbody tr:hover {
                   background-color: rgba(0, 123, 255, 0.08) !important;
+                }
+                
+                /* Basic Image row styling */
+                .basic-image-row {
+                  background-color: rgba(255, 193, 7, 0.1) !important;
+                  border-left: 3px solid #ffc107 !important;
+                }
+                .basic-image-row:hover {
+                  background-color: rgba(255, 193, 7, 0.15) !important;
+                }
+                
+                /* Basic Image icon */
+                .basic-image-icon {
+                  color: #ffc107;
+                  font-size: 1.1em;
+                  margin-left: 5px;
+                  text-shadow: 0 0 3px rgba(255, 193, 7, 0.5);
+                }
+                
+                /* ML Image icon */
+                .ml-image-icon {
+                  color: #e74c3c;
+                  font-size: 1.1em;
+                  margin-left: 3px;
+                  text-shadow: 0 0 3px rgba(231, 76, 60, 0.5);
+                }
+                
+                /* K8s Image icon */
+                .k8s-image-icon {
+                  color: #3498db;
+                  font-size: 1.1em;
+                  margin-left: 3px;
+                  text-shadow: 0 0 3px rgba(52, 152, 219, 0.5);
                 }
                 
                 /* Reduce spacing in details section */
@@ -2203,6 +2236,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
                       <p style="text-align: left;"><strong>Created Date:</strong> ${image.creationDate}</p>
                       ${image.isKubernetesImage ? `<p style="text-align: left;"><strong>K8s Support:</strong> <span style="color: blue; font-weight: bold;">✓ Yes</span></p>` : ''}
                       ${image.isGPUImage ? `<p style="text-align: left;"><strong>GPU Support:</strong> <span style="color: red; font-weight: bold;">✓ Yes</span></p>` : ''}
+                      ${image.isBasicImage ? `<p style="text-align: left;"><strong>Basic Image:</strong> <span style="color: green; font-weight: bold;">✓ Yes</span></p>` : ''}
                     </div>
                   </div>
                 `;
@@ -2252,7 +2286,15 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 "order": [[0, 'asc']],
                 "columnDefs": [
                   {
+                    "targets": 0,
+                    "type": "num"
+                  },
+                  {
                     "targets": -1,
+                    "orderable": false
+                  },
+                  {
+                    "targets": -2,
                     "orderable": false
                   }
                 ],
