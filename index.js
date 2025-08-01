@@ -2347,7 +2347,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 diskSizeInput = "default";
               }
               createMciReqVm.rootDiskSize = diskSizeInput;
-              if (diskSizeInput == "default" && selectedSpec.rootDiskSize != "default" && selectedSpec.rootDiskSize != "-1") {
+              if (diskSizeInput == "default" && selectedSpec.rootDiskSize != "default" && selectedSpec.rootDiskSize != "-1" && selectedSpec.rootDiskSize != "0") {
                 createMciReqVm.rootDiskSize = selectedSpec.rootDiskSize;
                 // need to validate requested disk size >= default disk size given by vm spec
               }
@@ -5040,3 +5040,1087 @@ function jsonToTable(jsonText) {
     table.appendChild(tr);
   }
 }
+
+
+function updateFirewallRules() {
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+  var username = usernameElement.value;
+  var password = passwordElement.value;
+  var nsId = namespaceElement.value;
+  var mciId = mciidElement.value;
+  var subgroupid = document.getElementById("subgroupid").value;
+  var vmid = document.getElementById("vmid").value;
+
+  const assocUrl = `http://${hostname}:${port}/tumblebug/ns/${nsId}/mci/${mciId}/associatedResources`;
+  axios({
+    method: "get",
+    url: assocUrl,
+    auth: { username, password },
+  }).then((assocRes) => {
+    const sgIds = (assocRes.data?.securityGroupIds || []);
+    if (sgIds.length === 0) {
+      errorAlert("No associated Security Groups found for this MCI.");
+      return;
+    }
+
+    Promise.all(sgIds.map(sgId =>
+      axios({
+        method: "get",
+        url: `http://${hostname}:${port}/tumblebug/ns/${nsId}/resources/securityGroup/${sgId}`,
+        auth: { username, password },
+      }).then(res => res.data)
+    )).then((sgList) => {
+
+      let summaryHtml = `
+        <div style="margin-bottom:8px; font-size:12px; color:#444;">
+          <b style="font-size:13px;">Security Group Rule Summary</b>
+          <div style="margin-top: 10px;">
+            <!-- Tab Navigation -->
+            <ul class="nav nav-tabs" id="sgTabs" role="tablist" style="margin-bottom: 15px; border-bottom: 2px solid #dee2e6;">
+              ${sgList.map((sg, idx) => `
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link ${idx === 0 ? 'active' : ''}" id="sg-tab-${idx}" data-bs-toggle="tab" data-bs-target="#sg-content-${idx}" type="button" role="tab" aria-controls="sg-content-${idx}" aria-selected="${idx === 0}"
+                          style="border: none; border-bottom: 3px solid transparent; padding: 10px 15px; margin-right: 5px; background: none; color: #6c757d; font-weight: 500; transition: all 0.3s ease; ${idx === 0 ? 'color: #007bff; border-bottom-color: #007bff;' : ''}"
+                          onmouseover="if(!this.classList.contains('active')) { this.style.color='#007bff'; this.style.backgroundColor='#f8f9fa'; }"
+                          onmouseout="if(!this.classList.contains('active')) { this.style.color='#6c757d'; this.style.backgroundColor='transparent'; }">
+                    <span style="font-size: 12px; font-weight: 600;">${sg.name}</span>
+                    <span style="margin-left: 6px; background-color: ${idx === 0 ? '#007bff' : '#6c757d'}; color: white; font-size: 9px; padding: 2px 6px; border-radius: 10px; font-weight: bold;">${(sg.firewallRules||[]).length}</span>
+                  </button>
+                </li>
+              `).join("")}
+            </ul>
+            
+            <!-- Tab Content -->
+            <div class="tab-content" id="sgTabContent">
+              ${sgList.map((sg, idx) => `
+                <div class="tab-pane fade ${idx === 0 ? 'show active' : ''}" id="sg-content-${idx}" role="tabpanel" aria-labelledby="sg-tab-${idx}">
+                  <div style="border: 1px solid #dee2e6; border-radius: 6px; padding: 15px; background-color: #f8f9fa;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                      <div>
+                        <h6 style="margin: 0; color: #495057; font-weight: 600;">${sg.name}</h6>
+                        <small style="color: #6c757d;">Security Group ID: <code>${sg.id}</code></small>
+                      </div>
+                      <button class="btn btn-success btn-sm" onclick="addNewRuleToSg('${sg.id}', '${sg.name}')" style="font-size: 11px; padding: 4px 8px;">
+                        <span style="margin-right: 3px;">+</span>Add Rule
+                      </button>
+                    </div>
+                    
+                    <div style="background: white; border-radius: 4px; overflow: hidden; border: 1px solid #dee2e6;">
+                      ${(sg.firewallRules||[]).length > 0 ? `
+                        <table class="table table-sm table-hover" style="margin-bottom: 0; font-size: 12px;">
+                          <thead style="background-color: #e9ecef;">
+                            <tr>
+                              <th style="padding: 8px; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Direction</th>
+                              <th style="padding: 8px; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Protocol</th>
+                              <th style="padding: 8px; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Port</th>
+                              <th style="padding: 8px; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">CIDR</th>
+                              <th style="padding: 8px; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; text-align: center; width: 80px;">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            ${sg.firewallRules.map((rule, ruleIdx) => `
+                              <tr style="transition: background-color 0.2s;">
+                                <td style="padding: 8px; vertical-align: middle;">
+                                  <span style="font-size: 9px; padding: 3px 8px; border-radius: 12px; font-weight: 600; color: white; background-color: ${rule.Direction === 'inbound' || (rule.direction && rule.direction.toLowerCase() === 'inbound') ? '#28a745' : '#6c757d'};">
+                                    ${(rule.Direction || rule.direction || "").toUpperCase()}
+                                  </span>
+                                </td>
+                                <td style="padding: 8px; vertical-align: middle;">
+                                  <code style="background-color: #f8f9fa; padding: 2px 4px; border-radius: 3px; font-size: 10px;">
+                                    ${(rule.Protocol || rule.protocol || "").toUpperCase()}
+                                  </code>
+                                </td>
+                                <td style="padding: 8px; vertical-align: middle; font-family: monospace;">
+                                  ${rule.Port || rule.port || ""}
+                                </td>
+                                <td style="padding: 8px; vertical-align: middle; font-family: monospace; color: #6c757d;">
+                                  ${rule.CIDR || rule.cidr || ""}
+                                </td>
+                                <td style="padding: 8px; text-align: center; vertical-align: middle;">
+                                  <button class="btn btn-outline-danger btn-xs" onclick="deleteFirewallRule('${sg.id}', '${sg.name}', '${encodeURIComponent(JSON.stringify(rule))}')" 
+                                          style="font-size: 9px; padding: 2px 6px; border-radius: 3px;"
+                                          title="Delete this rule">
+                                    🗑️
+                                  </button>
+                                </td>
+                              </tr>
+                            `).join("")}
+                          </tbody>
+                        </table>
+                      ` : `
+                        <div style="padding: 20px; text-align: center; color: #6c757d;">
+                          <div style="font-size: 24px; margin-bottom: 8px;">🔒</div>
+                          <div style="font-weight: 500; margin-bottom: 4px;">No firewall rules defined</div>
+                          <div style="font-size: 11px;">Click "Add Rule" to create your first rule</div>
+                        </div>
+                      `}
+                    </div>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        </div>
+      `;
+
+      let firstRule = null;
+      if (sgList.length > 0 && (sgList[0].firewallRules || []).length > 0) {
+        firstRule = sgList[0].firewallRules[0];
+      }
+
+      let rulesHtml = `
+        <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border: 1px solid #dee2e6;">
+          <div style="background: #343a40; color: white; padding: 12px; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
+            <span>
+              <span style="margin-right: 8px;">🔧</span>
+              Apply Same Rules to All Security Groups
+            </span>
+            <button class="btn btn-success btn-sm" onclick="addRuleRowAll()" style="font-size: 11px; padding: 4px 8px; background-color: #28a745; border: none;">
+              <span style="margin-right: 3px;">+</span>Add Rule
+            </button>
+          </div>
+          <div style="padding: 15px; background-color: #f8f9fa;">
+            <div style="margin-bottom: 10px; font-size: 12px; color: #6c757d;">
+              <strong>Note:</strong> These rules will be applied to all Security Groups associated with this MCI, replacing existing rules.
+            </div>
+            <div style="background: white; border-radius: 4px; overflow: hidden; border: 1px solid #dee2e6;">
+              <table class="table table-sm table-hover" style="margin-bottom: 0; font-size: 12px;">
+                <thead style="background-color: #e9ecef;">
+                  <tr>
+                    <th style="padding: 8px; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Direction</th>
+                    <th style="padding: 8px; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Protocol</th>
+                    <th style="padding: 8px; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">Ports</th>
+                    <th style="padding: 8px; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6;">CIDR</th>
+                    <th style="padding: 8px; font-weight: 600; color: #495057; border-bottom: 2px solid #dee2e6; text-align: center; width: 80px;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="sg-rules-all" style="background: white;">
+                </tbody>
+              </table>
+              <div id="sg-rules-all-empty" style="padding: 20px; text-align: center; color: #6c757d; display: block;">
+                <div style="font-size: 24px; margin-bottom: 8px;">📝</div>
+                <div style="font-weight: 500; margin-bottom: 4px;">No rules defined yet</div>
+                <div style="font-size: 11px;">Click "Add Rule" to create your first rule</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+
+      const presetRules = [
+        { direction: "inbound", protocol: "TCP", port: "22", cidr: "0.0.0.0/0", label: "SSH (22)" },
+        { direction: "inbound", protocol: "TCP", port: "80", cidr: "0.0.0.0/0", label: "HTTP (80)" },
+        { direction: "inbound", protocol: "TCP", port: "443", cidr: "0.0.0.0/0", label: "HTTPS (443)" },
+        { direction: "inbound", protocol: "TCP", port: "1-65535", cidr: "0.0.0.0/0", label: "All TCP Ports" },
+        { direction: "inbound", protocol: "UDP", port: "1-65535", cidr: "0.0.0.0/0", label: "All UDP Ports" },
+        { direction: "inbound", protocol: "ICMP", port: "", cidr: "0.0.0.0/0", label: "ICMP" },
+        { direction: "inbound", protocol: "ALL", port: "", cidr: "0.0.0.0/0", label: "All Protocols" },
+      ];
+      let presetHtml = presetRules.map((p, i) =>
+        `<button class="btn btn-outline-secondary btn-sm" style="margin:3px; font-size:11px; padding:4px 8px; border-radius:4px;" onclick="insertPresetRule(${i})">${p.label}</button>`
+      ).join("");
+
+      Swal.fire({
+        title: "Update Security Group Rules",
+        html: `
+          <div>
+            ${summaryHtml}
+            <div style="margin: 15px 0; padding: 12px; background: #e8f4fd; border-radius: 6px; border-left: 4px solid #0066cc;">
+              <div style="font-weight: 600; color: #0066cc; margin-bottom: 8px; font-size: 13px;">📋 Frequently Used Rules</div>
+              <div>${presetHtml}</div>
+            </div>
+            <div style="max-height:400px;overflow:auto;">${rulesHtml}</div>
+          </div>
+        `,
+        width: 1200,
+        showCancelButton: true,
+        confirmButtonText: "Apply",
+        cancelButtonText: "Cancel",
+        didOpen: () => {
+          // Initialize Bootstrap tabs functionality for Security Groups
+          const tabButtons = document.querySelectorAll('#sgTabs button[data-bs-toggle="tab"]');
+          tabButtons.forEach(button => {
+            button.addEventListener('click', function (e) {
+              e.preventDefault();
+              
+              // Remove active class from all tabs and content
+              tabButtons.forEach(btn => {
+                btn.classList.remove('active');
+                btn.style.color = '#6c757d';
+                btn.style.borderBottomColor = 'transparent';
+                btn.style.backgroundColor = 'transparent';
+                // Update badge color
+                const badge = btn.querySelector('span:last-child');
+                if (badge) badge.style.backgroundColor = '#6c757d';
+              });
+              document.querySelectorAll('.tab-pane').forEach(pane => {
+                pane.classList.remove('show', 'active');
+              });
+              
+              // Add active class to clicked tab
+              this.classList.add('active');
+              this.style.color = '#007bff';
+              this.style.borderBottomColor = '#007bff';
+              this.style.backgroundColor = 'transparent';
+              // Update badge color for active tab
+              const activeBadge = this.querySelector('span:last-child');
+              if (activeBadge) activeBadge.style.backgroundColor = '#007bff';
+              
+              // Show corresponding content
+              const target = this.getAttribute('data-bs-target');
+              const targetPane = document.querySelector(target);
+              if (targetPane) {
+                targetPane.classList.add('show', 'active');
+              }
+            });
+          });
+          
+          window.addRuleRowAll = function () {
+            const tbody = document.getElementById("sg-rules-all");
+            const emptyDiv = document.getElementById("sg-rules-all-empty");
+            
+            // Hide empty state message when adding first rule
+            if (emptyDiv && tbody.rows.length === 0) {
+              emptyDiv.style.display = 'none';
+            }
+            
+            let def = { direction: "inbound", protocol: "TCP", ports: "", cidr: "" };
+            if (firstRule) {
+              def.direction = firstRule.Direction || firstRule.direction || "inbound";
+              def.protocol = (firstRule.Protocol || firstRule.protocol || "TCP").toUpperCase();
+              def.ports = firstRule.Ports || firstRule.port || "";
+              def.cidr = firstRule.CIDR || firstRule.cidr || "";
+            }
+            const row = document.createElement("tr");
+            row.style.transition = "background-color 0.2s";
+            row.innerHTML = `
+              <td style="padding: 8px; vertical-align: middle;">
+                <select class="form-control" name="direction" style="font-size: 11px; padding: 4px;">
+                  <option value="inbound" ${def.direction === "inbound" ? "selected" : ""}>Inbound</option>
+                  <option value="outbound" ${def.direction === "outbound" ? "selected" : ""}>Outbound</option>
+                </select>
+              </td>
+              <td style="padding: 8px; vertical-align: middle;">
+                <select class="form-control" name="protocol" style="font-size: 11px; padding: 4px;" onchange="togglePortField(this)">
+                  <option value="TCP" ${def.protocol === "TCP" ? "selected" : ""}>TCP</option>
+                  <option value="UDP" ${def.protocol === "UDP" ? "selected" : ""}>UDP</option>
+                  <option value="ICMP" ${def.protocol === "ICMP" ? "selected" : ""}>ICMP</option>
+                  <option value="ALL" ${def.protocol === "ALL" ? "selected" : ""}>ALL</option>
+                </select>
+              </td>
+              <td style="padding: 8px; vertical-align: middle;">
+                <input type="text" class="form-control" name="Ports" placeholder="ex: 22,80,1000-2000" value="${def.ports}" style="font-size: 11px; padding: 4px; font-family: monospace;">
+              </td>
+              <td style="padding: 8px; vertical-align: middle;">
+                <input type="text" class="form-control" name="cidr" value="${def.cidr}" placeholder="ex: 0.0.0.0/0" style="font-size: 11px; padding: 4px; font-family: monospace;">
+              </td>
+              <td style="padding: 8px; text-align: center; vertical-align: middle;">
+                <button class="btn btn-outline-danger btn-xs" onclick="removeRuleRowAll(this)" style="font-size: 9px; padding: 2px 6px; border-radius: 3px;" title="Delete this rule">
+                  🗑️
+                </button>
+              </td>
+            `;
+            tbody.appendChild(row);
+            
+            // Check initial protocol and disable port field if needed
+            const protocolSelect = row.querySelector('select[name="protocol"]');
+            const portInput = row.querySelector('input[name="Ports"]');
+            if (protocolSelect.value === "ICMP" || protocolSelect.value === "ALL") {
+              portInput.disabled = true;
+              portInput.value = "";
+              portInput.placeholder = "Not applicable for " + protocolSelect.value;
+              portInput.style.backgroundColor = "#f8f9fa";
+            }
+          };
+          
+          // Add remove function for rules
+          window.removeRuleRowAll = function(button) {
+            const row = button.closest('tr');
+            const tbody = document.getElementById("sg-rules-all");
+            const emptyDiv = document.getElementById("sg-rules-all-empty");
+            
+            row.remove();
+            
+            // Show empty state message if no rules left
+            if (emptyDiv && tbody.rows.length === 0) {
+              emptyDiv.style.display = 'block';
+            }
+          };
+          
+          // Function to toggle port field based on protocol selection
+          window.togglePortField = function(protocolSelect) {
+            const row = protocolSelect.closest('tr');
+            const portInput = row.querySelector('input[name="Ports"]');
+            const protocol = protocolSelect.value;
+            
+            if (protocol === "ICMP" || protocol === "ALL") {
+              portInput.disabled = true;
+              portInput.value = "";
+              portInput.placeholder = "Not applicable for " + protocol;
+              portInput.style.backgroundColor = "#f8f9fa";
+              portInput.style.color = "#6c757d";
+            } else {
+              portInput.disabled = false;
+              portInput.placeholder = "ex: 22,80,1000-2000";
+              portInput.style.backgroundColor = "";
+              portInput.style.color = "";
+            }
+          };
+          
+          window.insertPresetRule = function (presetIdx) {
+            const p = presetRules[presetIdx];
+            const tbody = document.getElementById("sg-rules-all");
+            const emptyDiv = document.getElementById("sg-rules-all-empty");
+            
+            // Hide empty state message when adding first rule
+            if (emptyDiv && tbody.rows.length === 0) {
+              emptyDiv.style.display = 'none';
+            }
+            
+            let def = { direction: "inbound", protocol: "TCP" };
+            if (firstRule) {
+              def.direction = firstRule.Direction || firstRule.direction || "inbound";
+              def.protocol = (firstRule.Protocol || firstRule.protocol || "TCP").toUpperCase();
+            }
+            const row = document.createElement("tr");
+            row.style.transition = "background-color 0.2s";
+            row.innerHTML = `
+              <td style="padding: 8px; vertical-align: middle;">
+                <select class="form-control" name="direction" style="font-size: 11px; padding: 4px;">
+                  <option value="inbound" ${p.direction === "inbound" ? "selected" : ""}>Inbound</option>
+                  <option value="outbound" ${p.direction === "outbound" ? "selected" : ""}>Outbound</option>
+                </select>
+              </td>
+              <td style="padding: 8px; vertical-align: middle;">
+                <select class="form-control" name="protocol" style="font-size: 11px; padding: 4px;" onchange="togglePortField(this)">
+                  <option value="TCP" ${p.protocol === "TCP" ? "selected" : ""}>TCP</option>
+                  <option value="UDP" ${p.protocol === "UDP" ? "selected" : ""}>UDP</option>
+                  <option value="ICMP" ${p.protocol === "ICMP" ? "selected" : ""}>ICMP</option>
+                  <option value="ALL" ${p.protocol === "ALL" ? "selected" : ""}>ALL</option>
+                </select>
+              </td>
+              <td style="padding: 8px; vertical-align: middle;">
+                <input type="text" class="form-control" name="Ports" placeholder="ex: 22,80,1000-2000" value="${p.port}" style="font-size: 11px; padding: 4px; font-family: monospace;">
+              </td>
+              <td style="padding: 8px; vertical-align: middle;">
+                <input type="text" class="form-control" name="cidr" value="${p.cidr}" style="font-size: 11px; padding: 4px; font-family: monospace;">
+              </td>
+              <td style="padding: 8px; text-align: center; vertical-align: middle;">
+                <button class="btn btn-outline-danger btn-xs" onclick="removeRuleRowAll(this)" style="font-size: 9px; padding: 2px 6px; border-radius: 3px;" title="Delete this rule">
+                  🗑️
+                </button>
+              </td>
+            `;
+            tbody.appendChild(row);
+            
+            // Check protocol and disable port field if needed
+            const protocolSelect = row.querySelector('select[name="protocol"]');
+            const portInput = row.querySelector('input[name="Ports"]');
+            if (protocolSelect.value === "ICMP" || protocolSelect.value === "ALL") {
+              portInput.disabled = true;
+              portInput.value = "";
+              portInput.placeholder = "Not applicable for " + protocolSelect.value;
+              portInput.style.backgroundColor = "#f8f9fa";
+            }
+          };
+        },
+        preConfirm: () => {
+
+          const tbody = document.getElementById("sg-rules-all");
+          let rules = [];
+          for (let row of tbody.rows) {
+            const direction = row.querySelector('select[name="direction"]').value;
+            const protocol = row.querySelector('select[name="protocol"]').value;
+            const port = row.querySelector('input[name="Ports"]').value.trim();
+            const cidr = row.querySelector('input[name="cidr"]').value.trim();
+            
+            // For ICMP and ALL protocols, port is not required
+            const isPortRequired = (protocol === "TCP" || protocol === "UDP");
+            const isValidRule = direction && protocol && cidr && (!isPortRequired || (isPortRequired && port));
+            
+            if (isValidRule) {
+              rules.push({
+                Ports: port || "", // Use empty string for ICMP/ALL protocols
+                Protocol: protocol,
+                Direction: direction,
+                CIDR: cidr
+              });
+            }
+          }
+          return sgList.map(sg => ({ id: sg.id, name: sg.name, firewallRules: rules }));
+        }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          
+          // Show loading message
+          Swal.fire({
+            title: 'Updating Security Groups...',
+            text: 'Please wait while we update the security group rules.',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => {
+              Swal.showLoading();
+            }
+          });
+
+          // Since we now use UpdateMultipleFirewallRules, make a single API call instead of multiple calls
+          const updatePromise = axios({
+            method: "put",
+            url: `http://${hostname}:${port}/tumblebug/ns/${nsId}/mci/${mciId}/associatedSecurityGroups`,
+            headers: { "Content-Type": "application/json" },
+            data: JSON.stringify({
+              firewallRules: result.value[0].firewallRules // All SGs get the same rules
+            }),
+            auth: { username, password },
+          }).then(response => {
+            // Check if response has the new batch format with response array and summary
+            const responseData = response.data;
+            if (responseData && responseData.response && Array.isArray(responseData.response)) {
+              // New batch response format - extract individual results
+              return responseData.response.map(sgResponse => ({
+                id: sgResponse.id,
+                name: sgResponse.name,
+                success: sgResponse.success,
+                message: sgResponse.message || "Successfully updated",
+                response: sgResponse,
+                summary: responseData.summary // Include summary information
+              }));
+            } else {
+              // Fallback for unexpected response format
+              return sgList.map(sg => ({
+                id: sg.id,
+                name: sg.name,
+                success: false,
+                message: "Unexpected response format",
+                response: responseData
+              }));
+            }
+          }).catch(error => {
+            // Return error result for each security group
+            return sgList.map(sg => ({
+              id: sg.id,
+              name: sg.name,
+              success: false,
+              message: error.response?.data?.message || error.message || "Unknown error",
+              error: error
+            }));
+          });
+
+          updatePromise.then((results) => {
+            const successCount = results.filter(r => r.success).length;
+            const failedCount = results.filter(r => r.success === false).length;
+            const allSuccess = failedCount === 0;
+            
+            // Extract summary if available
+            const summary = results.length > 0 && results[0].summary ? results[0].summary : null;
+
+            // Calculate update time and other details
+            const updateTime = new Date().toLocaleString();
+            
+            // Create detailed result table with summary information
+            let resultHtml = `
+              <div style="text-align: left;">
+                <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                  <h5 style="margin: 0 0 12px 0; color: #495057; display: flex; align-items: center;">
+                    <span style="margin-right: 8px;">📊</span>
+                    Security Group Update Results Summary
+                    ${summary ? '<span style="font-size: 12px; color: #6c757d; margin-left: 10px;">(Parallel Processing)</span>' : ''}
+                  </h5>
+                  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px; margin-bottom: 10px;">
+                    <div style="text-align: center; padding: 8px; background: white; border-radius: 6px; border-left: 4px solid #6c757d;">
+                      <div style="font-size: 18px; font-weight: bold; color: #6c757d;">${summary ? summary.total : results.length}</div>
+                      <div style="font-size: 12px; color: #6c757d;">Total</div>
+                    </div>
+                    <div style="text-align: center; padding: 8px; background: white; border-radius: 6px; border-left: 4px solid #28a745;">
+                      <div style="font-size: 18px; font-weight: bold; color: #28a745;">${summary ? summary.success : successCount}</div>
+                      <div style="font-size: 12px; color: #28a745;">Success</div>
+                    </div>
+                    <div style="text-align: center; padding: 8px; background: white; border-radius: 6px; border-left: 4px solid #dc3545;">
+                      <div style="font-size: 18px; font-weight: bold; color: #dc3545;">${summary ? summary.failed : failedCount}</div>
+                      <div style="font-size: 12px; color: #dc3545;">Failed</div>
+                    </div>
+                    <div style="text-align: center; padding: 8px; background: white; border-radius: 6px; border-left: 4px solid #17a2b8;">
+                      <div style="font-size: 11px; font-weight: bold; color: #17a2b8;">${updateTime}</div>
+                      <div style="font-size: 12px; color: #17a2b8;">Updated</div>
+                    </div>
+                  </div>
+                  ${summary && summary.allSuccess ? 
+                    '<div style="background: #d4edda; color: #155724; padding: 8px; border-radius: 4px; font-size: 12px; text-align: center;"><strong>✅ All security groups updated successfully!</strong></div>' : 
+                    summary && !summary.allSuccess ? 
+                    '<div style="background: #fff3cd; color: #856404; padding: 8px; border-radius: 4px; font-size: 12px; text-align: center;"><strong>⚠️ Some security groups failed to update</strong></div>' : ''
+                  }
+                </div>
+                
+                <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                  <div style="background: #343a40; color: white; padding: 12px; font-weight: bold;">
+                    <span style="margin-right: 8px;">📋</span>
+                    Detailed Update Results
+                  </div>
+                  <div style="max-height: 400px; overflow-y: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                      <thead style="background: #f8f9fa; position: sticky; top: 0; z-index: 1;">
+                        <tr>
+                          <th style="padding: 12px 8px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600; color: #495057; width: 50px;">#</th>
+                          <th style="padding: 12px 8px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600; color: #495057; width: 80px;">Status</th>
+                          <th style="padding: 12px 8px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600; color: #495057; min-width: 150px;">Security Group</th>
+                          <th style="padding: 12px 8px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600; color: #495057;">ID</th>
+                          <th style="padding: 12px 8px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600; color: #495057; min-width: 200px;">Message</th>
+                          <th style="padding: 12px 8px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600; color: #495057; width: 100px;">Details</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+            `;
+
+            results.forEach((result, index) => {
+              const statusIcon = result.success ? '✅' : '❌';
+              const statusText = result.success ? 'Success' : 'Failed';
+              const statusColor = result.success ? '#28a745' : '#dc3545';
+              const rowBgColor = result.success ? '#f8fff8' : '#fff5f5';
+              const rulesCount = result.response?.firewallRules?.length || result.response?.updated?.firewallRules?.length || 'N/A';
+              
+              resultHtml += `
+                <tr style="background-color: ${rowBgColor}; border-bottom: 1px solid #f0f0f0;">
+                  <td style="padding: 12px 8px; text-align: center; font-weight: bold; color: #6c757d;">${index + 1}</td>
+                  <td style="padding: 12px 8px; text-align: center;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+                      <span style="font-size: 16px;">${statusIcon}</span>
+                      <span style="font-weight: 600; color: ${statusColor}; font-size: 12px;">${statusText}</span>
+                    </div>
+                  </td>
+                  <td style="padding: 12px 8px;">
+                    <div style="font-weight: 600; color: #212529; margin-bottom: 2px;">${result.name}</div>
+                    <div style="font-size: 11px; color: #6c757d;">Rules: ${rulesCount}</div>
+                  </td>
+                  <td style="padding: 12px 8px;">
+                    <code style="background: #f8f9fa; padding: 2px 6px; border-radius: 3px; font-size: 11px; color: #495057;">${result.id}</code>
+                  </td>
+                  <td style="padding: 12px 8px;">
+                    <div style="color: #495057; line-height: 1.4; word-break: break-word;">
+                      ${result.message}
+                    </div>
+                  </td>
+                  <td style="padding: 12px 8px; text-align: center;">
+                    <button onclick="showSgDetails('${result.id}', '${result.name}', ${index})" 
+                            style="background: #17a2b8; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: background 0.2s;"
+                            onmouseover="this.style.background='#138496'" 
+                            onmouseout="this.style.background='#17a2b8'">
+                      View
+                    </button>
+                  </td>
+                </tr>
+              `;
+            });
+
+            resultHtml += `
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            `;
+
+            // Add global function for showing details
+            window.showSgDetails = function(sgId, sgName, index) {
+              const result = results[index];
+              let detailsHtml = `
+                <div style="text-align: left;">
+                  <h6 style="color: #495057; margin-bottom: 15px;">
+                    <strong>Security Group:</strong> ${sgName} 
+                    <span style="font-size: 12px; color: #6c757d;">(${sgId})</span>
+                  </h6>
+              `;
+              
+              if (result.success && result.response) {
+                const sgData = result.response.updated || result.response;
+                if (sgData.firewallRules && sgData.firewallRules.length > 0) {
+                  detailsHtml += `
+                    <div style="margin-bottom: 15px;">
+                      <strong style="color: #28a745;">✅ Updated Rules (${sgData.firewallRules.length}):</strong>
+                      <div style="max-height: 200px; overflow-y: auto; margin-top: 8px; border: 1px solid #dee2e6; border-radius: 4px;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                          <thead style="background: #f8f9fa;">
+                            <tr>
+                              <th style="padding: 6px; border-bottom: 1px solid #dee2e6;">Direction</th>
+                              <th style="padding: 6px; border-bottom: 1px solid #dee2e6;">Protocol</th>
+                              <th style="padding: 6px; border-bottom: 1px solid #dee2e6;">Port</th>
+                              <th style="padding: 6px; border-bottom: 1px solid #dee2e6;">CIDR</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                  `;
+                  
+                  sgData.firewallRules.forEach(rule => {
+                    detailsHtml += `
+                      <tr>
+                        <td style="padding: 6px; border-bottom: 1px solid #f0f0f0;">${rule.Direction || rule.direction || 'N/A'}</td>
+                        <td style="padding: 6px; border-bottom: 1px solid #f0f0f0;">${rule.Protocol || rule.protocol || 'N/A'}</td>
+                        <td style="padding: 6px; border-bottom: 1px solid #f0f0f0;">${rule.Port || rule.port || rule.Ports || 'N/A'}</td>
+                        <td style="padding: 6px; border-bottom: 1px solid #f0f0f0;">${rule.CIDR || rule.cidr || 'N/A'}</td>
+                      </tr>
+                    `;
+                  });
+                  
+                  detailsHtml += `
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  `;
+                }
+              } else {
+                detailsHtml += `
+                  <div style="color: #dc3545; background: #f8d7da; padding: 10px; border-radius: 4px; margin-bottom: 10px;">
+                    <strong>❌ Update Failed:</strong><br>
+                    ${result.message}
+                  </div>
+                `;
+                
+                if (result.error && result.error.response) {
+                  detailsHtml += `
+                    <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; border-left: 4px solid #dc3545;">
+                      <strong>Error Details:</strong><br>
+                      <code style="font-size: 11px; color: #dc3545;">${JSON.stringify(result.error.response.data, null, 2)}</code>
+                    </div>
+                  `;
+                }
+              }
+              
+              detailsHtml += `</div>`;
+              
+              Swal.fire({
+                title: `Security Group Details`,
+                html: detailsHtml,
+                width: 600,
+                confirmButtonText: "Close",
+                confirmButtonColor: "#6c757d"
+              });
+            };
+
+            if (allSuccess) {
+              Swal.fire({
+                title: "🎉 All Updates Successful!",
+                html: resultHtml,
+                icon: "success",
+                width: 900,
+                confirmButtonText: "Excellent!",
+                confirmButtonColor: "#28a745"
+              });
+            } else if (successCount > 0) {
+              Swal.fire({
+                title: "⚠️ Partial Success",
+                html: resultHtml,
+                icon: "warning",
+                width: 900,
+                confirmButtonText: "Got it",
+                confirmButtonColor: "#ffc107"
+              });
+            } else {
+              Swal.fire({
+                title: "❌ Update Failed",
+                html: resultHtml,
+                icon: "error",
+                width: 900,
+                confirmButtonText: "Retry",
+                confirmButtonColor: "#dc3545"
+              });
+            }
+          }).catch((err) => {
+            Swal.fire({
+              title: "💥 Unexpected Error",
+              html: `
+                <div style="text-align: left;">
+                  <p>An unexpected error occurred while updating security group rules:</p>
+                  <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px; border-left: 4px solid #dc3545;">
+                    <code style="color: #dc3545;">${err.response?.data?.message || err.message || err}</code>
+                  </div>
+                  <p style="margin-top: 12px; color: #6c757d;">Please check your connection and try again.</p>
+                </div>
+              `,
+              icon: "error",
+              width: 600,
+              confirmButtonText: "Close",
+              confirmButtonColor: "#dc3545"
+            });
+          });
+        }
+      }).catch((err) => {
+        if (err) errorAlert("Popup error: " + err);
+      });
+    }).catch((err) => {
+      errorAlert("Failed to load security group details: " + (err.response?.data?.message || err));
+    });
+  }).catch((err) => {
+    errorAlert("Failed to load associated security group IDs: " + (err.response?.data?.message || err));
+  });
+}
+window.updateFirewallRules = updateFirewallRules;
+
+// Function to delete individual firewall rule
+function deleteFirewallRule(sgId, sgName, ruleData) {
+  try {
+    const rule = JSON.parse(decodeURIComponent(ruleData));
+    
+    Swal.fire({
+      title: "Delete Firewall Rule",
+      html: `
+        <div style="text-align: left;">
+          <p><strong>Security Group:</strong> ${sgName}</p>
+          <p><strong>Rule to delete:</strong></p>
+          <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; border-left: 4px solid #dc3545;">
+            <strong>Direction:</strong> ${rule.Direction || rule.direction || 'N/A'}<br>
+            <strong>Protocol:</strong> ${rule.Protocol || rule.protocol || 'N/A'}<br>
+            <strong>Port:</strong> ${rule.Port || rule.port || rule.Ports || 'N/A'}<br>
+            <strong>CIDR:</strong> ${rule.CIDR || rule.cidr || 'N/A'}
+          </div>
+          <p style="color: #dc3545; margin-top: 10px;">⚠️ This action cannot be undone.</p>
+        </div>
+      `,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Delete",
+      confirmButtonColor: "#dc3545",
+      cancelButtonText: "Cancel",
+      cancelButtonColor: "#6c757d"
+    }).then((result) => {
+      if (result.isConfirmed) {
+        // Show loading
+        Swal.fire({
+          title: 'Deleting Rule...',
+          text: 'Please wait while we delete the firewall rule.',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        var hostname = hostnameElement.value;
+        var port = portElement.value;
+        var username = usernameElement.value;
+        var password = passwordElement.value;
+        var nsId = namespaceElement.value;
+
+        // Prepare request data for deletion
+        const deleteRule = {
+          Direction: rule.Direction || rule.direction,
+          Protocol: rule.Protocol || rule.protocol,
+          Ports: rule.Port || rule.port || rule.Ports,
+          CIDR: rule.CIDR || rule.cidr
+        };
+
+        axios({
+          method: "delete",
+          url: `http://${hostname}:${port}/tumblebug/ns/${nsId}/resources/securityGroup/${sgId}/rules`,
+          headers: { "Content-Type": "application/json" },
+          data: JSON.stringify({
+            firewallRules: [deleteRule]
+          }),
+          auth: { username, password },
+        }).then((response) => {
+          const responseData = response.data;
+          // Check if the response indicates success
+          const isSuccess = responseData.success !== false;
+          
+          if (isSuccess) {
+            Swal.fire({
+              title: "✅ Rule Deleted Successfully",
+              html: `
+                <div style="text-align: left;">
+                  <p>The firewall rule has been successfully deleted from security group <strong>${sgName}</strong>.</p>
+                  <div style="background: #d4edda; padding: 10px; border-radius: 4px; border-left: 4px solid #28a745; margin-top: 10px;">
+                    <strong>Deleted Rule:</strong><br>
+                    Direction: ${deleteRule.Direction}<br>
+                    Protocol: ${deleteRule.Protocol}<br>
+                    Port: ${deleteRule.Ports}<br>
+                    CIDR: ${deleteRule.CIDR}
+                  </div>
+                  ${responseData.message ? `<p style="margin-top: 10px; color: #28a745;"><strong>Message:</strong> ${responseData.message}</p>` : ''}
+                </div>
+              `,
+              icon: "success",
+              confirmButtonText: "Refresh View",
+              confirmButtonColor: "#28a745"
+            }).then(() => {
+              // Refresh the firewall rules view
+              updateFirewallRules();
+            });
+          } else {
+            throw new Error(responseData.message || 'Failed to delete rule');
+          }
+        }).catch((error) => {
+          Swal.fire({
+            title: "❌ Delete Failed",
+            html: `
+              <div style="text-align: left;">
+                <p>Failed to delete the firewall rule:</p>
+                <div style="background: #f8d7da; padding: 10px; border-radius: 4px; border-left: 4px solid #dc3545;">
+                  <code style="color: #dc3545;">${error.response?.data?.message || error.message || 'Unknown error'}</code>
+                </div>
+              </div>
+            `,
+            icon: "error",
+            confirmButtonText: "Close",
+            confirmButtonColor: "#dc3545"
+          });
+        });
+      }
+    });
+  } catch (err) {
+    errorAlert("Error parsing rule data: " + err.message);
+  }
+}
+window.deleteFirewallRule = deleteFirewallRule;
+
+// Function to add new firewall rule to specific security group
+function addNewRuleToSg(sgId, sgName) {
+  Swal.fire({
+    title: `Add New Rule to ${sgName}`,
+    html: `
+      <div style="text-align: left;">
+        <div style="margin-bottom: 15px;">
+          <label style="font-weight: bold; margin-bottom: 5px; display: block;">Direction:</label>
+          <select id="newRuleDirection" class="form-control">
+            <option value="inbound">Inbound</option>
+            <option value="outbound">Outbound</option>
+          </select>
+        </div>
+        <div style="margin-bottom: 15px;">
+          <label style="font-weight: bold; margin-bottom: 5px; display: block;">Protocol:</label>
+          <select id="newRuleProtocol" class="form-control" onchange="togglePortFieldIndividual()">
+            <option value="TCP">TCP</option>
+            <option value="UDP">UDP</option>
+            <option value="ICMP">ICMP</option>
+            <option value="ALL">ALL</option>
+          </select>
+        </div>
+        <div style="margin-bottom: 15px;">
+          <label style="font-weight: bold; margin-bottom: 5px; display: block;">Port:</label>
+          <input type="text" id="newRulePort" class="form-control" placeholder="ex: 22, 80-100, 22,80,443" />
+          <small style="color: #6c757d;">Enter single port (22), port range (80-100), or multiple (22,80,443)</small>
+        </div>
+        <div style="margin-bottom: 15px;">
+          <label style="font-weight: bold; margin-bottom: 5px; display: block;">CIDR:</label>
+          <input type="text" id="newRuleCidr" class="form-control" placeholder="ex: 0.0.0.0/0, 192.168.1.0/24" value="0.0.0.0/0" />
+          <small style="color: #6c757d;">IP address range in CIDR notation</small>
+        </div>
+        <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; margin-top: 15px;">
+          <strong>Quick Templates:</strong><br>
+          <button class="btn btn-outline-secondary btn-sm" onclick="setQuickTemplate('SSH')" style="margin: 2px;">SSH (22)</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="setQuickTemplate('HTTP')" style="margin: 2px;">HTTP (80)</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="setQuickTemplate('HTTPS')" style="margin: 2px;">HTTPS (443)</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="setQuickTemplate('MYSQL')" style="margin: 2px;">MySQL (3306)</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="setQuickTemplate('POSTGRES')" style="margin: 2px;">PostgreSQL (5432)</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="setQuickTemplate('ALL_TCP')" style="margin: 2px;">All TCP Ports</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="setQuickTemplate('ALL_UDP')" style="margin: 2px;">All UDP Ports</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="setQuickTemplate('ICMP')" style="margin: 2px;">ICMP</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="setQuickTemplate('ALL_PROTOCOLS')" style="margin: 2px;">All Protocols</button>
+        </div>
+      </div>
+    `,
+    width: 500,
+    showCancelButton: true,
+    confirmButtonText: "Add Rule",
+    confirmButtonColor: "#28a745",
+    cancelButtonText: "Cancel",
+    cancelButtonColor: "#6c757d",
+    didOpen: () => {
+      // Function to toggle port field for individual rule addition
+      window.togglePortFieldIndividual = function() {
+        const protocolSelect = document.getElementById("newRuleProtocol");
+        const portInput = document.getElementById("newRulePort");
+        const protocol = protocolSelect.value;
+        
+        if (protocol === "ICMP" || protocol === "ALL") {
+          portInput.disabled = true;
+          portInput.value = "";
+          portInput.placeholder = "Not applicable for " + protocol;
+          portInput.style.backgroundColor = "#f8f9fa";
+          portInput.style.color = "#6c757d";
+        } else {
+          portInput.disabled = false;
+          portInput.placeholder = "ex: 22, 80-100, 22,80,443";
+          portInput.style.backgroundColor = "";
+          portInput.style.color = "";
+        }
+      };
+      
+      // Initialize port field state
+      togglePortFieldIndividual();
+      
+      // Define quick template function
+      window.setQuickTemplate = function(template) {
+        const protocolSelect = document.getElementById("newRuleProtocol");
+        const portInput = document.getElementById("newRulePort");
+        const cidrInput = document.getElementById("newRuleCidr");
+        
+        switch(template) {
+          case 'SSH':
+            protocolSelect.value = "TCP";
+            portInput.value = "22";
+            cidrInput.value = "0.0.0.0/0";
+            break;
+          case 'HTTP':
+            protocolSelect.value = "TCP";
+            portInput.value = "80";
+            cidrInput.value = "0.0.0.0/0";
+            break;
+          case 'HTTPS':
+            protocolSelect.value = "TCP";
+            portInput.value = "443";
+            cidrInput.value = "0.0.0.0/0";
+            break;
+          case 'MYSQL':
+            protocolSelect.value = "TCP";
+            portInput.value = "3306";
+            cidrInput.value = "0.0.0.0/0";
+            break;
+          case 'POSTGRES':
+            protocolSelect.value = "TCP";
+            portInput.value = "5432";
+            cidrInput.value = "0.0.0.0/0";
+            break;
+          case 'ALL_TCP':
+            protocolSelect.value = "TCP";
+            portInput.value = "1-65535";
+            cidrInput.value = "0.0.0.0/0";
+            break;
+          case 'ALL_UDP':
+            protocolSelect.value = "UDP";
+            portInput.value = "1-65535";
+            cidrInput.value = "0.0.0.0/0";
+            break;
+          case 'ICMP':
+            protocolSelect.value = "ICMP";
+            portInput.value = "";
+            cidrInput.value = "0.0.0.0/0";
+            break;
+          case 'ALL_PROTOCOLS':
+            protocolSelect.value = "ALL";
+            portInput.value = "";
+            cidrInput.value = "0.0.0.0/0";
+            break;
+        }
+        
+        // Update port field state after template selection
+        togglePortFieldIndividual();
+      };
+    },
+    preConfirm: () => {
+      const direction = document.getElementById("newRuleDirection").value;
+      const protocol = document.getElementById("newRuleProtocol").value;
+      const port = document.getElementById("newRulePort").value.trim();
+      const cidr = document.getElementById("newRuleCidr").value.trim();
+      
+      // For ICMP and ALL protocols, port is not required
+      if (!direction || !protocol || !cidr) {
+        Swal.showValidationMessage("Direction, Protocol, and CIDR are required");
+        return false;
+      }
+      
+      // Check port requirement based on protocol
+      if ((protocol === "TCP" || protocol === "UDP") && !port) {
+        Swal.showValidationMessage("Port is required for TCP and UDP protocols");
+        return false;
+      }
+      
+      // Basic CIDR validation
+      if (!cidr.includes('/')) {
+        Swal.showValidationMessage("CIDR must include network prefix (e.g., 0.0.0.0/0)");
+        return false;
+      }
+      
+      return { direction, protocol, port: port || "", cidr };
+    }
+  }).then((result) => {
+    if (result.isConfirmed) {
+      const { direction, protocol, port, cidr } = result.value;
+      
+      // Show loading
+      Swal.fire({
+        title: 'Adding Rule...',
+        text: 'Please wait while we add the new firewall rule.',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+
+      var hostname = hostnameElement.value;
+      var portVal = portElement.value;
+      var username = usernameElement.value;
+      var password = passwordElement.value;
+      var nsId = namespaceElement.value;
+
+      // Prepare request data for addition
+      const newRule = {
+        Direction: direction,
+        Protocol: protocol,
+        Ports: port,
+        CIDR: cidr
+      };
+
+      axios({
+        method: "post",
+        url: `http://${hostname}:${portVal}/tumblebug/ns/${nsId}/resources/securityGroup/${sgId}/rules`,
+        headers: { "Content-Type": "application/json" },
+        data: JSON.stringify({
+          firewallRules: [newRule]
+        }),
+        auth: { username, password },
+      }).then((response) => {
+        const responseData = response.data;
+        // Check if the response indicates success
+        const isSuccess = responseData.success !== false;
+        
+        if (isSuccess) {
+          Swal.fire({
+            title: "✅ Rule Added Successfully",
+            html: `
+              <div style="text-align: left;">
+                <p>The new firewall rule has been successfully added to security group <strong>${sgName}</strong>.</p>
+                <div style="background: #d4edda; padding: 10px; border-radius: 4px; border-left: 4px solid #28a745; margin-top: 10px;">
+                  <strong>Added Rule:</strong><br>
+                  Direction: ${newRule.Direction}<br>
+                  Protocol: ${newRule.Protocol}<br>
+                  ${newRule.Ports ? `Port: ${newRule.Ports}<br>` : ''}
+                  CIDR: ${newRule.CIDR}
+                </div>
+                ${responseData.message ? `<p style="margin-top: 10px; color: #28a745;"><strong>Message:</strong> ${responseData.message}</p>` : ''}
+              </div>
+            `,
+            icon: "success",
+            confirmButtonText: "Refresh View",
+            confirmButtonColor: "#28a745"
+          }).then(() => {
+            // Refresh the firewall rules view
+            updateFirewallRules();
+          });
+        } else {
+          throw new Error(responseData.message || 'Failed to add rule');
+        }
+      }).catch((error) => {
+        Swal.fire({
+          title: "❌ Add Failed",
+          html: `
+            <div style="text-align: left;">
+              <p>Failed to add the new firewall rule:</p>
+              <div style="background: #f8d7da; padding: 10px; border-radius: 4px; border-left: 4px solid #dc3545;">
+                <code style="color: #dc3545;">${error.response?.data?.message || error.message || 'Unknown error'}</code>
+              </div>
+            </div>
+          `,
+          icon: "error",
+          confirmButtonText: "Close",
+          confirmButtonColor: "#dc3545"
+        });
+      });
+    }
+  });
+}
+window.addNewRuleToSg = addNewRuleToSg;
