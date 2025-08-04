@@ -934,11 +934,13 @@ function getMci() {
             }
           }
         } else {
+          // Clear MCI geometries when list is empty
           geometries = [];
         }
       })
       .catch(function (error) {
-        console.log(error);
+        console.log("MCI API error:", error);
+        // Don't update geometries on API error to preserve current state
       });
 
     // get vnet list and put them on the map
@@ -953,23 +955,25 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
-      if (obj.vNet != null) {
+      if (obj.vNet != null && obj.vNet.length > 0) {
         var resourceLocation = [];
         for (let item of obj.vNet) {
           resourceLocation.push([
             item.connectionConfig.regionDetail.location.longitude * 1,
             item.connectionConfig.regionDetail.location.latitude * 1 - 0.05,
           ]);
-          geoResourceLocation.vnet[0] = new MultiPoint([resourceLocation]);
-          //console.log("geoResourceLocation.vnet[0]");
-          //console.log(geoResourceLocation.vnet[0]);
         }
+        geoResourceLocation.vnet[0] = new MultiPoint([resourceLocation]);
+        //console.log("geoResourceLocation.vnet[0]");
+        //console.log(geoResourceLocation.vnet[0]);
       } else {
+        // Clear vnet icons when list is empty
         geoResourceLocation.vnet = [];
       }
     })
       .catch(function (error) {
-        console.log(error);
+        console.log("vNet API error:", error);
+        // Don't update icons on API error to preserve current state
       });
 
     // get securityGroup list and put them on the map
@@ -984,21 +988,23 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
-      if (obj.securityGroup != null) {
+      if (obj.securityGroup != null && obj.securityGroup.length > 0) {
         var resourceLocation = [];
         for (let item of obj.securityGroup) {
           resourceLocation.push([
             item.connectionConfig.regionDetail.location.longitude * 1 - 0.05,
             item.connectionConfig.regionDetail.location.latitude * 1,
           ]);
-          geoResourceLocation.sg[0] = new MultiPoint([resourceLocation]);
         }
+        geoResourceLocation.sg[0] = new MultiPoint([resourceLocation]);
       } else {
+        // Clear securityGroup icons when list is empty
         geoResourceLocation.sg = [];
       }
     })
       .catch(function (error) {
-        console.log(error);
+        console.log("securityGroup API error:", error);
+        // Don't update icons on API error to preserve current state
       });
 
 
@@ -1014,21 +1020,23 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
-      if (obj.sshKey != null) {
+      if (obj.sshKey != null && obj.sshKey.length > 0) {
         var resourceLocation = [];
         for (let item of obj.sshKey) {
           resourceLocation.push([
             item.connectionConfig.regionDetail.location.longitude * 1 + 0.05,
             item.connectionConfig.regionDetail.location.latitude * 1,
           ]);
-          geoResourceLocation.sshKey[0] = new MultiPoint([resourceLocation]);
         }
+        geoResourceLocation.sshKey[0] = new MultiPoint([resourceLocation]);
       } else {
+        // Clear sshKey icons when list is empty
         geoResourceLocation.sshKey = [];
       }
     })
       .catch(function (error) {
-        console.log(error);
+        console.log("sshKey API error:", error);
+        // Don't update icons on API error to preserve current state
       });
 
     // get k8sCluster list and put them on the map
@@ -1053,17 +1061,15 @@ function getMci() {
           ]);
         }
         console.log(resourceLocation);
-        if (resourceLocation.length > 0) {
-          geoResourceLocation.k8s[0] = new MultiPoint([resourceLocation]);
-        } else {
-          geoResourceLocation.k8s = [];
-        }
+        geoResourceLocation.k8s[0] = new MultiPoint([resourceLocation]);
       } else {
+        // Clear k8s icons when list is empty
         geoResourceLocation.k8s = [];
       }
     })
       .catch(function (error) {
-        console.log(error);
+        console.log("k8sCluster API error:", error);
+        // Don't update icons on API error to preserve current state
       });
 
     // get VPN list and put them on the map
@@ -1078,29 +1084,38 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
-      if (obj != null) {
+      if (obj != null && obj.results != null && obj.results.length > 0) {
         var resourceLocation = [];
-        if (obj.results != null) {
-          for (let result of obj.results) {
-            if (result.vpnSites != null) {
-              for (let item of result.vpnSites) {
-                resourceLocation.push([
-                  item.connectionConfig.regionDetail.location.longitude * 1,
-                  item.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
-                ]);
-                geoResourceLocation.vpn[0] = new MultiPoint([resourceLocation]);
-                console.log("geoResourceLocation.vpn[0]");
-                console.log(geoResourceLocation.vpn[0]);
-              }
+        var hasValidVpnSites = false;
+        
+        for (let result of obj.results) {
+          if (result.vpnSites != null && result.vpnSites.length > 0) {
+            hasValidVpnSites = true;
+            for (let item of result.vpnSites) {
+              resourceLocation.push([
+                item.connectionConfig.regionDetail.location.longitude * 1,
+                item.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
+              ]);
             }
           }
         }
+        
+        if (hasValidVpnSites && resourceLocation.length > 0) {
+          geoResourceLocation.vpn[0] = new MultiPoint([resourceLocation]);
+          console.log("geoResourceLocation.vpn[0]");
+          console.log(geoResourceLocation.vpn[0]);
+        } else {
+          // Clear VPN icons when no valid vpnSites exist
+          geoResourceLocation.vpn = [];
+        }
       } else {
+        // Clear VPN icons when list is empty
         geoResourceLocation.vpn = [];
       }
     })
       .catch(function (error) {
-        console.log(error);
+        console.log("VPN API error:", error);
+        // Don't update icons on API error to preserve current state
       });
   }
 }
