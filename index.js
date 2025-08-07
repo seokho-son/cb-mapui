@@ -1334,6 +1334,907 @@ var createMciReqVmTmplt = {
   name: "",
 };
 
+// Final MCI Creation Confirmation with options
+function showFinalMciConfirmation(createMciReq, url, totalCost, totalNodeScale, costDetailsHtml, subGroupReqString, username, password) {
+  Swal.fire({
+    title: "Are you sure you want to create this MCI?",
+    width: 750,
+    html:
+      "<font size=4>" +
+      "<br><b><span style='color: black; font-size: larger;'>" + createMciReq.name + " </b> (" + totalNodeScale + " node(s))" + "</span><br>" +
+      "<hr>" +
+      costDetailsHtml +
+      "<hr>" +
+      subGroupReqString +
+      "<br><br><input type='checkbox' id='hold-checkbox'> Hold VM provisioning of the MCI" +
+      "<br><input type='checkbox' id='monitoring-checkbox'> Deploy a monitoring agent" +
+      "<br><input type='checkbox' id='postcommand-checkbox'> Add post-deployment commands",
+    showCancelButton: true,
+    confirmButtonText: "Confirm",
+    scrollbarPadding: false,
+    preConfirm: () => {
+      return {
+        monitoring: document.getElementById('monitoring-checkbox').checked,
+        hold: document.getElementById('hold-checkbox').checked,
+        addPostCommand: document.getElementById('postcommand-checkbox').checked
+      };
+    }
+  }).then((result) => {
+    if (result.isConfirmed) {
+      createMciReq.installMonAgent = "no";
+      if (result.value.monitoring) {
+        Swal.fire("Create MCI with a monitoring agent");
+        createMciReq.installMonAgent = "yes";
+      }
+      if (result.value.hold) {
+        Swal.fire("Create MCI with hold option. It will not be deployed immediately. Use Action:Continue when you are ready.");
+        url += "?option=hold";
+      }
+
+      if (result.value.addPostCommand) {
+        // Show postCommand input popup
+        Swal.fire({
+          title: "<font size=5><b>Add post-deployment commands</b></font>",
+          width: 900,
+          html: `
+            <div id="dynamicContainer" style="text-align: left;">
+              <p><font size=4><b>[Commands]</b></font></p>
+              <div id="cmdContainer" style="margin-bottom: 20px;">
+                <div id="cmdDiv1" class="cmdRow">
+                  Command 1: <input type="text" id="cmd1" style="width: 75%" value="${defaultRemoteCommand[0]}">
+                  <button onclick="document.getElementById('cmd1').value = ''">Clear</button>
+                </div>
+                <div id="cmdDiv2" class="cmdRow">
+                  Command 2: <input type="text" id="cmd2" style="width: 75%" value="${defaultRemoteCommand[1]}">
+                  <button onclick="document.getElementById('cmd2').value = ''">Clear</button>
+                </div>
+                <div id="cmdDiv3" class="cmdRow">
+                  Command 3: <input type="text" id="cmd3" style="width: 75%" value="${defaultRemoteCommand[2]}">
+                  <button onclick="document.getElementById('cmd3').value = ''">Clear</button>
+                </div>
+                <button id="addCmd" onclick="addCmd()" style="margin-left: 1px;"> + </button>
+              </div>
+
+              <p><font size=4><b>[Predefined Scripts]</b></font></p>
+              <div style="margin-bottom: 15px;">
+                <select id="predefinedScripts" style="width: 75%; padding: 5px;" onchange="loadPredefinedScript()">
+                  <option value="">-- Select a predefined script --</option>
+                  <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
+                  <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
+                  <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
+                  <option value="vLLM">[LLM vLLM] vLLM Server</option>
+                  <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
+                  <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
+                  <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
+                  <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
+                  <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
+                  <option value="WeaveScope">[Observability] Weave Scope</option>
+                  <option value="ELK">[Observability] ELK Stack</option>
+                  <option value="Jitsi">[Video Conference] Jitsi Meet</option>
+                  <option value="Xonotic">[Game:FPS] Xonotic Game Server</option>
+                  <option value="Westward">[Game:MMORPG] Westward Game</option>
+                  <option value="Nginx">[Web:Server] Nginx Web Server</option>
+                  <option value="Stress">[Web:Stress] Stress Test</option>
+                </select>
+                <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
+                  Select a predefined script to auto-fill the command fields
+                </div>
+              </div>        
+
+              <p><font size=4><b>[Label Selector]</b></font></p>
+              <div style="margin-bottom: 15px;">
+                <input type="text" id="labelSelector" style="width: 75%" placeholder="ex: role=worker,env=production">
+                <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
+                  ex: Optional: set targets by the label (ex: role=worker,env=production,sys.id=g1-2)
+                </div>
+              </div>
+              
+            </div>`,
+          showCancelButton: true,
+          confirmButtonText: "Confirm",
+          didOpen: () => {
+            window.addCmd = () => {
+              const cmdContainer = document.getElementById('cmdContainer');
+              const cmdCount = cmdContainer.children.length;
+              if (cmdCount >= 10) {
+                Swal.showValidationMessage('Maximum 10 commands allowed');
+                return;
+              }
+              const newCmdDiv = document.createElement('div');
+              newCmdDiv.id = `cmdDiv${cmdCount}`;
+              newCmdDiv.className = 'cmdRow';
+              newCmdDiv.innerHTML = `
+                Command ${cmdCount}: <input type="text" id="cmd${cmdCount}" style="width: 75%">
+                <button onclick="document.getElementById('cmd${cmdCount}').value = ''">Clear</button>
+              `;
+              cmdContainer.appendChild(newCmdDiv);
+            };
+
+            // Use predefined script dropdown to load default commands
+            const scriptSelect = document.getElementById('predefinedScripts');
+            if (scriptSelect) {
+              scriptSelect.removeEventListener('change', window.loadPredefinedScript);
+              scriptSelect.addEventListener('change', window.loadPredefinedScript);
+              if (scriptSelect.value) {
+                window.loadPredefinedScript();
+              }
+            }
+          },
+          preConfirm: () => {
+            const commands = [];
+            const cmdContainer = document.getElementById('cmdContainer');
+            for (let i = 1; i <= cmdContainer.children.length - 1; i++) {
+              const cmdInput = document.getElementById(`cmd${i}`);
+              if (cmdInput && cmdInput.value.trim()) {
+                commands.push(cmdInput.value.trim());
+              }
+            }
+            return commands;
+          },
+        }).then((cmdResult) => {
+          if (cmdResult.isConfirmed && cmdResult.value && cmdResult.value.length > 0) {
+            createMciReq.postCommand = {
+              command: cmdResult.value,
+              userName: "cb-user"
+            };
+            proceedWithMciCreation(createMciReq, url, username, password);
+          }
+          // User cancelled the postCommand dialog or no commands were entered
+        });
+      } else {
+        // No postCommand needed, proceed with MCI creation
+        proceedWithMciCreation(createMciReq, url, username, password);
+      }
+    }
+  });
+}
+
+// MCI Creation execution
+function proceedWithMciCreation(createMciReq, url, username, password) {
+  var jsonBody = JSON.stringify(createMciReq, undefined, 4);
+  messageTextArea.value = " Creating MCI ...";
+  var spinnerId = addSpinnerTask("Creating MCI: " + createMciReq.name);
+
+  var requestId = generateRandomRequestId("mci-" + createMciReq.name + "-", 10);
+  addRequestIdToSelect(requestId);
+
+  axios({
+    method: "post",
+    url: url,
+    headers: { "Content-Type": "application/json", "x-request-id": requestId },
+    data: jsonBody,
+    auth: {
+      username: `${username}`,
+      password: `${password}`,
+    },
+  })
+    .then((res) => {
+      console.log(res); // for debug
+
+      displayJsonData(res.data, typeInfo);
+      handleAxiosResponse(res);
+
+      updateMciList();
+
+      clearCircle("none");
+      messageTextArea.value = "Created " + createMciReq.name;
+    })
+    .catch(function (error) {
+      errorAlert("Failed to create MCI: " + createMciReq.name);
+      if (error.response) {
+        // status code is not 2xx
+        console.log(error.response.data);
+        console.log(error.response.status);
+        console.log(error.response.headers);
+        displayJsonData(error.response.data, typeError);
+      } else {
+        console.log("Error", error.message);
+      }
+      console.log(error.config);
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
+}
+
+// MCI Review function - checks configuration before creation
+function reviewMciConfiguration(createMciReq, hostname, port, username, password, namespace, finalUrl, totalCost, totalNodeScale, costDetailsHtml, subGroupReqString) {
+  var reviewUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mciDynamicReview`;
+  
+  // Show loading spinner for review
+  Swal.fire({
+    title: "Reviewing Configuration...",
+    html: "Please wait while we validate your MCI configuration",
+    allowOutsideClick: false,
+    didOpen: () => {
+      Swal.showLoading();
+    }
+  });
+
+  var jsonBody = JSON.stringify(createMciReq, undefined, 4);
+  var requestId = generateRandomRequestId("review-" + createMciReq.name + "-", 10);
+
+  // Call MCI Dynamic Review API
+  axios({
+    method: "post",
+    url: reviewUrl,
+    headers: { 
+      "Content-Type": "application/json", 
+      "x-request-id": requestId 
+    },
+    data: jsonBody,
+    auth: {
+      username: username,
+      password: password,
+    },
+  })
+  .then((res) => {
+    console.log("Review Response:", res); // for debug
+    
+    var reviewData = res.data;
+    var validationStatus = "success";
+    var validationDetails = "";
+    var warnings = [];
+    var errors = [];
+    var infos = [];
+    var vmDetailsList = [];
+    var resourceSummary = {
+      totalEstimatedTime: "N/A",
+      totalResources: 0,
+      providerBreakdown: {},
+      regionBreakdown: {},
+      specBreakdown: {}
+    };
+    
+    // Parse enhanced review response to extract comprehensive validation information
+    if (reviewData) {
+      // Extract MCI-level information
+      if (reviewData.mciName) infos.push(`MCI Name: ${reviewData.mciName}`);
+      if (reviewData.totalVmCount) infos.push(`Total VM Count: ${reviewData.totalVmCount}`);
+      if (reviewData.estimatedCost) infos.push(`Estimated Cost: ${reviewData.estimatedCost}`);
+      if (reviewData.overallStatus) {
+        infos.push(`Overall Status: ${reviewData.overallStatus}`);
+        if (reviewData.overallStatus.toLowerCase().includes("error")) {
+          errors.push(`MCI Status Error: ${reviewData.overallMessage || reviewData.overallStatus}`);
+          validationStatus = "error";
+        } else if (reviewData.overallStatus.toLowerCase().includes("warning")) {
+          warnings.push(`MCI Status Warning: ${reviewData.overallMessage || reviewData.overallStatus}`);
+        }
+      }
+      
+      if (reviewData.overallMessage) infos.push(`Message: ${reviewData.overallMessage}`);
+      if (reviewData.creationViable !== undefined) infos.push(`Creation Viable: ${reviewData.creationViable ? 'Yes' : 'No'}`);
+      if (reviewData.policyOnPartialFailure) infos.push(`Failure Policy: ${reviewData.policyOnPartialFailure}`);
+      if (reviewData.policyDescription) infos.push(`Policy Description: ${reviewData.policyDescription}`);
+      
+      // Extract ResourceSummary information
+      if (reviewData.resourceSummary) {
+        var rs = reviewData.resourceSummary;
+        if (rs.totalProviders) resourceSummary.totalProviders = rs.totalProviders;
+        if (rs.totalRegions) resourceSummary.totalRegions = rs.totalRegions;
+        if (rs.availableSpecs !== undefined) resourceSummary.availableSpecs = rs.availableSpecs;
+        if (rs.unavailableSpecs !== undefined) resourceSummary.unavailableSpecs = rs.unavailableSpecs;
+        if (rs.availableImages !== undefined) resourceSummary.availableImages = rs.availableImages;
+        if (rs.unavailableImages !== undefined) resourceSummary.unavailableImages = rs.unavailableImages;
+        
+        // Provider breakdown
+        if (rs.providerNames && Array.isArray(rs.providerNames)) {
+          rs.providerNames.forEach(provider => {
+            resourceSummary.providerBreakdown[provider] = (resourceSummary.providerBreakdown[provider] || 0) + 1;
+          });
+        }
+        
+        // Region breakdown  
+        if (rs.regionNames && Array.isArray(rs.regionNames)) {
+          rs.regionNames.forEach(region => {
+            resourceSummary.regionBreakdown[region] = (resourceSummary.regionBreakdown[region] || 0) + 1;
+          });
+        }
+        
+        // Spec breakdown
+        if (rs.uniqueSpecs && Array.isArray(rs.uniqueSpecs)) {
+          rs.uniqueSpecs.forEach(spec => {
+            resourceSummary.specBreakdown[spec] = (resourceSummary.specBreakdown[spec] || 0) + 1;
+          });
+        }
+      }
+      
+      // Parse VM review results in detail
+      if (reviewData.vmReviews && Array.isArray(reviewData.vmReviews)) {
+        resourceSummary.totalResources = reviewData.vmReviews.length;
+        
+        reviewData.vmReviews.forEach((vmReview, index) => {
+          var vmDetails = {
+            index: index + 1,
+            name: vmReview.vmName || `VM-${index + 1}`,
+            status: vmReview.status || "Unknown",
+            message: vmReview.message || "",
+            canCreate: vmReview.canCreate || false,
+            estimatedCost: vmReview.estimatedCost || "Unknown",
+            issues: [],
+            info: [],
+            validations: {}
+          };
+          
+          // VM basic information
+          if (vmReview.subGroupSize) vmDetails.info.push(`SubGroup Size: ${vmReview.subGroupSize}`);
+          if (vmReview.connectionName) vmDetails.info.push(`Connection: ${vmReview.connectionName}`);
+          if (vmReview.providerName) vmDetails.info.push(`Provider: ${vmReview.providerName}`);
+          if (vmReview.regionName) vmDetails.info.push(`Region: ${vmReview.regionName}`);
+          
+          // Spec validation details
+          if (vmReview.specValidation) {
+            var sv = vmReview.specValidation;
+            vmDetails.validations.spec = {
+              resourceId: sv.resourceId,
+              resourceName: sv.resourceName,
+              isAvailable: sv.isAvailable,
+              status: sv.status,
+              message: sv.message,
+              cspResourceId: sv.cspResourceId
+            };
+            
+            if (!sv.isAvailable) {
+              vmDetails.issues.push(`Spec Issue: ${sv.message || 'Spec not available'}`);
+            }
+          }
+          
+          // Image validation details
+          if (vmReview.imageValidation) {
+            var iv = vmReview.imageValidation;
+            vmDetails.validations.image = {
+              resourceId: iv.resourceId,
+              resourceName: iv.resourceName,
+              isAvailable: iv.isAvailable,
+              status: iv.status,
+              message: iv.message,
+              cspResourceId: iv.cspResourceId
+            };
+            
+            if (!iv.isAvailable) {
+              vmDetails.issues.push(`Image Issue: ${iv.message || 'Image not available'}`);
+            }
+          }
+          
+          // VM-level errors, warnings, and info
+          if (vmReview.errors && Array.isArray(vmReview.errors)) {
+            vmReview.errors.forEach(error => {
+              vmDetails.issues.push(`Error: ${error}`);
+              errors.push(`VM ${index + 1} (${vmDetails.name}): ${error}`);
+              validationStatus = "error";
+            });
+          }
+          
+          if (vmReview.warnings && Array.isArray(vmReview.warnings)) {
+            vmReview.warnings.forEach(warning => {
+              vmDetails.issues.push(`Warning: ${warning}`);
+              warnings.push(`VM ${index + 1} (${vmDetails.name}): ${warning}`);
+            });
+          }
+          
+          if (vmReview.info && Array.isArray(vmReview.info)) {
+            vmReview.info.forEach(info => {
+              vmDetails.info.push(info);
+            });
+          }
+          
+          vmDetailsList.push(vmDetails);
+        });
+      }
+      
+      // Extract recommendations
+      if (reviewData.recommendations && Array.isArray(reviewData.recommendations)) {
+        reviewData.recommendations.forEach(rec => {
+          if (rec.toLowerCase().includes('warning') || rec.toLowerCase().includes('caution')) {
+            warnings.push(`Recommendation: ${rec}`);
+          } else {
+            infos.push(`Recommendation: ${rec}`);
+          }
+        });
+      }
+      
+      // Check for any additional validation messages
+      if (reviewData.description && reviewData.description.includes("validation")) {
+        validationDetails = reviewData.description;
+      }
+    }
+
+    // Build validation summary HTML
+    var validationSummaryHtml = "";
+    
+    if (validationStatus === "success" && warnings.length === 0 && errors.length === 0) {
+      validationSummaryHtml = `
+        <div style="margin: 20px 0; padding: 15px; background-color: #d4edda; border: 1px solid #c3e6cb; border-radius: 5px;">
+          <h4 style="color: #155724; margin: 0 0 10px 0;">✅ Configuration Valid</h4>
+          <p style="color: #155724; margin: 0;">Your MCI configuration has been validated successfully. All resources can be provisioned as configured.</p>
+        </div>
+      `;
+    } else {
+      if (errors.length > 0) {
+        validationSummaryHtml += `
+          <div style="margin: 20px 0; padding: 15px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 5px;">
+            <h4 style="color: #721c24; margin: 0 0 10px 0;">❌ Configuration Errors</h4>
+            <ul style="color: #721c24; margin: 0; padding-left: 20px;">
+              ${errors.map(error => `<li>${error}</li>`).join('')}
+            </ul>
+          </div>
+        `;
+      }
+      
+      if (warnings.length > 0) {
+        validationSummaryHtml += `
+          <div style="margin: 20px 0; padding: 15px; background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px;">
+            <h4 style="color: #856404; margin: 0 0 10px 0;">⚠️ Configuration Warnings</h4>
+            <ul style="color: #856404; margin: 0; padding-left: 20px;">
+              ${warnings.map(warning => `<li>${warning}</li>`).join('')}
+            </ul>
+          </div>
+        `;
+      }
+    }
+
+    // Build comprehensive information sections with structured layout
+    var mciInfoHtml = "";
+    if (infos.length > 0) {
+      // Parse structured information from the review response
+      var structuredInfo = {
+        basic: [],
+        status: [],
+        policy: [],
+        recommendations: []
+      };
+      
+      infos.forEach(info => {
+        if (info.includes('MCI Name:') || info.includes('Total VM Count:') || info.includes('Estimated Cost:')) {
+          // Special handling for estimated cost
+          if (info.includes('Estimated Cost:')) {
+            const costValue = info.split(': ')[1];
+            if (costValue && (costValue.includes('unavailable') || costValue.includes('Cost estimation'))) {
+              // Parse cost unavailability messages
+              if (costValue.includes('unavailable for all')) {
+                const vmCount = costValue.match(/\d+/);
+                structuredInfo.basic.push(`Estimated Cost: Not available (${vmCount ? vmCount[0] : 'all'} VMs)`);
+              } else if (costValue.includes('unavailable')) {
+                structuredInfo.basic.push(`Estimated Cost: Not available`);
+              } else {
+                structuredInfo.basic.push(info);
+              }
+            } else {
+              structuredInfo.basic.push(info);
+            }
+          } else {
+            structuredInfo.basic.push(info);
+          }
+        } else if (info.includes('Overall Status:') || info.includes('Message:') || info.includes('Creation Viable:')) {
+          structuredInfo.status.push(info);
+        } else if (info.includes('Failure Policy:') || info.includes('Policy Description:')) {
+          structuredInfo.policy.push(info);
+        } else if (info.includes('Recommendation:')) {
+          structuredInfo.recommendations.push(info.replace('Recommendation: ', ''));
+        } else {
+          structuredInfo.basic.push(info);
+        }
+      });
+      
+      mciInfoHtml = `
+        <div style="margin: 15px 0; padding: 0; background-color: #e3f2fd; border: 1px solid #bbdefb; border-radius: 8px; overflow: hidden;">
+          <div style="padding: 12px; background: linear-gradient(135deg, #1976d2, #1565c0); color: white;">
+            <h5 style="margin: 0; font-size: 1.1em; font-weight: 600;">ℹ️ MCI Configuration Summary</h5>
+          </div>
+          
+          <div style="padding: 16px;">
+            ${structuredInfo.basic.length > 0 ? `
+              <div style="margin-bottom: 16px;">
+                <h6 style="margin: 0 0 8px 0; color: #1565c0; font-size: 0.95em; font-weight: 600; border-bottom: 1px solid #bbdefb; padding-bottom: 4px;">📋 Basic Information</h6>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px; margin-top: 8px;">
+                  ${structuredInfo.basic.map(info => {
+                    const [label, value] = info.split(': ');
+                    
+                    // Special styling for cost information
+                    let borderColor = '#2196f3';
+                    let valueStyle = 'color: #424242; font-size: 0.9em;';
+                    let costIcon = '';
+                    
+                    if (label === 'Estimated Cost') {
+                      if (value && (value.includes('Not available') || value.includes('unavailable'))) {
+                        borderColor = '#ff9800';
+                        valueStyle = 'color: #e65100; font-size: 0.9em; font-weight: 500;';
+                        costIcon = '⚠️ ';
+                      } else if (value && value.startsWith('$')) {
+                        borderColor = '#4caf50';
+                        valueStyle = 'color: #2e7d32; font-size: 0.9em; font-weight: 600;';
+                        costIcon = '💰 ';
+                      } else {
+                        borderColor = '#9e9e9e';
+                        valueStyle = 'color: #757575; font-size: 0.9em;';
+                        costIcon = '❓ ';
+                      }
+                    }
+                    
+                    return `
+                      <div style="display: flex; align-items: center; padding: 6px 10px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid ${borderColor};">
+                        <span style="font-weight: 600; color: #1565c0; margin-right: 8px; min-width: 80px;">${label}:</span>
+                        <span style="${valueStyle}">${costIcon}${value || 'N/A'}</span>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            ` : ''}
+            
+            ${structuredInfo.status.length > 0 ? `
+              <div style="margin-bottom: 16px;">
+                <h6 style="margin: 0 0 8px 0; color: #1565c0; font-size: 0.95em; font-weight: 600; border-bottom: 1px solid #bbdefb; padding-bottom: 4px;">📊 Status Information</h6>
+                <div style="margin-top: 8px;">
+                  ${structuredInfo.status.map(info => {
+                    const [label, value] = info.split(': ');
+                    let statusColor = '#424242';
+                    let statusIcon = '📝';
+                    
+                    if (label === 'Overall Status') {
+                      if (value.toLowerCase().includes('ready')) {
+                        statusColor = '#4caf50';
+                        statusIcon = '✅';
+                      } else if (value.toLowerCase().includes('warning')) {
+                        statusColor = '#ff9800';
+                        statusIcon = '⚠️';
+                      } else if (value.toLowerCase().includes('error')) {
+                        statusColor = '#f44336';
+                        statusIcon = '❌';
+                      }
+                    } else if (label === 'Creation Viable') {
+                      statusColor = value === 'Yes' ? '#4caf50' : '#f44336';
+                      statusIcon = value === 'Yes' ? '✅' : '❌';
+                    }
+                    
+                    return `
+                      <div style="margin: 6px 0; padding: 8px 12px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid ${statusColor};">
+                        <div style="display: flex; align-items: flex-start;">
+                          <span style="margin-right: 8px; font-size: 1.1em;">${statusIcon}</span>
+                          <div style="flex: 1;">
+                            <span style="font-weight: 600; color: ${statusColor}; margin-right: 8px;">${label}:</span>
+                            <span style="color: #424242; font-size: 0.9em;">${value || 'N/A'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            ` : ''}
+            
+            ${structuredInfo.policy.length > 0 ? `
+              <div style="margin-bottom: 16px;">
+                <h6 style="margin: 0 0 8px 0; color: #1565c0; font-size: 0.95em; font-weight: 600; border-bottom: 1px solid #bbdefb; padding-bottom: 4px;">⚙️ Failure Handling Policy</h6>
+                <div style="margin-top: 8px;">
+                  ${structuredInfo.policy.map(info => {
+                    const [label, value] = info.split(': ');
+                    const isDescription = label === 'Policy Description';
+                    
+                    return `
+                      <div style="margin: 6px 0; padding: 10px 12px; background: ${isDescription ? '#fff3e0' : '#f3e5f5'}; border-radius: 4px; border-left: 3px solid ${isDescription ? '#ff9800' : '#9c27b0'};">
+                        <div style="display: flex; align-items: flex-start;">
+                          <span style="margin-right: 8px; font-size: 1.1em;">${isDescription ? '📖' : '🔧'}</span>
+                          <div style="flex: 1;">
+                            <div style="font-weight: 600; color: ${isDescription ? '#e65100' : '#7b1fa2'}; margin-bottom: ${isDescription ? '4px' : '0'};">${label}:</div>
+                            <div style="color: #424242; font-size: 0.9em; line-height: 1.4;">${value || 'N/A'}</div>
+                          </div>
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            ` : ''}
+            
+            ${structuredInfo.recommendations.length > 0 ? `
+              <div style="margin-bottom: 8px;">
+                <h6 style="margin: 0 0 8px 0; color: #1565c0; font-size: 0.95em; font-weight: 600; border-bottom: 1px solid #bbdefb; padding-bottom: 4px;">💡 Recommendations</h6>
+                <div style="margin-top: 8px;">
+                  ${structuredInfo.recommendations.map(rec => {
+                    let recColor = '#2196f3';
+                    let recIcon = '💡';
+                    let recBg = '#e3f2fd';
+                    
+                    if (rec.toLowerCase().includes('warning') || rec.toLowerCase().includes('caution')) {
+                      recColor = '#ff9800';
+                      recIcon = '⚠️';
+                      recBg = '#fff3e0';
+                    } else if (rec.toLowerCase().includes('cost') || rec.toLowerCase().includes('estimation unavailable')) {
+                      recColor = '#ff9800';
+                      recIcon = '💰';
+                      recBg = '#fff3e0';
+                    } else if (rec.toLowerCase().includes('failure policy')) {
+                      recColor = '#9c27b0';
+                      recIcon = '⚙️';
+                      recBg = '#f3e5f5';
+                    }
+                    
+                    return `
+                      <div style="margin: 6px 0; padding: 8px 12px; background: ${recBg}; border-radius: 4px; border-left: 3px solid ${recColor};">
+                        <div style="display: flex; align-items: flex-start;">
+                          <span style="margin-right: 8px; font-size: 1.1em;">${recIcon}</span>
+                          <span style="color: #424242; font-size: 0.9em; line-height: 1.4;">${rec}</span>
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    // Build resource summary HTML
+    var resourceSummaryHtml = `
+      <div style="margin: 15px 0;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+          <tr style="background-color: #f8f9fa;">
+            <th style="border: 1px solid #dee2e6; padding: 8px; text-align: left;">Resource Type</th>
+            <th style="border: 1px solid #dee2e6; padding: 8px; text-align: left;">Count/Details</th>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #dee2e6; padding: 8px;">Total VMs</td>
+            <td style="border: 1px solid #dee2e6; padding: 8px;"><strong>${resourceSummary.totalResources}</strong></td>
+          </tr>
+          ${Object.keys(resourceSummary.providerBreakdown).length > 0 ? `
+          <tr>
+            <td style="border: 1px solid #dee2e6; padding: 8px;">Cloud Providers</td>
+            <td style="border: 1px solid #dee2e6; padding: 8px;">
+              ${Object.entries(resourceSummary.providerBreakdown).map(([provider, count]) => 
+                `<span style="margin-right: 10px;"><strong>${provider}:</strong> ${count}</span>`
+              ).join('')}
+            </td>
+          </tr>` : ''}
+          ${Object.keys(resourceSummary.regionBreakdown).length > 0 ? `
+          <tr>
+            <td style="border: 1px solid #dee2e6; padding: 8px;">Regions</td>
+            <td style="border: 1px solid #dee2e6; padding: 8px;">
+              ${Object.entries(resourceSummary.regionBreakdown).map(([region, count]) => 
+                `<span style="margin-right: 10px;"><strong>${region}:</strong> ${count}</span>`
+              ).join('')}
+            </td>
+          </tr>` : ''}
+        </table>
+      </div>
+    `;
+
+    // Build detailed VM information HTML with enhanced validation details
+    var vmDetailsHtml = "";
+    if (vmDetailsList.length > 0) {
+      vmDetailsHtml = vmDetailsList.map(vm => {
+        var statusIcon = vm.canCreate ? '✅' : '❌';
+        var statusColor = vm.canCreate ? '#28a745' : '#dc3545';
+        var bgColor = vm.canCreate ? '#f8fff8' : '#fff8f8';
+        
+        return `
+        <div style="margin: 10px 0; padding: 12px; border: 1px solid #dee2e6; border-radius: 6px; background-color: ${bgColor};">
+          <div style="display: flex; align-items: center; margin-bottom: 10px;">
+            <span style="font-size: 18px; margin-right: 8px;">${statusIcon}</span>
+            <h6 style="margin: 0; color: ${statusColor};">🖥️ ${vm.name} (VM #${vm.index})</h6>
+            ${vm.estimatedCost !== 'Unknown' && vm.estimatedCost !== 'Cost estimation unavailable' ? 
+              `<span style="margin-left: auto; padding: 3px 8px; background: #4caf50; color: white; border-radius: 12px; font-size: 12px;">💰 ${vm.estimatedCost}</span>` : 
+              `<span style="margin-left: auto; padding: 3px 8px; background: #ff9800; color: white; border-radius: 12px; font-size: 12px;">⚠️ Cost N/A</span>`
+            }
+          </div>
+          
+          <div style="margin-bottom: 8px;">
+            <strong>Status:</strong> 
+            <span style="color: ${statusColor}; font-weight: bold;">
+              ${vm.status}
+            </span>
+            ${vm.message ? `<span style="margin-left: 10px; color: #6c757d; font-size: 0.9em;">(${vm.message})</span>` : ''}
+          </div>
+          
+          ${vm.validations && (vm.validations.spec || vm.validations.image) ? `
+          <div style="margin: 10px 0; padding: 8px; background: #f1f3f4; border-radius: 4px; border-left: 3px solid #007bff;">
+            <strong style="color: #495057; font-size: 0.95em;">🔍 Resource Validation</strong>
+            ${vm.validations.spec ? `
+            <div style="margin: 6px 0; padding: 6px; background: ${vm.validations.spec.isAvailable ? '#e8f5e8' : '#ffe8e8'}; border-radius: 4px;">
+              <div style="font-size: 0.9em;"><strong>🖥️ Spec:</strong> ${vm.validations.spec.resourceId || 'N/A'}</div>
+              <div style="font-size: 0.85em; color: #6c757d;">
+                Status: ${vm.validations.spec.status || 'Unknown'} | 
+                Available: ${vm.validations.spec.isAvailable ? 'Yes' : 'No'}
+                ${vm.validations.spec.message ? `<br>📝 ${vm.validations.spec.message}` : ''}
+              </div>
+            </div>` : ''}
+            ${vm.validations.image ? `
+            <div style="margin: 6px 0; padding: 6px; background: ${vm.validations.image.isAvailable ? '#e8f5e8' : '#ffe8e8'}; border-radius: 4px;">
+              <div style="font-size: 0.9em;"><strong>💿 Image:</strong> ${vm.validations.image.resourceId || 'N/A'}</div>
+              <div style="font-size: 0.85em; color: #6c757d;">
+                Status: ${vm.validations.image.status || 'Unknown'} | 
+                Available: ${vm.validations.image.isAvailable ? 'Yes' : 'No'}
+                ${vm.validations.image.message ? `<br>📝 ${vm.validations.image.message}` : ''}
+              </div>
+            </div>` : ''}
+          </div>` : ''}
+          
+          ${vm.issues.length > 0 ? `
+          <div style="margin: 10px 0; padding: 8px; background: #ffe6e6; border-radius: 4px; border-left: 3px solid #dc3545;">
+            <strong style="color: #dc3545; font-size: 0.95em;">⚠️ Issues Found</strong>
+            <ul style="margin: 5px 0; padding-left: 20px; color: #dc3545; font-size: 0.85em;">
+              ${vm.issues.map(issue => `<li>${issue}</li>`).join('')}
+            </ul>
+          </div>` : ''}
+          
+          ${vm.info.length > 0 ? `
+          <details style="margin-top: 10px;">
+            <summary style="cursor: pointer; font-size: 0.9em; color: #6c757d; font-weight: bold;">📋 View Additional Details</summary>
+            <div style="margin: 8px 0; padding: 8px; background: #f8f9fa; border-radius: 4px;">
+              <ul style="margin: 0; padding-left: 20px; font-size: 0.85em; color: #6c757d;">
+                ${vm.info.map(info => `<li style="margin: 2px 0;">${info}</li>`).join('')}
+              </ul>
+            </div>
+          </details>` : ''}
+        </div>`;
+      }).join('');
+    }
+    
+    // Create enhanced resource summary HTML
+    var resourceSummaryHtml = "";
+    if (resourceSummary && (resourceSummary.totalProviders || resourceSummary.totalRegions || Object.keys(resourceSummary.providerBreakdown).length > 0)) {
+      resourceSummaryHtml = `
+        <div style="margin: 12px 0; padding: 12px; border: 1px solid #dee2e6; border-radius: 6px; background: #f8f9fa;">
+          <strong style="color: #495057; font-size: 1em;">📊 Resource Summary</strong>
+          <div style="margin: 8px 0; font-size: 0.9em; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;">
+            ${resourceSummary.totalProviders ? `<div>🌐 Providers: <span style="font-weight: bold; color: #007bff;">${resourceSummary.totalProviders}</span></div>` : ''}
+            ${resourceSummary.totalRegions ? `<div>🗺️ Regions: <span style="font-weight: bold; color: #007bff;">${resourceSummary.totalRegions}</span></div>` : ''}
+            ${resourceSummary.availableSpecs !== undefined ? `<div>✅ Available Specs: <span style="font-weight: bold; color: #28a745;">${resourceSummary.availableSpecs}</span></div>` : ''}
+            ${resourceSummary.unavailableSpecs !== undefined ? `<div>❌ Unavailable Specs: <span style="font-weight: bold; color: #dc3545;">${resourceSummary.unavailableSpecs}</span></div>` : ''}
+            ${resourceSummary.availableImages !== undefined ? `<div>✅ Available Images: <span style="font-weight: bold; color: #28a745;">${resourceSummary.availableImages}</span></div>` : ''}
+            ${resourceSummary.unavailableImages !== undefined ? `<div>❌ Unavailable Images: <span style="font-weight: bold; color: #dc3545;">${resourceSummary.unavailableImages}</span></div>` : ''}
+          </div>
+          
+          ${Object.keys(resourceSummary.providerBreakdown).length > 0 ? `
+            <div style="margin: 8px 0;">
+              <strong style="font-size: 0.9em; color: #495057;">Cloud Provider Distribution:</strong>
+              <div style="margin-top: 4px;">
+                ${Object.entries(resourceSummary.providerBreakdown).map(([provider, count]) => 
+                  `<span style="display: inline-block; margin: 2px 4px; padding: 3px 8px; background: #e7f3ff; border: 1px solid #007bff; border-radius: 12px; font-size: 0.85em; color: #007bff;">${provider}: ${count}</span>`
+                ).join('')}
+              </div>
+            </div>
+          ` : ''}
+          
+          ${Object.keys(resourceSummary.regionBreakdown).length > 0 ? `
+            <div style="margin: 8px 0;">
+              <strong style="font-size: 0.9em; color: #495057;">Region Distribution:</strong>
+              <div style="margin-top: 4px;">
+                ${Object.entries(resourceSummary.regionBreakdown).map(([region, count]) => 
+                  `<span style="display: inline-block; margin: 2px 4px; padding: 3px 8px; background: #e8f5e8; border: 1px solid #28a745; border-radius: 12px; font-size: 0.85em; color: #28a745;">${region}: ${count}</span>`
+                ).join('')}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    // Show review results
+    Swal.fire({
+      title: "MCI Configuration Review Results",
+      width: 1000,
+      html: `
+        ${validationSummaryHtml}
+        ${mciInfoHtml}
+        <div style="text-align: left;">
+          <details open>
+            <summary style="font-weight: bold; font-size: 1.1em; margin: 10px 0; cursor: pointer;">📋 Configuration Summary</summary>
+            <div style="margin-left: 20px;">
+              <p><strong>MCI Name:</strong> ${createMciReq.name}</p>
+              <p><strong>Total Nodes:</strong> ${totalNodeScale}</p>
+              <p><strong>Estimated Cost:</strong> $${totalCost.toFixed(4)}/hour</p>
+              ${resourceSummaryHtml}
+            </div>
+          </details>
+          
+          <details>
+            <summary style="font-weight: bold; font-size: 1.1em; margin: 10px 0; cursor: pointer;">�️ VM Status & Details</summary>
+            <div style="margin-left: 20px;">
+              ${vmDetailsHtml.length > 0 ? vmDetailsHtml : '<p style="color: #6c757d; font-style: italic;">No VM details available</p>'}
+            </div>
+          </details>
+          
+          <details>
+            <summary style="font-weight: bold; font-size: 1.1em; margin: 10px 0; cursor: pointer;">💰 Cost Breakdown</summary>
+            <div style="margin-left: 20px;">
+              ${costDetailsHtml}
+            </div>
+          </details>
+          
+          <details>
+            <summary style="font-weight: bold; font-size: 1.1em; margin: 10px 0; cursor: pointer;">⚙️ VM Configurations</summary>
+            <div style="margin-left: 20px;">
+              ${subGroupReqString}
+            </div>
+          </details>
+          
+          <details>
+            <summary style="font-weight: bold; font-size: 1.1em; margin: 10px 0; cursor: pointer;">🔍 Raw Review Response</summary>
+            <div style="margin-left: 20px;">
+              <div style="margin-bottom: 10px;">
+                <button onclick="copyToClipboard('${JSON.stringify(reviewData).replace(/'/g, "\\'")}'); alert('Review data copied to clipboard!');" 
+                        style="padding: 5px 10px; background-color: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.8em;">
+                  📋 Copy to Clipboard
+                </button>
+              </div>
+              <pre style="background-color: #f8f9fa; padding: 10px; border-radius: 5px; overflow: auto; max-height: 300px; font-size: 0.8em; border: 1px solid #dee2e6;">${JSON.stringify(reviewData, null, 2)}</pre>
+            </div>
+          </details>
+        </div>
+        
+        <script>
+          function copyToClipboard(text) {
+            try {
+              navigator.clipboard.writeText(text);
+            } catch (err) {
+              // Fallback for older browsers
+              const textArea = document.createElement('textarea');
+              textArea.value = text;
+              document.body.appendChild(textArea);
+              textArea.select();
+              document.execCommand('copy');
+              document.body.removeChild(textArea);
+            }
+          }
+        </script>
+      `,
+      showCancelButton: true,
+      confirmButtonText: validationStatus === "error" ? "Review Configuration" : "Proceed to Create MCI",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: validationStatus === "error" ? "#dc3545" : "#28a745",
+      scrollbarPadding: false,
+    }).then((result) => {
+      if (result.isConfirmed) {
+        if (validationStatus === "error") {
+          // If there are errors, don't proceed with creation
+          Swal.fire({
+            icon: "error",
+            title: "Cannot Proceed",
+            text: "Please fix the configuration errors before creating the MCI.",
+          });
+        } else {
+          // Proceed to final confirmation and creation
+          showFinalMciConfirmation(createMciReq, finalUrl, totalCost, totalNodeScale, costDetailsHtml, subGroupReqString, username, password);
+        }
+      }
+    });
+  })
+  .catch(function (error) {
+    console.error("Review failed:", error);
+    
+    var errorMessage = "Unknown error occurred during review";
+    if (error.response && error.response.data) {
+      errorMessage = error.response.data.message || JSON.stringify(error.response.data);
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    Swal.fire({
+      icon: "error",
+      title: "Review Failed",
+      html: `
+        <p>Unable to review MCI configuration:</p>
+        <div style="background-color: #f8f9fa; padding: 10px; border-radius: 5px; margin: 10px 0;">
+          <code>${errorMessage}</code>
+        </div>
+        <p>Would you like to proceed without review?</p>
+      `,
+      showCancelButton: true,
+      confirmButtonText: "Proceed Anyway",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#ffc107",
+    }).then((result) => {
+      if (result.isConfirmed) {
+        // Proceed to final confirmation even without review
+        showFinalMciConfirmation(createMciReq, finalUrl, totalCost, totalNodeScale, costDetailsHtml, subGroupReqString, username, password);
+      }
+    });
+  });
+}
+
 function createMci() {
   if (vmReqeustFromSpecList.length != 0) {
     var hostname = hostnameElement.value;
@@ -1401,9 +2302,7 @@ function createMci() {
       subGroupReqString = subGroupReqString + html;
     }
 
-
     var costDetailsHtml =
-
       "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
       "<tr><th><b>Usage Period</b></th><td><b>Estimated Cost</b></td></tr>" +
       "<tr><th>Hourly</th><td><span style='color: red; '><b>$" + totalCost.toFixed(4) + "</span></td></tr>" +
@@ -1411,9 +2310,7 @@ function createMci() {
       "<tr><th>Monthly</th><td><span style='color: red; '><b>$" + (totalCost * 24 * 31).toFixed(4) + "</span></td></tr>" +
       "</table> <br>(Do not rely on this estimated cost. It is just an estimation using spec price.)<br>";
 
-
-    var hasUserConfirmed = false;
-
+    // Step 1: MCI Name Input
     Swal.fire({
       title: "Enter the name of the MCI you wish to create",
       input: "text",
@@ -1422,216 +2319,13 @@ function createMci() {
       },
       inputValue: createMciReq.name,
       showCancelButton: true,
-      confirmButtonText: "Confirm",
+      confirmButtonText: "Next: Review Configuration",
     }).then((result) => {
       if (result.value) {
         createMciReq.name = result.value;
-
-        Swal.fire({
-          title: "Are you sure you want to create this MCI?",
-          width: 750,
-          html:
-            "<font size=4>" +
-            "<br><b><span style='color: black; font-size: larger;'>" + createMciReq.name + " </b> (" + totalNodeScale + " node(s))" + "</span><br>" +
-            "<hr>" +
-            costDetailsHtml +
-            "<hr>" +
-            subGroupReqString +
-            "<br><br><input type='checkbox' id='hold-checkbox'> Hold VM provisioning of the MCI" +
-            "<br><input type='checkbox' id='monitoring-checkbox'> Deploy a monitoring agent" +
-            "<br><input type='checkbox' id='postcommand-checkbox'> Add post-deployment commands",
-          showCancelButton: true,
-          confirmButtonText: "Confirm",
-          scrollbarPadding: false,
-
-          preConfirm: () => {
-            return {
-              monitoring: document.getElementById('monitoring-checkbox').checked,
-              hold: document.getElementById('hold-checkbox').checked,
-              addPostCommand: document.getElementById('postcommand-checkbox').checked
-            };
-          }
-
-
-        }).then((result) => {
-          if (result.isConfirmed) {
-            createMciReq.installMonAgent = "no";
-            if (result.value.monitoring) {
-              Swal.fire("Create MCI with a monitoring agent");
-              createMciReq.installMonAgent = "yes";
-            }
-            if (result.value.hold) {
-              Swal.fire("Create MCI with hold option. It will not be deployed immediately. Use Action:Continue when you are ready.");
-              url += "?option=hold";
-            }
-
-            if (result.value.addPostCommand) {
-              // Show postCommand input popup
-              Swal.fire({
-                title: "<font size=5><b>Add post-deployment commands</b></font>",
-                width: 900,
-                html: `
-                  <div id="dynamicContainer" style="text-align: left;">
-                    <p><font size=4><b>[Commands]</b></font></p>
-                    <div id="cmdContainer" style="margin-bottom: 20px;">
-                      <div id="cmdDiv1" class="cmdRow">
-                        Command 1: <input type="text" id="cmd1" style="width: 75%" value="${defaultRemoteCommand[0]}">
-                        <button onclick="document.getElementById('cmd1').value = ''">Clear</button>
-                      </div>
-                      <div id="cmdDiv2" class="cmdRow">
-                        Command 2: <input type="text" id="cmd2" style="width: 75%" value="${defaultRemoteCommand[1]}">
-                        <button onclick="document.getElementById('cmd2').value = ''">Clear</button>
-                      </div>
-                      <div id="cmdDiv3" class="cmdRow">
-                        Command 3: <input type="text" id="cmd3" style="width: 75%" value="${defaultRemoteCommand[2]}">
-                        <button onclick="document.getElementById('cmd3').value = ''">Clear</button>
-                      </div>
-                      <button id="addCmd" onclick="addCmd()" style="margin-left: 1px;"> + </button>
-                    </div>
-
-                    <p><font size=4><b>[Predefined Scripts]</b></font></p>
-                    <div style="margin-bottom: 15px;">
-                      <select id="predefinedScripts" style="width: 75%; padding: 5px;" onchange="loadPredefinedScript()">
-                        <option value="">-- Select a predefined script --</option>
-            <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
-            <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
-            <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
-            <option value="vLLM">[LLM vLLM] vLLM Server</option>
-            <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
-            <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
-            <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
-            <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
-            <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
-            <option value="WeaveScope">[Observability] Weave Scope</option>
-            <option value="ELK">[Observability] ELK Stack</option>
-            <option value="Jitsi">[Video Conference] Jitsi Meet</option>
-            <option value="Xonotic">[Game:FPS] Xonotic Game Server</option>
-            <option value="Westward">[Game:MMORPG] Westward Game</option>
-            <option value="Nginx">[Web:Server] Nginx Web Server</option>
-            <option value="Stress">[Web:Stress] Stress Test</option>
-                      </select>
-                      <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
-                        Select a predefined script to auto-fill the command fields
-                      </div>
-                    </div>        
-
-                    <p><font size=4><b>[Label Selector]</b></font></p>
-                    <div style="margin-bottom: 15px;">
-                      <input type="text" id="labelSelector" style="width: 75%" placeholder="ex: role=worker,env=production">
-                      <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
-                        ex: Optional: set targets by the label (ex: role=worker,env=production,sys.id=g1-2)
-                      </div>
-                    </div>
-                    
-                  </div>`,
-                showCancelButton: true,
-                confirmButtonText: "Confirm",
-                didOpen: () => {
-                  window.addCmd = () => {
-                    const cmdContainer = document.getElementById('cmdContainer');
-                    const cmdCount = cmdContainer.children.length;
-                    if (cmdCount >= 10) {
-                      Swal.showValidationMessage('Maximum 10 commands allowed');
-                      return;
-                    }
-                    const newCmdDiv = document.createElement('div');
-                    newCmdDiv.id = `cmdDiv${cmdCount}`;
-                    newCmdDiv.className = 'cmdRow';
-                    newCmdDiv.innerHTML = `
-                      Command ${cmdCount}: <input type="text" id="cmd${cmdCount}" style="width: 75%">
-                      <button onclick="document.getElementById('cmd${cmdCount}').value = ''">Clear</button>
-                    `;
-                    cmdContainer.appendChild(newCmdDiv);
-                  };
-
-                  // Use predefined script dropdown to load default commands
-                  const scriptSelect = document.getElementById('predefinedScripts');
-                  if (scriptSelect) {
-                    scriptSelect.removeEventListener('change', window.loadPredefinedScript);
-                    scriptSelect.addEventListener('change', window.loadPredefinedScript);
-                    if (scriptSelect.value) {
-                      window.loadPredefinedScript();
-                    }
-                  }
-
-                },
-                preConfirm: () => {
-                  const commands = [];
-                  const cmdContainer = document.getElementById('cmdContainer');
-                  for (let i = 1; i <= cmdContainer.children.length - 1; i++) {
-                    const cmdInput = document.getElementById(`cmd${i}`);
-                    if (cmdInput && cmdInput.value.trim()) {
-                      commands.push(cmdInput.value.trim());
-                    }
-                  }
-                  return commands;
-                },
-              }).then((cmdResult) => {
-                if (cmdResult.isConfirmed && cmdResult.value && cmdResult.value.length > 0) {
-                  createMciReq.postCommand = {
-                    command: cmdResult.value,
-                    userName: "cb-user"
-                  };
-                  proceedWithMciCreation(createMciReq, url, username, password);
-                }
-                // User cancelled the postCommand dialog or no commands were entered
-              });
-            } else {
-              // No postCommand needed, proceed with MCI creation
-              proceedWithMciCreation(createMciReq, url, username, password);
-            }
-
-            // Extracted the MCI creation process into a function to avoid code duplication
-            function proceedWithMciCreation(createMciReq, url, username, password) {
-              var jsonBody = JSON.stringify(createMciReq, undefined, 4);
-              messageTextArea.value = " Creating MCI ...";
-              var spinnerId = addSpinnerTask(
-                "Creating MCI: " + createMciReq.name
-              );
-
-              var requestId = generateRandomRequestId("mci-" + createMciReq.name + "-", 10);
-              addRequestIdToSelect(requestId);
-
-              axios({
-                method: "post",
-                url: url,
-                headers: { "Content-Type": "application/json", "x-request-id": requestId },
-                data: jsonBody,
-                auth: {
-                  username: `${username}`,
-                  password: `${password}`,
-                },
-              })
-                .then((res) => {
-                  console.log(res); // for debug
-
-                  displayJsonData(res.data, typeInfo);
-                  handleAxiosResponse(res);
-
-                  updateMciList();
-
-                  clearCircle("none");
-                  messageTextArea.value = "Created " + createMciReq.name;
-                })
-                .catch(function (error) {
-                  errorAlert("Failed to create MCI: " + createMciReq.name);
-                  if (error.response) {
-                    // status code is not 2xx
-                    console.log(error.response.data);
-                    console.log(error.response.status);
-                    console.log(error.response.headers);
-                    displayJsonData(error.response.data, typeError);
-                  } else {
-                    console.log("Error", error.message);
-                  }
-                  console.log(error.config);
-                })
-                .finally(function () {
-                  removeSpinnerTask(spinnerId);
-                });
-            }
-          }
-        });
+        
+        // Step 2: Start MCI Review process
+        reviewMciConfiguration(createMciReq, hostname, port, username, password, namespace, url, totalCost, totalNodeScale, costDetailsHtml, subGroupReqString);
       }
     });
   } else {
