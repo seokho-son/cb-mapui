@@ -1588,10 +1588,25 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
     
     // Parse enhanced review response to extract comprehensive validation information
     if (reviewData) {
-      // Extract MCI-level information
+      // Extract MCI-level information (prioritize backend-calculated values)
       if (reviewData.mciName) infos.push(`MCI Name: ${reviewData.mciName}`);
-      if (reviewData.totalVmCount) infos.push(`Total VM Count: ${reviewData.totalVmCount}`);
-      if (reviewData.estimatedCost) infos.push(`Estimated Cost: ${reviewData.estimatedCost}`);
+      // Use backend-calculated totalVmCount if available, fallback to frontend calculation
+      if (reviewData.totalVmCount) {
+        infos.push(`Total VM Count: ${reviewData.totalVmCount}`);
+        // Update totalNodeScale with backend value if available
+        totalNodeScale = reviewData.totalVmCount;
+      } else {
+        infos.push(`Total VM Count: ${totalNodeScale} (frontend calculated)`);
+      }
+      // Use backend-calculated estimatedCost if available
+      if (reviewData.estimatedCost) {
+        infos.push(`Estimated Cost: ${reviewData.estimatedCost}`);
+        // Parse and update totalCost with backend value if numeric
+        var backendCostMatch = String(reviewData.estimatedCost).match(/\$?([\d.]+)/);
+        if (backendCostMatch) {
+          totalCost = parseFloat(backendCostMatch[1]);
+        }
+      }
       if (reviewData.overallStatus) {
         infos.push(`Overall Status: ${reviewData.overallStatus}`);
         if (reviewData.overallStatus.toLowerCase().includes("error")) {
@@ -1639,14 +1654,19 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
         }
       }
       
-      // Parse VM review results in detail
+      // Parse VM review results in detail and group by SubGroup
       if (reviewData.vmReviews && Array.isArray(reviewData.vmReviews)) {
         resourceSummary.totalResources = reviewData.vmReviews.length;
+        
+        // Group VMs by SubGroup name for better organization
+        var subGroupVMs = {};
         
         reviewData.vmReviews.forEach((vmReview, index) => {
           var vmDetails = {
             index: index + 1,
             name: vmReview.vmName || `VM-${index + 1}`,
+            subGroupName: vmReview.subGroupName || vmReview.vmName || `VM-${index + 1}`,
+            subGroupSize: vmReview.subGroupSize || "1",
             status: vmReview.status || "Unknown",
             message: vmReview.message || "",
             canCreate: vmReview.canCreate || false,
@@ -1656,11 +1676,24 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             validations: {}
           };
           
-          // VM basic information
-          if (vmReview.subGroupSize) vmDetails.info.push(`SubGroup Size: ${vmReview.subGroupSize}`);
+          // VM basic information with enhanced SubGroup details
+          if (vmReview.subGroupSize) {
+            var actualVMs = parseInt(vmReview.subGroupSize) || 1;
+            vmDetails.info.push(`SubGroup Size: ${vmReview.subGroupSize} VM${actualVMs > 1 ? 's' : ''}`);
+            if (actualVMs > 1) {
+              vmDetails.info.push(`Total VMs in SubGroup: ${actualVMs} instances`);
+            }
+          }
           if (vmReview.connectionName) vmDetails.info.push(`Connection: ${vmReview.connectionName}`);
           if (vmReview.providerName) vmDetails.info.push(`Provider: ${vmReview.providerName}`);
           if (vmReview.regionName) vmDetails.info.push(`Region: ${vmReview.regionName}`);
+          
+          // Group VMs by SubGroup name
+          var groupKey = vmDetails.subGroupName;
+          if (!subGroupVMs[groupKey]) {
+            subGroupVMs[groupKey] = [];
+          }
+          subGroupVMs[groupKey].push(vmDetails);
           
           // Spec validation details
           if (vmReview.specValidation) {
@@ -1718,7 +1751,52 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             });
           }
           
-          vmDetailsList.push(vmDetails);
+          // Don't add individual VMs to vmDetailsList anymore, we'll use subGroupVMs
+        });
+        
+        // Convert subGroupVMs to organized vmDetailsList
+        Object.keys(subGroupVMs).forEach(groupName => {
+          var groupVMs = subGroupVMs[groupName];
+          // Add SubGroup as a single entry with consolidated information
+          if (groupVMs.length > 0) {
+            var representativeVM = groupVMs[0];
+            var subGroupSize = parseInt(representativeVM.subGroupSize) || 1;
+            
+            // Find corresponding VM configuration from createMciReq for additional spec details
+            var vmConfig = null;
+            if (createMciReq && createMciReq.vm) {
+              vmConfig = createMciReq.vm.find(vm => vm.name === groupName);
+            }
+            
+            var groupDetails = {
+              index: representativeVM.index,
+              name: groupName,
+              isSubGroup: true,
+              subGroupSize: subGroupSize,
+              status: representativeVM.status,
+              message: representativeVM.message,
+              canCreate: representativeVM.canCreate,
+              estimatedCost: representativeVM.estimatedCost,
+              issues: representativeVM.issues,
+              info: representativeVM.info,
+              validations: representativeVM.validations,
+              vmInstances: groupVMs.length,
+              // Add VM configuration details
+              vmConfig: vmConfig
+            };
+            
+            // Calculate total cost for SubGroup if cost per VM is available
+            if (representativeVM.estimatedCost && representativeVM.estimatedCost !== 'Unknown') {
+              var costMatch = String(representativeVM.estimatedCost).match(/\$?([\d.]+)/);
+              if (costMatch) {
+                var costPerVM = parseFloat(costMatch[1]);
+                var totalSubGroupCost = (costPerVM * subGroupSize).toFixed(4);
+                groupDetails.estimatedCost = `$${totalSubGroupCost}/hour (${subGroupSize} × $${costPerVM})`;
+              }
+            }
+            
+            vmDetailsList.push(groupDetails);
+          }
         });
       }
       
@@ -1744,17 +1822,17 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
     
     if (validationStatus === "success" && warnings.length === 0 && errors.length === 0) {
       validationSummaryHtml = `
-        <div style="margin: 20px 0; padding: 15px; background-color: #d4edda; border: 1px solid #c3e6cb; border-radius: 5px;">
-          <h4 style="color: #155724; margin: 0 0 10px 0;">✅ Configuration Valid</h4>
-          <p style="color: #155724; margin: 0;">Your MCI configuration has been validated successfully. All resources can be provisioned as configured.</p>
+        <div style="margin: 15px 0; padding: 12px; background-color: #f0f8f0; border: 1px solid #28a745; border-radius: 5px;">
+          <h4 style="color: #28a745; margin: 0 0 8px 0; font-size: 1em;">✅ Configuration Valid</h4>
+          <p style="color: #666; margin: 0; font-size: 0.9em;">Your MCI configuration has been validated successfully. All resources can be provisioned as configured.</p>
         </div>
       `;
     } else {
       if (errors.length > 0) {
         validationSummaryHtml += `
-          <div style="margin: 20px 0; padding: 15px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 5px;">
-            <h4 style="color: #721c24; margin: 0 0 10px 0;">❌ Configuration Errors</h4>
-            <ul style="color: #721c24; margin: 0; padding-left: 20px;">
+          <div style="margin: 15px 0; padding: 12px; background-color: #fff0f0; border: 1px solid #dc3545; border-radius: 5px;">
+            <h4 style="color: #dc3545; margin: 0 0 8px 0; font-size: 1em;">❌ Configuration Errors</h4>
+            <ul style="color: #666; margin: 0; padding-left: 20px; font-size: 0.9em;">
               ${errors.map(error => `<li>${error}</li>`).join('')}
             </ul>
           </div>
@@ -1763,9 +1841,9 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
       
       if (warnings.length > 0) {
         validationSummaryHtml += `
-          <div style="margin: 20px 0; padding: 15px; background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px;">
-            <h4 style="color: #856404; margin: 0 0 10px 0;">⚠️ Configuration Warnings</h4>
-            <ul style="color: #856404; margin: 0; padding-left: 20px;">
+          <div style="margin: 15px 0; padding: 12px; background-color: #fff8f0; border: 1px solid #ffc107; border-radius: 5px;">
+            <h4 style="color: #ffc107; margin: 0 0 8px 0; font-size: 1em;">⚠️ Configuration Warnings</h4>
+            <ul style="color: #666; margin: 0; padding-left: 20px; font-size: 0.9em;">
               ${warnings.map(warning => `<li>${warning}</li>`).join('')}
             </ul>
           </div>
@@ -1805,7 +1883,9 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
           } else {
             structuredInfo.basic.push(info);
           }
-        } else if (info.includes('Overall Status:') || info.includes('Message:') || info.includes('Creation Viable:')) {
+        } else if (info.includes('Message:')) {
+          structuredInfo.basic.push(info);
+        } else if (info.includes('Overall Status:') || info.includes('Creation Viable:')) {
           structuredInfo.status.push(info);
         } else if (info.includes('Failure Policy:') || info.includes('Policy Description:')) {
           structuredInfo.policy.push(info);
@@ -1817,144 +1897,209 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
       });
       
       mciInfoHtml = `
-        <div style="margin: 15px 0; padding: 0; background-color: #e3f2fd; border: 1px solid #bbdefb; border-radius: 8px; overflow: hidden;">
-          <div style="padding: 12px; background: linear-gradient(135deg, #1976d2, #1565c0); color: white;">
-            <h5 style="margin: 0; font-size: 1.1em; font-weight: 600;">ℹ️ MCI Configuration Summary</h5>
-          </div>
+        <div style="margin: 15px 0; padding: 0; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 5px; overflow: hidden;">
           
           <div style="padding: 16px;">
-            ${structuredInfo.basic.length > 0 ? `
-              <div style="margin-bottom: 16px;">
-                <h6 style="margin: 0 0 8px 0; color: #1565c0; font-size: 0.95em; font-weight: 600; border-bottom: 1px solid #bbdefb; padding-bottom: 4px;">📋 Basic Information</h6>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px; margin-top: 8px;">
-                  ${structuredInfo.basic.map(info => {
-                    const [label, value] = info.split(': ');
-                    
-                    // Special styling for cost information
-                    let borderColor = '#2196f3';
-                    let valueStyle = 'color: #424242; font-size: 0.9em;';
-                    let costIcon = '';
-                    
-                    if (label === 'Estimated Cost') {
-                      if (value && (value.includes('Not available') || value.includes('unavailable'))) {
-                        borderColor = '#ff9800';
-                        valueStyle = 'color: #e65100; font-size: 0.9em; font-weight: 500;';
-                        costIcon = '⚠️ ';
-                      } else if (value && value.startsWith('$')) {
-                        borderColor = '#4caf50';
-                        valueStyle = 'color: #2e7d32; font-size: 0.9em; font-weight: 600;';
-                        costIcon = '💰 ';
-                      } else {
-                        borderColor = '#9e9e9e';
-                        valueStyle = 'color: #757575; font-size: 0.9em;';
-                        costIcon = '❓ ';
-                      }
-                    }
-                    
-                    return `
-                      <div style="display: flex; align-items: center; padding: 6px 10px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid ${borderColor};">
-                        <span style="font-weight: 600; color: #1565c0; margin-right: 8px; min-width: 80px;">${label}:</span>
-                        <span style="${valueStyle}">${costIcon}${value || 'N/A'}</span>
-                      </div>
-                    `;
-                  }).join('')}
-                </div>
-              </div>
-            ` : ''}
-            
             ${structuredInfo.status.length > 0 ? `
               <div style="margin-bottom: 16px;">
-                <h6 style="margin: 0 0 8px 0; color: #1565c0; font-size: 0.95em; font-weight: 600; border-bottom: 1px solid #bbdefb; padding-bottom: 4px;">📊 Status Information</h6>
                 <div style="margin-top: 8px;">
-                  ${structuredInfo.status.map(info => {
-                    const [label, value] = info.split(': ');
-                    let statusColor = '#424242';
-                    let statusIcon = '📝';
+                  ${(() => {
+                    // Separate status items
+                    let overallStatus = null;
+                    let creationViable = null;
+                    let otherStatus = [];
                     
-                    if (label === 'Overall Status') {
-                      if (value.toLowerCase().includes('ready')) {
-                        statusColor = '#4caf50';
-                        statusIcon = '✅';
-                      } else if (value.toLowerCase().includes('warning')) {
-                        statusColor = '#ff9800';
-                        statusIcon = '⚠️';
-                      } else if (value.toLowerCase().includes('error')) {
-                        statusColor = '#f44336';
-                        statusIcon = '❌';
+                    structuredInfo.status.forEach(info => {
+                      const colonIndex = info.indexOf(': ');
+                      if (colonIndex !== -1) {
+                        const label = info.substring(0, colonIndex);
+                        const value = info.substring(colonIndex + 2);
+                        if (label === 'Overall Status') {
+                          overallStatus = { label, value };
+                        } else if (label === 'Creation Viable') {
+                          creationViable = { label, value };
+                        } else {
+                          otherStatus.push({ label, value });
+                        }
                       }
-                    } else if (label === 'Creation Viable') {
-                      statusColor = value === 'Yes' ? '#4caf50' : '#f44336';
-                      statusIcon = value === 'Yes' ? '✅' : '❌';
+                    });
+                    
+                    let html = '';
+                    
+                    // Display Overall Status and Creation Viable in one row
+                    if (overallStatus || creationViable) {
+                      html += `
+                        <div style="display: flex; gap: 12px; margin: 6px 0; flex-wrap: wrap;">
+                      `;
+                      
+                      if (overallStatus) {
+                        let valueStyle = 'color: #666; font-size: 1em; font-weight: bold; line-height: 1.4;';
+                        let borderColor = '#007bff';
+                        let backgroundColor = '#f8f9fa';
+                        let statusIcon = '';
+                        
+                        if (overallStatus.value && overallStatus.value.toLowerCase().includes('ready')) {
+                          valueStyle = 'color: #28a745; font-size: 1em; font-weight: bold; line-height: 1.4;';
+                          borderColor = '#28a745';
+                          backgroundColor = '#f0f8f0';
+                          statusIcon = '✅ ';
+                        } else if (overallStatus.value && overallStatus.value.toLowerCase().includes('warning')) {
+                          valueStyle = 'color: #ffc107; font-size: 1em; font-weight: bold; line-height: 1.4;';
+                          borderColor = '#ffc107';
+                          backgroundColor = '#fff8f0';
+                          statusIcon = '⚠️ ';
+                        } else if (overallStatus.value && overallStatus.value.toLowerCase().includes('error')) {
+                          valueStyle = 'color: #dc3545; font-size: 1em; font-weight: bold; line-height: 1.4;';
+                          borderColor = '#dc3545';
+                          backgroundColor = '#fff0f0';
+                          statusIcon = '❌ ';
+                        }
+                        
+                        html += `
+                          <div style="flex: 1; min-width: 200px; padding: 8px 12px; background: ${backgroundColor}; border-radius: 4px; border-left: 3px solid ${borderColor};">
+                            <div style="font-weight: 600; color: #333; margin-bottom: 4px; font-size: 0.9em;">${overallStatus.label}:</div>
+                            <div style="${valueStyle}">${statusIcon}${overallStatus.value || 'N/A'}</div>
+                          </div>
+                        `;
+                      }
+                      
+                      if (creationViable) {
+                        let valueStyle = 'color: #666; font-size: 1em; font-weight: bold; line-height: 1.4;';
+                        let borderColor = '#007bff';
+                        let backgroundColor = '#f8f9fa';
+                        let statusIcon = '';
+                        
+                        if (creationViable.value === 'Yes') {
+                          valueStyle = 'color: #28a745; font-size: 1em; font-weight: bold; line-height: 1.4;';
+                          borderColor = '#28a745';
+                          backgroundColor = '#f0f8f0';
+                          statusIcon = '✅ ';
+                        } else if (creationViable.value === 'No') {
+                          valueStyle = 'color: #dc3545; font-size: 1em; font-weight: bold; line-height: 1.4;';
+                          borderColor = '#dc3545';
+                          backgroundColor = '#fff0f0';
+                          statusIcon = '❌ ';
+                        }
+                        
+                        html += `
+                          <div style="flex: 1; min-width: 200px; padding: 8px 12px; background: ${backgroundColor}; border-radius: 4px; border-left: 3px solid ${borderColor};">
+                            <div style="font-weight: 600; color: #333; margin-bottom: 4px; font-size: 0.9em;">${creationViable.label}:</div>
+                            <div style="${valueStyle}">${statusIcon}${creationViable.value || 'N/A'}</div>
+                          </div>
+                        `;
+                      }
+                      
+                      html += '</div>';
                     }
                     
-                    return `
-                      <div style="margin: 6px 0; padding: 8px 12px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid ${statusColor};">
-                        <div style="display: flex; align-items: flex-start;">
-                          <span style="margin-right: 8px; font-size: 1.1em;">${statusIcon}</span>
-                          <div style="flex: 1;">
-                            <span style="font-weight: 600; color: ${statusColor}; margin-right: 8px;">${label}:</span>
-                            <span style="color: #424242; font-size: 0.9em;">${value || 'N/A'}</span>
-                          </div>
+                    // Display other status items
+                    otherStatus.forEach(statusInfo => {
+                      html += `
+                        <div style="margin: 6px 0; padding: 8px 12px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #007bff;">
+                          <div style="font-weight: 600; color: #333; margin-bottom: 4px; font-size: 0.9em;">${statusInfo.label}:</div>
+                          <div style="color: #666; font-size: 0.9em; line-height: 1.4; word-wrap: break-word; white-space: normal;">${statusInfo.value || 'N/A'}</div>
                         </div>
-                      </div>
-                    `;
-                  }).join('')}
-                </div>
-              </div>
-            ` : ''}
-            
-            ${structuredInfo.policy.length > 0 ? `
-              <div style="margin-bottom: 16px;">
-                <h6 style="margin: 0 0 8px 0; color: #1565c0; font-size: 0.95em; font-weight: 600; border-bottom: 1px solid #bbdefb; padding-bottom: 4px;">⚙️ Failure Handling Policy</h6>
-                <div style="margin-top: 8px;">
-                  ${structuredInfo.policy.map(info => {
-                    const [label, value] = info.split(': ');
-                    const isDescription = label === 'Policy Description';
+                      `;
+                    });
                     
-                    return `
-                      <div style="margin: 6px 0; padding: 10px 12px; background: ${isDescription ? '#fff3e0' : '#f3e5f5'}; border-radius: 4px; border-left: 3px solid ${isDescription ? '#ff9800' : '#9c27b0'};">
-                        <div style="display: flex; align-items: flex-start;">
-                          <span style="margin-right: 8px; font-size: 1.1em;">${isDescription ? '📖' : '🔧'}</span>
-                          <div style="flex: 1;">
-                            <div style="font-weight: 600; color: ${isDescription ? '#e65100' : '#7b1fa2'}; margin-bottom: ${isDescription ? '4px' : '0'};">${label}:</div>
-                            <div style="color: #424242; font-size: 0.9em; line-height: 1.4;">${value || 'N/A'}</div>
-                          </div>
-                        </div>
-                      </div>
-                    `;
-                  }).join('')}
+                    return html;
+                  })()}
                 </div>
               </div>
             ` : ''}
-            
+          
+            ${structuredInfo.basic.length > 0 ? `
+              <div style="margin-bottom: 16px;">
+                
+                <div style="margin-top: 8px;">
+                  ${(() => {
+                    // Separate Message from other basic info but don't display it here
+                    const basicInfoWithoutMessage = [];
+                    let messageInfo = null;
+                    
+                    structuredInfo.basic.forEach(info => {
+                      const colonIndex = info.indexOf(': ');
+                      if (colonIndex !== -1) {
+                        const label = info.substring(0, colonIndex);
+                        const value = info.substring(colonIndex + 2);
+                        if (label === 'Message') {
+                          messageInfo = { label, value };
+                        } else {
+                          basicInfoWithoutMessage.push({ label, value });
+                        }
+                      }
+                    });
+                    
+                    // Sort basic info (excluding Message)
+                    basicInfoWithoutMessage.sort((a, b) => {
+                      const order = ['MCI Name', 'Total VM Count', 'Estimated Cost'];
+                      const indexA = order.indexOf(a.label);
+                      const indexB = order.indexOf(b.label);
+                      
+                      if (indexA !== -1 && indexB !== -1) {
+                        return indexA - indexB;
+                      } else if (indexA !== -1) {
+                        return -1;
+                      } else if (indexB !== -1) {
+                        return 1;
+                      } else {
+                        return a.label.localeCompare(b.label);
+                      }
+                    });
+                    
+                    let html = '';
+                    
+                    // Display basic info in grid (Message will be shown later)
+                    if (basicInfoWithoutMessage.length > 0) {
+                      html += `
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px;">
+                          ${basicInfoWithoutMessage.map(info => `
+                            <div style="display: flex; align-items: center; padding: 8px 10px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #007bff;">
+                              <span style="font-weight: 600; color: #333; margin-right: 8px; min-width: 80px; font-size: 0.9em;">${info.label}:</span>
+                              <span style="color: #666; font-size: 0.9em;">${info.value || 'N/A'}</span>
+                            </div>
+                          `).join('')}
+                        </div>
+                      `;
+                    }
+                    
+                    // Store messageInfo in a global variable to use later
+                    window.tempMessageInfo = messageInfo;
+                    
+                    return html;
+                  })()}
+                </div>
+              </div>
+            ` : ''}
+
+
+            ${(() => {
+              // Display Message section after Status Information
+              const messageInfo = window.tempMessageInfo;
+              if (messageInfo) {
+                return `
+                  <div style="margin-bottom: 16px;">
+                    <div style="margin-top: 8px;">
+                      <div style="padding: 10px 12px; background: #f0f8ff; border-radius: 4px; border-left: 3px solid #007bff; border: 1px solid #e3f2fd; width: 100%; box-sizing: border-box;">
+                        <div style="color: #333; font-size: 0.9em; line-height: 1.6; background: white; padding: 8px; border-radius: 3px; border: 1px solid #dee2e6; word-wrap: break-word; overflow-wrap: break-word; white-space: normal;">💬 ${messageInfo.value || 'N/A'}</div>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }
+              return '';
+            })()}
+
             ${structuredInfo.recommendations.length > 0 ? `
               <div style="margin-bottom: 8px;">
-                <h6 style="margin: 0 0 8px 0; color: #1565c0; font-size: 0.95em; font-weight: 600; border-bottom: 1px solid #bbdefb; padding-bottom: 4px;">💡 Recommendations</h6>
+                <h6 style="margin: 0 0 8px 0; color: #007bff; font-size: 0.9em; font-weight: 600; border-bottom: 1px solid #ddd; padding-bottom: 4px;">💡 Recommendations</h6>
                 <div style="margin-top: 8px;">
                   ${structuredInfo.recommendations.map(rec => {
-                    let recColor = '#2196f3';
-                    let recIcon = '💡';
-                    let recBg = '#e3f2fd';
-                    
-                    if (rec.toLowerCase().includes('warning') || rec.toLowerCase().includes('caution')) {
-                      recColor = '#ff9800';
-                      recIcon = '⚠️';
-                      recBg = '#fff3e0';
-                    } else if (rec.toLowerCase().includes('cost') || rec.toLowerCase().includes('estimation unavailable')) {
-                      recColor = '#ff9800';
-                      recIcon = '💰';
-                      recBg = '#fff3e0';
-                    } else if (rec.toLowerCase().includes('failure policy')) {
-                      recColor = '#9c27b0';
-                      recIcon = '⚙️';
-                      recBg = '#f3e5f5';
-                    }
-                    
                     return `
-                      <div style="margin: 6px 0; padding: 8px 12px; background: ${recBg}; border-radius: 4px; border-left: 3px solid ${recColor};">
+                      <div style="margin: 6px 0; padding: 8px 12px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #ffc107;">
                         <div style="display: flex; align-items: flex-start;">
-                          <span style="margin-right: 8px; font-size: 1.1em;">${recIcon}</span>
-                          <span style="color: #424242; font-size: 0.9em; line-height: 1.4;">${rec}</span>
+                          <span style="margin-right: 8px;">💡</span>
+                          <span style="color: #666; font-size: 0.9em; line-height: 1.4;">${rec}</span>
                         </div>
                       </div>
                     `;
@@ -1972,17 +2117,17 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
       <div style="margin: 15px 0;">
         <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
           <tr style="background-color: #f8f9fa;">
-            <th style="border: 1px solid #dee2e6; padding: 8px; text-align: left;">Resource Type</th>
-            <th style="border: 1px solid #dee2e6; padding: 8px; text-align: left;">Count/Details</th>
+            <th style="border: 1px solid #ddd; padding: 8px; text-align: left; color: #333;">Resource Type</th>
+            <th style="border: 1px solid #ddd; padding: 8px; text-align: left; color: #333;">Count/Details</th>
           </tr>
           <tr>
-            <td style="border: 1px solid #dee2e6; padding: 8px;">Total VMs</td>
-            <td style="border: 1px solid #dee2e6; padding: 8px;"><strong>${resourceSummary.totalResources}</strong></td>
+            <td style="border: 1px solid #ddd; padding: 8px; color: #666;">Total VMs</td>
+            <td style="border: 1px solid #ddd; padding: 8px; color: #333;"><strong>${resourceSummary.totalResources}</strong></td>
           </tr>
           ${Object.keys(resourceSummary.providerBreakdown).length > 0 ? `
           <tr>
-            <td style="border: 1px solid #dee2e6; padding: 8px;">Cloud Providers</td>
-            <td style="border: 1px solid #dee2e6; padding: 8px;">
+            <td style="border: 1px solid #ddd; padding: 8px; color: #666;">Cloud Providers</td>
+            <td style="border: 1px solid #ddd; padding: 8px; color: #333;">
               ${Object.entries(resourceSummary.providerBreakdown).map(([provider, count]) => 
                 `<span style="margin-right: 10px;"><strong>${provider}:</strong> ${count}</span>`
               ).join('')}
@@ -1990,8 +2135,8 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
           </tr>` : ''}
           ${Object.keys(resourceSummary.regionBreakdown).length > 0 ? `
           <tr>
-            <td style="border: 1px solid #dee2e6; padding: 8px;">Regions</td>
-            <td style="border: 1px solid #dee2e6; padding: 8px;">
+            <td style="border: 1px solid #ddd; padding: 8px; color: #666;">Regions</td>
+            <td style="border: 1px solid #ddd; padding: 8px; color: #333;">
               ${Object.entries(resourceSummary.regionBreakdown).map(([region, count]) => 
                 `<span style="margin-right: 10px;"><strong>${region}:</strong> ${count}</span>`
               ).join('')}
@@ -2001,32 +2146,156 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
       </div>
     `;
 
-    // Build detailed VM information HTML with enhanced validation details
+    // Build detailed VM information HTML with enhanced SubGroup validation details
     var vmDetailsHtml = "";
     if (vmDetailsList.length > 0) {
       vmDetailsHtml = vmDetailsList.map(vm => {
         var statusIcon = vm.canCreate ? '✅' : '❌';
         var statusColor = vm.canCreate ? '#28a745' : '#dc3545';
-        var bgColor = vm.canCreate ? '#f8fff8' : '#fff8f8';
+        var bgColor = '#f8f9fa';
+        
+        // SubGroup-specific display
+        var subGroupIndicator = '';
+        var vmTitle = '';
+        if (vm.isSubGroup) {
+          subGroupIndicator = `
+            <div style="display: inline-flex; align-items: center; margin-left: 10px; padding: 2px 8px; background: #f0f8ff; border: 1px solid #007bff; border-radius: 12px; font-size: 0.8em; color: #007bff;">
+             🖥️ X ${vm.subGroupSize}
+            </div>
+          `;
+          vmTitle = `${vm.name}`;
+        } else {
+          vmTitle = `${vm.name} (VM #${vm.index})`;
+        }
         
         return `
-        <div style="margin: 10px 0; padding: 12px; border: 1px solid #dee2e6; border-radius: 6px; background-color: ${bgColor};">
-          <div style="display: flex; align-items: center; margin-bottom: 10px;">
-            <span style="font-size: 18px; margin-right: 8px;">${statusIcon}</span>
-            <h6 style="margin: 0; color: ${statusColor};">🖥️ ${vm.name} (VM #${vm.index})</h6>
+        <div style="margin: 10px 0; padding: 12px; border: 1px solid #ddd; border-radius: 5px; background-color: ${bgColor};">
+          <div style="display: flex; align-items: center; margin-bottom: 10px; flex-wrap: wrap;">
+            <label style="display: flex; align-items: center; margin-right: 8px; cursor: pointer;">
+              <input type="checkbox" class="subgroup-checkbox" data-subgroup-name="${vm.name}" style="margin-right: 6px; transform: scale(1.1);" checked onchange="updateReviewButtonState()">
+            </label>
+            <span style="font-size: 1em; margin-right: 8px;">${statusIcon}</span>
+            <h6 style="margin: 0; color: ${statusColor}; font-size: 1em;">${vmTitle}</h6>
+            ${subGroupIndicator}
             ${vm.estimatedCost !== 'Unknown' && vm.estimatedCost !== 'Cost estimation unavailable' ? 
-              `<span style="margin-left: auto; padding: 3px 8px; background: #4caf50; color: white; border-radius: 12px; font-size: 12px;">💰 ${vm.estimatedCost}</span>` : 
-              `<span style="margin-left: auto; padding: 3px 8px; background: #ff9800; color: white; border-radius: 12px; font-size: 12px;">⚠️ Cost N/A</span>`
+              `<span style="margin-left: auto; padding: 3px 8px; background: #28a745; color: white; border-radius: 14px; font-size: 0.8em;">💰 ${vm.estimatedCost}</span>` : 
+              `<span style="margin-left: auto; padding: 3px 8px; background: #ffc107; color: white; border-radius: 14px; font-size: 0.8em;">⚠️ Cost N/A</span>`
             }
           </div>
           
           <div style="margin-bottom: 8px;">
-            <strong>Status:</strong> 
-            <span style="color: ${statusColor}; font-weight: bold;">
-              ${vm.status}
-            </span>
-            ${vm.message ? `<span style="margin-left: 10px; color: #6c757d; font-size: 0.9em;">(${vm.message})</span>` : ''}
+            <div style="margin-bottom: 4px;">
+              <strong style="font-size: 0.9em;">Status:</strong> 
+              <span style="color: ${statusColor}; font-weight: bold; font-size: 0.9em;">
+                ${vm.status}
+              </span>
+            </div>
+            ${vm.message ? `<div style="margin-left: 0; color: #666; font-size: 0.8em; line-height: 1.4; word-wrap: break-word; white-space: normal;">(${vm.message})</div>` : ''}
           </div>
+          
+          ${vm.isSubGroup ? `
+          <div style="margin: 8px 0; padding: 8px; background: #f0f8ff; border-radius: 4px; border-left: 3px solid #007bff;">
+            
+            ${(() => {
+              // Extract Provider and Region from VM info
+              var provider = '';
+              var region = '';
+              if (vm.info && Array.isArray(vm.info)) {
+                vm.info.forEach(info => {
+                  if (info.includes('Provider:')) provider = info.split(': ')[1] || '';
+                  if (info.includes('Region:')) region = info.split(': ')[1] || '';
+                });
+              }
+              
+              // Extract spec details from vmConfig if available
+              var specDetails = '';
+              if (vm.vmConfig) {
+                var specs = [];
+                
+                // Try to find detailed spec info from recommendedSpecList if available
+                var detailedSpec = null;
+                if (vm.vmConfig.commonSpec && typeof recommendedSpecList !== 'undefined' && Array.isArray(recommendedSpecList)) {
+                  detailedSpec = recommendedSpecList.find(spec => 
+                    spec.id === vm.vmConfig.commonSpec || 
+                    spec.name === vm.vmConfig.commonSpec ||
+                    vm.vmConfig.commonSpec.includes(spec.id)
+                  );
+                }
+                
+                if (detailedSpec) {
+                  // Use detailed spec information from recommendedSpecList
+                  if (detailedSpec.vCPU) {
+                    specs.push(`💻 <strong>vCPU:</strong> ${detailedSpec.vCPU}`);
+                  }
+                  if (detailedSpec.memoryGiB) {
+                    specs.push(`🧠 <strong>Memory:</strong> ${detailedSpec.memoryGiB} GiB`);
+                  }
+                  if (detailedSpec.acceleratorType && detailedSpec.acceleratorType !== 'N/A') {
+                    var acceleratorInfo = detailedSpec.acceleratorType;
+                    if (detailedSpec.acceleratorModel && detailedSpec.acceleratorModel !== 'N/A') {
+                      acceleratorInfo += ` (${detailedSpec.acceleratorModel})`;
+                    }
+                    specs.push(`⚡ <strong>Accelerator:</strong> ${acceleratorInfo}`);
+                  }
+                } else if (vm.vmConfig.commonSpec) {
+                  // Fallback: Try to extract vCPU and memory from spec name if available
+                  var specMatch = vm.vmConfig.commonSpec.match(/([0-9]+)vcpu_([0-9.]+)gb/i);
+                  if (specMatch) {
+                    specs.push(`💻 <strong>vCPU:</strong> ${specMatch[1]}`);
+                    specs.push(`🧠 <strong>Memory:</strong> ${specMatch[2]} GB`);
+                  } else {
+                    // Show spec ID as fallback
+                    specs.push(`🖥️ <strong>Spec:</strong> ${vm.vmConfig.commonSpec.split('+').pop() || vm.vmConfig.commonSpec}`);
+                  }
+                }
+                
+                // Add RootDisk information if available
+                if (vm.vmConfig.rootDiskSize && vm.vmConfig.rootDiskSize !== 'default') {
+                  specs.push(`💽 <strong>Root Disk:</strong> ${vm.vmConfig.rootDiskSize} GB`);
+                } else {
+                  // Show default if explicitly specified
+                  specs.push(`💽 <strong>Root Disk:</strong> Default`);
+                }
+                
+                // Add RootDisk type if available
+                if (vm.vmConfig.rootDiskType && vm.vmConfig.rootDiskType !== 'default') {
+                  specs.push(`📀 <strong>Disk Type:</strong> ${vm.vmConfig.rootDiskType}`);
+                }
+                
+                // Check for accelerator/GPU information from spec name if not found in detailed spec
+                if (!detailedSpec && vm.vmConfig.commonSpec && 
+                    (vm.vmConfig.commonSpec.toLowerCase().includes('gpu') || 
+                     vm.vmConfig.commonSpec.toLowerCase().includes('accelerator'))) {
+                  specs.push(`⚡ <strong>Accelerator:</strong> GPU-enabled`);
+                }
+                
+                if (specs.length > 0) {
+                  specDetails = `
+                    <div style="margin: 8px 0; padding: 8px; background: #f0f8ff; border-radius: 4px; border: 1px solid #b3d9ff;">
+                      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 4px; font-size: 0.8em;">
+                        ${specs.map(spec => `<div style="color: #004499;">${spec}</div>`).join('')}
+                      </div>
+                    </div>
+                  `;
+                }
+              }
+              
+              // Create location info section
+              var locationInfo = '';
+              if (provider || region) {
+                locationInfo = `
+                  <div style="margin: 8px 0; padding: 8px; background: #f0f8ff; border-radius: 4px; border: 1px solid #b3d9ff;">
+                    <div style="display: flex; gap: 12px; font-size: 0.8em; color: #228b22;">
+                      ${provider ? `<div>🏢 <strong>Provider:</strong> ${provider}</div>` : ''}
+                      ${region ? `<div>📍 <strong>Region:</strong> ${region}</div>` : ''}
+                    </div>
+                  </div>
+                `;
+              }
+              
+              return locationInfo + specDetails ;
+            })()}
+          </div>` : ''}
           
           ${vm.validations && (vm.validations.spec || vm.validations.image) ? `
           <div style="margin: 10px 0; padding: 8px; background: #f1f3f4; border-radius: 4px; border-left: 3px solid #007bff;">
@@ -2034,19 +2303,19 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             ${vm.validations.spec ? `
             <div style="margin: 6px 0; padding: 6px; background: ${vm.validations.spec.isAvailable ? '#e8f5e8' : '#ffe8e8'}; border-radius: 4px;">
               <div style="font-size: 0.9em;"><strong>🖥️ Spec:</strong> ${vm.validations.spec.resourceId || 'N/A'}</div>
-              <div style="font-size: 0.85em; color: #6c757d;">
+              <div style="font-size: 0.8em; color: #666; line-height: 1.4;">
                 Status: ${vm.validations.spec.status || 'Unknown'} | 
                 Available: ${vm.validations.spec.isAvailable ? 'Yes' : 'No'}
-                ${vm.validations.spec.message ? `<br>📝 ${vm.validations.spec.message}` : ''}
+                ${vm.validations.spec.message ? `<div style="margin-top: 4px; word-wrap: break-word; white-space: normal;">📝 ${vm.validations.spec.message}</div>` : ''}
               </div>
             </div>` : ''}
             ${vm.validations.image ? `
             <div style="margin: 6px 0; padding: 6px; background: ${vm.validations.image.isAvailable ? '#e8f5e8' : '#ffe8e8'}; border-radius: 4px;">
               <div style="font-size: 0.9em;"><strong>💿 Image:</strong> ${vm.validations.image.resourceId || 'N/A'}</div>
-              <div style="font-size: 0.85em; color: #6c757d;">
+              <div style="font-size: 0.8em; color: #666; line-height: 1.4;">
                 Status: ${vm.validations.image.status || 'Unknown'} | 
                 Available: ${vm.validations.image.isAvailable ? 'Yes' : 'No'}
-                ${vm.validations.image.message ? `<br>📝 ${vm.validations.image.message}` : ''}
+                ${vm.validations.image.message ? `<div style="margin-top: 4px; word-wrap: break-word; white-space: normal;">📝 ${vm.validations.image.message}</div>` : ''}
               </div>
             </div>` : ''}
           </div>` : ''}
@@ -2064,7 +2333,12 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             <summary style="cursor: pointer; font-size: 0.9em; color: #6c757d; font-weight: bold;">📋 View Additional Details</summary>
             <div style="margin: 8px 0; padding: 8px; background: #f8f9fa; border-radius: 4px;">
               <ul style="margin: 0; padding-left: 20px; font-size: 0.85em; color: #6c757d;">
-                ${vm.info.map(info => `<li style="margin: 2px 0;">${info}</li>`).join('')}
+                ${vm.info.filter(info => 
+                  !info.includes('Provider:') && 
+                  !info.includes('Region:') && 
+                  !info.includes('SubGroup Size:') &&
+                  !info.includes('Total VMs in SubGroup:')
+                ).map(info => `<li style="margin: 2px 0;">${info}</li>`).join('')}
               </ul>
             </div>
           </details>` : ''}
@@ -2076,23 +2350,21 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
     var resourceSummaryHtml = "";
     if (resourceSummary && (resourceSummary.totalProviders || resourceSummary.totalRegions || Object.keys(resourceSummary.providerBreakdown).length > 0)) {
       resourceSummaryHtml = `
-        <div style="margin: 12px 0; padding: 12px; border: 1px solid #dee2e6; border-radius: 6px; background: #f8f9fa;">
-          <strong style="color: #495057; font-size: 1em;">📊 Resource Summary</strong>
+        <div style="margin: 12px 0; padding: 12px; border: 1px solid #ddd; border-radius: 5px; background: #f8f9fa;">
+          <strong style="color: #333; font-size: 1em;">📊 Resource Summary</strong>
           <div style="margin: 8px 0; font-size: 0.9em; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;">
-            ${resourceSummary.totalProviders ? `<div>🌐 Providers: <span style="font-weight: bold; color: #007bff;">${resourceSummary.totalProviders}</span></div>` : ''}
-            ${resourceSummary.totalRegions ? `<div>🗺️ Regions: <span style="font-weight: bold; color: #007bff;">${resourceSummary.totalRegions}</span></div>` : ''}
             ${resourceSummary.availableSpecs !== undefined ? `<div>✅ Available Specs: <span style="font-weight: bold; color: #28a745;">${resourceSummary.availableSpecs}</span></div>` : ''}
-            ${resourceSummary.unavailableSpecs !== undefined ? `<div>❌ Unavailable Specs: <span style="font-weight: bold; color: #dc3545;">${resourceSummary.unavailableSpecs}</span></div>` : ''}
             ${resourceSummary.availableImages !== undefined ? `<div>✅ Available Images: <span style="font-weight: bold; color: #28a745;">${resourceSummary.availableImages}</span></div>` : ''}
+            ${resourceSummary.unavailableSpecs !== undefined ? `<div>❌ Unavailable Specs: <span style="font-weight: bold; color: #dc3545;">${resourceSummary.unavailableSpecs}</span></div>` : ''}
             ${resourceSummary.unavailableImages !== undefined ? `<div>❌ Unavailable Images: <span style="font-weight: bold; color: #dc3545;">${resourceSummary.unavailableImages}</span></div>` : ''}
           </div>
           
           ${Object.keys(resourceSummary.providerBreakdown).length > 0 ? `
             <div style="margin: 8px 0;">
-              <strong style="font-size: 0.9em; color: #495057;">Cloud Provider Distribution:</strong>
+              <strong style="font-size: 0.9em; color: #333;">Cloud Provider Distribution:</strong>
               <div style="margin-top: 4px;">
                 ${Object.entries(resourceSummary.providerBreakdown).map(([provider, count]) => 
-                  `<span style="display: inline-block; margin: 2px 4px; padding: 3px 8px; background: #e7f3ff; border: 1px solid #007bff; border-radius: 12px; font-size: 0.85em; color: #007bff;">${provider}: ${count}</span>`
+                  `<span style="display: inline-block; margin: 2px 4px; padding: 3px 8px; background: #f0f8ff; border: 1px solid #007bff; border-radius: 12px; font-size: 0.8em; color: #007bff;">${provider}: ${count}</span>`
                 ).join('')}
               </div>
             </div>
@@ -2100,10 +2372,10 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
           
           ${Object.keys(resourceSummary.regionBreakdown).length > 0 ? `
             <div style="margin: 8px 0;">
-              <strong style="font-size: 0.9em; color: #495057;">Region Distribution:</strong>
+              <strong style="font-size: 0.9em; color: #333;">Region Distribution:</strong>
               <div style="margin-top: 4px;">
                 ${Object.entries(resourceSummary.regionBreakdown).map(([region, count]) => 
-                  `<span style="display: inline-block; margin: 2px 4px; padding: 3px 8px; background: #e8f5e8; border: 1px solid #28a745; border-radius: 12px; font-size: 0.85em; color: #28a745;">${region}: ${count}</span>`
+                  `<span style="display: inline-block; margin: 2px 4px; padding: 3px 8px; background: #f0f8f0; border: 1px solid #28a745; border-radius: 12px; font-size: 0.8em; color: #28a745;">${region}: ${count}</span>`
                 ).join('')}
               </div>
             </div>
@@ -2120,49 +2392,94 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
         ${validationSummaryHtml}
         ${mciInfoHtml}
         <div style="text-align: left;">
-          <details open>
-            <summary style="font-weight: bold; font-size: 1.1em; margin: 10px 0; cursor: pointer;">📋 Configuration Summary</summary>
+          <details>
+            <summary style="font-weight: bold; font-size: 1em; margin: 10px 0; cursor: pointer; color: #333;">📋 Configuration Summary</summary>
             <div style="margin-left: 20px;">
-              <p><strong>MCI Name:</strong> ${createMciReq.name}</p>
-              <p><strong>Total Nodes:</strong> ${totalNodeScale}</p>
-              <p><strong>Estimated Cost:</strong> $${totalCost.toFixed(4)}/hour</p>
               ${resourceSummaryHtml}
             </div>
           </details>
           
           <details>
-            <summary style="font-weight: bold; font-size: 1.1em; margin: 10px 0; cursor: pointer;">�️ VM Status & Details</summary>
+            <summary style="font-weight: bold; font-size: 1em; margin: 10px 0; cursor: pointer; color: #333;">🖥️ SubGroup Configuration Status</summary>
             <div style="margin-left: 20px;">
-              ${vmDetailsHtml.length > 0 ? vmDetailsHtml : '<p style="color: #6c757d; font-style: italic;">No VM details available</p>'}
-            </div>
-          </details>
-          
-          <details>
-            <summary style="font-weight: bold; font-size: 1.1em; margin: 10px 0; cursor: pointer;">💰 Cost Breakdown</summary>
-            <div style="margin-left: 20px;">
-              ${costDetailsHtml}
-            </div>
-          </details>
-          
-          <details>
-            <summary style="font-weight: bold; font-size: 1.1em; margin: 10px 0; cursor: pointer;">⚙️ VM Configurations</summary>
-            <div style="margin-left: 20px;">
-              ${subGroupReqString}
-            </div>
-          </details>
-          
-          <details>
-            <summary style="font-weight: bold; font-size: 1.1em; margin: 10px 0; cursor: pointer;">🔍 Raw Review Response</summary>
-            <div style="margin-left: 20px;">
-              <div style="margin-bottom: 10px;">
-                <button onclick="copyToClipboard('${JSON.stringify(reviewData).replace(/'/g, "\\'")}'); alert('Review data copied to clipboard!');" 
-                        style="padding: 5px 10px; background-color: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.8em;">
-                  📋 Copy to Clipboard
-                </button>
+              <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid #007bff;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                  <strong style="color: #007bff; font-size: 0.95em;">📋 SubGroup Selection</strong>
+                  <button id="reviewWithSelectedSubgroups" style="padding: 4px 12px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 0.8em; cursor: pointer;">
+                    🔄 re-validate
+                  </button>
+                </div>
+                <div style="font-size: 0.85em; color: #666; margin-bottom: 8px;">
+                  Uncheck SubGroups to exclude them from MCI creation. Click "re-validate" to re-validate your configuration.
+                </div>
+                <div style="margin: 8px 0;">
+                  <label style="display: flex; align-items: center; cursor: pointer; font-size: 0.85em; margin-bottom: 4px;">
+                    <input type="checkbox" id="selectAllSubgroups" style="margin-right: 6px;" checked onchange="toggleAllSubgroups()">
+                    <span style="color: #333; font-weight: 500;">Select/Deselect All SubGroups</span>
+                  </label>
+                </div>
               </div>
-              <pre style="background-color: #f8f9fa; padding: 10px; border-radius: 5px; overflow: auto; max-height: 300px; font-size: 0.8em; border: 1px solid #dee2e6;">${JSON.stringify(reviewData, null, 2)}</pre>
+              ${vmDetailsHtml.length > 0 ? vmDetailsHtml : '<p style="color: #666; font-style: italic; font-size: 0.9em;">No SubGroup details available</p>'}
             </div>
           </details>
+          
+          <details>
+            <summary style="font-weight: bold; font-size: 1em; margin: 10px 0; cursor: pointer; color: #333;">🔍 Raw Review Response</summary>
+            <div style="margin-left: 20px;">
+              <pre style="background-color: #f8f9fa; padding: 10px; border-radius: 5px; overflow: auto; max-height: 300px; font-size: 0.8em; border: 1px solid #ddd; color: #666;">${JSON.stringify(reviewData, null, 2)}</pre>
+            </div>
+          </details>
+          
+          <details>
+            <summary style="font-weight: bold; font-size: 1em; margin: 10px 0; cursor: pointer; color: #333;">📋 Current Configuration</summary>
+            <div style="margin-left: 20px;">
+              <div style="margin-bottom: 15px;">
+                <div style="font-size: 0.9em; color: #666; margin-bottom: 8px;">
+                  This shows the current MCI request body that will be sent to create the infrastructure.
+                </div>
+              </div>
+              <pre style="background-color: #f8f9fa; padding: 10px; border-radius: 5px; overflow: auto; max-height: 400px; font-size: 0.8em; border: 1px solid #ddd; color: #666;">${JSON.stringify(createMciReq, null, 2)}</pre>
+            </div>
+          </details>
+          
+          ${validationStatus !== "error" ? `
+            <div style="margin: 20px 0; padding: 16px; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 5px;">
+              <h6 style="margin: 0 0 12px 0; color: #007bff; font-size: 1em; font-weight: 600; border-bottom: 1px solid #ddd; padding-bottom: 4px;">⚙️ Deployment Options</h6>
+              <div style="margin-top: 12px;">
+                
+                <div style="margin: 8px 0;">
+                  <label style="display: flex; align-items: center; cursor: not-allowed; font-size: 0.9em; opacity: 0.5;">
+                    <input type="checkbox" id="monitoring-checkbox" style="margin-right: 8px; transform: scale(1.2);" disabled>
+                    <span style="color: #999; font-weight: 500;">📊 Deploy a monitoring agent (temporarily disabled)</span>
+                  </label>
+                  <div style="margin-left: 24px; margin-top: 4px; color: #999; font-size: 0.8em;">
+                    Install CB-Dragonfly monitoring agent on all VMs for performance monitoring.
+                  </div>
+                </div>
+
+                <div style="margin: 8px 0;">
+                  <label style="display: flex; align-items: center; cursor: pointer; font-size: 0.9em;">
+                    <input type="checkbox" id="hold-checkbox" style="margin-right: 8px; transform: scale(1.2);">
+                    <span style="color: #333; font-weight: 500;">⏸️ Hold VM provisioning of the MCI</span>
+                  </label>
+                  <div style="margin-left: 24px; margin-top: 4px; color: #666; font-size: 0.8em;">
+                    Create MCI structure without deploying VMs immediately. Use "Continue" action when ready.
+                  </div>
+                </div>
+
+                
+                <div style="margin: 8px 0;">
+                  <label style="display: flex; align-items: center; cursor: pointer; font-size: 0.9em;">
+                    <input type="checkbox" id="postcommand-checkbox" style="margin-right: 8px; transform: scale(1.2);">
+                    <span style="color: #333; font-weight: 500;">🚀 Add post-deployment commands</span>
+                  </label>
+                  <div style="margin-left: 24px; margin-top: 4px; color: #666; font-size: 0.8em;">
+                    Execute custom commands on all VMs after successful deployment.
+                  </div>
+                </div>
+              </div>
+            </div>
+          ` : ''}
         </div>
         
         <script>
@@ -2179,13 +2496,117 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
               document.body.removeChild(textArea);
             }
           }
+          
+          function downloadJson(jsonData, filename) {
+            try {
+              const jsonString = typeof jsonData === 'string' ? jsonData : JSON.stringify(jsonData, null, 2);
+              const blob = new Blob([jsonString], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = filename || 'config.json';
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+            } catch (err) {
+              console.error('Failed to download JSON:', err);
+              alert('Failed to download JSON file.');
+            }
+          }
+          
         </script>
       `,
       showCancelButton: true,
-      confirmButtonText: validationStatus === "error" ? "Review Configuration" : "Proceed to Create MCI",
+      confirmButtonText: validationStatus === "error" ? "Review Configuration" : "Create MCI",
       cancelButtonText: "Cancel",
       confirmButtonColor: validationStatus === "error" ? "#dc3545" : "#28a745",
       scrollbarPadding: false,
+      didOpen: () => {
+        // Initialize SubGroup management functions
+        window.toggleAllSubgroups = function() {
+          const selectAllCheckbox = document.getElementById('selectAllSubgroups');
+          const subgroupCheckboxes = document.querySelectorAll('.subgroup-checkbox');
+          
+          subgroupCheckboxes.forEach(checkbox => {
+            checkbox.checked = selectAllCheckbox.checked;
+          });
+          
+          updateReviewButtonState();
+        };
+        
+        window.updateReviewButtonState = function() {
+          const selectedSubgroups = document.querySelectorAll('.subgroup-checkbox:checked');
+          const reviewButton = document.getElementById('reviewWithSelectedSubgroups');
+          const selectAllCheckbox = document.getElementById('selectAllSubgroups');
+          
+          if (reviewButton) {
+            if (selectedSubgroups.length === 0) {
+              reviewButton.style.background = '#dc3545';
+              reviewButton.textContent = '⚠️ No SubGroups Selected';
+              reviewButton.disabled = true;
+            } else {
+              reviewButton.style.background = '#28a745';
+              reviewButton.textContent = '🔄 Review Selected (' + selectedSubgroups.length + ')';
+              reviewButton.disabled = false;
+            }
+          }
+          
+          // Update "Select All" checkbox state
+          const allSubgroups = document.querySelectorAll('.subgroup-checkbox');
+          if (selectAllCheckbox && allSubgroups.length > 0) {
+            selectAllCheckbox.checked = selectedSubgroups.length === allSubgroups.length;
+            selectAllCheckbox.indeterminate = selectedSubgroups.length > 0 && selectedSubgroups.length < allSubgroups.length;
+          }
+        };
+        
+        window.getSelectedSubgroups = function() {
+          const selectedCheckboxes = document.querySelectorAll('.subgroup-checkbox:checked');
+          return Array.from(selectedCheckboxes).map(cb => cb.getAttribute('data-subgroup-name'));
+        };
+        
+        // Set up event listeners
+        const reviewButton = document.getElementById('reviewWithSelectedSubgroups');
+        if (reviewButton) {
+          reviewButton.addEventListener('click', function() {
+            const selectedSubgroups = getSelectedSubgroups();
+            if (selectedSubgroups.length === 0) {
+              alert('Please select at least one SubGroup to review.');
+              return;
+            }
+            
+            // Store selected subgroups and current config for re-review
+            window.selectedSubgroupsForReview = selectedSubgroups;
+            
+            // Close current modal and trigger re-review
+            Swal.close();
+            
+            // Use setTimeout to ensure modal is closed before starting new review
+            setTimeout(() => {
+              reviewWithSelectedSubgroups(selectedSubgroups);
+            }, 100);
+          });
+        }
+        
+        // Initialize button state
+        updateReviewButtonState();
+        
+        // Add change listeners to all subgroup checkboxes
+        const subgroupCheckboxes = document.querySelectorAll('.subgroup-checkbox');
+        subgroupCheckboxes.forEach(checkbox => {
+          checkbox.addEventListener('change', updateReviewButtonState);
+        });
+      },
+      preConfirm: () => {
+        if (validationStatus !== "error") {
+          return {
+            monitoring: document.getElementById('monitoring-checkbox') ? document.getElementById('monitoring-checkbox').checked : false,
+            hold: document.getElementById('hold-checkbox') ? document.getElementById('hold-checkbox').checked : false,
+            addPostCommand: document.getElementById('postcommand-checkbox') ? document.getElementById('postcommand-checkbox').checked : false
+          };
+        }
+        return null;
+      }
     }).then((result) => {
       if (result.isConfirmed) {
         if (validationStatus === "error") {
@@ -2196,8 +2617,137 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             text: "Please fix the configuration errors before creating the MCI.",
           });
         } else {
-          // Proceed to final confirmation and creation
-          showFinalMciConfirmation(createMciReq, finalUrl, totalCost, totalNodeScale, costDetailsHtml, subGroupReqString, username, password);
+          // Proceed directly to MCI creation with selected options
+          const options = result.value || { monitoring: false, hold: false, addPostCommand: false };
+          
+          createMciReq.installMonAgent = "no";
+          var mciCreationUrl = finalUrl;
+          
+          if (options.monitoring) {
+            createMciReq.installMonAgent = "yes";
+          }
+          if (options.hold) {
+            mciCreationUrl += "?option=hold";
+          }
+
+          if (options.addPostCommand) {
+            // Show postCommand input popup using the existing comprehensive implementation
+            Swal.fire({
+              title: "<font size=5><b>Add post-deployment commands</b></font>",
+              width: 900,
+              html: `
+                <div id="dynamicContainer" style="text-align: left;">
+                  <p><font size=4><b>[Commands]</b></font></p>
+                  <div id="cmdContainer" style="margin-bottom: 20px;">
+                    <div id="cmdDiv1" class="cmdRow">
+                      Command 1: <input type="text" id="cmd1" style="width: 75%" value="${defaultRemoteCommand[0]}">
+                      <button onclick="document.getElementById('cmd1').value = ''">Clear</button>
+                    </div>
+                    <div id="cmdDiv2" class="cmdRow">
+                      Command 2: <input type="text" id="cmd2" style="width: 75%" value="${defaultRemoteCommand[1]}">
+                      <button onclick="document.getElementById('cmd2').value = ''">Clear</button>
+                    </div>
+                    <div id="cmdDiv3" class="cmdRow">
+                      Command 3: <input type="text" id="cmd3" style="width: 75%" value="${defaultRemoteCommand[2]}">
+                      <button onclick="document.getElementById('cmd3').value = ''">Clear</button>
+                    </div>
+                    <button id="addCmd" onclick="addCmd()" style="margin-left: 1px;"> + </button>
+                  </div>
+
+                  <p><font size=4><b>[Predefined Scripts]</b></font></p>
+                  <div style="margin-bottom: 15px;">
+                    <select id="predefinedScripts" style="width: 75%; padding: 5px;" onchange="loadPredefinedScript()">
+                      <option value="">-- Select a predefined script --</option>
+                      <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
+                      <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
+                      <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
+                      <option value="vLLM">[LLM vLLM] vLLM Server</option>
+                      <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
+                      <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
+                      <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
+                      <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
+                      <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
+                      <option value="WeaveScope">[Observability] Weave Scope</option>
+                      <option value="ELK">[Observability] ELK Stack</option>
+                      <option value="Jitsi">[Video Conference] Jitsi Meet</option>
+                      <option value="Xonotic">[Game:FPS] Xonotic Game Server</option>
+                      <option value="Westward">[Game:MMORPG] Westward Game</option>
+                      <option value="Nginx">[Web:Server] Nginx Web Server</option>
+                      <option value="Stress">[Web:Stress] Stress Test</option>
+                    </select>
+                    <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
+                      Select a predefined script to auto-fill the command fields
+                    </div>
+                  </div>        
+
+                  <p><font size=4><b>[Label Selector]</b></font></p>
+                  <div style="margin-bottom: 15px;">
+                    <input type="text" id="labelSelector" style="width: 75%" placeholder="ex: role=worker,env=production">
+                    <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
+                      ex: Optional: set targets by the label (ex: role=worker,env=production,sys.id=g1-2)
+                    </div>
+                  </div>
+                  
+                </div>`,
+              showCancelButton: true,
+              confirmButtonText: "Add & Create MCI",
+              didOpen: () => {
+                window.addCmd = () => {
+                  const cmdContainer = document.getElementById('cmdContainer');
+                  const cmdCount = cmdContainer.children.length;
+                  if (cmdCount >= 10) {
+                    Swal.showValidationMessage('Maximum 10 commands allowed');
+                    return;
+                  }
+                  const newCmdDiv = document.createElement('div');
+                  newCmdDiv.id = `cmdDiv${cmdCount}`;
+                  newCmdDiv.className = 'cmdRow';
+                  newCmdDiv.innerHTML = `
+                    Command ${cmdCount}: <input type="text" id="cmd${cmdCount}" style="width: 75%">
+                    <button onclick="document.getElementById('cmd${cmdCount}').value = ''">Clear</button>
+                  `;
+                  cmdContainer.appendChild(newCmdDiv);
+                };
+
+                // Use predefined script dropdown to load default commands
+                const scriptSelect = document.getElementById('predefinedScripts');
+                if (scriptSelect) {
+                  scriptSelect.removeEventListener('change', window.loadPredefinedScript);
+                  scriptSelect.addEventListener('change', window.loadPredefinedScript);
+                  if (scriptSelect.value) {
+                    window.loadPredefinedScript();
+                  }
+                }
+              },
+              preConfirm: () => {
+                const commands = [];
+                const cmdContainer = document.getElementById('cmdContainer');
+                for (let i = 1; i <= cmdContainer.children.length - 1; i++) {
+                  const cmdInput = document.getElementById(`cmd${i}`);
+                  if (cmdInput && cmdInput.value.trim()) {
+                    commands.push(cmdInput.value.trim());
+                  }
+                }
+                const labelSelector = document.getElementById('labelSelector').value.trim();
+                return { commands, labelSelector };
+              }
+            }).then((commandResult) => {
+              if (commandResult.isConfirmed) {
+                if (commandResult.value.commands && commandResult.value.commands.length > 0) {
+                  createMciReq.postCommand = {
+                    command: commandResult.value.commands,
+                    userName: "cb-user"
+                  };
+                  if (commandResult.value.labelSelector) {
+                    createMciReq.postCommand.labelSelector = commandResult.value.labelSelector;
+                  }
+                }
+                proceedWithMciCreation(createMciReq, mciCreationUrl, username, password);
+              }
+            });
+          } else {
+            proceedWithMciCreation(createMciReq, mciCreationUrl, username, password);
+          }
         }
       }
     });
@@ -2228,11 +2778,104 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
       confirmButtonColor: "#ffc107",
     }).then((result) => {
       if (result.isConfirmed) {
-        // Proceed to final confirmation even without review
-        showFinalMciConfirmation(createMciReq, finalUrl, totalCost, totalNodeScale, costDetailsHtml, subGroupReqString, username, password);
+        // Proceed to final confirmation even without review - call the same logic as successful review
+        const options = { monitoring: false, hold: false, addPostCommand: false };
+        
+        createMciReq.installMonAgent = "no";
+        
+        proceedWithMciCreation(createMciReq, finalUrl, username, password);
       }
     });
   });
+}
+
+// Function to review MCI with selected SubGroups only
+function reviewWithSelectedSubgroups(selectedSubgroups) {
+  // Get current MCI request data
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+  var username = usernameElement.value;
+  var password = passwordElement.value;
+  var namespace = namespaceElement.value;
+  
+  // Get current createMciReq from global vmReqeustFromSpecList
+  if (vmReqeustFromSpecList.length === 0) {
+    Swal.fire({
+      icon: "error",
+      title: "No Configuration Found",
+      text: "No MCI configuration found. Please create a new configuration first."
+    });
+    return;
+  }
+  
+  // Filter VM requests to include only selected SubGroups
+  var filteredVmRequests = vmReqeustFromSpecList.filter(vmReq => {
+    return selectedSubgroups.includes(vmReq.name);
+  });
+  
+  if (filteredVmRequests.length === 0) {
+    Swal.fire({
+      icon: "warning",
+      title: "No SubGroups Selected",
+      text: "Please select at least one SubGroup to proceed with the review."
+    });
+    return;
+  }
+  
+  // Create modified MCI request with filtered VMs
+  var modifiedCreateMciReq = JSON.parse(JSON.stringify(createMciReqTmplt));
+  var randomString = Math.random().toString(36).substr(2, 5);
+  modifiedCreateMciReq.name = "mc-" + randomString;
+  modifiedCreateMciReq.vm = filteredVmRequests;
+  
+  // Calculate costs and details for selected SubGroups
+  let totalCost = 0;
+  let totalNodeScale = 0;
+  let costDetailsHtml = "";
+  let subGroupReqString = "";
+  
+  filteredVmRequests.forEach(vmReq => {
+    totalNodeScale += parseInt(vmReq.subGroupSize || 1);
+    subGroupReqString += `<b>${vmReq.name}</b> (${vmReq.subGroupSize || 1} VMs)<br>`;
+  });
+  
+  costDetailsHtml = `
+    <div style="text-align: left; margin: 10px 0;">
+      <strong>Selected SubGroups: ${filteredVmRequests.length}</strong><br>
+      <strong>Total VMs: ${totalNodeScale}</strong><br>
+      <div style="font-size: 0.9em; color: #666; margin-top: 5px;">
+        ${subGroupReqString}
+      </div>
+    </div>
+  `;
+  
+  var finalUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mciDynamic`;
+  
+  // Show loading message
+  Swal.fire({
+    title: "Reviewing Modified Configuration",
+    html: `
+      <div style="text-align: center;">
+        <div style="margin: 20px 0;">
+          <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        </div>
+        <p>Validating configuration with ${filteredVmRequests.length} selected SubGroups...</p>
+      </div>
+      <style>
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      </style>
+    `,
+    showConfirmButton: false,
+    allowOutsideClick: false
+  });
+  
+  // Trigger review with modified configuration
+  setTimeout(() => {
+    reviewMciConfiguration(modifiedCreateMciReq, hostname, port, username, password, namespace, finalUrl, totalCost, totalNodeScale, costDetailsHtml, subGroupReqString);
+  }, 1000);
 }
 
 function createMci() {
