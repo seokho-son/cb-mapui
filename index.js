@@ -1321,7 +1321,7 @@ var createMciReqTmplt = {
   description: "Made via cb-mapui",
   installMonAgent: "no",
   name: "mci",
-  vm: [],
+  subGroups: [],
 };
 
 var createMciReqVmTmplt = {
@@ -1764,8 +1764,8 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             
             // Find corresponding VM configuration from createMciReq for additional spec details
             var vmConfig = null;
-            if (createMciReq && createMciReq.vm) {
-              vmConfig = createMciReq.vm.find(vm => vm.name === groupName);
+            if (createMciReq && createMciReq.subGroups) {
+              vmConfig = createMciReq.subGroups.find(vm => vm.name === groupName);
             }
             
             var groupDetails = {
@@ -2826,7 +2826,7 @@ function reviewWithSelectedSubgroups(selectedSubgroups) {
   var modifiedCreateMciReq = JSON.parse(JSON.stringify(createMciReqTmplt));
   var randomString = Math.random().toString(36).substr(2, 5);
   modifiedCreateMciReq.name = "mc-" + randomString;
-  modifiedCreateMciReq.vm = filteredVmRequests;
+  modifiedCreateMciReq.subGroups = filteredVmRequests;
   
   // Calculate costs and details for selected SubGroups
   let totalCost = 0;
@@ -2892,24 +2892,24 @@ function createMci() {
 
     var createMciReq = createMciReqTmplt;
     createMciReq.name = "mc-" + `${randomString}`;
-    createMciReq.vm = vmReqeustFromSpecList;
+    createMciReq.subGroups = vmReqeustFromSpecList;
     let totalCost = 0;
     let totalNodeScale = 0;
 
     var subGroupReqString = "";
-    for (i = 0; i < createMciReq.vm.length; i++) {
+    for (i = 0; i < createMciReq.subGroups.length; i++) {
 
-      totalNodeScale += parseInt(createMciReq.vm[i].subGroupSize);
+      totalNodeScale += parseInt(createMciReq.subGroups[i].subGroupSize);
       let costPerHour = recommendedSpecList[i].costPerHour;
       let subTotalCost = "unknown";
       if (costPerHour == "-1" || costPerHour == "") {
         costPerHour = "unknown";
-        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($" + costPerHour + " * " + createMciReq.vm[i].subGroupSize + ")" + "</span></b></td></tr>";
+        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($" + costPerHour + " * " + createMciReq.subGroups[i].subGroupSize + ")" + "</span></b></td></tr>";
       } else {
-        totalCost += parseFloat(costPerHour) * createMciReq.vm[i].subGroupSize;
+        totalCost += parseFloat(costPerHour) * createMciReq.subGroups[i].subGroupSize;
 
-        subTotalCost = (parseFloat(costPerHour) * createMciReq.vm[i].subGroupSize).toFixed(4);
-        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($" + costPerHour + " * " + createMciReq.vm[i].subGroupSize + ")" + "</span></b></td></tr>";
+        subTotalCost = (parseFloat(costPerHour) * createMciReq.subGroups[i].subGroupSize).toFixed(4);
+        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($" + costPerHour + " * " + createMciReq.subGroups[i].subGroupSize + ")" + "</span></b></td></tr>";
       }
       let acceleratorType = recommendedSpecList[i].acceleratorType;
       let acceleratorModel = recommendedSpecList[i].acceleratorModel;
@@ -2922,18 +2922,18 @@ function createMci() {
       var html =
         "<font size=3>" +
         "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
-        "<tr><th style='width: 50%;'>[#" + (i + 1).toString() + "] SubGroup Name</th><td><b><span style='color: black; '>" + createMciReq.vm[i].name + " (" + createMciReq.vm[i].subGroupSize + " node(s))</span></b></td></tr>" +
+        "<tr><th style='width: 50%;'>[#" + (i + 1).toString() + "] SubGroup Name</th><td><b><span style='color: black; '>" + createMciReq.subGroups[i].name + " (" + createMciReq.subGroups[i].subGroupSize + " node(s))</span></b></td></tr>" +
         costPerHour +
-        "<tr><th style='width: 50%;'>Spec</th><td><b><span style='color: blue; '>" + createMciReq.vm[i].commonSpec + "</span></b></td></tr>" +
+        "<tr><th style='width: 50%;'>Spec</th><td><b><span style='color: blue; '>" + createMciReq.subGroups[i].commonSpec + "</span></b></td></tr>" +
         "<tr><th style='width: 50%;'>vCPU</th><td><b>" + recommendedSpecList[i].vCPU + "</b></td></tr>" +
         "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + recommendedSpecList[i].memoryGiB + "</b></td></tr>" +
         acceleratorType +
-        "<tr><th style='width: 50%;'>RootDisk(GB)</th><td><b>" + createMciReq.vm[i].rootDiskSize + " (type: " + createMciReq.vm[i].rootDiskType + ")</b></td></tr>" +
-        "<tr><th style='width: 50%;'>Selected Image</th><td><b><span style='color: green; '>" + createMciReq.vm[i].commonImage + "</span></b></td></tr>" +
+        "<tr><th style='width: 50%;'>RootDisk(GB)</th><td><b>" + createMciReq.subGroups[i].rootDiskSize + " (type: " + createMciReq.subGroups[i].rootDiskType + ")</b></td></tr>" +
+        "<tr><th style='width: 50%;'>Selected Image</th><td><b><span style='color: green; '>" + createMciReq.subGroups[i].commonImage + "</span></b></td></tr>" +
 
-        ((createMciReq.vm[i].label && Object.keys(createMciReq.vm[i].label).length > 0) ?
+        ((createMciReq.subGroups[i].label && Object.keys(createMciReq.subGroups[i].label).length > 0) ?
           "<tr><th style='width: 50%;'>Labels</th><td><b><span style='color: purple; '>" +
-          Object.entries(createMciReq.vm[i].label).map(([key, value]) =>
+          Object.entries(createMciReq.subGroups[i].label).map(([key, value]) =>
             `${key}=${value}`
           ).join(", ") +
           "</span></b></td></tr>" : "") +
@@ -3006,7 +3006,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
   var minAMEM = document.getElementById("minAMEM").value;
   var maxAMEM = document.getElementById("maxAMEM").value;
 
-  var url = `http://${hostname}:${port}/tumblebug/mciRecommendVm`;
+  var url = `http://${hostname}:${port}/tumblebug/recommendSpec`;
 
   function createPolicyConditions(metric, values, type) {
     const conditions = [];
