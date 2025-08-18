@@ -47,6 +47,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 <head>
   <title>CB-MapUI: Map Dashboard for Cloud-Barista</title>
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  
   <!-- Polyfill for older environments like Internet Explorer and Android 4.x -->
   <script
     src="https://polyfill.io/v3/polyfill.min.js?features=requestAnimationFrame,Element.prototype.classList,URL"></script>
@@ -135,6 +139,31 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       background-color: #98ed90;
 
     }
+
+    /* JSONFormatter value string wrapping */
+    #jsonoutput .json-formatter-string {
+      word-wrap: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: pre-wrap !important;
+      word-break: break-all !important;
+      max-width: 100% !important;
+    }
+
+    #jsonoutput .json-formatter-row .json-formatter-string {
+      word-wrap: break-word !important;
+      overflow-wrap: break-word !important;
+      white-space: pre-wrap !important;
+      word-break: break-all !important;
+    }
+
+    /* Remove quotes from string values in JSONFormatter */
+    #jsonoutput .json-formatter-string:before,
+    #jsonoutput .json-formatter-string:after {
+      content: "" !important;
+    }
+    #jsonoutput .json-formatter-string {
+      quotes: none !important;
+    }
   </style>
 </head>
 
@@ -143,14 +172,32 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <!-- <h3 class="my-1">CB-Tumblebug Map Dashboard</h3> -->
 
     <div class="row">
-      <!-- Left Column for Cards -->
+      <!-- Left Column for Tabs -->
       <div class="col-md-3 scrollable-column">
 
+        <!-- Tab Navigation -->
+        <ul class="nav nav-tabs" id="mainTabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <a class="nav-link active" id="provision-tab" data-toggle="tab" href="#provision" role="tab" aria-controls="provision" aria-selected="true">Provision</a>
+          </li>
+          <li class="nav-item" role="presentation">
+            <a class="nav-link" id="control-tab" data-toggle="tab" href="#control" role="tab" aria-controls="control" aria-selected="false">Control</a>
+          </li>
+          <li class="nav-item" role="presentation">
+            <a class="nav-link" id="resources-tab" data-toggle="tab" href="#resources" role="tab" aria-controls="resources" aria-selected="false">Resources</a>
+          </li>
+          <li class="nav-item" role="presentation">
+            <a class="nav-link" id="config-tab" data-toggle="tab" href="#config" role="tab" aria-controls="config" aria-selected="false">Config</a>
+          </li>
+        </ul>
 
-        <!-- Configuration Card -->
-        <div class="card mb-2">
-          <div class="card-header">Dashboard Configuration</div>
-          <div class="card-body d-flex flex-column">
+        <!-- Tab Content -->
+        <div class="tab-content" id="mainTabContent">
+          <!-- Configuration Tab -->
+          <div class="tab-pane fade" id="config" role="tabpanel" aria-labelledby="config-tab">
+            <div class="card mb-2">
+              <div class="card-header">Dashboard Configuration</div>
+              <div class="card-body d-flex flex-column">
             <form id="configuration-form" class="form-row">
               <!-- Hidden configuration fields - automatically managed -->
               <div class="form-group col" style="display: none;">
@@ -243,13 +290,29 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             </form>
           </div>
         </div>
+        </div>
 
-
-        <!-- MCI Provisioning Card -->
-        <div class="card mb-2">
-          <div class="card-header">MC-Infra Provisioning</div>
-          <div class="card-body d-flex flex-column">
+        <!-- Provisioning Tab -->
+        <div class="tab-pane fade show active" id="provision" role="tabpanel" aria-labelledby="provision-tab">
+          <div class="card mb-2">
+            <div class="card-header">MC-Infra Provisioning</div>
+            <div class="card-body d-flex flex-column">
             <form id="mci-configuration-form" class="form-row">
+
+              <!-- Namespace ID Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text" id="namespaceLabel">NS ID</span>
+                  </div>
+                  <select id="namespace" name="namespace" class="form-control" aria-label="Namespace ID"
+                    aria-describedby="namespaceLabel">
+                    <!-- Options will be filled dynamically -->
+                  </select>
+                </div>
+              </div>
+
+
               <!-- Recommendation Policy Field -->
               <div class="form-group col">
                 <div class="input-group">
@@ -349,7 +412,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               <div class="form-group col">
                 <div class="input-group">
                   <div class="input-group-prepend">
-                    <span class="input-group-text">Image(OS)</span>
+                    <span class="input-group-text">Image</span>
                   </div>
                   <select id="osImage" name="osImage" class="form-control">
                     <option value="">Any</option>
@@ -458,11 +521,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             </form>
           </div>
         </div>
+        </div>
 
-        <!-- MCI Control Card -->
-        <div class="card mb-2">
-          <div class="card-header">MC-Infra Control</div>
-          <div class="card-body d-flex flex-column">
+        <!-- Control Tab -->
+        <div class="tab-pane fade" id="control" role="tabpanel" aria-labelledby="control-tab">
+          <div class="card mb-2">
+            <div class="card-header">MC-Infra Control</div>
+            <div class="card-body d-flex flex-column">
             <form id="mci-control-form" class="form-row">
 
               <!-- Namespace ID Field -->
@@ -471,7 +536,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <div class="input-group-prepend">
                     <span class="input-group-text" id="namespaceLabel">NS ID</span>
                   </div>
-                  <select id="namespace" name="namespace" class="form-control" aria-label="Namespace ID"
+                  <select id="namespace-control" name="namespace" class="form-control" aria-label="Namespace ID"
                     aria-describedby="namespaceLabel">
                     <!-- Options will be filled dynamically -->
                   </select>
@@ -618,12 +683,27 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             </form>
           </div>
         </div>
+        </div>
 
-        <!-- Resource view Card -->
-        <div class="card mb-2">
-          <div class="card-header">Resource View</div>
-          <div class="card-body d-flex flex-column">
+        <!-- Resources Tab -->
+        <div class="tab-pane fade" id="resources" role="tabpanel" aria-labelledby="resources-tab">
+          <div class="card mb-2">
+            <div class="card-header">Resource View</div>
+            <div class="card-body d-flex flex-column">
             <form id="resource-view-form" class="form-row">
+
+              <!-- Namespace ID Field -->
+              <div class="form-group col">
+                <div class="input-group">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text" id="namespaceLabel">NS ID</span>
+                  </div>
+                  <select id="namespace-resources" name="namespace" class="form-control" aria-label="Namespace ID"
+                    aria-describedby="namespaceLabel">
+                    <!-- Options will be filled dynamically -->
+                  </select>
+                </div>
+              </div>
 
 
               <!-- vNet ID Field -->
@@ -727,66 +807,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             </form>
           </div>
         </div>
+        </div>
+        </div>
 
-
-
-
-        <!-- MCI Application Card -->
-        <!-- <div class="card mb-2">
-          <div class="card-header">MC-Infra Application</div>
-          <div class="card-body d-flex flex-column">
-            <form id="mci-application-form" class="form-row"> -->
-
-              <!-- Select Application Field -->
-              <!-- <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text" id="selectAppLabel">App</span>
-                  </div>
-                  <select id="selectApp" name="selectApp" class="form-control" aria-label="Select Application"
-                    aria-describedby="selectAppLabel">
-                    <option value="Xonotic" selected="selected">FPSGame(Xonotic)</option>
-                    <option value="Nvidia">NvidiaDriver</option>
-                    <option value="Ollama">LLM(Ollama)</option>
-                    <option value="OllamaPull">LLM(Ollama PullModel)</option>
-                    <option value="OpenWebUI">LLMChat(Open WebUI)</option>
-                    <option value="vLLM">LLM(vLLM+SelfHostAPI)</option>
-                    <option value="Westward">MMORPG(Westward)</option>
-                    <option value="Nginx">WebServer(Nginx)</option>
-                    <option value="WeaveScope">Monitor(WeaveScope)</option>
-                    <option value="Jitsi">VideoConf(Jitsi)</option>
-                    <option value="ELK">LogAnalisys(ELK)</option>
-                    <option value="Stress">LoadTest(Stress)</option>
-                  </select>
-                </div>
-              </div> -->
-
-              <!-- Application Control Buttons -->
-              <!-- <div class="form-group col dropdown">
-                <button class="btn btn-primary dropdown-toggle w-100" type="button" id="appControlDropdown"
-                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                  App Control
-                </button>
-
-                <div class="dropdown-menu" aria-labelledby="appControlDropdown">
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="startApp();">Start/Install</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="stopApp();">Stop</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="statusApp();">Status</a>
-                </div>
-              </div> -->
-
-
-
-            <!-- </form>
-          </div>
-        </div> -->
-        <!-- Message Area -->
+        <!-- Message Area (outside tabs) -->
         <div class="card mb-2">
           <div class="card-header">Message Area</div>
           <div class="card-body d-flex flex-column">
             <div class="row">
               <div class="col-md-12">
-                <textarea id="message" rows="3" name="message" readonly class="form-control"></textarea>
+                <textarea id="message" rows="5" name="message" readonly class="form-control"></textarea>
               </div>
               <!-- <div class="col-md-3">
                 <div class="form-check mb-2">
@@ -797,7 +827,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               </div> -->
               <div class="col-md-12">
                 <div id="jsonoutput" class="form-control" readonly
-                  style="height: auto; background-color: black; word-wrap: break-word; overflow-wrap: break-word; overflow-x: auto;">
+                  style="height: auto; background-color: black; color: white; padding: 10px; overflow: auto; max-height: 400px; word-wrap: break-word; overflow-wrap: break-word;">
                 </div>
               </div>
             </div>
@@ -838,9 +868,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         <!-- Admin dashboards -->
         <div id="console" style="display:none; width:100%; height:100%; position:absolute; top:0; left:0;">
           <iframe id="iframe" src="http://localhost:1324/swagger.html"
+            style="visibility:visible; width:100%; height:100%; position:relative;"></iframe>          
+          <!-- <iframe id="iframe" src="http://localhost:1324/swagger.html"
             style="visibility:visible; width:50%; height:100%; position:relative;"></iframe>
           <iframe id="iframe2" src="http://localhost:1024/spider/adminweb"
-            style="visibility:visible; width:50%; height:100%; position:relative;"></iframe>
+            style="visibility:visible; width:50%; height:100%; position:relative;"></iframe> -->
         </div>
       </div>
 
@@ -849,6 +881,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
     <script type="module" src="./index.js"></script>
     <script type="text/javascript">
+      // Tab functionality
+      $(document).ready(function() {
+        // Enable Bootstrap tab functionality
+        $('#mainTabs a').on('click', function (e) {
+          e.preventDefault()
+          $(this).tab('show')
+        })
+      });
+
       function toggleView() {
         var map = document.getElementById('map');
         var console = document.getElementById('console');
