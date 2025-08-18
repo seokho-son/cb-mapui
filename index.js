@@ -98,8 +98,6 @@ var mciStatus = new Array();
 var mciGeo = new Array();
 
 var cspListDisplayEnabled = document.getElementById("displayOn");
-var tableDisplayEnabled = document.getElementById("tableOn");
-var table = document.getElementById("detailTable");
 var recommendPolicy = document.getElementById("recommendPolicy");
 var selectApp = document.getElementById("selectApp");
 
@@ -142,7 +140,6 @@ var map = new Map({
 
 // fucntion for clear map.
 function clearMap() {
-  // table.innerHTML = "";
   messageJsonOutput.value = "";
   messageTextArea.value = "";
   geometries = [];
@@ -168,7 +165,6 @@ function clearCircle(option) {
   cspPointsCircle = [];
   geoCspPointsCircle = [];
   messageJsonOutput.value = "";
-  // table.innerHTML = "";
 }
 window.clearCircle = clearCircle;
 
@@ -311,11 +307,6 @@ function displayCSPListOn() {
   }
 }
 window.displayCSPListOn = displayCSPListOn;
-
-function displayTableOn() {
-  // table.innerHTML = "";
-}
-window.displayTableOn = displayTableOn;
 
 function endpointChanged() {
   //getMci();
@@ -571,7 +562,7 @@ function changeSizeStatus(status) {
   } else if (status.includes("Terminating")) {
     return 2.4;
   } else {
-    return 1.0;
+    return 1.5;
   }
 }
 
@@ -782,11 +773,19 @@ function errorAlert(message) {
 function outputAlert(jsonData, type) {
   const jsonOutputConfig = {
     theme: "dark",
+    hoverPreviewEnabled: true,
+    hoverPreviewArrayCount: 100,
+    hoverPreviewFieldCount: 5,
+    animateOpen: true,
+    animateClose: true,
+    useToJSON: true,
+    quotesOnKeys: false,
+    quotesOnValues: false
   };
   Swal.fire({
     position: "top-end",
     icon: type,
-    html: '<div id="json-output" class="form-control" style="height: auto; background-color: black; text-align: left; white-space: pre-wrap; word-break: break-all; overflow-wrap: break-word; overflow-x: auto;"></div>',
+    html: '<div id="json-output" class="form-control" style="height: auto; background-color: black; text-align: left; padding: 10px; overflow: auto; max-height: 400px;"></div>',
     background: "#0e1746",
     showConfirmButton: true,
     width: '40%',
@@ -794,7 +793,37 @@ function outputAlert(jsonData, type) {
     didOpen: () => {
       const container = document.getElementById("json-output");
       const formatter = new JSONFormatter(jsonData, Infinity, jsonOutputConfig);
-      container.appendChild(formatter.render());
+      const renderedElement = formatter.render();
+      container.appendChild(renderedElement);
+      
+      // Remove quotes from string values using DOM manipulation
+      setTimeout(() => {
+        const stringElements = container.querySelectorAll('.json-formatter-string');
+        stringElements.forEach(element => {
+          if (element.textContent.startsWith('"') && element.textContent.endsWith('"')) {
+            element.textContent = element.textContent.slice(1, -1);
+          }
+        });
+      }, 100);
+      
+      // Apply custom styles for JSONFormatter value strings
+      const style = document.createElement('style');
+      style.textContent = `
+        #json-output .json-formatter-string {
+          word-wrap: break-word !important;
+          overflow-wrap: break-word !important;
+          white-space: pre-wrap !important;
+          word-break: break-all !important;
+          max-width: 100% !important;
+        }
+        #json-output .json-formatter-row .json-formatter-string {
+          word-wrap: break-word !important;
+          overflow-wrap: break-word !important;
+          white-space: pre-wrap !important;
+          word-break: break-all !important;
+        }
+      `;
+      document.head.appendChild(style);
     },
   });
 }
@@ -802,13 +831,30 @@ function outputAlert(jsonData, type) {
 function displayJsonData(jsonData, type) {
   const jsonOutputConfig = {
     theme: "dark",
+    hoverPreviewEnabled: true,
+    hoverPreviewArrayCount: 100,
+    hoverPreviewFieldCount: 5,
+    animateOpen: true,
+    animateClose: true,
+    useToJSON: true,
+    quotesOnKeys: false,
+    quotesOnValues: false
   };
   outputAlert(jsonData, type);
   const messageJsonOutput = document.getElementById("jsonoutput");
   messageJsonOutput.innerHTML = ""; // Clear existing content
-  messageJsonOutput.appendChild(
-    new JSONFormatter(jsonData, Infinity, jsonOutputConfig).render()
-  );
+  const renderedElement = new JSONFormatter(jsonData, Infinity, jsonOutputConfig).render();
+  messageJsonOutput.appendChild(renderedElement);
+  
+  // Remove quotes from string values using DOM manipulation
+  setTimeout(() => {
+    const stringElements = messageJsonOutput.querySelectorAll('.json-formatter-string');
+    stringElements.forEach(element => {
+      if (element.textContent.startsWith('"') && element.textContent.endsWith('"')) {
+        element.textContent = element.textContent.slice(1, -1);
+      }
+    });
+  }, 100);
 }
 
 function getMci() {
@@ -1535,6 +1581,123 @@ function proceedWithMciCreation(createMciReq, url, username, password) {
     .finally(function () {
       removeSpinnerTask(spinnerId);
     });
+}
+
+// Show post-deployment command dialog
+function showPostCommandDialog(createMciReq, mciCreationUrl, username, password) {
+  Swal.fire({
+    title: "<font size=5><b>Add post-deployment commands</b></font>",
+    width: 900,
+    html: `
+      <div id="dynamicContainer" style="text-align: left;">
+        <p><font size=4><b>[Commands]</b></font></p>
+        <div id="cmdContainer" style="margin-bottom: 20px;">
+          <div id="cmdDiv1" class="cmdRow">
+            Command 1: <input type="text" id="cmd1" style="width: 75%" value="${defaultRemoteCommand[0]}">
+            <button onclick="document.getElementById('cmd1').value = ''">Clear</button>
+          </div>
+          <div id="cmdDiv2" class="cmdRow">
+            Command 2: <input type="text" id="cmd2" style="width: 75%" value="${defaultRemoteCommand[1]}">
+            <button onclick="document.getElementById('cmd2').value = ''">Clear</button>
+          </div>
+          <div id="cmdDiv3" class="cmdRow">
+            Command 3: <input type="text" id="cmd3" style="width: 75%" value="${defaultRemoteCommand[2]}">
+            <button onclick="document.getElementById('cmd3').value = ''">Clear</button>
+          </div>
+          <button id="addCmd" onclick="addCmd()" style="margin-left: 1px;"> + </button>
+        </div>
+
+        <p><font size=4><b>[Predefined Scripts]</b></font></p>
+        <div style="margin-bottom: 15px;">
+          <select id="predefinedScripts" style="width: 75%; padding: 5px;" onchange="loadPredefinedScript()">
+            <option value="">-- Select a predefined script --</option>
+            <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
+            <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
+            <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
+            <option value="vLLM">[LLM vLLM] vLLM Server</option>
+            <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
+            <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
+            <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
+            <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
+            <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
+            <option value="WeaveScope">[Observability] Weave Scope</option>
+            <option value="ELK">[Observability] ELK Stack</option>
+            <option value="Jitsi">[Video Conference] Jitsi Meet</option>
+            <option value="Xonotic">[Game:FPS] Xonotic Game Server</option>
+            <option value="Westward">[Game:MMORPG] Westward Game</option>
+            <option value="Nginx">[Web:Server] Nginx Web Server</option>
+            <option value="Stress">[Web:Stress] Stress Test</option>
+          </select>
+          <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
+            Select a predefined script to auto-fill the command fields
+          </div>
+        </div>        
+
+        <p><font size=4><b>[Label Selector]</b></font></p>
+        <div style="margin-bottom: 15px;">
+          <input type="text" id="labelSelector" style="width: 75%" placeholder="ex: role=worker,env=production">
+          <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
+            ex: Optional: set targets by the label (ex: role=worker,env=production,sys.id=g1-2)
+          </div>
+        </div>
+        
+      </div>`,
+    showCancelButton: true,
+    confirmButtonText: "Add & Create MCI",
+    didOpen: () => {
+      window.addCmd = () => {
+        const cmdContainer = document.getElementById('cmdContainer');
+        const cmdCount = cmdContainer.children.length;
+        if (cmdCount >= 10) {
+          Swal.showValidationMessage('Maximum 10 commands allowed');
+          return;
+        }
+        const newCmdDiv = document.createElement('div');
+        newCmdDiv.id = `cmdDiv${cmdCount}`;
+        newCmdDiv.className = 'cmdRow';
+        newCmdDiv.innerHTML = `
+          Command ${cmdCount}: <input type="text" id="cmd${cmdCount}" style="width: 75%">
+          <button onclick="document.getElementById('cmd${cmdCount}').value = ''">Clear</button>
+        `;
+        cmdContainer.appendChild(newCmdDiv);
+      };
+
+      // Use predefined script dropdown to load default commands
+      const scriptSelect = document.getElementById('predefinedScripts');
+      if (scriptSelect) {
+        scriptSelect.removeEventListener('change', window.loadPredefinedScript);
+        scriptSelect.addEventListener('change', window.loadPredefinedScript);
+        if (scriptSelect.value) {
+          window.loadPredefinedScript();
+        }
+      }
+    },
+    preConfirm: () => {
+      const commands = [];
+      const cmdContainer = document.getElementById('cmdContainer');
+      for (let i = 1; i <= cmdContainer.children.length - 1; i++) {
+        const cmdInput = document.getElementById(`cmd${i}`);
+        if (cmdInput && cmdInput.value.trim()) {
+          commands.push(cmdInput.value.trim());
+        }
+      }
+      const labelSelector = document.getElementById('labelSelector').value.trim();
+      return { commands, labelSelector };
+    }
+  }).then((commandResult) => {
+    if (commandResult.isConfirmed) {
+      if (commandResult.value.commands && commandResult.value.commands.length > 0) {
+        createMciReq.postCommand = {
+          command: commandResult.value.commands,
+          userName: "cb-user"
+        };
+        if (commandResult.value.labelSelector) {
+          createMciReq.postCommand.labelSelector = commandResult.value.labelSelector;
+        }
+      }
+      proceedWithMciCreation(createMciReq, mciCreationUrl, username, password);
+    }
+  });
 }
 
 // MCI Review function - checks configuration before creation
@@ -2442,44 +2605,42 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             </div>
           </details>
           
-          ${validationStatus !== "error" ? `
-            <div style="margin: 20px 0; padding: 16px; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 5px;">
-              <h6 style="margin: 0 0 12px 0; color: #007bff; font-size: 1em; font-weight: 600; border-bottom: 1px solid #ddd; padding-bottom: 4px;">⚙️ Deployment Options</h6>
-              <div style="margin-top: 12px;">
-                
-                <div style="margin: 8px 0;">
-                  <label style="display: flex; align-items: center; cursor: not-allowed; font-size: 0.9em; opacity: 0.5;">
-                    <input type="checkbox" id="monitoring-checkbox" style="margin-right: 8px; transform: scale(1.2);" disabled>
-                    <span style="color: #999; font-weight: 500;">📊 Deploy a monitoring agent (temporarily disabled)</span>
-                  </label>
-                  <div style="margin-left: 24px; margin-top: 4px; color: #999; font-size: 0.8em;">
-                    Install CB-Dragonfly monitoring agent on all VMs for performance monitoring.
-                  </div>
+          <div style="margin: 20px 0; padding: 16px; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 5px;">
+            <h6 style="margin: 0 0 12px 0; color: #007bff; font-size: 1em; font-weight: 600; border-bottom: 1px solid #ddd; padding-bottom: 4px;">⚙️ Deployment Options</h6>
+            <div style="margin-top: 12px;">
+              
+              <div style="margin: 8px 0;">
+                <label style="display: flex; align-items: center; cursor: not-allowed; font-size: 0.9em; opacity: 0.5;">
+                  <input type="checkbox" id="monitoring-checkbox" style="margin-right: 8px; transform: scale(1.2);" disabled>
+                  <span style="color: #999; font-weight: 500;">📊 Deploy a monitoring agent (temporarily disabled)</span>
+                </label>
+                <div style="margin-left: 24px; margin-top: 4px; color: #999; font-size: 0.8em;">
+                  Install CB-Dragonfly monitoring agent on all VMs for performance monitoring.
                 </div>
+              </div>
 
-                <div style="margin: 8px 0;">
-                  <label style="display: flex; align-items: center; cursor: pointer; font-size: 0.9em;">
-                    <input type="checkbox" id="hold-checkbox" style="margin-right: 8px; transform: scale(1.2);">
-                    <span style="color: #333; font-weight: 500;">⏸️ Hold VM provisioning of the MCI</span>
-                  </label>
-                  <div style="margin-left: 24px; margin-top: 4px; color: #666; font-size: 0.8em;">
-                    Create MCI structure without deploying VMs immediately. Use "Continue" action when ready.
-                  </div>
+              <div style="margin: 8px 0;">
+                <label style="display: flex; align-items: center; cursor: pointer; font-size: 0.9em;">
+                  <input type="checkbox" id="hold-checkbox" style="margin-right: 8px; transform: scale(1.2);">
+                  <span style="color: #333; font-weight: 500;">⏸️ Hold VM provisioning of the MCI</span>
+                </label>
+                <div style="margin-left: 24px; margin-top: 4px; color: #666; font-size: 0.8em;">
+                  Create MCI structure without deploying VMs immediately. Use "Continue" action when ready.
                 </div>
+              </div>
 
-                
-                <div style="margin: 8px 0;">
-                  <label style="display: flex; align-items: center; cursor: pointer; font-size: 0.9em;">
-                    <input type="checkbox" id="postcommand-checkbox" style="margin-right: 8px; transform: scale(1.2);">
-                    <span style="color: #333; font-weight: 500;">🚀 Add post-deployment commands</span>
-                  </label>
-                  <div style="margin-left: 24px; margin-top: 4px; color: #666; font-size: 0.8em;">
-                    Execute custom commands on all VMs after successful deployment.
-                  </div>
+              
+              <div style="margin: 8px 0;">
+                <label style="display: flex; align-items: center; cursor: pointer; font-size: 0.9em;">
+                  <input type="checkbox" id="postcommand-checkbox" style="margin-right: 8px; transform: scale(1.2);">
+                  <span style="color: #333; font-weight: 500;">🚀 Add post-deployment commands</span>
+                </label>
+                <div style="margin-left: 24px; margin-top: 4px; color: #666; font-size: 0.8em;">
+                  Execute custom commands on all VMs after successful deployment.
                 </div>
               </div>
             </div>
-          ` : ''}
+          </div>
         </div>
         
         <script>
@@ -2518,9 +2679,9 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
         </script>
       `,
       showCancelButton: true,
-      confirmButtonText: validationStatus === "error" ? "Review Configuration" : "Create MCI",
+      confirmButtonText: "Create MCI",
       cancelButtonText: "Cancel",
-      confirmButtonColor: validationStatus === "error" ? "#dc3545" : "#28a745",
+      confirmButtonColor: validationStatus === "error" ? "#ffc107" : "#28a745",
       scrollbarPadding: false,
       didOpen: () => {
         // Initialize SubGroup management functions
@@ -2610,11 +2771,43 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
     }).then((result) => {
       if (result.isConfirmed) {
         if (validationStatus === "error") {
-          // If there are errors, don't proceed with creation
+          // Show warning and ask for confirmation to proceed despite errors
           Swal.fire({
-            icon: "error",
-            title: "Cannot Proceed",
-            text: "Please fix the configuration errors before creating the MCI.",
+            icon: "warning",
+            title: "⚠️ Configuration Has Errors",
+            html: `
+              <p><strong>Your MCI configuration has validation errors.</strong></p>
+              <p>Proceeding may result in deployment failures or unexpected behavior.</p>
+              <p>Do you want to proceed anyway?</p>
+            `,
+            showCancelButton: true,
+            confirmButtonText: "Yes, Create Anyway",
+            cancelButtonText: "Cancel",
+            confirmButtonColor: "#dc3545",
+            cancelButtonColor: "#6c757d"
+          }).then((forceResult) => {
+            if (forceResult.isConfirmed) {
+              // Force proceed with MCI creation using selected options
+              const options = result.value || { monitoring: false, hold: false, addPostCommand: false };
+              
+              createMciReq.installMonAgent = "no";
+              var mciCreationUrl = finalUrl;
+              
+              if (options.monitoring) {
+                createMciReq.installMonAgent = "yes";
+              }
+              if (options.hold) {
+                mciCreationUrl += "?option=hold";
+              }
+              
+              // Handle post-deployment commands for force creation
+              if (options.addPostCommand) {
+                // Show the same post-command dialog as normal flow
+                showPostCommandDialog(createMciReq, mciCreationUrl, username, password);
+              } else {
+                proceedWithMciCreation(createMciReq, mciCreationUrl, username, password);
+              }
+            }
           });
         } else {
           // Proceed directly to MCI creation with selected options
@@ -2631,120 +2824,8 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
           }
 
           if (options.addPostCommand) {
-            // Show postCommand input popup using the existing comprehensive implementation
-            Swal.fire({
-              title: "<font size=5><b>Add post-deployment commands</b></font>",
-              width: 900,
-              html: `
-                <div id="dynamicContainer" style="text-align: left;">
-                  <p><font size=4><b>[Commands]</b></font></p>
-                  <div id="cmdContainer" style="margin-bottom: 20px;">
-                    <div id="cmdDiv1" class="cmdRow">
-                      Command 1: <input type="text" id="cmd1" style="width: 75%" value="${defaultRemoteCommand[0]}">
-                      <button onclick="document.getElementById('cmd1').value = ''">Clear</button>
-                    </div>
-                    <div id="cmdDiv2" class="cmdRow">
-                      Command 2: <input type="text" id="cmd2" style="width: 75%" value="${defaultRemoteCommand[1]}">
-                      <button onclick="document.getElementById('cmd2').value = ''">Clear</button>
-                    </div>
-                    <div id="cmdDiv3" class="cmdRow">
-                      Command 3: <input type="text" id="cmd3" style="width: 75%" value="${defaultRemoteCommand[2]}">
-                      <button onclick="document.getElementById('cmd3').value = ''">Clear</button>
-                    </div>
-                    <button id="addCmd" onclick="addCmd()" style="margin-left: 1px;"> + </button>
-                  </div>
-
-                  <p><font size=4><b>[Predefined Scripts]</b></font></p>
-                  <div style="margin-bottom: 15px;">
-                    <select id="predefinedScripts" style="width: 75%; padding: 5px;" onchange="loadPredefinedScript()">
-                      <option value="">-- Select a predefined script --</option>
-                      <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
-                      <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
-                      <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
-                      <option value="vLLM">[LLM vLLM] vLLM Server</option>
-                      <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
-                      <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
-                      <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
-                      <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
-                      <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
-                      <option value="WeaveScope">[Observability] Weave Scope</option>
-                      <option value="ELK">[Observability] ELK Stack</option>
-                      <option value="Jitsi">[Video Conference] Jitsi Meet</option>
-                      <option value="Xonotic">[Game:FPS] Xonotic Game Server</option>
-                      <option value="Westward">[Game:MMORPG] Westward Game</option>
-                      <option value="Nginx">[Web:Server] Nginx Web Server</option>
-                      <option value="Stress">[Web:Stress] Stress Test</option>
-                    </select>
-                    <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
-                      Select a predefined script to auto-fill the command fields
-                    </div>
-                  </div>        
-
-                  <p><font size=4><b>[Label Selector]</b></font></p>
-                  <div style="margin-bottom: 15px;">
-                    <input type="text" id="labelSelector" style="width: 75%" placeholder="ex: role=worker,env=production">
-                    <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
-                      ex: Optional: set targets by the label (ex: role=worker,env=production,sys.id=g1-2)
-                    </div>
-                  </div>
-                  
-                </div>`,
-              showCancelButton: true,
-              confirmButtonText: "Add & Create MCI",
-              didOpen: () => {
-                window.addCmd = () => {
-                  const cmdContainer = document.getElementById('cmdContainer');
-                  const cmdCount = cmdContainer.children.length;
-                  if (cmdCount >= 10) {
-                    Swal.showValidationMessage('Maximum 10 commands allowed');
-                    return;
-                  }
-                  const newCmdDiv = document.createElement('div');
-                  newCmdDiv.id = `cmdDiv${cmdCount}`;
-                  newCmdDiv.className = 'cmdRow';
-                  newCmdDiv.innerHTML = `
-                    Command ${cmdCount}: <input type="text" id="cmd${cmdCount}" style="width: 75%">
-                    <button onclick="document.getElementById('cmd${cmdCount}').value = ''">Clear</button>
-                  `;
-                  cmdContainer.appendChild(newCmdDiv);
-                };
-
-                // Use predefined script dropdown to load default commands
-                const scriptSelect = document.getElementById('predefinedScripts');
-                if (scriptSelect) {
-                  scriptSelect.removeEventListener('change', window.loadPredefinedScript);
-                  scriptSelect.addEventListener('change', window.loadPredefinedScript);
-                  if (scriptSelect.value) {
-                    window.loadPredefinedScript();
-                  }
-                }
-              },
-              preConfirm: () => {
-                const commands = [];
-                const cmdContainer = document.getElementById('cmdContainer');
-                for (let i = 1; i <= cmdContainer.children.length - 1; i++) {
-                  const cmdInput = document.getElementById(`cmd${i}`);
-                  if (cmdInput && cmdInput.value.trim()) {
-                    commands.push(cmdInput.value.trim());
-                  }
-                }
-                const labelSelector = document.getElementById('labelSelector').value.trim();
-                return { commands, labelSelector };
-              }
-            }).then((commandResult) => {
-              if (commandResult.isConfirmed) {
-                if (commandResult.value.commands && commandResult.value.commands.length > 0) {
-                  createMciReq.postCommand = {
-                    command: commandResult.value.commands,
-                    userName: "cb-user"
-                  };
-                  if (commandResult.value.labelSelector) {
-                    createMciReq.postCommand.labelSelector = commandResult.value.labelSelector;
-                  }
-                }
-                proceedWithMciCreation(createMciReq, mciCreationUrl, username, password);
-              }
-            });
+            // Show post-command dialog
+            showPostCommandDialog(createMciReq, mciCreationUrl, username, password);
           } else {
             proceedWithMciCreation(createMciReq, mciCreationUrl, username, password);
           }
@@ -2978,13 +3059,6 @@ function createMci() {
   }
 }
 window.createMci = createMci;
-
-
-// Define the toggleTable function in the global scope
-function toggleTable() {
-  var table = document.getElementById('fullTable');
-  table.style.display = table.style.display === 'none' ? 'block' : 'none';
-}
 
 function getRecommendedSpec(idx, latitude, longitude) {
   var hostname = hostnameElement.value;
@@ -3742,67 +3816,6 @@ function getRecommendedSpec(idx, latitude, longitude) {
             acceleratorModel = "<tr><th style='width: 50%;'>AcceleratorModel</th><td><b><span style='color: black;'>" + acceleratorModel + "</span></b></td></tr>"
           }
 
-
-          // Show all recommended specs in a table if needed
-          var tableContent = res.data.map((spec, index) => {
-            let costPerHour = spec.costPerHour === "-1" || spec.costPerHour === "" ? "unknown" : spec.costPerHour;
-            let acceleratorCount = spec.acceleratorType === "gpu"
-              ? `<span style='color: red; font-size: larger;'>GPU</span>`
-              : `<span style='color: black;'>None</span>`;
-            let acceleratorModel = spec.acceleratorModel === "gpu"
-              ? `<span style='color: red; font-size: larger;'>${spec.acceleratorModel}</span>`
-              : `<span style='color: black;'>${spec.acceleratorModel}</span>`;
-
-            return `
-            <tr>
-              <th>${index + 1}</th>
-              <td>${spec.cspSpecName}</td>
-              <td>${spec.providerName.toUpperCase()}</td>
-              <td>${spec.regionName}</td>
-              <td>${spec.vCPU}</td>
-              <td>${spec.memoryGiB}</td>
-              <td>$ ${costPerHour}</td>
-              <td>${spec.acceleratorCount}</td>
-              <td>${spec.acceleratorModel}</td>
-              <td>${spec.acceleratorMemoryGB}</td>
-            </tr>`;
-          }).join("");
-
-          var tableHTML = `
-          <table id="recommendationTable" class="display nowrap" style="width:100%; text-align:left;">
-            <thead>
-              <tr>
-                <th> </th>
-                <th>Spec</th>
-                <th>CSP</th>
-                <th>Region</th>
-                <th>CPU</th>
-                <th>Mem</th>
-                <th>Cost</th>
-                <th>GPU</th>
-                <th>Model</th>
-                <th>Mem</th>
-              </tr>
-            </thead>
-              <tfoot>
-                <tr>
-                  <th></th>
-                  <th>Spec</th>
-                  <th>CSP</th>
-                  <th>Region</th>
-                  <th>CPU</th>
-                  <th>Mem</th>
-                  <th>Cost</th>
-                  <th>GPU</th>
-                  <th>Model</th>
-                  <th>Mem</th>
-                </tr>
-              </tfoot>
-            <tbody>
-              ${tableContent}
-            </tbody>
-          </table>`;
-
           Swal.fire({
             title: "Recommended Spec and CSP region <br>",
             width: 800,
@@ -3846,142 +3859,65 @@ function getRecommendedSpec(idx, latitude, longitude) {
               "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Enter the number of VMs for scaling (1 ~ 100)</span>" +
               "<input type='number' id='vmCount' style='width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px;' min='1' max='10' value='1'>" +
               "</td></tr>" +
-              "</table><br>" +
-
-              `<div style="margin-top: 10px;">` +
-              `<button id="toggleTableButton" class="btn btn-secondary dropdown-toggle w-100">Show All Recommendations</button>` +
-              `</div>` +
-              `<div id="fullTable" style="display:none">${tableHTML}</div>`,
+              "</table><br>",
 
             didOpen: () => {
+              // Focus on the VM count input for better user experience
+              const vmCountInput = document.getElementById('vmCount');
+              if (vmCountInput) {
+                vmCountInput.focus();
+              }
 
-              const toggleButton = document.getElementById('toggleTableButton');
-              toggleButton.addEventListener('click', toggleTable);
-
-              $('#recommendationTable').DataTable({
-                initComplete: function () {
-                  this.api().columns().every(function (index) {
-                    // Skip filtering for the first column (index column)
-                    if (index === 0) {
-                      return;
-                    }
-
-                    var column = this;
-
-                    // Get column data, extract text only (remove HTML tags), and sort
-                    var columnData = column.data().map(function (d) {
-                      // Extract plain text from HTML content
-                      return $('<div>').html(d).text().trim();
-                    }).unique().sort();
-
-                    // Create filter container with scrollable area
-                    var select = $('<div class="filter-container" style="height:100px; overflow:auto;"></div>')
-                      .appendTo($(column.footer()).empty());
-
-                    // Handle checkbox change events for filtering
-                    select.on('change', 'input:checkbox', function () {
-                      var checkedValues = [];
-                      $('input:checkbox:checked', select).each(function () {
-                        // Get trimmed checkbox value
-                        checkedValues.push($(this).val().trim());
-                      });
-
-                      // Create regex pattern from checked values
-                      var regex = checkedValues.length ?
-                        checkedValues.map(function (val) {
-                          // Escape special regex characters to prevent errors
-                          return val.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-                        }).join('|') : '';
-
-                      // Apply filter using regex
-                      column
-                        .search(checkedValues.length ? regex : '', true, false)
-                        .draw();
-
-                      console.log("Applied filter for column " + index + ": " + regex);
-                    });
-
-                    // Create checkboxes for each unique value in the column
-                    columnData.each(function (d, j) {
-                      if (d) { // Skip empty values
-                        // Clean the value and create checkbox with label
-                        var cleanValue = d.trim();
-                        var checkbox = $('<label><input type="checkbox" value="' + cleanValue + '"> ' + cleanValue + '</label><br>');
-                        select.append(checkbox);
-                      }
-                    });
-                  });
-                },
-                // Enable pagination
-                "paging": true,
-                // Set default sorting (first column ascending)
-                "order": [[0, 'asc']],
-                // Enable responsive behavior
-                "responsive": true,
-                // Enable horizontal scrolling if needed
-                "scrollX": true,
-                // Customize language settings
-                "language": {
-                  "search": "Search:",
-                  "lengthMenu": "Show _MENU_ entries",
-                  "info": "Showing _START_ to _END_ of _TOTAL_ entries",
-                  "infoEmpty": "Showing 0 to 0 of 0 entries",
-                  "infoFiltered": "(filtered from _MAX_ total entries)"
-                }
-              });
-              // Add image filtering input
-              const filterX86Checkbox = document.getElementById('filterX86');
-              const imageSelect = document.getElementById('osImageSelect');
-              const searchKeyword = document.getElementById('imageSearchKeyword');
-
-              function filterImages() {
-                const keyword = searchKeyword ? searchKeyword.value.toLowerCase() : '';
-                const filterX86Only = filterX86Checkbox.checked;
-
-                let matchCount = 0;
-                let firstMatchIndex = -1;
-                const options = imageSelect.options;
-
-                for (let i = 0; i < options.length; i++) {
-                  const optionText = options[i].text.toLowerCase();
-                  const optionValue = options[i].value.toLowerCase();
-                  const architecture = options[i].dataset.architecture?.toLowerCase() || '';
-
-                  const matchesKeyword = keyword === '' || optionText.includes(keyword) || optionValue.includes(keyword);
-
-                  const matchesArchitecture = filterX86Only 
-                        ? architecture.includes('x86')
-                        : !architecture.includes('x86'); 
-
-                  if (matchesKeyword && matchesArchitecture) {
-                    options[i].style.display = '';
-                    matchCount++;
-
-                    if (firstMatchIndex === -1) {
-                      firstMatchIndex = i;
-                    }
+              // Add input validation feedback for VM count
+              if (vmCountInput) {
+                vmCountInput.addEventListener('input', function() {
+                  const value = parseInt(this.value, 10);
+                  const isValid = !isNaN(value) && value >= 1 && value <= 100;
+                  
+                  if (isValid) {
+                    this.style.borderColor = '#28a745';
+                    this.style.backgroundColor = '#f8fff9';
                   } else {
-                    options[i].style.display = 'none';
+                    this.style.borderColor = '#dc3545';
+                    this.style.backgroundColor = '#fff5f5';
                   }
-                }
-
-                if (matchCount > 0 && firstMatchIndex >= 0) {
-                  imageSelect.selectedIndex = firstMatchIndex;
-                } else if (matchCount === 0) {
-                  imageSelect.selectedIndex = -1;
-                }
+                });
               }
 
-              if (filterX86Checkbox) {
-                filterX86Checkbox.addEventListener('change', filterImages);
+              // Add input validation feedback for root disk size
+              const rootDiskInput = document.getElementById('rootDiskSizeCustom');
+              if (rootDiskInput) {
+                rootDiskInput.addEventListener('input', function() {
+                  const value = this.value.trim();
+                  const isValid = value === 'default' || value === '' || /^\d+$/.test(value);
+                  
+                  if (isValid) {
+                    this.style.borderColor = '#28a745';
+                    this.style.backgroundColor = '#f8fff9';
+                  } else {
+                    this.style.borderColor = '#dc3545';
+                    this.style.backgroundColor = '#fff5f5';
+                  }
+                });
               }
 
-              if (searchKeyword) {
-                searchKeyword.addEventListener('input', filterImages);
+              // Add input validation feedback for labels
+              const labelsInput = document.getElementById('vmLabels');
+              if (labelsInput) {
+                labelsInput.addEventListener('input', function() {
+                  const value = this.value.trim();
+                  // Basic validation for key=value,key=value format
+                  const isValid = value === '' || /^[a-zA-Z0-9_-]+=.+?(,[a-zA-Z0-9_-]+=.+?)*$/.test(value);
+                  
+                  if (isValid) {
+                    this.style.borderColor = '#28a745';
+                    this.style.backgroundColor = '#f8fff9';
+                  } else {
+                    this.style.borderColor = '#ffc107';
+                    this.style.backgroundColor = '#fffef5';
+                  }
+                });
               }
-
-              filterImages();
-
             },
 
             inputAttributes: {
@@ -4607,14 +4543,25 @@ function registerCspResource() {
 window.registerCspResource = registerCspResource;
 
 function updateNsList() {
-  // Clear options in 'select'
-  var selectElement = document.getElementById("namespace");
-  var previousSelection = selectElement.value;
-  var i,
-    L = selectElement.options.length - 1;
-  for (i = L; i >= 0; i--) {
-    selectElement.remove(i);
-  }
+  // Get all namespace select elements
+  var namespaceSelects = [
+    document.getElementById("namespace"),           // Provision tab
+    document.getElementById("namespace-control"),   // Control tab  
+    document.getElementById("namespace-resources")  // Resources tab
+  ];
+  
+  // Store previous selections
+  var previousSelections = namespaceSelects.map(select => select ? select.value : '');
+  
+  // Clear options in all namespace selects
+  namespaceSelects.forEach(selectElement => {
+    if (selectElement) {
+      var i, L = selectElement.options.length - 1;
+      for (i = L; i >= 0; i--) {
+        selectElement.remove(i);
+      }
+    }
+  });
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
@@ -4634,21 +4581,31 @@ function updateNsList() {
     })
       .then((res) => {
         if (res.data.output != null) {
-          // mciList = res.data.output;
+          // Update all namespace select elements
           for (let item of res.data.output) {
             if (item && item.trim() !== "") {
-              var option = document.createElement("option");
-              option.value = item;
-              option.text = item;
-              document.getElementById("namespace").appendChild(option);
+              namespaceSelects.forEach((selectElement, index) => {
+                if (selectElement) {
+                  var option = document.createElement("option");
+                  option.value = item;
+                  option.text = item;
+                  selectElement.appendChild(option);
+                }
+              });
             }
           }
-          for (let i = 0; i < selectElement.options.length; i++) {
-            if (selectElement.options[i].value == previousSelection) {
-              selectElement.options[i].selected = true;
-              break;
+          
+          // Restore previous selections
+          namespaceSelects.forEach((selectElement, index) => {
+            if (selectElement && previousSelections[index]) {
+              for (let i = 0; i < selectElement.options.length; i++) {
+                if (selectElement.options[i].value == previousSelections[index]) {
+                  selectElement.options[i].selected = true;
+                  break;
+                }
+              }
             }
-          }
+          });
         }
       })
       .finally(function () {
@@ -4657,10 +4614,44 @@ function updateNsList() {
   }
 }
 
+// Function to sync namespace selection across all tabs
+function syncNamespaceSelection(selectedValue) {
+  var namespaceSelects = [
+    document.getElementById("namespace"),           // Provision tab
+    document.getElementById("namespace-control"),   // Control tab  
+    document.getElementById("namespace-resources")  // Resources tab
+  ];
+  
+  namespaceSelects.forEach(selectElement => {
+    if (selectElement && selectElement.value !== selectedValue) {
+      selectElement.value = selectedValue;
+    }
+  });
+}
+
 document.getElementById("namespace").onmouseover = function () {
   updateNsList();
 };
 document.getElementById("namespace").onchange = function () {
+  syncNamespaceSelection(this.value);
+  updateMciList();
+};
+
+// Add event handlers for Control tab namespace
+document.getElementById("namespace-control").onmouseover = function () {
+  updateNsList();
+};
+document.getElementById("namespace-control").onchange = function () {
+  syncNamespaceSelection(this.value);
+  updateMciList();
+};
+
+// Add event handlers for Resources tab namespace
+document.getElementById("namespace-resources").onmouseover = function () {
+  updateNsList();
+};
+document.getElementById("namespace-resources").onchange = function () {
+  syncNamespaceSelection(this.value);
   updateMciList();
 };
 
@@ -6335,7 +6326,6 @@ function jsonToTable(jsonText) {
     arr04[i] = json[i].costPerHour;
     arr05[i] = json[i].evaluationScore09;
   }
-  // table.innerHTML = "";
 
   // Header
   let tr0 = document.createElement("tr");
