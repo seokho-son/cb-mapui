@@ -1371,8 +1371,8 @@ var createMciReqTmplt = {
 };
 
 var createMciReqVmTmplt = {
-  commonImage: "ubuntu22.04",
-  commonSpec: "",
+  imageId: "ubuntu22.04",
+  specId: "",
   description: "mapui",
   rootDiskType: "default",
   rootDiskSize: "default",
@@ -2377,11 +2377,11 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
                 
                 // Try to find detailed spec info from recommendedSpecList if available
                 var detailedSpec = null;
-                if (vm.vmConfig.commonSpec && typeof recommendedSpecList !== 'undefined' && Array.isArray(recommendedSpecList)) {
+                if (vm.vmConfig.specId && typeof recommendedSpecList !== 'undefined' && Array.isArray(recommendedSpecList)) {
                   detailedSpec = recommendedSpecList.find(spec => 
-                    spec.id === vm.vmConfig.commonSpec || 
-                    spec.name === vm.vmConfig.commonSpec ||
-                    vm.vmConfig.commonSpec.includes(spec.id)
+                    spec.id === vm.vmConfig.specId || 
+                    spec.name === vm.vmConfig.specId ||
+                    vm.vmConfig.specId.includes(spec.id)
                   );
                 }
                 
@@ -2400,15 +2400,15 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
                     }
                     specs.push(`⚡ <strong>Accelerator:</strong> ${acceleratorInfo}`);
                   }
-                } else if (vm.vmConfig.commonSpec) {
+                } else if (vm.vmConfig.specId) {
                   // Fallback: Try to extract vCPU and memory from spec name if available
-                  var specMatch = vm.vmConfig.commonSpec.match(/([0-9]+)vcpu_([0-9.]+)gb/i);
+                  var specMatch = vm.vmConfig.specId.match(/([0-9]+)vcpu_([0-9.]+)gb/i);
                   if (specMatch) {
                     specs.push(`💻 <strong>vCPU:</strong> ${specMatch[1]}`);
                     specs.push(`🧠 <strong>Memory:</strong> ${specMatch[2]} GB`);
                   } else {
                     // Show spec ID as fallback
-                    specs.push(`🖥️ <strong>Spec:</strong> ${vm.vmConfig.commonSpec.split('+').pop() || vm.vmConfig.commonSpec}`);
+                    specs.push(`🖥️ <strong>Spec:</strong> ${vm.vmConfig.specId.split('+').pop() || vm.vmConfig.specId}`);
                   }
                 }
                 
@@ -2426,9 +2426,9 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
                 }
                 
                 // Check for accelerator/GPU information from spec name if not found in detailed spec
-                if (!detailedSpec && vm.vmConfig.commonSpec && 
-                    (vm.vmConfig.commonSpec.toLowerCase().includes('gpu') || 
-                     vm.vmConfig.commonSpec.toLowerCase().includes('accelerator'))) {
+                if (!detailedSpec && vm.vmConfig.specId && 
+                    (vm.vmConfig.specId.toLowerCase().includes('gpu') || 
+                     vm.vmConfig.specId.toLowerCase().includes('accelerator'))) {
                   specs.push(`⚡ <strong>Accelerator:</strong> GPU-enabled`);
                 }
                 
@@ -3005,12 +3005,12 @@ function createMci() {
         "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
         "<tr><th style='width: 50%;'>[#" + (i + 1).toString() + "] SubGroup Name</th><td><b><span style='color: black; '>" + createMciReq.subGroups[i].name + " (" + createMciReq.subGroups[i].subGroupSize + " node(s))</span></b></td></tr>" +
         costPerHour +
-        "<tr><th style='width: 50%;'>Spec</th><td><b><span style='color: blue; '>" + createMciReq.subGroups[i].commonSpec + "</span></b></td></tr>" +
+        "<tr><th style='width: 50%;'>Spec</th><td><b><span style='color: blue; '>" + createMciReq.subGroups[i].specId + "</span></b></td></tr>" +
         "<tr><th style='width: 50%;'>vCPU</th><td><b>" + recommendedSpecList[i].vCPU + "</b></td></tr>" +
         "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + recommendedSpecList[i].memoryGiB + "</b></td></tr>" +
         acceleratorType +
         "<tr><th style='width: 50%;'>RootDisk(GB)</th><td><b>" + createMciReq.subGroups[i].rootDiskSize + " (type: " + createMciReq.subGroups[i].rootDiskType + ")</b></td></tr>" +
-        "<tr><th style='width: 50%;'>Selected Image</th><td><b><span style='color: green; '>" + createMciReq.subGroups[i].commonImage + "</span></b></td></tr>" +
+        "<tr><th style='width: 50%;'>Selected Image</th><td><b><span style='color: green; '>" + createMciReq.subGroups[i].imageId + "</span></b></td></tr>" +
 
         ((createMciReq.subGroups[i].label && Object.keys(createMciReq.subGroups[i].label).length > 0) ?
           "<tr><th style='width: 50%;'>Labels</th><td><b><span style='color: purple; '>" +
@@ -3764,8 +3764,8 @@ function getRecommendedSpec(idx, latitude, longitude) {
               var osImage = document.getElementById("osImage");
               var diskSize = document.getElementById("diskSize");
 
-              createMciReqVm.commonSpec = selectedSpec.id;
-              createMciReqVm.commonImage = selectedImage.cspImageName; // Use selected image instead of osImage.value
+              createMciReqVm.specId = selectedSpec.id;
+              createMciReqVm.imageId = selectedImage.cspImageName; // Use selected image instead of osImage.value
               createMciReqVm.rootDiskType = selectedSpec.rootDiskType;
 
               var diskSizeInput = diskSize.value;
@@ -3954,9 +3954,9 @@ function getRecommendedSpec(idx, latitude, longitude) {
               const osImageSelect = document.getElementById('osImageSelect');
               if (osImageSelect && osImageSelect.value) {
                 console.log(osImageSelect.value);
-                createMciReqVm.commonImage = osImageSelect.value;
+                createMciReqVm.imageId = osImageSelect.value;
               }
-              if (!createMciReqVm.commonImage) {
+              if (!createMciReqVm.imageId) {
                 Swal.showValidationMessage('Select an OS image');
                 return false;
               }
@@ -4003,7 +4003,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
 
               messageTextArea.value +=
-                `${createMciReqVm.commonSpec}` +
+                `${createMciReqVm.specId}` +
                 `\t(${createMciReqVm.subGroupSize})`;
               vmReqeustFromSpecList.push(createMciReqVm);
               recommendedSpecList.push(recommendedSpec);
