@@ -472,11 +472,9 @@ const cspIconImg = {
   cloudit: "img/ht-cloudit.png",
   ibm: "img/ibm.png",
   tencent: "img/tencent.png",
-  ncpvpc: "img/ncpvpc.png",
   ncp: "img/ncp.png",
-  ktcloud: "img/kt.png",
-  ktcloudvpc: "img/ktvpc.png",
-  nhncloud: "img/nhn.png",
+  kt: "img/kt.png",
+  nhn: "img/nhn.png",
 
   // Add more CSP icons here
 };
@@ -519,23 +517,90 @@ Object.keys(cspIconImg).forEach((csp, index) => {
   addIconToMap(cspIconImg[csp], pnt, iconIndex);
 });
 
-// magenta black blue orange yellow red grey green
-function changeColorStatus(status) {
-  if (status.includes("Partial")) {
-    return "green";
-  } else if (status.includes("Running")) {
-    return "blue";
-  } else if (status.includes("Suspending")) {
-    return "black";
-  } else if (status.includes("Creating")) {
-    return "orange";
-  } else if (status.includes("Terminated")) {
-    return "red";
-  } else if (status.includes("Terminating")) {
-    return "grey";
-  } else {
-    return "grey";
+// Provider Icon Mapping for VM visualization (using existing cspIconImg)
+function getProviderIcon(providerName) {
+  const provider = providerName?.toLowerCase();
+  const iconPath = cspIconImg[provider] || "img/circle.png"; // fallback icon
+  return iconPath;
+}
+
+
+// Helper function to calculate luminance and determine contrast color
+function getContrastColor(hexColor) {
+  // Remove # if present and handle alpha values
+  const cleanHex = hexColor.replace('#', '').replace(/ff$/i, '');
+  
+  // Convert hex to RGB
+  const r = parseInt(cleanHex.substr(0, 2), 16);
+  const g = parseInt(cleanHex.substr(2, 2), 16);
+  const b = parseInt(cleanHex.substr(4, 2), 16);
+  
+  // Calculate relative luminance (W3C formula)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  
+  // Return black for bright colors, white for dark colors
+  return luminance > 0.5 ? "#000000" : "#ffffff";
+}
+
+// Unified VM/MCI Status Color Mapping with improved visibility and contrasting borders
+function getVmStatusColor(status) {
+  // Handle both exact status and status that includes keywords (for backward compatibility)
+  const statusStr = status?.toString().toLowerCase() || '';
+  
+  let fillColor;
+  
+  // Running states - Green shades (healthy/active)
+  if (status === "Running" || statusStr.includes("running")) {
+    fillColor = "#10b981"; // emerald-500 - bright green for active/healthy state
   }
+  // Creating/Starting states - Blue shades (in progress)
+  else if (status === "Creating" || statusStr.includes("creating")) {
+    fillColor = "#3b82f6"; // blue-500 - bright blue for creation progress
+  }
+  else if (status === "Resuming" || statusStr.includes("resuming")) {
+    fillColor = "#06b6d4"; // cyan-500 - cyan for resuming
+  }
+  // Suspended/Paused states - Yellow/Orange shades (paused but recoverable)
+  else if (status === "Suspended" || statusStr.includes("suspended")) {
+    fillColor = "#f59e0b"; // amber-500 - amber for suspended/paused state
+  }
+  else if (status === "Suspending" || statusStr.includes("suspending")) {
+    fillColor = "#d97706"; // amber-600 - darker amber for suspending process
+  }
+  // Rebooting state - Purple (special operation)
+  else if (status === "Rebooting" || statusStr.includes("rebooting")) {
+    fillColor = "#8b5cf6"; // violet-500 - purple for reboot operation
+  }
+  // Terminating states - Red shades (destructive operations)
+  else if (status === "Terminating" || statusStr.includes("terminating")) {
+    fillColor = "#ef4444"; // red-500 - bright red for terminating
+  }
+  else if (status === "Terminated" || statusStr.includes("terminated")) {
+    fillColor = "#dc2626"; // red-600 - darker red for terminated
+  }
+  // Failed/Error states - Dark red (critical issues)
+  else if (status === "Failed" || statusStr.includes("failed")) {
+    fillColor = "#b91c1c"; // red-700 - dark red for failed state
+  }
+  // Undefined/Unknown states - Gray (neutral/unknown)
+  else if (status === "Undefined" || statusStr.includes("undefined")) {
+    fillColor = "#6b7280"; // gray-500 - medium gray for undefined
+  }
+  // Default fallback
+  else {
+    fillColor = "#9ca3af"; // gray-400 - light gray for unknown states
+  }
+  
+  return {
+    fill: fillColor,
+    stroke: getContrastColor(fillColor)
+  };
+}
+
+// Legacy function for MCI status - returns only fill color for backward compatibility
+function changeColorStatus(status) {
+  const colorObj = getVmStatusColor(status);
+  return typeof colorObj === 'object' ? colorObj.fill : colorObj;
 }
 
 function changeSizeStatus(status) {
@@ -564,6 +629,65 @@ function changeSizeStatus(status) {
   } else {
     return 1.5;
   }
+}
+
+// Create VM icon style with status badge and provider icon
+function createVmStyleWithStatusBadge(vmStatus, providerName = null, baseScale = 1.0, vmCoords = null) {
+  const statusColors = getVmStatusColor(vmStatus);
+  
+  const styles = [
+    // Main VM icon (center)
+    new Style({
+      image: new Icon({
+        crossOrigin: "anonymous",
+        src: "img/iconVm.png",
+        opacity: 1.0,
+        scale: baseScale * 0.3,
+        anchor: [0.5, 0.5], // Center anchor
+        anchorXUnits: 'fraction',
+        anchorYUnits: 'fraction',
+      }),
+    }),
+    // Status badge (bottom-right using displacement)
+    new Style({
+      image: new CircleStyle({
+        radius: 3,
+        fill: new Fill({
+          color: statusColors.fill,
+        }),
+        stroke: new Stroke({
+          color: statusColors.stroke,
+          width: 1.5, // Slightly thicker border for better visibility
+        }),
+        displacement: [12, -13], // Move right and down (negative Y for down)
+      }),
+    })
+  ];
+
+  // Add provider icon if provider information is available (center-top using anchor)
+  if (providerName && providerName !== 'unknown') {
+    const providerIconSrc = getProviderIcon(providerName);
+    styles.push(
+      new Style({
+        image: new Icon({
+          crossOrigin: "anonymous",
+          src: providerIconSrc,
+          opacity: 0.9,
+          scale: baseScale * 0.3,
+          anchor: [0.5, 0.75], 
+          anchorXUnits: 'fraction',
+          anchorYUnits: 'fraction',
+        }),
+      })
+    );
+  }
+
+  return styles;
+}
+
+// Create individual VM point with offset for status badge
+function createVmPointWithOffset(coordinates, offsetX = 0.008, offsetY = 0.008) {
+  return new Point([coordinates[0] + offsetX, coordinates[1] + offsetY]);
 }
 
 function changeSizeByName(status) {
@@ -645,20 +769,20 @@ function makeTria(ip1, ip2, ip3) {
   //cnt++;
 }
 
-function makePolyDot(vmPoints) {
-  //for (i = 0; i < vmPoints.length; i++) {
-  //coordinates.push(vmPoints[i]);
-  //}
-
+function makePolyDot(vmPoints, vmStatuses = [], vmProviders = []) {
   var resourcePoints = [];
 
   for (i = 0; i < vmPoints.length; i++) {
     resourcePoints.push(vmPoints[i]);
   }
 
-  geometriesPoints[cnt] = new MultiPoint(resourcePoints);
-
-  //cnt++;
+  // Store geometry and VM metadata including provider info in the geometriesPoints
+  geometriesPoints[cnt] = {
+    geometry: new MultiPoint(resourcePoints),
+    vmPoints: vmPoints,
+    vmStatuses: vmStatuses,
+    vmProviders: vmProviders
+  };
 }
 
 function makePolyArray(vmPoints) {
@@ -874,8 +998,8 @@ function getMci() {
   var radius = 4.0;
 
   if (namespace && namespace != "") {
-    // get mci list and put them on the map
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=status`;
+    // get mci list and put them on the map - full details including connectionConfig
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci`;
 
     axios({
       method: "get",
@@ -890,7 +1014,8 @@ function getMci() {
         var obj = res.data;
 
         cnt = cntInit;
-        if (obj.mci != null) {
+        
+        if (obj.mci != null && obj.mci.length > 0) {
           for (let item of obj.mci) {
             console.log(item);
 
@@ -913,25 +1038,32 @@ function getMci() {
               break;
             }
             for (j = 0; j < item.vm.length; j++) {
+              // Safely extract VM coordinates for vmGeo
+              const vm = item.vm[j];
+              if (!vm.location || vm.location.longitude === undefined || vm.location.latitude === undefined) {
+                console.warn(`VM ${vm.id || j}: missing location data, skipping`);
+                continue;
+              }
+              
               //vmGeo.push([(item.vm[j].location.longitude*1) + (Math.round(Math.random()) / zoomLevel - 1) * Math.random()*1, (item.vm[j].location.latitude*1) + (Math.round(Math.random()) / zoomLevel - 1) * Math.random()*1 ])
               if (j == 0) {
                 vmGeo.push([
-                  item.vm[j].location.longitude * 1,
-                  item.vm[j].location.latitude * 1,
+                  vm.location.longitude * 1,
+                  vm.location.latitude * 1,
                 ]);
               } else {
                 var groupCnt = 0;
-                if ((item.vm[j].location.longitude == item.vm[j - 1].location.longitude) && (item.vm[j].location.latitude == item.vm[j - 1].location.latitude)) {
+                if ((vm.location.longitude == item.vm[j - 1].location.longitude) && (vm.location.latitude == item.vm[j - 1].location.latitude)) {
                   vmGeo.push([
-                    item.vm[j].location.longitude * 1 +
+                    vm.location.longitude * 1 +
                     (returnAdjustmentPoint(j, item.vm.length).ax / zoomLevel) * radius,
-                    item.vm[j].location.latitude * 1 +
+                    vm.location.latitude * 1 +
                     (returnAdjustmentPoint(j, item.vm.length).ay / zoomLevel) * radius,
                   ]);
                 } else {
                   vmGeo.push([
-                    item.vm[j].location.longitude * 1,
-                    item.vm[j].location.latitude * 1,
+                    vm.location.longitude * 1,
+                    vm.location.latitude * 1,
                   ]);
                 }
               }
@@ -956,8 +1088,64 @@ function getMci() {
             if (validateNum == item.vm.length) {
               //console.log("Found all GEOs validateNum : " + validateNum);
 
-              //make dots without convexHull
-              makePolyDot(vmGeo);
+              // Store VM-specific data for makePolyDot
+              var vmStatuses = [];
+              var vmProviders = [];
+              var vmPoints = [];
+              
+              for (let vmIndex = 0; vmIndex < item.vm.length; vmIndex++) {
+                const vm = item.vm[vmIndex];
+                
+                // Debug: Log only the first VM structure to avoid spam
+                if (vmIndex === 0) {
+                  console.log(`Debug VM ${vm.id || 'unknown'} structure:`, vm);
+                }
+                
+                vmStatuses.push(vm.status || "Undefined");
+                
+                // Extract provider from connectionConfig (full API response)
+                let provider = "unknown";
+                
+                // Debug: Log connection-related properties for first VM only
+                if (vmIndex === 0) {
+                  console.log(`VM ${vm.id}: connectionName =`, vm.connectionName);
+                  console.log(`VM ${vm.id}: connectionConfig =`, vm.connectionConfig);
+                }
+                
+                if (vm.connectionConfig && vm.connectionConfig.providerName) {
+                  provider = vm.connectionConfig.providerName;
+                  if (vmIndex === 0) console.log(`VM ${vm.id}: found provider in connectionConfig = ${provider}`);
+                } else if (vm.connectionName) {
+                  // Fallback: extract provider from connectionName (e.g., "aws-ap-northeast-2" -> "aws")
+                  provider = vm.connectionName.split('-')[0];
+                  if (vmIndex === 0) console.log(`VM ${vm.id}: extracted provider from connectionName = ${provider}`);
+                } else {
+                  if (vmIndex === 0) {
+                    console.log(`VM ${vm.id}: no provider info found, using unknown`);
+                    console.log(`VM ${vm.id}: available properties:`, Object.keys(vm));
+                  }
+                }
+                
+                vmProviders.push(provider);
+                
+                // Use the same coordinates as vmGeo for consistency
+                if (vmIndex == 0) {
+                  vmPoints.push([vm.location.longitude * 1, vm.location.latitude * 1]);
+                } else {
+                  const prevVm = item.vm[vmIndex - 1];
+                  if ((vm.location.longitude == prevVm.location.longitude) && (vm.location.latitude == prevVm.location.latitude)) {
+                    vmPoints.push([
+                      vm.location.longitude * 1 + (returnAdjustmentPoint(vmIndex, item.vm.length).ax / zoomLevel) * radius,
+                      vm.location.latitude * 1 + (returnAdjustmentPoint(vmIndex, item.vm.length).ay / zoomLevel) * radius,
+                    ]);
+                  } else {
+                    vmPoints.push([vm.location.longitude * 1, vm.location.latitude * 1]);
+                  }
+                }
+              }
+
+              //make dots without convexHull - now includes VM status and provider info
+              makePolyDot(vmGeo, vmStatuses, vmProviders);
               vmGeo = convexHull(vmGeo);
 
               mciStatus[cnt] = item.status;
@@ -980,8 +1168,16 @@ function getMci() {
             }
           }
         } else {
-          // Clear MCI geometries when list is empty
+          // Clear all MCI-related data when list is empty or null
+          console.log("No MCI data found, clearing map objects");
           geometries = [];
+          geometriesPoints = [];
+          mciName = [];
+          mciStatus = [];
+          mciGeo = [];
+          
+          // Force map re-render to show empty state
+          map.render();
         }
       })
       .catch(function (error) {
@@ -1755,11 +1951,11 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
       if (reviewData.mciName) infos.push(`MCI Name: ${reviewData.mciName}`);
       // Use backend-calculated totalVmCount if available, fallback to frontend calculation
       if (reviewData.totalVmCount) {
-        infos.push(`Total VM Count: ${reviewData.totalVmCount}`);
+        infos.push(`SubGroups: ${reviewData.totalVmCount}`);
         // Update totalNodeScale with backend value if available
         totalNodeScale = reviewData.totalVmCount;
       } else {
-        infos.push(`Total VM Count: ${totalNodeScale} (frontend calculated)`);
+        infos.push(`SubGroups: ${totalNodeScale} (frontend calculated)`);
       }
       // Use backend-calculated estimatedCost if available
       if (reviewData.estimatedCost) {
@@ -3369,10 +3565,8 @@ function getRecommendedSpec(idx, latitude, longitude) {
         // Search for images based on the selected spec
         const searchImageURL = `http://${hostname}:${port}/tumblebug/ns/system/resources/searchImage`;
         const searchImageBody = {
-          providerName: selectedSpec.providerName,
-          regionName: selectedSpec.regionName,
+          matchedSpecId: selectedSpec.id,
           osType: document.getElementById("osImage").value,
-          osArchitecture: selectedSpec.architecture,
         };
 
         console.log("Searching images for selected spec:", selectedSpec.id);
@@ -6246,16 +6440,54 @@ function drawObjects(event) {
     vectorContext.drawGeometry(geoResourceLocation.vpn[0]);
   }
 
-  // Draw MCI Points and Text
+  // Draw MCI Points and Individual VM Status Badges
   for (i = geometries.length - 1; i >= 0; --i) {
-
-    if (mciName[i].includes("NLB")) {
-      vectorContext.setStyle(iconStyleNlb);
+    const geometryPoint = geometriesPoints[i];
+    
+    // Check if geometryPoint has the new structure with VM data
+    if (geometryPoint && typeof geometryPoint === 'object' && geometryPoint.geometry) {
+      // New structure: Draw individual VMs with status badges and provider icons
+      const { geometry, vmPoints, vmStatuses, vmProviders } = geometryPoint;
+      const vmBaseScale = changeSizeStatus(mciName[i] + mciStatus[i]);
+      
+      // Draw individual VM icons with status badges and provider icons
+      if (vmPoints && vmStatuses) {
+        vmStatuses.forEach((vmStatus, vmIndex) => {
+          if (vmPoints[vmIndex]) {
+            const vmCoords = vmPoints[vmIndex];
+            const vmProvider = vmProviders ? vmProviders[vmIndex] : null;
+            const vmStyles = createVmStyleWithStatusBadge(vmStatus, vmProvider, vmBaseScale, vmCoords);
+            
+            // Test displacement approach - apply all styles to same geometry
+            const vmPoint = new Point(vmCoords);
+            
+            vmStyles.forEach(style => {
+              vectorContext.setStyle(style);
+              vectorContext.drawGeometry(vmPoint);
+            });
+          }
+        });
+      }
     } else {
-      vectorContext.setStyle(iconStyleVm);
+      // Legacy structure: Draw single MCI icon (fallback)
+      if (mciName[i].includes("NLB")) {
+        vectorContext.setStyle(iconStyleNlb);
+      } else {
+        vectorContext.setStyle(iconStyleVm);
+      }
+      
+      // Handle legacy geometry structure
+      const legacyGeometry = geometryPoint || geometriesPoints[i];
+      if (legacyGeometry) {
+        vectorContext.drawGeometry(legacyGeometry);
+      }
     }
-    vectorContext.drawGeometry(geometriesPoints[i]);
+  }
 
+  // Draw MCI status text
+  for (i = geometries.length - 1; i >= 0; --i) {
+    const statusColors = getVmStatusColor(mciStatus[i]);
+    
     // MCI status style
     var polyStatusTextStyle = new Style({
       // MCI status text style
@@ -6265,11 +6497,11 @@ function drawObjects(event) {
         scale: changeSizeStatus(mciName[i] + mciStatus[i]),
         offsetY: 44 * changeSizeStatus(mciName[i] + mciStatus[i]),
         stroke: new Stroke({
-          color: "white",
-          width: 1,
+          color: statusColors.stroke,
+          width: 2, // Slightly thicker stroke for better readability
         }),
         fill: new Fill({
-          color: changeColorStatus(mciStatus[i]),
+          color: statusColors.fill,
         }),
       }),
     });
