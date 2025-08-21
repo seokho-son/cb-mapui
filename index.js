@@ -603,6 +603,13 @@ function changeColorStatus(status) {
   return typeof colorObj === 'object' ? colorObj.fill : colorObj;
 }
 
+// Helper function to truncate MCI name with ellipsis
+function truncateMciName(name, maxLength = 12) {
+  if (!name) return '';
+  if (name.length <= maxLength) return name;
+  return name.substring(0, maxLength) + '...';
+}
+
 function changeSizeStatus(status) {
   if (status.includes("-df")) {
     return 0.4;
@@ -3968,7 +3975,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
               }
               createMciReqVm.rootDiskSize = diskSizeInput;
               if (diskSizeInput == "default" && selectedSpec.rootDiskSize != "default" && selectedSpec.rootDiskSize != "-1" && selectedSpec.rootDiskSize != "0") {
-                createMciReqVm.rootDiskSize = selectedSpec.rootDiskSize;
+                createMciReqVm.rootDiskSize = String(parseInt(selectedSpec.rootDiskSize) + 1); // add +1 GB for safety
                 // need to validate requested disk size >= default disk size given by vm spec
               }
 
@@ -6513,9 +6520,9 @@ function drawObjects(event) {
     // MCI text style
     var polyNameTextStyle = new Style({
       text: new Text({
-        text: mciName[i],
+        text: truncateMciName(mciName[i]),
         font: "bold 10px sans-serif",
-        scale: changeSizeByName(mciName[i] + mciStatus[i]) + 0.8,
+        scale: changeSizeByName(mciName[i] + mciStatus[i]) + 0.6,
         offsetY: 32 * changeSizeByName(mciName[i] + mciStatus[i]),
         stroke: new Stroke({
           color: [255, 255, 255, 1], //white
