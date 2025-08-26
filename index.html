@@ -595,88 +595,61 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 </div>
               </div>
 
-              <!-- VM Private IP Field -->
+
+              <!-- Control Actions Button (Primary) -->
               <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text" id="priipLabel">Pri IP</span>
-                  </div>
-                  <select id="priip" name="priip" class="form-control" aria-label="Pri IP"
-                    aria-describedby="priipLabel">
-                    <!-- Options will be filled dynamically -->
-                  </select>
-                </div>
+                <button type="button" id="controlActionsBtn" onClick="showActionsMenu();" class="btn btn-primary w-100">Control MCI</button>
               </div>
 
-
-              <!-- Control Actions Dropdown -->
-              <div class="form-group col dropdown">
-                <button class="btn btn-primary dropdown-toggle w-100" type="button" id="controlActionsDropdown"
-                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                  Actions
-                </button>
-                <div class="dropdown-menu" aria-labelledby="controlActionsDropdown">
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCI('suspend');">Suspend</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCI('resume');">Resume</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCI('reboot');">Reboot</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCI('refine');">Refine</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCI('continue');">Continue</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCI('withdraw');">Withdraw</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="controlMCI('terminate');">Terminate</a>
-                </div>
-              </div>
-
-              <!-- NLB Control Dropdown -->
-              <div class="form-group col dropdown">
-                <button class="btn btn-primary dropdown-toggle w-100" type="button" id="nlbControlDropdown"
-                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                  NLB Control
-                </button>
-                <div class="dropdown-menu" aria-labelledby="nlbControlDropdown">
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="AddMcNLB();">Add Global-NLB</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="AddNLB();">Add Regional-NLB</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="DelNLB();">Del Regional-NLB</a>
-                </div>
-              </div>
-
-              <!-- Update Firewall Rules Field -->
+              <!-- Status Field (Primary) -->
               <div class="form-group col">
-                <button type="button" id="updateFirewall" onClick="updateFirewallRules();" class="btn btn-primary w-100">Update Firewall</button>
+                <button type="button" id="statusBtn" onClick="statusMCI();" class="btn btn-primary w-100">Get Status</button>
               </div>
 
-              <!-- Status Field -->
-              <div class="form-group col">
-                <input type="button" value="Status" onClick="statusMCI();" class="btn btn-info w-100">
-              </div>
-
-              
-              <!-- MCI Access Field -->
+              <!-- MCI Access Field (Primary) -->
               <div class="form-group col dropdown">
-                <button class="btn btn-info dropdown-toggle w-100" type="button" id="accessDropdown"
+                <button class="btn btn-primary dropdown-toggle w-100" type="button" id="accessDropdown"
                   data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                   Get Access
                 </button>
                 <div class="dropdown-menu" aria-labelledby="accessDropdown">
                   <a class="dropdown-item" href="javascript:void(0)" onClick="getAccessInfo();">Get Access Info</a>
                   <a class="dropdown-item save-file" href="javascript:void(0)">Save SSH Key</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="executeRemoteCmd();">Remote Command</a>
                 </div>
               </div>
 
-              <!-- Remote Command Field -->
+              <!-- Remote Command Field (Warning) -->
               <div class="form-group col">
                 <button type="button" id="remoteCmd" onClick="executeRemoteCmd();" class="btn btn-warning w-100">Remote Command</button>
               </div>
 
-              <!-- File Transfer Field -->
+              <!-- File Transfer Field (Warning) -->
               <div class="form-group col">
                 <button type="button" id="filetransfer" onClick="transferFileToMci();"
                   class="btn btn-warning w-100">Remote File Transfer</button>
               </div>
 
-              <!-- Delete Field -->
+              <!-- Scale Out SubGroup Field (Success) -->
               <div class="form-group col">
-                <input type="button" value="Delete" onClick="deleteMCI();" class="btn btn-secondary w-100">
+                <button type="button" id="scaleOutBtn" onClick="scaleOutSubGroup();" class="btn btn-success w-100">ScaleOut SubGroup</button>
+              </div>
+
+              <!-- Update Firewall Rules Field (Success) -->
+              <div class="form-group col">
+                <button type="button" id="updateFirewall" onClick="updateFirewallRules();" class="btn btn-success w-100">Update Firewall</button>
+              </div>
+
+              <!-- NLB Control Dropdown (Success) -->
+              <div class="form-group col dropdown">
+                <button class="btn btn-success dropdown-toggle w-100" type="button" id="nlbControlDropdown"
+                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                  Control L4 NLB
+                </button>
+                <div class="dropdown-menu" aria-labelledby="nlbControlDropdown">
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="AddMcNLB();">Add Global-NLB</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="AddNLB();">Add Regional-NLB</a>
+                  <a class="dropdown-item" href="javascript:void(0)" onClick="DelNLB();">Del Regional-NLB</a>
+                </div>
               </div>
 
 
