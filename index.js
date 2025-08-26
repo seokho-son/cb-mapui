@@ -560,6 +560,13 @@ function getVmStatusColor(status) {
   else if (status === "Resuming" || statusStr.includes("resuming")) {
     fillColor = "#06b6d4"; // cyan-500 - cyan for resuming
   }
+  // Preparing states - Orange shades (preparation phase)
+  else if (status === "Preparing" || statusStr.includes("Preparing")) {
+    fillColor = "#f97316"; // orange-500 - orange for preparing state
+  }
+  else if (status === "Prepared" || statusStr.includes("Prepared")) {
+    fillColor = "#ea580c"; // orange-600 - darker orange for prepared state
+  }
   // Suspended/Paused states - Yellow/Orange shades (paused but recoverable)
   else if (status === "Suspended" || statusStr.includes("suspended")) {
     fillColor = "#f59e0b"; // amber-500 - amber for suspended/paused state
@@ -617,16 +624,18 @@ function changeSizeStatus(status) {
     return 0.4;
   } else if (status.includes("NLB")) {
     return 1.5;
+  } else if (status.includes("Failed")) {
+    return 2.2; // Make Failed VMs more visible with medium-large size
   } else if (status.includes("Partial")) {
     return 2.4;
   } else if (status.includes("Running")) {
-    return 2.5;
+    return 2.4;
   } else if (status.includes("Suspending")) {
     return 2.4;
   } else if (status.includes("Suspended")) {
     return 2.4;
   } else if (status.includes("Creating")) {
-    return 2.5;
+    return 2.4;
   } else if (status.includes("Resuming")) {
     return 2.4;
   } else if (status.includes("Terminated")) {
@@ -634,7 +643,7 @@ function changeSizeStatus(status) {
   } else if (status.includes("Terminating")) {
     return 2.4;
   } else {
-    return 1.5;
+    return 2.4;
   }
 }
 
@@ -988,6 +997,59 @@ function displayJsonData(jsonData, type) {
   }, 100);
 }
 
+// Handle MCI without VMs (preparing, prepared states)
+function handleMciWithoutVms(mciItem, cnt) {
+  // Get current map center coordinates
+  var mapCenter = map.getView().getCenter();
+  var defaultLon = mapCenter[0];
+  var defaultLat = mapCenter[1];
+  
+  // If MCI has label with location info, try to extract it (optional override)
+  if (mciItem.label && typeof mciItem.label === 'object') {
+    if (mciItem.label.location) {
+      var locParts = mciItem.label.location.split(',');
+      if (locParts.length === 2) {
+        var labelLat = parseFloat(locParts[0].trim());
+        var labelLon = parseFloat(locParts[1].trim());
+        if (!isNaN(labelLat) && !isNaN(labelLon)) {
+          defaultLat = labelLat;
+          defaultLon = labelLon;
+        }
+      }
+    }
+  }
+  
+  // Add slight offset to avoid overlapping if multiple preparing MCIs exist
+  var offsetDistance = 0.1; // Distance offset in degrees (reduced for closer positioning)
+  var offsetAngle = (cnt * 45) * (Math.PI / 180); // 45 degrees apart for each MCI
+  defaultLon += offsetDistance * Math.cos(offsetAngle);
+  defaultLat += offsetDistance * Math.sin(offsetAngle);
+  
+  // Create a simple point geometry for text positioning (no background shape)
+  geometries[cnt] = new Point([defaultLon, defaultLat]);
+  mciGeo[cnt] = new Point([defaultLon, defaultLat]);
+  
+  // Store MCI status
+  mciStatus[cnt] = mciItem.status;
+  
+  // Set MCI name
+  var newName = mciItem.name;
+  if (newName.includes("-nlb")) {
+    newName = "NLB";
+  }
+  
+  if (mciItem.targetAction == "None" || mciItem.targetAction == "" || !mciItem.targetAction) {
+    mciName[cnt] = "[" + newName + "]";
+  } else {
+    mciName[cnt] = mciItem.targetAction + "-> " + "[" + newName + "]";
+  }
+  
+  // Do not create VM points for preparing/prepared MCI (no actual VMs exist)
+  geometriesPoints[cnt] = null;
+  
+  console.log(`Added placeholder geometry for MCI ${mciItem.name} with status ${mciItem.status}`);
+}
+
 function getMci() {
   var hostname = hostnameElement.value;
   var port = portElement.value;
@@ -1037,13 +1099,19 @@ function getMci() {
               continue;
             }
 
+            // Handle MCI without VMs (preparing, prepared states)
+            if (item.vm == null || item.vm.length === 0) {
+              console.log("MCI without VMs:", item);
+              if (item.status === "Preparing" || item.status === "Prepared") {
+                handleMciWithoutVms(item, cnt);
+                cnt++;
+              }
+              continue;
+            }
+
             var vmGeo = [];
 
             var validateNum = 0;
-            if (item.vm == null) {
-              console.log(item);
-              break;
-            }
             for (j = 0; j < item.vm.length; j++) {
               // Safely extract VM coordinates for vmGeo
               const vm = item.vm[j];
@@ -3340,6 +3408,18 @@ function getRecommendedSpec(idx, latitude, longitude) {
   var jsonBody = JSON.stringify(struct);
   console.log("Request body for mciDynamicCheckRequest:", jsonBody);
 
+  // Show loading popup while API is processing
+  Swal.fire({
+    title: 'Recommending Specification list',
+    text: 'Please wait for a moment...',
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    showConfirmButton: false,
+    didOpen: () => {
+      Swal.showLoading();
+    }
+  });
+
   axios({
     method: "post",
     url: url,
@@ -3350,6 +3430,8 @@ function getRecommendedSpec(idx, latitude, longitude) {
       password: `${password}`,
     },
   }).then((res) => {
+    // Close loading popup
+    Swal.close();
     console.log(res); // for debug
     handleAxiosResponse(res);
 
@@ -3975,7 +4057,9 @@ function getRecommendedSpec(idx, latitude, longitude) {
               }
               createMciReqVm.rootDiskSize = diskSizeInput;
               if (diskSizeInput == "default" && selectedSpec.rootDiskSize != "default" && selectedSpec.rootDiskSize != "-1" && selectedSpec.rootDiskSize != "0") {
-                createMciReqVm.rootDiskSize = String(parseInt(selectedSpec.rootDiskSize) + 1); // add +1 GB for safety
+                //createMciReqVm.rootDiskSize = selectedSpec.rootDiskSize
+                // keep "default". selectedSpec.rootDiskSize does not work correctly yet
+                createMciReqVm.rootDiskSize = diskSizeInput; 
                 // need to validate requested disk size >= default disk size given by vm spec
               }
 
@@ -4242,6 +4326,9 @@ function getRecommendedSpec(idx, latitude, longitude) {
       }
     });
   }).catch(function (error) {
+    // Close loading popup on error
+    Swal.close();
+    
     console.log(error);
     errorAlert("Cannot recommend a spec (Check log for details)");
     if (error.response && error.response.data) {
@@ -6450,6 +6537,11 @@ function drawObjects(event) {
   // Draw MCI Points and Individual VM Status Badges
   for (i = geometries.length - 1; i >= 0; --i) {
     const geometryPoint = geometriesPoints[i];
+    
+    // Skip if no geometry point (e.g., preparing/prepared MCI)
+    if (!geometryPoint) {
+      continue;
+    }
     
     // Check if geometryPoint has the new structure with VM data
     if (geometryPoint && typeof geometryPoint === 'object' && geometryPoint.geometry) {
