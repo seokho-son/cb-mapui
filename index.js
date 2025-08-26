@@ -90,11 +90,22 @@ var cnti, cntj;
 const cntInit = 0;
 var cnt = cntInit;
 
+function getActionAnimation(targetAction) {
+  if (!targetAction || targetAction === "None" || targetAction === "") {
+    return "";
+  }
+  
+  const spinChars = ['◐', '◓', '◑', '◒'];
+  const index = Math.floor(Date.now() / 150) % spinChars.length;
+  return ' ' + spinChars[index];
+}
+
 //var n = 1000;
 var geometries = new Array();
 var geometriesPoints = new Array();
 var mciName = new Array();
 var mciStatus = new Array();
+var mciTargetAction = new Array(); // Store targetAction information for each MCI
 var mciGeo = new Array();
 
 var cspListDisplayEnabled = document.getElementById("displayOn");
@@ -143,6 +154,7 @@ function clearMap() {
   messageJsonOutput.value = "";
   messageTextArea.value = "";
   geometries = [];
+  mciTargetAction = []; // Clear targetAction array as well
   geoResourceLocation.k8s = [];
   geoResourceLocation.sg = [];
   geoResourceLocation.sshKey = [];
@@ -1038,11 +1050,12 @@ function handleMciWithoutVms(mciItem, cnt) {
     newName = "NLB";
   }
   
-  if (mciItem.targetAction == "None" || mciItem.targetAction == "" || !mciItem.targetAction) {
-    mciName[cnt] = "[" + newName + "]";
-  } else {
-    mciName[cnt] = mciItem.targetAction + "-> " + "[" + newName + "]";
-  }
+  // Store only the clean name
+  mciName[cnt] = "[" + newName + "]";
+  
+  // Store targetAction information separately
+  mciTargetAction[cnt] = (mciItem.targetAction && mciItem.targetAction !== "None" && mciItem.targetAction !== "") 
+    ? mciItem.targetAction : null;
   
   // Do not create VM points for preparing/prepared MCI (no actual VMs exist)
   geometriesPoints[cnt] = null;
@@ -1230,11 +1243,12 @@ function getMci() {
                 newName = "NLB";
               }
 
-              if (item.targetAction == "None" || item.targetAction == "") {
-                mciName[cnt] = "[" + newName + "]";
-              } else {
-                mciName[cnt] = item.targetAction + "-> " + "[" + newName + "]";
-              }
+              // Store only the clean name
+              mciName[cnt] = "[" + newName + "]";
+              
+              // Store targetAction information separately
+              mciTargetAction[cnt] = (item.targetAction && item.targetAction !== "None" && item.targetAction !== "") 
+                ? item.targetAction : null;
 
               //make poly with convexHull
               makePolyArray(vmGeo);
@@ -5064,14 +5078,10 @@ function updateVmList() {
 
       });
   } else {
-    // clear public ip and private ip
+    // clear public ip
     var pubip = document.getElementById("pubip");
-    var priip = document.getElementById("priip");
     while (pubip.options.length > 0) {
       pubip.remove(0);
-    }
-    while (priip.options.length > 0) {
-      priip.remove(0);
     }
   }
 }
@@ -5086,7 +5096,6 @@ document.getElementById("vmid").addEventListener('change', function () {
 
 function updateIpList() {
   var pubip = document.getElementById("pubip");
-  var priip = document.getElementById("priip");
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
@@ -5100,9 +5109,6 @@ function updateIpList() {
   if (namespace && namespace != "" && mciid && mciid != "" && subgroupid && subgroupid != "" && vmid && vmid != "") {
     while (pubip.options.length > 0) {
       pubip.remove(0);
-    }
-    while (priip.options.length > 0) {
-      priip.remove(0);
     }
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=accessinfo`;
 
@@ -5122,11 +5128,6 @@ function updateIpList() {
               optionPublicIP.value = vmAccessInfo.publicIP;
               optionPublicIP.text = vmAccessInfo.publicIP;
               pubip.appendChild(optionPublicIP);
-
-              var optionPrivateIP = document.createElement("option");
-              optionPrivateIP.value = vmAccessInfo.privateIP;
-              optionPrivateIP.text = vmAccessInfo.privateIP;
-              priip.appendChild(optionPrivateIP);
             }
           }
         }
@@ -5134,15 +5135,11 @@ function updateIpList() {
     });
   } else {
     pubip.options.length = 0;
-    priip.options.length = 0;
   }
 }
 window.updateIpList = updateIpList;
 
 document.getElementById("pubip").onmouseover = function () {
-  updateIpList();
-};
-document.getElementById("priip").onmouseover = function () {
   updateIpList();
 };
 
@@ -6609,12 +6606,22 @@ function drawObjects(event) {
   }
 
   for (i = geometries.length - 1; i >= 0; --i) {
-    // MCI text style
+    // MCI text style with real-time animation
+    var displayText = truncateMciName(mciName[i]);
+    
+    // Add animation if targetAction is active
+    if (mciTargetAction[i]) {
+      const spinChars = ['⠿', '⠷', '⠯', '⠟', '⠻', '⠽', '⠾', '⠷','⠿'];
+      // const spinChars = ['🔴', '🟠', '🟡', '🟠', '🔵', '🟣'];
+      const animIndex = Math.floor(drawCounter / 10 + i) % spinChars.length;
+      displayText = spinChars[animIndex] + ' ' + displayText;
+    }
+    
     var polyNameTextStyle = new Style({
       text: new Text({
-        text: truncateMciName(mciName[i]),
+        text: displayText,
         font: "bold 10px sans-serif",
-        scale: changeSizeByName(mciName[i] + mciStatus[i]) + 0.6,
+        scale: changeSizeByName(mciName[i] + mciStatus[i]) + 0.3,
         offsetY: 32 * changeSizeByName(mciName[i] + mciStatus[i]),
         stroke: new Stroke({
           color: [255, 255, 255, 1], //white
@@ -7797,3 +7804,359 @@ function addNewRuleToSg(sgId, sgName) {
   });
 }
 window.addNewRuleToSg = addNewRuleToSg;
+
+// Function for Scale Out SubGroup
+function scaleOutSubGroup() {
+  var mciid = document.getElementById("mciid").value;
+  var subgroupid = document.getElementById("subgroupid").value;
+
+  if (!mciid) {
+    errorAlert("Please select an MCI first");
+    return;
+  }
+
+  if (!subgroupid) {
+    errorAlert("Please select a SubGroup first");
+    return;
+  }
+
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+  var username = usernameElement.value;
+  var password = passwordElement.value;
+  var namespace = namespaceElement.value;
+
+  // Show dialog to get number of VMs to add
+  Swal.fire({
+    title: "Scale Out SubGroup",
+    width: 600,
+    html:
+      "<font size=3>" +
+      "<div style='text-align: left; margin: 20px;'>" +
+      "<p><b>Target MCI:</b> " + mciid + "</p>" +
+      "<p><b>Target SubGroup:</b> " + subgroupid + "</p>" +
+      "<hr>" +
+      "<p><b>Enter the number of VMs to add:</b></p>" +
+      "</div>",
+    input: "number",
+    inputValue: 1,
+    inputAttributes: {
+      min: 1,
+      max: 20,
+      step: 1,
+      autocapitalize: "off"
+    },
+    showCancelButton: true,
+    confirmButtonText: "Scale Out",
+    confirmButtonColor: "#28a745",
+    cancelButtonText: "Cancel",
+    position: "top",
+    backdrop: `rgba(0, 0, 0, 0.4)`,
+    inputValidator: (value) => {
+      if (!value || value < 1) {
+        return 'Please enter a valid number (minimum 1)';
+      }
+      if (value > 20) {
+        return 'Maximum 20 VMs can be added at once';
+      }
+    }
+  }).then((result) => {
+    if (result.isConfirmed) {
+      var numVMsToAdd = parseInt(result.value);
+      
+      // Confirmation dialog
+      Swal.fire({
+        title: "Confirm Scale Out",
+        html: 
+          "<div style='text-align: left; margin: 20px;'>" +
+          "<p>You are about to add <b>" + numVMsToAdd + " VM(s)</b> to:</p>" +
+          "<ul>" +
+          "<li>MCI: <b>" + mciid + "</b></li>" +
+          "<li>SubGroup: <b>" + subgroupid + "</b></li>" +
+          "</ul>" +
+          "<p style='color: #dc3545; margin-top: 15px;'><b>⚠️ Warning:</b> This will incur additional costs.</p>" +
+          "</div>",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Proceed with Scale Out",
+        cancelButtonText: "Cancel",
+        confirmButtonColor: "#28a745",
+        cancelButtonColor: "#dc3545"
+      }).then((confirmResult) => {
+        if (confirmResult.isConfirmed) {
+          executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, port, username, password);
+        }
+      });
+    }
+  });
+}
+window.scaleOutSubGroup = scaleOutSubGroup;
+
+// Function to execute the scale out operation
+function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, port, username, password) {
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/subgroup/${subgroupid}`;
+  
+  var scaleOutReq = {
+    numVMsToAdd: numVMsToAdd.toString()  // Convert to string as expected by API
+  };
+
+  var jsonBody = JSON.stringify(scaleOutReq, undefined, 4);
+  
+  messageTextArea.value = ` Scaling out SubGroup ${subgroupid} by adding ${numVMsToAdd} VM(s)...`;
+  var spinnerId = addSpinnerTask(`Scale Out: ${mciid}/${subgroupid} (+${numVMsToAdd} VMs)`);
+  infoAlert(`Starting Scale Out: Adding ${numVMsToAdd} VM(s) to ${subgroupid}`);
+
+  var requestId = generateRandomRequestId("scaleout-" + mciid + "-" + subgroupid + "-", 10);
+  addRequestIdToSelect(requestId);
+
+  axios({
+    method: "post",
+    url: url,
+    headers: { 
+      "Content-Type": "application/json",
+      "x-request-id": requestId 
+    },
+    data: jsonBody,
+    auth: {
+      username: `${username}`,
+      password: `${password}`,
+    },
+    timeout: 600000  // 10 minutes timeout for scale out operation
+  })
+    .then((res) => {
+      console.log("Scale out response:", res);
+      
+      displayJsonData(res.data, typeInfo);
+      handleAxiosResponse(res);
+      
+      messageTextArea.value = `Successfully scaled out SubGroup ${subgroupid} by adding ${numVMsToAdd} VM(s)`;
+      
+      Swal.fire({
+        icon: "success",
+        title: "Scale Out Successful!",
+        html: 
+          "<div style='text-align: left;'>" +
+          "<p><b>" + numVMsToAdd + " VM(s)</b> have been successfully added to:</p>" +
+          "<ul>" +
+          "<li>MCI: <b>" + mciid + "</b></li>" +
+          "<li>SubGroup: <b>" + subgroupid + "</b></li>" +
+          "</ul>" +
+          "<p style='margin-top: 15px; color: #28a745;'>✓ The new VMs are being provisioned.</p>" +
+          "</div>",
+        confirmButtonText: "OK"
+      });
+      
+      // Refresh MCI status after scale out
+      setTimeout(() => {
+        getMci();
+        updateSubGroupList();
+        updateVmList();
+      }, 3000);
+    })
+    .catch(function (error) {
+      var errorMsg = "Failed to scale out SubGroup";
+      
+      if (error.response) {
+        console.log(error.response.data);
+        console.log(error.response.status);
+        
+        if (error.response.data) {
+          if (typeof error.response.data === 'string') {
+            errorMsg = error.response.data;
+          } else if (error.response.data.message) {
+            errorMsg = error.response.data.message;
+          } else if (error.response.data.error) {
+            errorMsg = error.response.data.error;
+          }
+        }
+        
+        displayJsonData(error.response.data, typeError);
+      } else if (error.request) {
+        errorMsg = "No response from server. Please check the connection.";
+        console.log(error.request);
+      } else {
+        errorMsg = error.message;
+        console.log('Error', error.message);
+      }
+      
+      messageTextArea.value = errorMsg;
+      
+      Swal.fire({
+        icon: "error",
+        title: "Scale Out Failed",
+        html: 
+          "<div style='text-align: left;'>" +
+          "<p>Failed to scale out SubGroup <b>" + subgroupid + "</b></p>" +
+          "<p style='margin-top: 10px; color: #dc3545;'>Error: " + errorMsg + "</p>" +
+          "</div>",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#dc3545"
+      });
+      
+      console.log(error.config);
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
+}
+
+// Function to show MCI Actions menu in SweetAlert
+function showActionsMenu() {
+  var mciid = document.getElementById("mciid").value;
+  
+  if (!mciid) {
+    errorAlert("Please select an MCI first");
+    return;
+  }
+
+  Swal.fire({
+    title: "Control MCI",
+    width: 500,
+    showCancelButton: true,
+    showConfirmButton: false,
+    cancelButtonText: "Cancel",
+    cancelButtonColor: "#6c757d",
+    position: "center",
+    backdrop: `rgba(0, 0, 0, 0.4)`,
+    html: `
+      <div style="text-align: left; margin: 20px;">
+        <p><b>Selected MCI:</b> ${mciid}</p>
+        <hr>
+        <p><b>Choose a lifecycle control action:</b></p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px;">
+          <button type="button" class="btn btn-warning" onclick="executeAction('suspend')" style="margin: 5px;">
+            ⏸️ Suspend
+          </button>
+          <button type="button" class="btn btn-primary" onclick="executeAction('resume')" style="margin: 5px;">
+            ▶️ Resume
+          </button>
+          <button type="button" class="btn btn-primary" onclick="executeAction('reboot')" style="margin: 5px;">
+            🔄 Reboot
+          </button>
+          <button type="button" class="btn btn-primary" onclick="executeAction('refine')" style="margin: 5px;">
+            ⬆️ Refine
+          </button>
+          <button type="button" class="btn btn-primary" onclick="executeAction('continue')" style="margin: 5px;">
+            ⏭️ Continue
+          </button>
+          <button type="button" class="btn btn-warning" onclick="executeAction('withdraw')" style="margin: 5px;">
+            ⬅️ Withdraw
+          </button>
+          <button type="button" class="btn btn-danger" onclick="executeAction('terminate')" style="margin: 5px;">
+            ⏹️ Terminate
+          </button>
+          <button type="button" class="btn btn-danger" onclick="executeAction('delete')" style="margin: 5px;">
+            ⬛ Delete
+          </button>
+        </div>
+      </div>
+    `,
+    customClass: {
+      popup: 'swal-wide'
+    }
+  });
+}
+window.showActionsMenu = showActionsMenu;
+
+// Function to execute selected action and close SweetAlert
+function executeAction(action) {
+  Swal.close(); // Close the current SweetAlert
+  
+  // Add confirmation for dangerous actions
+  if (action === 'terminate') {
+    var mciid = document.getElementById("mciid").value;
+    Swal.fire({
+      title: "⚠️ Confirm Termination",
+      html: `
+        <div style="text-align: left; margin: 20px;">
+          <p>You are about to <b style="color: #dc3545;">TERMINATE</b> MCI:</p>
+          <p><b>${mciid}</b></p>
+          <br>
+          <p style="color: #dc3545;"><b>⚠️ WARNING:</b> This action is <b>IRREVERSIBLE</b>!</p>
+          <p style="color: #dc3545;">All VMs and associated resources will be permanently deleted.</p>
+        </div>
+      `,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Terminate",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#dc3545",
+      cancelButtonColor: "#6c757d"
+    }).then((result) => {
+      if (result.isConfirmed) {
+        controlMCI(action);
+      }
+    });
+  } else if (action === 'withdraw') {
+    var mciid = document.getElementById("mciid").value;
+    Swal.fire({
+      title: "⚠️ Confirm Withdraw",
+      html: `
+        <div style="text-align: left; margin: 20px;">
+          <p>You are about to <b style="color: #ffc107;">WITHDRAW</b> MCI:</p>
+          <p><b>${mciid}</b></p>
+          <br>
+          <p style="color: #ffc107;"><b>⚠️ WARNING:</b> This will shut down all VMs in the MCI.</p>
+        </div>
+      `,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Withdraw",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#ffc107",
+      cancelButtonColor: "#6c757d"
+    }).then((result) => {
+      if (result.isConfirmed) {
+        controlMCI(action);
+      }
+    });
+  } else if (action === 'delete') {
+    var mciid = document.getElementById("mciid").value;
+    Swal.fire({
+      title: "⚠️ Confirm Delete",
+      html: `
+        <div style="text-align: left; margin: 20px;">
+          <p>You are about to <b style="color: #dc3545;">DELETE</b> MCI:</p>
+          <p><b>${mciid}</b></p>
+          <br>
+          <p style="color: #dc3545;"><b>⚠️ WARNING:</b> This action is <b>IRREVERSIBLE</b>!</p>
+          <p style="color: #dc3545;">The MCI and all associated resources will be permanently removed.</p>
+        </div>
+      `,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Delete",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#dc3545",
+      cancelButtonColor: "#6c757d"
+    }).then((result) => {
+      if (result.isConfirmed) {
+        deleteMCI();
+      }
+    });
+  } else {
+    // For other actions, execute directly with brief confirmation
+    var mciid = document.getElementById("mciid").value;
+    var actionName = action.charAt(0).toUpperCase() + action.slice(1);
+    
+    Swal.fire({
+      title: `Confirm ${actionName}`,
+      html: `
+        <div style="text-align: center; margin: 20px;">
+          <p>Execute <b>${actionName}</b> on MCI: <b>${mciid}</b>?</p>
+        </div>
+      `,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: `Yes, ${actionName}`,
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#007bff",
+      cancelButtonColor: "#6c757d"
+    }).then((result) => {
+      if (result.isConfirmed) {
+        controlMCI(action);
+      }
+    });
+  }
+}
+window.executeAction = executeAction;
