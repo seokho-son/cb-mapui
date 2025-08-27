@@ -112,7 +112,6 @@ var cspListDisplayEnabled = document.getElementById("displayOn");
 var recommendPolicy = document.getElementById("recommendPolicy");
 var selectApp = document.getElementById("selectApp");
 
-var messageTextArea = document.getElementById("message");
 var messageJsonOutput = document.getElementById("jsonoutput");
 
 var hostnameElement = document.getElementById("hostname");
@@ -152,7 +151,7 @@ var map = new Map({
 // fucntion for clear map.
 function clearMap() {
   messageJsonOutput.value = "";
-  messageTextArea.value = "";
+  console.log("[Map Cleared]");
   geometries = [];
   mciTargetAction = []; // Clear targetAction array as well
   geoResourceLocation.k8s = [];
@@ -169,7 +168,7 @@ window.clearMap = clearMap;
 function clearCircle(option) {
   //document.getElementById("latLonInputPairArea").innerHTML = '';
   if (option == "clearText") {
-    messageTextArea.value = "";
+    console.log("[Circle Configuration Cleared]");
   }
   latLonInputPairIdx = 0;
   vmReqeustFromSpecList = [];
@@ -188,11 +187,9 @@ function writeLatLonInputPair(idx, lat, lon) {
   //document.getElementById("latLonInputPairArea").innerHTML +=
   `VM ${idx + 1}: (${latf}, ${lonf}) / `;
   if (idx == 0) {
-    messageTextArea.value = `[Started MCI configuration]\n`;
+    console.log("[Started MCI configuration]");
   }
-  messageTextArea.value += `\n - [VM-${idx + 1
-    }]  Location:  ${latf}, ${lonf}\t\t| Best Spec: `;
-  messageTextArea.scrollTop = messageTextArea.scrollHeight;
+  console.log(`VM-${idx + 1} Location: ${latf}, ${lonf} | Best Spec: `);
 }
 
 var latLonInputPairIdx = 0;
@@ -283,10 +280,10 @@ function displayCSPListOn() {
         .on("end", () => {
           console.log(cloudLocation);
 
-          messageTextArea.value =
+          console.log(
             "[Complete] Display Known Cloud Regions: " +
-            cloudLocation.length +
-            "\n";
+            cloudLocation.length
+          );
 
           cloudLocation.forEach((location) => {
             const { CloudType, Longitude, Latitude } = location;
@@ -1516,10 +1513,10 @@ function getConnection() {
     .then((res) => {
       var obj = res.data;
       if (obj.connectionconfig != null) {
-        messageTextArea.value =
+        console.log(
           "[Complete] Registered Cloud Regions: " +
-          obj.connectionconfig.length +
-          "\n";
+          obj.connectionconfig.length
+        );
 
         obj.connectionconfig.forEach((config, i) => {
           const providerName = config.providerName;
@@ -1528,7 +1525,7 @@ function getConnection() {
           const briefAddr = config.regionDetail.location.display;
           const nativeRegion = config.regionDetail.regionName;
 
-          messageTextArea.value +=
+          console.log(
             "[" +
             i +
             "] " +
@@ -1543,7 +1540,8 @@ function getConnection() {
             latitude +
             " (" +
             briefAddr +
-            ")\n";
+            ")"
+          );
 
           if (!cspPoints[providerName]) {
             cspPoints[providerName] = [];
@@ -1823,7 +1821,7 @@ function showFinalMciConfirmation(createMciReq, url, totalCost, totalNodeScale, 
 // MCI Creation execution
 function proceedWithMciCreation(createMciReq, url, username, password) {
   var jsonBody = JSON.stringify(createMciReq, undefined, 4);
-  messageTextArea.value = " Creating MCI ...";
+  console.log("Creating MCI ...");
   var spinnerId = addSpinnerTask("Creating MCI: " + createMciReq.name);
 
   var requestId = generateRandomRequestId("mci-" + createMciReq.name + "-", 10);
@@ -1848,7 +1846,7 @@ function proceedWithMciCreation(createMciReq, url, username, password) {
       updateMciList();
 
       clearCircle("none");
-      messageTextArea.value = "Created " + createMciReq.name;
+      console.log("Created " + createMciReq.name);
     })
     .catch(function (error) {
       errorAlert("Failed to create MCI: " + createMciReq.name);
@@ -3338,8 +3336,9 @@ function createMci() {
       }
     });
   } else {
-    messageTextArea.value =
-      " To create a MCI, VMs should be configured!\n Click the Map to add a config for VM request.";
+    console.log(
+      "To create a MCI, VMs should be configured! Click the Map to add a config for VM request."
+    );
     errorAlert("Please configure MCI first\n(Click the Map to add VMs)");
   }
 }
@@ -3358,7 +3357,6 @@ function getRecommendedSpec(idx, latitude, longitude) {
   var specName = document.getElementById("specName").value;
   var architecture = document.getElementById("architecture").value;
   var providerName = document.getElementById("provider").value;
-  var acceleratorType = document.getElementById("acceleratorType").value;
   var acceleratorModel = document.getElementById("acceleratorModel").value;
   var minAcceleratorCount = document.getElementById("minAcceleratorCount").value;
   var maxAcceleratorCount = document.getElementById("maxAcceleratorCount").value;
@@ -3380,14 +3378,23 @@ function getRecommendedSpec(idx, latitude, longitude) {
     return { metric: metric, condition: conditions };
   }
 
+  // Handle GPU-related conditions
+  var gpuPolicies = [];
+  if (acceleratorModel === "any") {
+    // For "Any GPU", add acceleratorType as "gpu" but exclude AcceleratorModel
+    gpuPolicies.push(createPolicyConditions("AcceleratorType", { value: "gpu" }, "single"));
+  } else if (acceleratorModel && acceleratorModel !== "") {
+    // For specific GPU models, add AcceleratorModel condition
+    gpuPolicies.push(createPolicyConditions("AcceleratorModel", { value: acceleratorModel }, "single"));
+  }
+
   var policies = [
     createPolicyConditions("vCPU", { min: minVCPU, max: maxVCPU }, "range"),
     createPolicyConditions("MemoryGiB", { min: minRAM, max: maxRAM }, "range"),
     createPolicyConditions("CspSpecName", { value: specName }, "single"),
     createPolicyConditions("ProviderName", { value: providerName }, "single"),
     createPolicyConditions("Architecture", { value: architecture }, "single"),
-    createPolicyConditions("AcceleratorType", { value: acceleratorType }, "single"),
-    createPolicyConditions("AcceleratorModel", { value: acceleratorModel }, "single"),
+    ...gpuPolicies,
     createPolicyConditions("AcceleratorMemoryGB", { min: minAMEM, max: maxAMEM }, "range"),
     createPolicyConditions("AcceleratorCount", { min: minAcceleratorCount, max: maxAcceleratorCount }, "range"),
   ];
@@ -4301,13 +4308,14 @@ function getRecommendedSpec(idx, latitude, longitude) {
               }
 
 
-              messageTextArea.value +=
+              console.log(
                 `${createMciReqVm.specId}` +
-                `\t(${createMciReqVm.subGroupSize})`;
+                `\t(${createMciReqVm.subGroupSize})`
+              );
               vmReqeustFromSpecList.push(createMciReqVm);
               recommendedSpecList.push(recommendedSpec);
             } else {
-              messageTextArea.value = messageTextArea.value.replace(/\n.*$/, "");
+              console.log("VM configuration failed for this location");
               latLonInputPairIdx--;
               cspPointsCircle.pop();
               geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
@@ -4315,7 +4323,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
           });
             } else {
               // User canceled image selection
-              messageTextArea.value = messageTextArea.value.replace(/\n.*$/, "");
+              console.log("Image selection canceled");
               latLonInputPairIdx--;
               cspPointsCircle.pop();
               geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
@@ -4326,7 +4334,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
         });
       } else {
         // User canceled spec selection
-        messageTextArea.value = messageTextArea.value.replace(/\n.*$/, "");
+        console.log("Spec selection canceled");
         latLonInputPairIdx--;
         cspPointsCircle.pop();
         geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
@@ -4467,7 +4475,7 @@ function controlMCI(action) {
       );
       return;
   }
-  //messageTextArea.value = "[MCI " +action +"]";
+  //console.log("[MCI " +action +"]");
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
@@ -4658,7 +4666,7 @@ function hideMCI() {
 window.hideMCI = hideMCI;
 
 function statusMCI() {
-  messageTextArea.value = "[Get MCI status]";
+  console.log("[Get MCI status]");
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
@@ -4700,7 +4708,7 @@ function statusMCI() {
 window.statusMCI = statusMCI;
 
 function deleteMCI() {
-  messageTextArea.value = "Deleting MCI";
+  console.log("Deleting MCI");
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
@@ -4835,7 +4843,7 @@ function registerCspResource() {
     .then((res) => {
       console.log(res); // for debug
 
-      messageTextArea.value = "[Complete: Registering all CSP's resources]\n";
+      console.log("[Complete: Registering all CSP's resources]\n");
       displayJsonData(res.data, typeInfo);
     })
     .finally(function () {
@@ -4848,8 +4856,7 @@ function updateNsList() {
   // Get all namespace select elements
   var namespaceSelects = [
     document.getElementById("namespace"),           // Provision tab
-    document.getElementById("namespace-control"),   // Control tab  
-    document.getElementById("namespace-resources")  // Resources tab
+    document.getElementById("namespace-control")    // Control tab  
   ];
   
   // Store previous selections
@@ -4920,8 +4927,7 @@ function updateNsList() {
 function syncNamespaceSelection(selectedValue) {
   var namespaceSelects = [
     document.getElementById("namespace"),           // Provision tab
-    document.getElementById("namespace-control"),   // Control tab  
-    document.getElementById("namespace-resources")  // Resources tab
+    document.getElementById("namespace-control")    // Control tab  
   ];
   
   namespaceSelects.forEach(selectElement => {
@@ -4930,32 +4936,6 @@ function syncNamespaceSelection(selectedValue) {
     }
   });
 }
-
-document.getElementById("namespace").onmouseover = function () {
-  updateNsList();
-};
-document.getElementById("namespace").onchange = function () {
-  syncNamespaceSelection(this.value);
-  updateMciList();
-};
-
-// Add event handlers for Control tab namespace
-document.getElementById("namespace-control").onmouseover = function () {
-  updateNsList();
-};
-document.getElementById("namespace-control").onchange = function () {
-  syncNamespaceSelection(this.value);
-  updateMciList();
-};
-
-// Add event handlers for Resources tab namespace
-document.getElementById("namespace-resources").onmouseover = function () {
-  updateNsList();
-};
-document.getElementById("namespace-resources").onchange = function () {
-  syncNamespaceSelection(this.value);
-  updateMciList();
-};
 
 var mciList = [];
 var mciHideList = [];
@@ -5246,21 +5226,60 @@ function updateResourceList(resourceType) {
   }
 }
 
-document.getElementById(typeStringVNet).onmouseover = function () {
-  updateResourceList(typeStringVNet);
-};
-document.getElementById(typeStringSG).onmouseover = function () {
-  updateResourceList(typeStringSG);
-};
-document.getElementById(typeStringSshKey).onmouseover = function () {
-  updateResourceList(typeStringSshKey);
-};
-// document.getElementById(typeStringImage).onmouseover = function () {
-//   //updateResourceList(typeStringImage);
-// };
-// document.getElementById(typeStringSpec).onmouseover = function () {
-//   //updateResourceList(typeStringSpec);
-// };
+// Initialize DOM event handlers when document is ready
+document.addEventListener('DOMContentLoaded', function() {
+  // Namespace event handlers
+  const namespaceElement = document.getElementById("namespace");
+  if (namespaceElement) {
+    namespaceElement.onmouseover = function () {
+      updateNsList();
+    };
+    namespaceElement.onchange = function () {
+      syncNamespaceSelection(this.value);
+      updateMciList();
+    };
+  }
+  
+  const namespaceControlElement = document.getElementById("namespace-control");
+  if (namespaceControlElement) {
+    namespaceControlElement.onmouseover = function () {
+      updateNsList();
+    };
+    namespaceControlElement.onchange = function () {
+      syncNamespaceSelection(this.value);
+      updateMciList();
+    };
+  }
+  
+  // Resource list event handlers
+  const vNetElement = document.getElementById(typeStringVNet);
+  if (vNetElement) {
+    vNetElement.onmouseover = function () {
+      updateResourceList(typeStringVNet);
+    };
+  }
+  
+  const securityGroupElement = document.getElementById(typeStringSG);
+  if (securityGroupElement) {
+    securityGroupElement.onmouseover = function () {
+      updateResourceList(typeStringSG);
+    };
+  }
+  
+  const sshKeyElement = document.getElementById(typeStringSshKey);
+  if (sshKeyElement) {
+    sshKeyElement.onmouseover = function () {
+      updateResourceList(typeStringSshKey);
+    };
+  }
+  
+  // document.getElementById(typeStringImage).onmouseover = function () {
+  //   //updateResourceList(typeStringImage);
+  // };
+  // document.getElementById(typeStringSpec).onmouseover = function () {
+  //   //updateResourceList(typeStringSpec);
+  // };
+});
 
 function updateConnectionList() {
   var selectElement = document.getElementById(typeStringConnection);
@@ -5361,7 +5380,7 @@ function AddMcNLB() {
     // result.value is false if result.isDenied or another key such as result.isDismissed
     if (result.value) {
       infoAlert("Creating MC-NLB(special MCI) to : " + mciid);
-      messageTextArea.value = " Creating Multi-Cloud NLB (special MCI)";
+      console.log(" Creating Multi-Cloud NLB (special MCI)");
       var spinnerId = addSpinnerTask(
         "Creating MC-NLB(special MCI) to : " + mciid
       );
@@ -5440,16 +5459,18 @@ function AddNLB() {
   // var nlbport = document.getElementById("nlbport").value;
 
   if (!mciid) {
-    messageTextArea.value =
-      " When calling AddNLB(), you must specify the mciid.";
+    console.log(
+      "When calling AddNLB(), you must specify the mciid."
+    );
   }
 
   if (!subgroupid) {
-    messageTextArea.value =
-      " When calling AddNLB(), you must specify the subgroupid.";
+    console.log(
+      "When calling AddNLB(), you must specify the subgroupid."
+    );
   }
 
-  messageTextArea.value = " Creating NLB " + subgroupid;
+  console.log(" Creating NLB " + subgroupid);
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/nlb`;
 
@@ -5555,16 +5576,18 @@ function DelNLB() {
   var subgroupid = document.getElementById("subgroupid").value;
 
   if (!mciid) {
-    messageTextArea.value =
-      " When calling DelNLB(), you must specify the mciid.";
+    console.log(
+      "When calling DelNLB(), you must specify the mciid."
+    );
   }
 
   if (!subgroupid) {
-    messageTextArea.value =
-      " When calling DelNLB(), you must specify the subgroupid.";
+    console.log(
+      "When calling DelNLB(), you must specify the subgroupid."
+    );
   }
 
-  messageTextArea.value = " Deleting NLB " + subgroupid;
+  console.log(" Deleting NLB " + subgroupid);
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/nlb/${subgroupid}`;
 
@@ -5579,7 +5602,7 @@ function DelNLB() {
     .then((res) => {
       console.log(res); // for debug
 
-      messageTextArea.value = "[Deleted NLB]\n";
+      console.log("[Deleted NLB]\n");
       displayJsonData(res.data, typeInfo);
     })
     .catch(function (error) {
@@ -5714,7 +5737,7 @@ function startApp() {
     setDefaultRemoteCommandsByApp(selectApp.value);
     executeRemoteCmd();
   } else {
-    messageTextArea.value = " MCI ID is not assigned";
+    console.log(" MCI ID is not assigned");
   }
 }
 window.startApp = startApp;
@@ -5723,7 +5746,7 @@ window.startApp = startApp;
 function stopApp() {
   var mciid = mciidElement.value;
   if (mciid) {
-    messageTextArea.value = " Stopping " + selectApp.value;
+    console.log(" Stopping " + selectApp.value);
 
     var hostname = hostnameElement.value;
     var port = portElement.value;
@@ -5784,11 +5807,11 @@ function stopApp() {
     }).then((res) => {
       console.log(res); // for debug
 
-      messageTextArea.value = "[Complete: Stopping App]\n";
+      console.log("[Complete: Stopping App]\n");
       displayJsonData(res.data, typeInfo);
     });
   } else {
-    messageTextArea.value = " MCI ID is not assigned";
+    console.log(" MCI ID is not assigned");
   }
 }
 window.stopApp = stopApp;
@@ -5803,7 +5826,7 @@ function statusApp() {
   var mciid = mciidElement.value;
 
   if (mciid) {
-    messageTextArea.value = " Getting status " + selectApp.value;
+    console.log(" Getting status " + selectApp.value);
 
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}`;
     var cmd = [];
@@ -5862,11 +5885,11 @@ function statusApp() {
     }).then((res) => {
       console.log(res); // for debug
 
-      messageTextArea.value = "[Complete: Getting App status]\n";
+      console.log("[Complete: Getting App status]\n");
       displayJsonData(res.data, typeInfo);
     });
   } else {
-    messageTextArea.value = " MCI ID is not assigned";
+    console.log(" MCI ID is not assigned");
   }
 }
 window.statusApp = statusApp;
@@ -5910,8 +5933,9 @@ function executeRemoteCmd() {
   if (mciid) {
     var spinnerId = "";
 
-    messageTextArea.value =
-      "[Forward remote ssh command to MCI:" + mciid + "]\n";
+    console.log(
+      "Forward remote ssh command to MCI:" + mciid
+    );
 
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}`;
     var cmd = [];
@@ -6056,7 +6080,7 @@ function executeRemoteCmd() {
         }
 
         cmd = result.value;
-        messageTextArea.value += cmd.join(", ");
+        console.log(cmd.join(", "));
 
         var commandReqTmp = {
           command: cmd,
@@ -6101,7 +6125,7 @@ function executeRemoteCmd() {
             formattedOutput += "\n--------------------------------------\n";
           });
 
-          messageTextArea.value = formattedOutput;
+          console.log(formattedOutput);
         })
           .catch(function (error) {
             if (error.response) {
@@ -6126,13 +6150,13 @@ function executeRemoteCmd() {
           });
 
       } else {
-        messageTextArea.value = "Cannot set command";
+        console.log("Cannot set command");
         removeSpinnerTask(spinnerId);
       }
     });
   } else {
     errorAlert("MCI ID is not assigned");
-    messageTextArea.value = " MCI ID is not assigned";
+    console.log(" MCI ID is not assigned");
   }
 }
 window.executeRemoteCmd = executeRemoteCmd;
@@ -6149,7 +6173,7 @@ function transferFileToMci() {
   var vmid = document.getElementById("vmid").value;
 
   if (mciid) {
-    messageTextArea.value = "[Transfer file to MCI:" + mciid + "]\n";
+    console.log("[Transfer file to MCI:" + mciid + "]\n");
 
     // Swal popup for selecting file and target path
     Swal.fire({
@@ -6252,7 +6276,7 @@ function transferFileToMci() {
               title: 'File transferred',
               text: `The file "${file.name}" was transferred successfully.`,
             });
-            messageTextArea.value = `[Complete: File transfer to MCI ${mciid}]\n`;
+            console.log(`[Complete: File transfer to MCI ${mciid}]\n`);
             displayJsonData(res.data, typeInfo);
           })
           .catch((error) => {
@@ -6269,12 +6293,12 @@ function transferFileToMci() {
             Swal.hideLoading();
           });
       } else {
-        messageTextArea.value = "File transfer was canceled.";
+        console.log("File transfer was canceled.");
       }
     });
   } else {
     errorAlert("MCI ID is not assigned");
-    messageTextArea.value = "MCI ID is not assigned.";
+    console.log("MCI ID is not assigned.");
   }
 }
 window.transferFileToMci = transferFileToMci;
@@ -6289,8 +6313,9 @@ function getAccessInfo() {
   var mciid = mciidElement.value;
 
   if (mciid) {
-    messageTextArea.value =
-      "[Retrieve access information for MCI:" + mciid + "]\n";
+    console.log(
+      "Retrieve access information for MCI:" + mciid
+    );
 
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=accessinfo`;
 
@@ -6306,7 +6331,7 @@ function getAccessInfo() {
       displayJsonData(res.data, typeInfo);
     });
   } else {
-    messageTextArea.value = " MCI ID is not assigned";
+    console.log(" MCI ID is not assigned");
   }
 }
 window.getAccessInfo = getAccessInfo;
@@ -6315,7 +6340,7 @@ window.getAccessInfo = getAccessInfo;
 // SSH Key save function
 const saveBtn = document.querySelector(".save-file");
 saveBtn.addEventListener("click", function () {
-  messageTextArea.value = " [Retrieve MCI Access Information ...]\n";
+  console.log(" [Retrieve MCI Access Information ...]\n");
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
@@ -7902,7 +7927,7 @@ function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, po
 
   var jsonBody = JSON.stringify(scaleOutReq, undefined, 4);
   
-  messageTextArea.value = ` Scaling out SubGroup ${subgroupid} by adding ${numVMsToAdd} VM(s)...`;
+  console.log(` Scaling out SubGroup ${subgroupid} by adding ${numVMsToAdd} VM(s)...`);
   var spinnerId = addSpinnerTask(`Scale Out: ${mciid}/${subgroupid} (+${numVMsToAdd} VMs)`);
   infoAlert(`Starting Scale Out: Adding ${numVMsToAdd} VM(s) to ${subgroupid}`);
 
@@ -7929,7 +7954,7 @@ function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, po
       displayJsonData(res.data, typeInfo);
       handleAxiosResponse(res);
       
-      messageTextArea.value = `Successfully scaled out SubGroup ${subgroupid} by adding ${numVMsToAdd} VM(s)`;
+      console.log(`Successfully scaled out SubGroup ${subgroupid} by adding ${numVMsToAdd} VM(s)`);
       
       Swal.fire({
         icon: "success",
@@ -7979,7 +8004,7 @@ function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, po
         console.log('Error', error.message);
       }
       
-      messageTextArea.value = errorMsg;
+      console.log(errorMsg);
       
       Swal.fire({
         icon: "error",
@@ -8011,7 +8036,7 @@ function showActionsMenu() {
 
   Swal.fire({
     title: "Control MCI",
-    width: 500,
+    width: 600,
     showCancelButton: true,
     showConfirmButton: false,
     cancelButtonText: "Cancel",
@@ -8023,29 +8048,43 @@ function showActionsMenu() {
         <p><b>Selected MCI:</b> ${mciid}</p>
         <hr>
         <p><b>Choose a lifecycle control action:</b></p>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px;">
+        
+        <!-- First row: 3 buttons -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 20px;">
           <button type="button" class="btn btn-warning" onclick="executeAction('suspend')" style="margin: 5px;">
             ⏸️ Suspend
           </button>
-          <button type="button" class="btn btn-primary" onclick="executeAction('resume')" style="margin: 5px;">
+          <button type="button" class="btn btn-warning" onclick="executeAction('resume')" style="margin: 5px;">
             ▶️ Resume
           </button>
-          <button type="button" class="btn btn-primary" onclick="executeAction('reboot')" style="margin: 5px;">
+          <button type="button" class="btn btn-warning" onclick="executeAction('reboot')" style="margin: 5px;">
             🔄 Reboot
           </button>
+        </div>
+        
+        <!-- Second row: 3 buttons -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px;">
           <button type="button" class="btn btn-primary" onclick="executeAction('refine')" style="margin: 5px;">
             ⬆️ Refine
           </button>
           <button type="button" class="btn btn-primary" onclick="executeAction('continue')" style="margin: 5px;">
             ⏭️ Continue
           </button>
-          <button type="button" class="btn btn-warning" onclick="executeAction('withdraw')" style="margin: 5px;">
+          <button type="button" class="btn btn-primary" onclick="executeAction('withdraw')" style="margin: 5px;">
             ⬅️ Withdraw
           </button>
-          <button type="button" class="btn btn-danger" onclick="executeAction('terminate')" style="margin: 5px;">
+        </div>
+        
+        <!-- Third row: Terminate button (full width) -->
+        <div style="margin-top: 10px;">
+          <button type="button" class="btn btn-secondary" onclick="executeAction('terminate')" style="margin: 5px; width: 100%;">
             ⏹️ Terminate
           </button>
-          <button type="button" class="btn btn-danger" onclick="executeAction('delete')" style="margin: 5px;">
+        </div>
+        
+        <!-- Fourth row: Delete button (full width) -->
+        <div style="margin-top: 10px;">
+          <button type="button" class="btn btn-danger" onclick="executeAction('delete')" style="margin: 5px; width: 100%;">
             ⬛ Delete
           </button>
         </div>
