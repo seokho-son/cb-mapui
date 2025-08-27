@@ -7913,6 +7913,172 @@ function scaleOutSubGroup() {
 }
 window.scaleOutSubGroup = scaleOutSubGroup;
 
+// Improved Scale Out SubGroup function with MCI and SubGroup selection
+function scaleOutSubGroupWithSelection() {
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+  var username = usernameElement.value;
+  var password = passwordElement.value;
+  var namespace = namespaceElement.value;
+
+  if (!namespace) {
+    errorAlert("Please select a namespace first");
+    return;
+  }
+
+  // Use the common MCI selection dialog for ScaleOut operations
+  showMciSelectionForScaleOut(
+    "Select MCI for Scale Out",
+    "Select the MCI to scale out",
+    (selectedMciId) => {
+      showSubGroupSelectionForScaleOut(selectedMciId, namespace, hostname, port, username, password);
+    }
+  );
+}
+window.scaleOutSubGroupWithSelection = scaleOutSubGroupWithSelection;
+
+// Step 2: Show SubGroup selection dialog
+function showSubGroupSelectionForScaleOut(selectedMciId, namespace, hostname, port, username, password) {
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${selectedMciId}/subgroup`;
+  
+  var spinnerId = addSpinnerTask("Loading SubGroup list");
+
+  axios({
+    method: "get",
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`,
+    },
+    timeout: 30000,
+  })
+    .then((res) => {
+      var subGroupOptions = '';
+      
+      if (res.data.output && res.data.output.length > 0) {
+        res.data.output.forEach((subGroupName) => {
+          if (subGroupName && subGroupName.trim() !== "") {
+            subGroupOptions += `<option value="${subGroupName}">${subGroupName}</option>`;
+          }
+        });
+
+        // Show SubGroup selection dialog
+        Swal.fire({
+          title: "Select SubGroup for Scale Out",
+          width: 600,
+          html:
+            "<div style='text-align: left; margin: 20px;'>" +
+            "<p><b>Step 2:</b> Select the SubGroup to scale out</p>" +
+            "<p><b>Selected MCI:</b> " + selectedMciId + "</p>" +
+            "<hr>" +
+            "<div class='form-group'>" +
+            "<label for='subgroup-select'><b>Available SubGroups:</b></label>" +
+            "<select id='subgroup-select' class='form-control' style='margin-top: 10px;'>" +
+            "<option value=''>-- Select SubGroup --</option>" +
+            subGroupOptions +
+            "</select>" +
+            "</div>" +
+            "</div>",
+          showCancelButton: true,
+          confirmButtonText: "Next: Configure Scale Out",
+          cancelButtonText: "Back",
+          confirmButtonColor: "#007bff",
+          preConfirm: () => {
+            const selectedSubGroup = document.getElementById('subgroup-select').value;
+            if (!selectedSubGroup) {
+              Swal.showValidationMessage('Please select a SubGroup');
+              return false;
+            }
+            return selectedSubGroup;
+          }
+        }).then((result) => {
+          if (result.isConfirmed) {
+            showScaleOutConfiguration(selectedMciId, result.value, namespace, hostname, port, username, password);
+          } else if (result.dismiss === Swal.DismissReason.cancel) {
+            // Go back to MCI selection
+            scaleOutSubGroupWithSelection();
+          }
+        });
+      } else {
+        errorAlert("No SubGroups found in the selected MCI");
+      }
+    })
+    .catch(function (error) {
+      console.log("Failed to get SubGroup list:", error);
+      errorAlert("Failed to load SubGroup list. Please check your connection.");
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
+}
+
+// Step 3: Show scale out configuration dialog
+function showScaleOutConfiguration(mciId, subGroupId, namespace, hostname, port, username, password) {
+  Swal.fire({
+    title: "Configure Scale Out",
+    width: 600,
+    html:
+      "<div style='text-align: left; margin: 20px;'>" +
+      "<p><b>Step 3:</b> Configure the scale out operation</p>" +
+      "<p><b>Selected MCI:</b> " + mciId + "</p>" +
+      "<p><b>Selected SubGroup:</b> " + subGroupId + "</p>" +
+      "<hr>" +
+      "<p><b>Enter the number of VMs to add:</b></p>" +
+      "</div>",
+    input: "number",
+    inputValue: 1,
+    inputAttributes: {
+      min: 1,
+      max: 20,
+      step: 1,
+      autocapitalize: "off"
+    },
+    showCancelButton: true,
+    confirmButtonText: "Scale Out",
+    confirmButtonColor: "#28a745",
+    cancelButtonText: "Back",
+    inputValidator: (value) => {
+      if (!value || value < 1) {
+        return 'Please enter a valid number (minimum 1)';
+      }
+      if (value > 20) {
+        return 'Maximum 20 VMs can be added at once';
+      }
+    }
+  }).then((result) => {
+    if (result.isConfirmed) {
+      var numVMsToAdd = parseInt(result.value);
+      
+      // Final confirmation dialog
+      Swal.fire({
+        title: "Confirm Scale Out",
+        html: 
+          "<div style='text-align: left; margin: 20px;'>" +
+          "<p>You are about to add <b>" + numVMsToAdd + " VM(s)</b> to:</p>" +
+          "<ul>" +
+          "<li>MCI: <b>" + mciId + "</b></li>" +
+          "<li>SubGroup: <b>" + subGroupId + "</b></li>" +
+          "</ul>" +
+          "<p style='color: #dc3545; margin-top: 15px;'><b>⚠️ Warning:</b> This will incur additional costs.</p>" +
+          "</div>",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Proceed with Scale Out",
+        cancelButtonText: "Cancel",
+        confirmButtonColor: "#28a745",
+        cancelButtonColor: "#dc3545"
+      }).then((confirmResult) => {
+        if (confirmResult.isConfirmed) {
+          executeScaleOut(namespace, mciId, subGroupId, numVMsToAdd, hostname, port, username, password);
+        }
+      });
+    } else if (result.dismiss === Swal.DismissReason.cancel) {
+      // Go back to SubGroup selection
+      showSubGroupSelectionForScaleOut(mciId, namespace, hostname, port, username, password);
+    }
+  });
+}
+
 // Function to execute the scale out operation
 function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, port, username, password) {
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/subgroup/${subgroupid}`;
@@ -8195,3 +8361,374 @@ function executeAction(action) {
   }
 }
 window.executeAction = executeAction;
+
+// Common function for ScaleOut operations - MCI selection dialog
+function showMciSelectionForScaleOut(title, description, successCallback) {
+  // Get MCI list specifically for ScaleOut operations
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+  var username = usernameElement.value;
+  var password = passwordElement.value;
+  var namespace = namespaceElement.value;
+
+  if (!namespace || namespace === "") {
+    errorAlert("Please select a namespace first");
+    return;
+  }
+
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
+  var spinnerId = addSpinnerTask("Loading MCI list for ScaleOut");
+
+  axios({
+    method: "get",
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`,
+    },
+    timeout: 30000,
+  })
+    .then((res) => {
+      var mciOptions = '';
+      
+      if (res.data.output && res.data.output.length > 0) {
+        res.data.output.forEach((mciId) => {
+          if (mciId && mciId.trim() !== "") {
+            mciOptions += `<option value="${mciId}">${mciId}</option>`;
+          }
+        });
+
+        if (mciOptions) {
+          // Show MCI selection dialog
+          Swal.fire({
+            title: title,
+            width: 600,
+            html:
+              "<div style='text-align: left; margin: 20px;'>" +
+              "<p><b>Step 1:</b> " + description + "</p>" +
+              (vmReqeustFromSpecList && vmReqeustFromSpecList.length > 0 ? 
+                "<p><b>Available VM Configurations:</b> " + vmReqeustFromSpecList.length + " location(s)</p>" : "") +
+              "<hr>" +
+              "<div class='form-group'>" +
+              "<label for='mci-select'><b>Available MCIs:</b></label>" +
+              "<select id='mci-select' class='form-control' style='margin-top: 10px;'>" +
+              "<option value=''>-- Select MCI --</option>" +
+              mciOptions +
+              "</select>" +
+              "</div>" +
+              "</div>",
+            showCancelButton: true,
+            confirmButtonText: "Next",
+            cancelButtonText: "Cancel",
+            confirmButtonColor: "#28a745",
+            preConfirm: () => {
+              const selectedMci = document.getElementById('mci-select').value;
+              if (!selectedMci) {
+                Swal.showValidationMessage('Please select an MCI');
+                return false;
+              }
+              return selectedMci;
+            }
+          }).then((result) => {
+            if (result.isConfirmed) {
+              successCallback(result.value);
+            }
+          });
+        } else {
+          errorAlert("No MCIs found in the selected namespace");
+        }
+      } else {
+        errorAlert("No MCIs found in the selected namespace");
+      }
+    })
+    .catch(function (error) {
+      console.log("Failed to get MCI list for ScaleOut:", error);
+      errorAlert("Failed to load MCI list. Please check your connection.");
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
+}
+
+// ScaleOut MCI function with current map configuration
+function scaleOutMciWithConfiguration() {
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+  var username = usernameElement.value;
+  var password = passwordElement.value;
+  var namespace = namespaceElement.value;
+
+  if (!namespace) {
+    errorAlert("Please select a namespace first");
+    return;
+  }
+
+  // Check if we have any VM configuration from the map
+  if (!vmReqeustFromSpecList || vmReqeustFromSpecList.length === 0) {
+    errorAlert("Please configure VM specifications first by clicking on the map or using the configuration form");
+    return;
+  }
+
+  // Use the common MCI selection dialog for ScaleOut operations
+  showMciSelectionForScaleOut(
+    "Select MCI for VM Addition",
+    "Select the MCI to add new VMs",
+    (selectedMciId) => {
+      showMciScaleOutConfiguration(selectedMciId, namespace, hostname, port, username, password);
+    }
+  );
+}
+window.scaleOutMciWithConfiguration = scaleOutMciWithConfiguration;
+
+// Step 2: Show MCI scale out configuration dialog
+function showMciScaleOutConfiguration(selectedMciId, namespace, hostname, port, username, password) {
+  // Build VM configuration summary from current map settings
+  var vmConfigSummary = "";
+  var totalVMs = 0;
+  
+  if (vmReqeustFromSpecList && vmReqeustFromSpecList.length > 0) {
+    vmReqeustFromSpecList.forEach((vmConfig, index) => {
+      var vmCount = 1; // Default VM count per location
+      totalVMs += vmCount;
+      vmConfigSummary += 
+        "<div style='margin: 5px 0; padding: 8px; background: #f8f9fa; border-radius: 4px;'>" +
+        "<b>Location " + (index + 1) + ":</b><br>" +
+        "Spec: " + (vmConfig.specId || "Auto-selected") + "<br>" +
+        "Image: " + (vmConfig.imageId || "Auto-selected") + "<br>" +
+        "Count: " + vmCount + " VM(s)" +
+        "</div>";
+    });
+  }
+
+  Swal.fire({
+    title: "Configure MCI Scale Out",
+    width: 700,
+    html:
+      "<div style='text-align: left; margin: 20px;'>" +
+      "<p><b>Step 2:</b> Configure VM addition to MCI</p>" +
+      "<p><b>Selected MCI:</b> " + selectedMciId + "</p>" +
+      "<hr>" +
+      "<div style='margin-bottom: 15px;'>" +
+      "<label for='subgroup-name'><b>New SubGroup Name:</b></label>" +
+      "<input id='subgroup-name' class='form-control' style='margin-top: 5px;' " +
+      "placeholder='Enter subgroup name (e.g., web-servers-2)' value='dynamic-group-" + Date.now() + "'>" +
+      "</div>" +
+      "<div style='margin-bottom: 15px;'>" +
+      "<label for='vm-count'><b>Number of VMs per location:</b></label>" +
+      "<input id='vm-count' type='number' class='form-control' style='margin-top: 5px;' " +
+      "min='1' max='10' value='1' placeholder='Enter number of VMs'>" +
+      "</div>" +
+      "<hr>" +
+      "<p><b>VM Configuration Summary:</b></p>" +
+      "<div style='max-height: 200px; overflow-y: auto;'>" +
+      vmConfigSummary +
+      "</div>" +
+      "<hr>" +
+      "<p><b>Total VMs to add:</b> <span id='total-vms'>" + totalVMs + "</span></p>" +
+      "</div>",
+    showCancelButton: true,
+    confirmButtonText: "Add VMs to MCI",
+    cancelButtonText: "Back",
+    confirmButtonColor: "#28a745",
+    didOpen: () => {
+      // Update total VM count when VM count per location changes
+      document.getElementById('vm-count').addEventListener('input', function() {
+        var vmPerLocation = parseInt(this.value) || 1;
+        var totalLocations = vmReqeustFromSpecList.length;
+        var newTotal = vmPerLocation * totalLocations;
+        document.getElementById('total-vms').textContent = newTotal;
+      });
+    },
+    preConfirm: () => {
+      const subGroupName = document.getElementById('subgroup-name').value.trim();
+      const vmCount = parseInt(document.getElementById('vm-count').value) || 1;
+      
+      if (!subGroupName) {
+        Swal.showValidationMessage('Please enter a SubGroup name');
+        return false;
+      }
+      
+      if (vmCount < 1 || vmCount > 10) {
+        Swal.showValidationMessage('VM count must be between 1 and 10');
+        return false;
+      }
+      
+      return { subGroupName, vmCount };
+    }
+  }).then((result) => {
+    if (result.isConfirmed) {
+      var config = result.value;
+      showMciScaleOutConfirmation(selectedMciId, config.subGroupName, config.vmCount, namespace, hostname, port, username, password);
+    } else if (result.dismiss === Swal.DismissReason.cancel) {
+      // Go back to MCI selection
+      scaleOutMciWithConfiguration();
+    }
+  });
+}
+
+// Step 3: Show final confirmation and execute MCI scale out
+function showMciScaleOutConfirmation(mciId, subGroupName, vmCountPerLocation, namespace, hostname, port, username, password) {
+  var totalVMs = vmCountPerLocation * vmReqeustFromSpecList.length;
+  
+  Swal.fire({
+    title: "Confirm MCI Scale Out",
+    html: 
+      "<div style='text-align: left; margin: 20px;'>" +
+      "<p>You are about to add <b>" + totalVMs + " VM(s)</b> to MCI:</p>" +
+      "<ul>" +
+      "<li>MCI: <b>" + mciId + "</b></li>" +
+      "<li>New SubGroup: <b>" + subGroupName + "</b></li>" +
+      "<li>VMs per location: <b>" + vmCountPerLocation + "</b></li>" +
+      "<li>Total locations: <b>" + vmReqeustFromSpecList.length + "</b></li>" +
+      "</ul>" +
+      "<p style='color: #dc3545; margin-top: 15px;'><b>⚠️ Warning:</b> This will incur additional costs.</p>" +
+      "</div>",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Proceed with VM Addition",
+    cancelButtonText: "Cancel",
+    confirmButtonColor: "#28a745",
+    cancelButtonColor: "#dc3545"
+  }).then((confirmResult) => {
+    if (confirmResult.isConfirmed) {
+      executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, hostname, port, username, password);
+    }
+  });
+}
+
+// Execute MCI scale out operation
+function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, hostname, port, username, password) {
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciId}/vmDynamic`;
+  
+  // Build the request body using current map configuration
+  var vmDynamicReq = {
+    name: subGroupName,
+    subGroupSize: vmCountPerLocation.toString(),
+    description: "Dynamically added via CB-MapUI Scale Out MCI",
+    label: {
+      "created-by": "cb-mapui",
+      "creation-type": "scale-out-mci",
+      "timestamp": new Date().toISOString()
+    }
+  };
+
+  // Use the first VM configuration from the map as the template
+  // In a real scenario, you might want to let users select which configuration to use
+  if (vmReqeustFromSpecList && vmReqeustFromSpecList.length > 0) {
+    var templateVm = vmReqeustFromSpecList[0];
+    
+    if (templateVm.specId) {
+      vmDynamicReq.specId = templateVm.specId;
+    }
+    if (templateVm.imageId) {
+      vmDynamicReq.imageId = templateVm.imageId;
+    }
+    if (templateVm.rootDiskType) {
+      vmDynamicReq.rootDiskType = templateVm.rootDiskType;
+    }
+    if (templateVm.rootDiskSize) {
+      vmDynamicReq.rootDiskSize = templateVm.rootDiskSize;
+    }
+    if (templateVm.connectionName) {
+      vmDynamicReq.connectionName = templateVm.connectionName;
+    }
+  }
+
+  var jsonBody = JSON.stringify(vmDynamicReq, undefined, 4);
+  
+  console.log(`Adding VMs to MCI ${mciId} with subgroup ${subGroupName}...`);
+  var spinnerId = addSpinnerTask(`Scale Out MCI: ${mciId} (+${vmCountPerLocation * vmReqeustFromSpecList.length} VMs)`);
+  infoAlert(`Starting MCI Scale Out: Adding ${vmCountPerLocation * vmReqeustFromSpecList.length} VM(s) to ${mciId}`);
+
+  var requestId = generateRandomRequestId("mci-scaleout-" + mciId + "-" + subGroupName + "-", 10);
+  addRequestIdToSelect(requestId);
+
+  axios({
+    method: "post",
+    url: url,
+    headers: { 
+      "Content-Type": "application/json",
+      "x-request-id": requestId 
+    },
+    data: jsonBody,
+    auth: {
+      username: `${username}`,
+      password: `${password}`,
+    },
+    timeout: 600000  // 10 minutes timeout for scale out operation
+  })
+    .then((res) => {
+      console.log("MCI scale out response:", res);
+      
+      displayJsonData(res.data, typeInfo);
+      handleAxiosResponse(res);
+      
+      console.log(`Successfully added VMs to MCI ${mciId}`);
+      
+      Swal.fire({
+        icon: "success",
+        title: "MCI Scale Out Successful!",
+        html: 
+          "<div style='text-align: left;'>" +
+          "<p><b>" + (vmCountPerLocation * vmReqeustFromSpecList.length) + " VM(s)</b> have been successfully added to:</p>" +
+          "<ul>" +
+          "<li>MCI: <b>" + mciId + "</b></li>" +
+          "<li>SubGroup: <b>" + subGroupName + "</b></li>" +
+          "</ul>" +
+          "<p style='margin-top: 15px; color: #28a745;'>✓ The new VMs are being provisioned.</p>" +
+          "</div>",
+        confirmButtonText: "OK"
+      });
+      
+      // Refresh MCI status after scale out
+      setTimeout(() => {
+        getMci();
+        updateMciList();
+      }, 3000);
+    })
+    .catch(function (error) {
+      var errorMsg = "Failed to scale out MCI";
+      
+      if (error.response) {
+        console.log(error.response.data);
+        console.log(error.response.status);
+        
+        if (error.response.data) {
+          if (typeof error.response.data === 'string') {
+            errorMsg = error.response.data;
+          } else if (error.response.data.message) {
+            errorMsg = error.response.data.message;
+          } else if (error.response.data.error) {
+            errorMsg = error.response.data.error;
+          }
+        }
+        
+        displayJsonData(error.response.data, typeError);
+      } else if (error.request) {
+        errorMsg = "No response from server. Please check the connection.";
+        console.log(error.request);
+      } else {
+        errorMsg = error.message;
+        console.log('Error', error.message);
+      }
+      
+      console.log(errorMsg);
+      
+      Swal.fire({
+        icon: "error",
+        title: "MCI Scale Out Failed",
+        html: 
+          "<div style='text-align: left;'>" +
+          "<p>Failed to scale out MCI <b>" + mciId + "</b></p>" +
+          "<p style='margin-top: 10px; color: #dc3545;'>Error: " + errorMsg + "</p>" +
+          "</div>",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#dc3545"
+      });
+      
+      console.log(error.config);
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
+}

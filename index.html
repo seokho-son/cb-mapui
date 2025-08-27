@@ -615,6 +615,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   </div>
 
 
+                  <!-- Create MCI Field -->
+                  <div class="form-group">
+                    <button type="button" id="createMciButton" onClick="createMci();" class="btn btn-primary w-100">🚀
+                      Create MCI</button>
+                  </div>
+
+
 
                   <!-- Clear Selection Field -->
                   <div class="form-group">
@@ -622,13 +629,28 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                       Configuration</button>
                   </div>
 
-                  <!-- Create MCI Field -->
+
+                </form>
+              </div>
+            </div>
+
+            <!-- MC-Infra Expansion Card -->
+            <div class="card mb-2">
+              <div class="card-header">⚙️ MC-Infra Expansion</div>
+              <div class="card-body d-flex flex-column">
+                <form id="mci-config-form">
+
+                  <!-- Scale Out MCI Field -->
                   <div class="form-group">
-                    <button type="button" id="createMciButton" onClick="createMci();" class="btn btn-primary w-100">🚀
-                      Create
-                      MCI</button>
+                    <button type="button" id="scaleOutMciBtn" onClick="scaleOutMciWithConfiguration();"
+                      class="btn btn-success w-100">📈 ScaleOut MCI</button>
                   </div>
 
+                  <!-- Scale Out SubGroup Field -->
+                  <div class="form-group">
+                    <button type="button" id="scaleOutBtn" onClick="scaleOutSubGroupWithSelection();"
+                      class="btn btn-primary w-100">📈 ScaleOut SubGroup</button>
+                  </div>
 
 
                 </form>
@@ -747,12 +769,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                       class="btn btn-warning w-100">📁 Remote File Transfer</button>
                   </div>
 
-
-                  <!-- Scale Out SubGroup Field (Success) -->
-                  <div class="form-group">
-                    <button type="button" id="scaleOutBtn" onClick="scaleOutSubGroup();"
-                      class="btn btn btn-info w-100">📈 ScaleOut SubGroup</button>
-                  </div>
 
                   <!-- Update Firewall Rules Field (Success) -->
                   <div class="form-group">
