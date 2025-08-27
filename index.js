@@ -112,8 +112,6 @@ var cspListDisplayEnabled = document.getElementById("displayOn");
 var recommendPolicy = document.getElementById("recommendPolicy");
 var selectApp = document.getElementById("selectApp");
 
-var messageJsonOutput = document.getElementById("jsonoutput");
-
 var hostnameElement = document.getElementById("hostname");
 var portElement = document.getElementById("port");
 var usernameElement = document.getElementById("username");
@@ -150,7 +148,6 @@ var map = new Map({
 
 // fucntion for clear map.
 function clearMap() {
-  messageJsonOutput.value = "";
   console.log("[Map Cleared]");
   geometries = [];
   mciTargetAction = []; // Clear targetAction array as well
@@ -175,7 +172,6 @@ function clearCircle(option) {
   recommendedSpecList = [];
   cspPointsCircle = [];
   geoCspPointsCircle = [];
-  messageJsonOutput.value = "";
 }
 window.clearCircle = clearCircle;
 
@@ -940,39 +936,46 @@ function outputAlert(jsonData, type) {
     width: '40%',
     //backdrop: false,
     didOpen: () => {
-      const container = document.getElementById("json-output");
-      const formatter = new JSONFormatter(jsonData, Infinity, jsonOutputConfig);
-      const renderedElement = formatter.render();
-      container.appendChild(renderedElement);
-      
-      // Remove quotes from string values using DOM manipulation
+      // Use setTimeout to ensure DOM is fully ready
       setTimeout(() => {
-        const stringElements = container.querySelectorAll('.json-formatter-string');
-        stringElements.forEach(element => {
-          if (element.textContent.startsWith('"') && element.textContent.endsWith('"')) {
-            element.textContent = element.textContent.slice(1, -1);
-          }
-        });
-      }, 100);
-      
-      // Apply custom styles for JSONFormatter value strings
-      const style = document.createElement('style');
-      style.textContent = `
-        #json-output .json-formatter-string {
-          word-wrap: break-word !important;
-          overflow-wrap: break-word !important;
-          white-space: pre-wrap !important;
-          word-break: break-all !important;
-          max-width: 100% !important;
+        const container = document.getElementById("json-output");
+        if (container) {
+          const formatter = new JSONFormatter(jsonData, Infinity, jsonOutputConfig);
+          const renderedElement = formatter.render();
+          container.appendChild(renderedElement);
+          
+          // Remove quotes from string values using DOM manipulation
+          setTimeout(() => {
+            const stringElements = container.querySelectorAll('.json-formatter-string');
+            stringElements.forEach(element => {
+              if (element.textContent.startsWith('"') && element.textContent.endsWith('"')) {
+                element.textContent = element.textContent.slice(1, -1);
+              }
+            });
+          }, 100);
+          
+          // Apply custom styles for JSONFormatter value strings
+          const style = document.createElement('style');
+          style.textContent = `
+            #json-output .json-formatter-string {
+              word-wrap: break-word !important;
+              overflow-wrap: break-word !important;
+              white-space: pre-wrap !important;
+              word-break: break-all !important;
+              max-width: 100% !important;
+            }
+            #json-output .json-formatter-row .json-formatter-string {
+              word-wrap: break-word !important;
+              overflow-wrap: break-word !important;
+              white-space: pre-wrap !important;
+              word-break: break-all !important;
+            }
+          `;
+          document.head.appendChild(style);
+        } else {
+          console.error("json-output container not found");
         }
-        #json-output .json-formatter-row .json-formatter-string {
-          word-wrap: break-word !important;
-          overflow-wrap: break-word !important;
-          white-space: pre-wrap !important;
-          word-break: break-all !important;
-        }
-      `;
-      document.head.appendChild(style);
+      }, 50);
     },
   });
 }
@@ -989,21 +992,9 @@ function displayJsonData(jsonData, type) {
     quotesOnKeys: false,
     quotesOnValues: false
   };
-  outputAlert(jsonData, type);
-  const messageJsonOutput = document.getElementById("jsonoutput");
-  messageJsonOutput.innerHTML = ""; // Clear existing content
-  const renderedElement = new JSONFormatter(jsonData, Infinity, jsonOutputConfig).render();
-  messageJsonOutput.appendChild(renderedElement);
   
-  // Remove quotes from string values using DOM manipulation
-  setTimeout(() => {
-    const stringElements = messageJsonOutput.querySelectorAll('.json-formatter-string');
-    stringElements.forEach(element => {
-      if (element.textContent.startsWith('"') && element.textContent.endsWith('"')) {
-        element.textContent = element.textContent.slice(1, -1);
-      }
-    });
-  }, 100);
+  // Show JSON data in SweetAlert popup
+  outputAlert(jsonData, type);
 }
 
 // Handle MCI without VMs (preparing, prepared states)
