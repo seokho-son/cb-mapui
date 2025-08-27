@@ -3779,8 +3779,9 @@ function getRecommendedSpec(idx, latitude, longitude) {
                     </tbody>
                   </table>
                 </div>
-                <div id="imageDetailsContainer" style="margin-top:15px;padding:8px;border:1px solid #ddd;border-radius:5px;">
-                  <div id="imageDetailsContent"></div>
+                <div id="imageDetailsContainer" style="margin-top:15px;padding:8px;border:1px solid #ddd;border-radius:5px;height:280px;overflow-y:auto;display:flex;flex-direction:column;">
+                  <h5 style="font-size: 0.85rem;margin-bottom:5px;flex-shrink:0;">Selected Image Details</h5>
+                  <div id="imageDetailsContent" style="flex:1;overflow-y:auto;"></div>
                 </div>
                 <input type="hidden" id="selectedImageIndex" value="0">
               </div>
@@ -3899,11 +3900,14 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 }
                 
                 /* Reduce spacing in details section */
-                #imageDetailsContent .row p {
-                  margin-bottom: 0.15rem;
+                #imageDetailsContent {
+                  line-height: 1.2;
                 }
                 #imageDetailsContent .row {
-                  margin-bottom: 0.3rem;
+                  margin: 0;
+                }
+                #imageDetailsContent p {
+                  margin: 2px 0;
                 }
                 
                 /* Details table styling */
@@ -3953,47 +3957,48 @@ function getRecommendedSpec(idx, latitude, longitude) {
               function updateImageDetails(index) {
                 const image = availableImages[index];
                 
-                // Combined image information in 2 columns
+                // Combined image information - simplified layout
                 const imageInfoHTML = `
-                  <div class="row">
-                    <div class="col-md-10" style="text-align: left;">
-                      <p style="text-align: left;"><strong>Name:</strong> ${image.cspImageName}</p>
-                      <p style="text-align: left;"><strong>Distribution:</strong> ${image.osDistribution}</p>
-                      <p style="text-align: left;"><strong>Description:</strong> ${image.description}</p>
+                  <div style="margin:0; padding:0; text-align: left;">
+                    <div style="margin-bottom:3px; text-align: left;">
+                      <strong>Name:</strong> ${image.cspImageName}
                     </div>
-                    <div class="col-md-2" style="text-align: left;">
-                      <p style="text-align: left;"><strong>Image Status:</strong> <span style="color: ${image.imageStatus === 'Available' || image.imageStatus === 'available' ? 'green' : 'orange'};">${image.imageStatus}</span></p>
-                      <p style="text-align: left;"><strong>Created Date:</strong> ${image.creationDate}</p>
-                      ${image.isKubernetesImage ? `<p style="text-align: left;"><strong>K8s Support:</strong> <span style="color: blue; font-weight: bold;">✓ Yes</span></p>` : ''}
-                      ${image.isGPUImage ? `<p style="text-align: left;"><strong>GPU Support:</strong> <span style="color: red; font-weight: bold;">✓ Yes</span></p>` : ''}
-                      ${image.isBasicImage ? `<p style="text-align: left;"><strong>Basic Image:</strong> <span style="color: green; font-weight: bold;">✓ Yes</span></p>` : ''}
+                    <div style="margin-bottom:3px; text-align: left;">
+                      <strong>Distribution:</strong> ${image.osDistribution}
                     </div>
+                    <div style="margin-bottom:3px; text-align: left;">
+                      <strong>Description:</strong> ${image.description}
+                    </div>
+                    <div style="margin-bottom:3px; text-align: left;">
+                      <strong>Status:</strong> <span style="color: ${image.imageStatus === 'Available' || image.imageStatus === 'available' ? 'green' : 'orange'};">${image.imageStatus}</span>
+                    </div>
+                    ${image.isKubernetesImage ? `<div style="margin-bottom:3px; text-align: left;"><strong>K8s Support:</strong> <span style="color: blue; font-weight: bold;">✓ Yes</span></div>` : ''}
+                    ${image.isGPUImage ? `<div style="margin-bottom:3px; text-align: left;"><strong>GPU Support:</strong> <span style="color: red; font-weight: bold;">✓ Yes</span></div>` : ''}
+                    ${image.isBasicImage ? `<div style="margin-bottom:3px; text-align: left;"><strong>Basic Image:</strong> <span style="color: green; font-weight: bold;">✓ Yes</span></div>` : ''}
                   </div>
                 `;
 
-                // Details table (similar to spec details)
+                // Details table - simplified
                 let detailsTableHTML = "";
                 if (image.details && Array.isArray(image.details) && image.details.length > 0) {
                   detailsTableHTML = `
-                    <div class="mt-2">
-                      <div class="image-details-table">
-                        <table class="table table-sm table-bordered">
-                          <thead>
-                            <tr>
-                              <th style="width: 35%;">Property</th>
-                              <th>Value</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            ${image.details.map(item =>
-                              `<tr>
-                                <td><strong>${item.key}</strong></td>
-                                <td style="word-wrap: break-word; max-width: 300px;">${item.value}</td>
-                              </tr>`
-                            ).join('')}
-                          </tbody>
-                        </table>
-                      </div>
+                    <div style="margin-top: 8px; text-align: left;">
+                      <table style="width:100%; border-collapse: collapse; font-size: 0.75rem; text-align: left;">
+                        <thead>
+                          <tr>
+                            <th style="width: 35%; padding: 3px; border: 1px solid #ddd; background: #f8f9fa; text-align: left;">Property</th>
+                            <th style="padding: 3px; border: 1px solid #ddd; background: #f8f9fa; text-align: left;">Value</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${image.details.map(item =>
+                            `<tr>
+                              <td style="padding: 3px; border: 1px solid #ddd; text-align: left;"><strong>${item.key}</strong></td>
+                              <td style="padding: 3px; border: 1px solid #ddd; word-wrap: break-word; text-align: left;">${item.value}</td>
+                            </tr>`
+                          ).join('')}
+                        </tbody>
+                      </table>
                     </div>
                   `;
                 }
