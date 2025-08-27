@@ -112,9 +112,6 @@ var cspListDisplayEnabled = document.getElementById("displayOn");
 var recommendPolicy = document.getElementById("recommendPolicy");
 var selectApp = document.getElementById("selectApp");
 
-var messageTextArea = document.getElementById("message");
-var messageJsonOutput = document.getElementById("jsonoutput");
-
 var hostnameElement = document.getElementById("hostname");
 var portElement = document.getElementById("port");
 var usernameElement = document.getElementById("username");
@@ -151,8 +148,7 @@ var map = new Map({
 
 // fucntion for clear map.
 function clearMap() {
-  messageJsonOutput.value = "";
-  messageTextArea.value = "";
+  console.log("[Map Cleared]");
   geometries = [];
   mciTargetAction = []; // Clear targetAction array as well
   geoResourceLocation.k8s = [];
@@ -169,14 +165,13 @@ window.clearMap = clearMap;
 function clearCircle(option) {
   //document.getElementById("latLonInputPairArea").innerHTML = '';
   if (option == "clearText") {
-    messageTextArea.value = "";
+    console.log("[Circle Configuration Cleared]");
   }
   latLonInputPairIdx = 0;
   vmReqeustFromSpecList = [];
   recommendedSpecList = [];
   cspPointsCircle = [];
   geoCspPointsCircle = [];
-  messageJsonOutput.value = "";
 }
 window.clearCircle = clearCircle;
 
@@ -188,11 +183,9 @@ function writeLatLonInputPair(idx, lat, lon) {
   //document.getElementById("latLonInputPairArea").innerHTML +=
   `VM ${idx + 1}: (${latf}, ${lonf}) / `;
   if (idx == 0) {
-    messageTextArea.value = `[Started MCI configuration]\n`;
+    console.log("[Started MCI configuration]");
   }
-  messageTextArea.value += `\n - [VM-${idx + 1
-    }]  Location:  ${latf}, ${lonf}\t\t| Best Spec: `;
-  messageTextArea.scrollTop = messageTextArea.scrollHeight;
+  console.log(`VM-${idx + 1} Location: ${latf}, ${lonf} | Best Spec: `);
 }
 
 var latLonInputPairIdx = 0;
@@ -283,10 +276,10 @@ function displayCSPListOn() {
         .on("end", () => {
           console.log(cloudLocation);
 
-          messageTextArea.value =
+          console.log(
             "[Complete] Display Known Cloud Regions: " +
-            cloudLocation.length +
-            "\n";
+            cloudLocation.length
+          );
 
           cloudLocation.forEach((location) => {
             const { CloudType, Longitude, Latitude } = location;
@@ -943,39 +936,46 @@ function outputAlert(jsonData, type) {
     width: '40%',
     //backdrop: false,
     didOpen: () => {
-      const container = document.getElementById("json-output");
-      const formatter = new JSONFormatter(jsonData, Infinity, jsonOutputConfig);
-      const renderedElement = formatter.render();
-      container.appendChild(renderedElement);
-      
-      // Remove quotes from string values using DOM manipulation
+      // Use setTimeout to ensure DOM is fully ready
       setTimeout(() => {
-        const stringElements = container.querySelectorAll('.json-formatter-string');
-        stringElements.forEach(element => {
-          if (element.textContent.startsWith('"') && element.textContent.endsWith('"')) {
-            element.textContent = element.textContent.slice(1, -1);
-          }
-        });
-      }, 100);
-      
-      // Apply custom styles for JSONFormatter value strings
-      const style = document.createElement('style');
-      style.textContent = `
-        #json-output .json-formatter-string {
-          word-wrap: break-word !important;
-          overflow-wrap: break-word !important;
-          white-space: pre-wrap !important;
-          word-break: break-all !important;
-          max-width: 100% !important;
+        const container = document.getElementById("json-output");
+        if (container) {
+          const formatter = new JSONFormatter(jsonData, Infinity, jsonOutputConfig);
+          const renderedElement = formatter.render();
+          container.appendChild(renderedElement);
+          
+          // Remove quotes from string values using DOM manipulation
+          setTimeout(() => {
+            const stringElements = container.querySelectorAll('.json-formatter-string');
+            stringElements.forEach(element => {
+              if (element.textContent.startsWith('"') && element.textContent.endsWith('"')) {
+                element.textContent = element.textContent.slice(1, -1);
+              }
+            });
+          }, 100);
+          
+          // Apply custom styles for JSONFormatter value strings
+          const style = document.createElement('style');
+          style.textContent = `
+            #json-output .json-formatter-string {
+              word-wrap: break-word !important;
+              overflow-wrap: break-word !important;
+              white-space: pre-wrap !important;
+              word-break: break-all !important;
+              max-width: 100% !important;
+            }
+            #json-output .json-formatter-row .json-formatter-string {
+              word-wrap: break-word !important;
+              overflow-wrap: break-word !important;
+              white-space: pre-wrap !important;
+              word-break: break-all !important;
+            }
+          `;
+          document.head.appendChild(style);
+        } else {
+          console.error("json-output container not found");
         }
-        #json-output .json-formatter-row .json-formatter-string {
-          word-wrap: break-word !important;
-          overflow-wrap: break-word !important;
-          white-space: pre-wrap !important;
-          word-break: break-all !important;
-        }
-      `;
-      document.head.appendChild(style);
+      }, 50);
     },
   });
 }
@@ -992,21 +992,9 @@ function displayJsonData(jsonData, type) {
     quotesOnKeys: false,
     quotesOnValues: false
   };
-  outputAlert(jsonData, type);
-  const messageJsonOutput = document.getElementById("jsonoutput");
-  messageJsonOutput.innerHTML = ""; // Clear existing content
-  const renderedElement = new JSONFormatter(jsonData, Infinity, jsonOutputConfig).render();
-  messageJsonOutput.appendChild(renderedElement);
   
-  // Remove quotes from string values using DOM manipulation
-  setTimeout(() => {
-    const stringElements = messageJsonOutput.querySelectorAll('.json-formatter-string');
-    stringElements.forEach(element => {
-      if (element.textContent.startsWith('"') && element.textContent.endsWith('"')) {
-        element.textContent = element.textContent.slice(1, -1);
-      }
-    });
-  }, 100);
+  // Show JSON data in SweetAlert popup
+  outputAlert(jsonData, type);
 }
 
 // Handle MCI without VMs (preparing, prepared states)
@@ -1516,10 +1504,10 @@ function getConnection() {
     .then((res) => {
       var obj = res.data;
       if (obj.connectionconfig != null) {
-        messageTextArea.value =
+        console.log(
           "[Complete] Registered Cloud Regions: " +
-          obj.connectionconfig.length +
-          "\n";
+          obj.connectionconfig.length
+        );
 
         obj.connectionconfig.forEach((config, i) => {
           const providerName = config.providerName;
@@ -1528,7 +1516,7 @@ function getConnection() {
           const briefAddr = config.regionDetail.location.display;
           const nativeRegion = config.regionDetail.regionName;
 
-          messageTextArea.value +=
+          console.log(
             "[" +
             i +
             "] " +
@@ -1543,7 +1531,8 @@ function getConnection() {
             latitude +
             " (" +
             briefAddr +
-            ")\n";
+            ")"
+          );
 
           if (!cspPoints[providerName]) {
             cspPoints[providerName] = [];
@@ -1823,7 +1812,7 @@ function showFinalMciConfirmation(createMciReq, url, totalCost, totalNodeScale, 
 // MCI Creation execution
 function proceedWithMciCreation(createMciReq, url, username, password) {
   var jsonBody = JSON.stringify(createMciReq, undefined, 4);
-  messageTextArea.value = " Creating MCI ...";
+  console.log("Creating MCI ...");
   var spinnerId = addSpinnerTask("Creating MCI: " + createMciReq.name);
 
   var requestId = generateRandomRequestId("mci-" + createMciReq.name + "-", 10);
@@ -1848,7 +1837,7 @@ function proceedWithMciCreation(createMciReq, url, username, password) {
       updateMciList();
 
       clearCircle("none");
-      messageTextArea.value = "Created " + createMciReq.name;
+      console.log("Created " + createMciReq.name);
     })
     .catch(function (error) {
       errorAlert("Failed to create MCI: " + createMciReq.name);
@@ -3338,8 +3327,9 @@ function createMci() {
       }
     });
   } else {
-    messageTextArea.value =
-      " To create a MCI, VMs should be configured!\n Click the Map to add a config for VM request.";
+    console.log(
+      "To create a MCI, VMs should be configured! Click the Map to add a config for VM request."
+    );
     errorAlert("Please configure MCI first\n(Click the Map to add VMs)");
   }
 }
@@ -3358,7 +3348,6 @@ function getRecommendedSpec(idx, latitude, longitude) {
   var specName = document.getElementById("specName").value;
   var architecture = document.getElementById("architecture").value;
   var providerName = document.getElementById("provider").value;
-  var acceleratorType = document.getElementById("acceleratorType").value;
   var acceleratorModel = document.getElementById("acceleratorModel").value;
   var minAcceleratorCount = document.getElementById("minAcceleratorCount").value;
   var maxAcceleratorCount = document.getElementById("maxAcceleratorCount").value;
@@ -3380,14 +3369,23 @@ function getRecommendedSpec(idx, latitude, longitude) {
     return { metric: metric, condition: conditions };
   }
 
+  // Handle GPU-related conditions
+  var gpuPolicies = [];
+  if (acceleratorModel === "any") {
+    // For "Any GPU", add acceleratorType as "gpu" but exclude AcceleratorModel
+    gpuPolicies.push(createPolicyConditions("AcceleratorType", { value: "gpu" }, "single"));
+  } else if (acceleratorModel && acceleratorModel !== "") {
+    // For specific GPU models, add AcceleratorModel condition
+    gpuPolicies.push(createPolicyConditions("AcceleratorModel", { value: acceleratorModel }, "single"));
+  }
+
   var policies = [
     createPolicyConditions("vCPU", { min: minVCPU, max: maxVCPU }, "range"),
     createPolicyConditions("MemoryGiB", { min: minRAM, max: maxRAM }, "range"),
     createPolicyConditions("CspSpecName", { value: specName }, "single"),
     createPolicyConditions("ProviderName", { value: providerName }, "single"),
     createPolicyConditions("Architecture", { value: architecture }, "single"),
-    createPolicyConditions("AcceleratorType", { value: acceleratorType }, "single"),
-    createPolicyConditions("AcceleratorModel", { value: acceleratorModel }, "single"),
+    ...gpuPolicies,
     createPolicyConditions("AcceleratorMemoryGB", { min: minAMEM, max: maxAMEM }, "range"),
     createPolicyConditions("AcceleratorCount", { min: minAcceleratorCount, max: maxAcceleratorCount }, "range"),
   ];
@@ -3772,8 +3770,9 @@ function getRecommendedSpec(idx, latitude, longitude) {
                     </tbody>
                   </table>
                 </div>
-                <div id="imageDetailsContainer" style="margin-top:15px;padding:8px;border:1px solid #ddd;border-radius:5px;">
-                  <div id="imageDetailsContent"></div>
+                <div id="imageDetailsContainer" style="margin-top:15px;padding:8px;border:1px solid #ddd;border-radius:5px;height:280px;overflow-y:auto;display:flex;flex-direction:column;">
+                  <h5 style="font-size: 0.85rem;margin-bottom:5px;flex-shrink:0;">Selected Image Details</h5>
+                  <div id="imageDetailsContent" style="flex:1;overflow-y:auto;"></div>
                 </div>
                 <input type="hidden" id="selectedImageIndex" value="0">
               </div>
@@ -3892,11 +3891,14 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 }
                 
                 /* Reduce spacing in details section */
-                #imageDetailsContent .row p {
-                  margin-bottom: 0.15rem;
+                #imageDetailsContent {
+                  line-height: 1.2;
                 }
                 #imageDetailsContent .row {
-                  margin-bottom: 0.3rem;
+                  margin: 0;
+                }
+                #imageDetailsContent p {
+                  margin: 2px 0;
                 }
                 
                 /* Details table styling */
@@ -3946,47 +3948,48 @@ function getRecommendedSpec(idx, latitude, longitude) {
               function updateImageDetails(index) {
                 const image = availableImages[index];
                 
-                // Combined image information in 2 columns
+                // Combined image information - simplified layout
                 const imageInfoHTML = `
-                  <div class="row">
-                    <div class="col-md-10" style="text-align: left;">
-                      <p style="text-align: left;"><strong>Name:</strong> ${image.cspImageName}</p>
-                      <p style="text-align: left;"><strong>Distribution:</strong> ${image.osDistribution}</p>
-                      <p style="text-align: left;"><strong>Description:</strong> ${image.description}</p>
+                  <div style="margin:0; padding:0; text-align: left;">
+                    <div style="margin-bottom:3px; text-align: left;">
+                      <strong>Name:</strong> ${image.cspImageName}
                     </div>
-                    <div class="col-md-2" style="text-align: left;">
-                      <p style="text-align: left;"><strong>Image Status:</strong> <span style="color: ${image.imageStatus === 'Available' || image.imageStatus === 'available' ? 'green' : 'orange'};">${image.imageStatus}</span></p>
-                      <p style="text-align: left;"><strong>Created Date:</strong> ${image.creationDate}</p>
-                      ${image.isKubernetesImage ? `<p style="text-align: left;"><strong>K8s Support:</strong> <span style="color: blue; font-weight: bold;">✓ Yes</span></p>` : ''}
-                      ${image.isGPUImage ? `<p style="text-align: left;"><strong>GPU Support:</strong> <span style="color: red; font-weight: bold;">✓ Yes</span></p>` : ''}
-                      ${image.isBasicImage ? `<p style="text-align: left;"><strong>Basic Image:</strong> <span style="color: green; font-weight: bold;">✓ Yes</span></p>` : ''}
+                    <div style="margin-bottom:3px; text-align: left;">
+                      <strong>Distribution:</strong> ${image.osDistribution}
                     </div>
+                    <div style="margin-bottom:3px; text-align: left;">
+                      <strong>Description:</strong> ${image.description}
+                    </div>
+                    <div style="margin-bottom:3px; text-align: left;">
+                      <strong>Status:</strong> <span style="color: ${image.imageStatus === 'Available' || image.imageStatus === 'available' ? 'green' : 'orange'};">${image.imageStatus}</span>
+                    </div>
+                    ${image.isKubernetesImage ? `<div style="margin-bottom:3px; text-align: left;"><strong>K8s Support:</strong> <span style="color: blue; font-weight: bold;">✓ Yes</span></div>` : ''}
+                    ${image.isGPUImage ? `<div style="margin-bottom:3px; text-align: left;"><strong>GPU Support:</strong> <span style="color: red; font-weight: bold;">✓ Yes</span></div>` : ''}
+                    ${image.isBasicImage ? `<div style="margin-bottom:3px; text-align: left;"><strong>Basic Image:</strong> <span style="color: green; font-weight: bold;">✓ Yes</span></div>` : ''}
                   </div>
                 `;
 
-                // Details table (similar to spec details)
+                // Details table - simplified
                 let detailsTableHTML = "";
                 if (image.details && Array.isArray(image.details) && image.details.length > 0) {
                   detailsTableHTML = `
-                    <div class="mt-2">
-                      <div class="image-details-table">
-                        <table class="table table-sm table-bordered">
-                          <thead>
-                            <tr>
-                              <th style="width: 35%;">Property</th>
-                              <th>Value</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            ${image.details.map(item =>
-                              `<tr>
-                                <td><strong>${item.key}</strong></td>
-                                <td style="word-wrap: break-word; max-width: 300px;">${item.value}</td>
-                              </tr>`
-                            ).join('')}
-                          </tbody>
-                        </table>
-                      </div>
+                    <div style="margin-top: 8px; text-align: left;">
+                      <table style="width:100%; border-collapse: collapse; font-size: 0.75rem; text-align: left;">
+                        <thead>
+                          <tr>
+                            <th style="width: 35%; padding: 3px; border: 1px solid #ddd; background: #f8f9fa; text-align: left;">Property</th>
+                            <th style="padding: 3px; border: 1px solid #ddd; background: #f8f9fa; text-align: left;">Value</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${image.details.map(item =>
+                            `<tr>
+                              <td style="padding: 3px; border: 1px solid #ddd; text-align: left;"><strong>${item.key}</strong></td>
+                              <td style="padding: 3px; border: 1px solid #ddd; word-wrap: break-word; text-align: left;">${item.value}</td>
+                            </tr>`
+                          ).join('')}
+                        </tbody>
+                      </table>
                     </div>
                   `;
                 }
@@ -4301,13 +4304,14 @@ function getRecommendedSpec(idx, latitude, longitude) {
               }
 
 
-              messageTextArea.value +=
+              console.log(
                 `${createMciReqVm.specId}` +
-                `\t(${createMciReqVm.subGroupSize})`;
+                `\t(${createMciReqVm.subGroupSize})`
+              );
               vmReqeustFromSpecList.push(createMciReqVm);
               recommendedSpecList.push(recommendedSpec);
             } else {
-              messageTextArea.value = messageTextArea.value.replace(/\n.*$/, "");
+              console.log("VM configuration failed for this location");
               latLonInputPairIdx--;
               cspPointsCircle.pop();
               geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
@@ -4315,7 +4319,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
           });
             } else {
               // User canceled image selection
-              messageTextArea.value = messageTextArea.value.replace(/\n.*$/, "");
+              console.log("Image selection canceled");
               latLonInputPairIdx--;
               cspPointsCircle.pop();
               geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
@@ -4326,7 +4330,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
         });
       } else {
         // User canceled spec selection
-        messageTextArea.value = messageTextArea.value.replace(/\n.*$/, "");
+        console.log("Spec selection canceled");
         latLonInputPairIdx--;
         cspPointsCircle.pop();
         geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
@@ -4467,7 +4471,7 @@ function controlMCI(action) {
       );
       return;
   }
-  //messageTextArea.value = "[MCI " +action +"]";
+  //console.log("[MCI " +action +"]");
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
@@ -4658,7 +4662,7 @@ function hideMCI() {
 window.hideMCI = hideMCI;
 
 function statusMCI() {
-  messageTextArea.value = "[Get MCI status]";
+  console.log("[Get MCI status]");
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
@@ -4700,7 +4704,7 @@ function statusMCI() {
 window.statusMCI = statusMCI;
 
 function deleteMCI() {
-  messageTextArea.value = "Deleting MCI";
+  console.log("Deleting MCI");
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
@@ -4835,7 +4839,7 @@ function registerCspResource() {
     .then((res) => {
       console.log(res); // for debug
 
-      messageTextArea.value = "[Complete: Registering all CSP's resources]\n";
+      console.log("[Complete: Registering all CSP's resources]\n");
       displayJsonData(res.data, typeInfo);
     })
     .finally(function () {
@@ -4848,8 +4852,7 @@ function updateNsList() {
   // Get all namespace select elements
   var namespaceSelects = [
     document.getElementById("namespace"),           // Provision tab
-    document.getElementById("namespace-control"),   // Control tab  
-    document.getElementById("namespace-resources")  // Resources tab
+    document.getElementById("namespace-control")    // Control tab  
   ];
   
   // Store previous selections
@@ -4920,8 +4923,7 @@ function updateNsList() {
 function syncNamespaceSelection(selectedValue) {
   var namespaceSelects = [
     document.getElementById("namespace"),           // Provision tab
-    document.getElementById("namespace-control"),   // Control tab  
-    document.getElementById("namespace-resources")  // Resources tab
+    document.getElementById("namespace-control")    // Control tab  
   ];
   
   namespaceSelects.forEach(selectElement => {
@@ -4930,32 +4932,6 @@ function syncNamespaceSelection(selectedValue) {
     }
   });
 }
-
-document.getElementById("namespace").onmouseover = function () {
-  updateNsList();
-};
-document.getElementById("namespace").onchange = function () {
-  syncNamespaceSelection(this.value);
-  updateMciList();
-};
-
-// Add event handlers for Control tab namespace
-document.getElementById("namespace-control").onmouseover = function () {
-  updateNsList();
-};
-document.getElementById("namespace-control").onchange = function () {
-  syncNamespaceSelection(this.value);
-  updateMciList();
-};
-
-// Add event handlers for Resources tab namespace
-document.getElementById("namespace-resources").onmouseover = function () {
-  updateNsList();
-};
-document.getElementById("namespace-resources").onchange = function () {
-  syncNamespaceSelection(this.value);
-  updateMciList();
-};
 
 var mciList = [];
 var mciHideList = [];
@@ -5246,21 +5222,60 @@ function updateResourceList(resourceType) {
   }
 }
 
-document.getElementById(typeStringVNet).onmouseover = function () {
-  updateResourceList(typeStringVNet);
-};
-document.getElementById(typeStringSG).onmouseover = function () {
-  updateResourceList(typeStringSG);
-};
-document.getElementById(typeStringSshKey).onmouseover = function () {
-  updateResourceList(typeStringSshKey);
-};
-// document.getElementById(typeStringImage).onmouseover = function () {
-//   //updateResourceList(typeStringImage);
-// };
-// document.getElementById(typeStringSpec).onmouseover = function () {
-//   //updateResourceList(typeStringSpec);
-// };
+// Initialize DOM event handlers when document is ready
+document.addEventListener('DOMContentLoaded', function() {
+  // Namespace event handlers
+  const namespaceElement = document.getElementById("namespace");
+  if (namespaceElement) {
+    namespaceElement.onmouseover = function () {
+      updateNsList();
+    };
+    namespaceElement.onchange = function () {
+      syncNamespaceSelection(this.value);
+      updateMciList();
+    };
+  }
+  
+  const namespaceControlElement = document.getElementById("namespace-control");
+  if (namespaceControlElement) {
+    namespaceControlElement.onmouseover = function () {
+      updateNsList();
+    };
+    namespaceControlElement.onchange = function () {
+      syncNamespaceSelection(this.value);
+      updateMciList();
+    };
+  }
+  
+  // Resource list event handlers
+  const vNetElement = document.getElementById(typeStringVNet);
+  if (vNetElement) {
+    vNetElement.onmouseover = function () {
+      updateResourceList(typeStringVNet);
+    };
+  }
+  
+  const securityGroupElement = document.getElementById(typeStringSG);
+  if (securityGroupElement) {
+    securityGroupElement.onmouseover = function () {
+      updateResourceList(typeStringSG);
+    };
+  }
+  
+  const sshKeyElement = document.getElementById(typeStringSshKey);
+  if (sshKeyElement) {
+    sshKeyElement.onmouseover = function () {
+      updateResourceList(typeStringSshKey);
+    };
+  }
+  
+  // document.getElementById(typeStringImage).onmouseover = function () {
+  //   //updateResourceList(typeStringImage);
+  // };
+  // document.getElementById(typeStringSpec).onmouseover = function () {
+  //   //updateResourceList(typeStringSpec);
+  // };
+});
 
 function updateConnectionList() {
   var selectElement = document.getElementById(typeStringConnection);
@@ -5361,7 +5376,7 @@ function AddMcNLB() {
     // result.value is false if result.isDenied or another key such as result.isDismissed
     if (result.value) {
       infoAlert("Creating MC-NLB(special MCI) to : " + mciid);
-      messageTextArea.value = " Creating Multi-Cloud NLB (special MCI)";
+      console.log(" Creating Multi-Cloud NLB (special MCI)");
       var spinnerId = addSpinnerTask(
         "Creating MC-NLB(special MCI) to : " + mciid
       );
@@ -5440,16 +5455,18 @@ function AddNLB() {
   // var nlbport = document.getElementById("nlbport").value;
 
   if (!mciid) {
-    messageTextArea.value =
-      " When calling AddNLB(), you must specify the mciid.";
+    console.log(
+      "When calling AddNLB(), you must specify the mciid."
+    );
   }
 
   if (!subgroupid) {
-    messageTextArea.value =
-      " When calling AddNLB(), you must specify the subgroupid.";
+    console.log(
+      "When calling AddNLB(), you must specify the subgroupid."
+    );
   }
 
-  messageTextArea.value = " Creating NLB " + subgroupid;
+  console.log(" Creating NLB " + subgroupid);
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/nlb`;
 
@@ -5555,16 +5572,18 @@ function DelNLB() {
   var subgroupid = document.getElementById("subgroupid").value;
 
   if (!mciid) {
-    messageTextArea.value =
-      " When calling DelNLB(), you must specify the mciid.";
+    console.log(
+      "When calling DelNLB(), you must specify the mciid."
+    );
   }
 
   if (!subgroupid) {
-    messageTextArea.value =
-      " When calling DelNLB(), you must specify the subgroupid.";
+    console.log(
+      "When calling DelNLB(), you must specify the subgroupid."
+    );
   }
 
-  messageTextArea.value = " Deleting NLB " + subgroupid;
+  console.log(" Deleting NLB " + subgroupid);
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/nlb/${subgroupid}`;
 
@@ -5579,7 +5598,7 @@ function DelNLB() {
     .then((res) => {
       console.log(res); // for debug
 
-      messageTextArea.value = "[Deleted NLB]\n";
+      console.log("[Deleted NLB]\n");
       displayJsonData(res.data, typeInfo);
     })
     .catch(function (error) {
@@ -5714,7 +5733,7 @@ function startApp() {
     setDefaultRemoteCommandsByApp(selectApp.value);
     executeRemoteCmd();
   } else {
-    messageTextArea.value = " MCI ID is not assigned";
+    console.log(" MCI ID is not assigned");
   }
 }
 window.startApp = startApp;
@@ -5723,7 +5742,7 @@ window.startApp = startApp;
 function stopApp() {
   var mciid = mciidElement.value;
   if (mciid) {
-    messageTextArea.value = " Stopping " + selectApp.value;
+    console.log(" Stopping " + selectApp.value);
 
     var hostname = hostnameElement.value;
     var port = portElement.value;
@@ -5784,11 +5803,11 @@ function stopApp() {
     }).then((res) => {
       console.log(res); // for debug
 
-      messageTextArea.value = "[Complete: Stopping App]\n";
+      console.log("[Complete: Stopping App]\n");
       displayJsonData(res.data, typeInfo);
     });
   } else {
-    messageTextArea.value = " MCI ID is not assigned";
+    console.log(" MCI ID is not assigned");
   }
 }
 window.stopApp = stopApp;
@@ -5803,7 +5822,7 @@ function statusApp() {
   var mciid = mciidElement.value;
 
   if (mciid) {
-    messageTextArea.value = " Getting status " + selectApp.value;
+    console.log(" Getting status " + selectApp.value);
 
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}`;
     var cmd = [];
@@ -5862,11 +5881,11 @@ function statusApp() {
     }).then((res) => {
       console.log(res); // for debug
 
-      messageTextArea.value = "[Complete: Getting App status]\n";
+      console.log("[Complete: Getting App status]\n");
       displayJsonData(res.data, typeInfo);
     });
   } else {
-    messageTextArea.value = " MCI ID is not assigned";
+    console.log(" MCI ID is not assigned");
   }
 }
 window.statusApp = statusApp;
@@ -5910,8 +5929,9 @@ function executeRemoteCmd() {
   if (mciid) {
     var spinnerId = "";
 
-    messageTextArea.value =
-      "[Forward remote ssh command to MCI:" + mciid + "]\n";
+    console.log(
+      "Forward remote ssh command to MCI:" + mciid
+    );
 
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}`;
     var cmd = [];
@@ -6056,7 +6076,7 @@ function executeRemoteCmd() {
         }
 
         cmd = result.value;
-        messageTextArea.value += cmd.join(", ");
+        console.log(cmd.join(", "));
 
         var commandReqTmp = {
           command: cmd,
@@ -6101,7 +6121,7 @@ function executeRemoteCmd() {
             formattedOutput += "\n--------------------------------------\n";
           });
 
-          messageTextArea.value = formattedOutput;
+          console.log(formattedOutput);
         })
           .catch(function (error) {
             if (error.response) {
@@ -6126,13 +6146,13 @@ function executeRemoteCmd() {
           });
 
       } else {
-        messageTextArea.value = "Cannot set command";
+        console.log("Cannot set command");
         removeSpinnerTask(spinnerId);
       }
     });
   } else {
     errorAlert("MCI ID is not assigned");
-    messageTextArea.value = " MCI ID is not assigned";
+    console.log(" MCI ID is not assigned");
   }
 }
 window.executeRemoteCmd = executeRemoteCmd;
@@ -6149,7 +6169,7 @@ function transferFileToMci() {
   var vmid = document.getElementById("vmid").value;
 
   if (mciid) {
-    messageTextArea.value = "[Transfer file to MCI:" + mciid + "]\n";
+    console.log("[Transfer file to MCI:" + mciid + "]\n");
 
     // Swal popup for selecting file and target path
     Swal.fire({
@@ -6252,7 +6272,7 @@ function transferFileToMci() {
               title: 'File transferred',
               text: `The file "${file.name}" was transferred successfully.`,
             });
-            messageTextArea.value = `[Complete: File transfer to MCI ${mciid}]\n`;
+            console.log(`[Complete: File transfer to MCI ${mciid}]\n`);
             displayJsonData(res.data, typeInfo);
           })
           .catch((error) => {
@@ -6269,12 +6289,12 @@ function transferFileToMci() {
             Swal.hideLoading();
           });
       } else {
-        messageTextArea.value = "File transfer was canceled.";
+        console.log("File transfer was canceled.");
       }
     });
   } else {
     errorAlert("MCI ID is not assigned");
-    messageTextArea.value = "MCI ID is not assigned.";
+    console.log("MCI ID is not assigned.");
   }
 }
 window.transferFileToMci = transferFileToMci;
@@ -6289,8 +6309,9 @@ function getAccessInfo() {
   var mciid = mciidElement.value;
 
   if (mciid) {
-    messageTextArea.value =
-      "[Retrieve access information for MCI:" + mciid + "]\n";
+    console.log(
+      "Retrieve access information for MCI:" + mciid
+    );
 
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=accessinfo`;
 
@@ -6306,7 +6327,7 @@ function getAccessInfo() {
       displayJsonData(res.data, typeInfo);
     });
   } else {
-    messageTextArea.value = " MCI ID is not assigned";
+    console.log(" MCI ID is not assigned");
   }
 }
 window.getAccessInfo = getAccessInfo;
@@ -6315,7 +6336,7 @@ window.getAccessInfo = getAccessInfo;
 // SSH Key save function
 const saveBtn = document.querySelector(".save-file");
 saveBtn.addEventListener("click", function () {
-  messageTextArea.value = " [Retrieve MCI Access Information ...]\n";
+  console.log(" [Retrieve MCI Access Information ...]\n");
 
   var hostname = hostnameElement.value;
   var port = portElement.value;
@@ -7892,6 +7913,172 @@ function scaleOutSubGroup() {
 }
 window.scaleOutSubGroup = scaleOutSubGroup;
 
+// Improved Scale Out SubGroup function with MCI and SubGroup selection
+function scaleOutSubGroupWithSelection() {
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+  var username = usernameElement.value;
+  var password = passwordElement.value;
+  var namespace = namespaceElement.value;
+
+  if (!namespace) {
+    errorAlert("Please select a namespace first");
+    return;
+  }
+
+  // Use the common MCI selection dialog for ScaleOut operations
+  showMciSelectionForScaleOut(
+    "Select MCI for Scale Out",
+    "Select the MCI to scale out",
+    (selectedMciId) => {
+      showSubGroupSelectionForScaleOut(selectedMciId, namespace, hostname, port, username, password);
+    }
+  );
+}
+window.scaleOutSubGroupWithSelection = scaleOutSubGroupWithSelection;
+
+// Step 2: Show SubGroup selection dialog
+function showSubGroupSelectionForScaleOut(selectedMciId, namespace, hostname, port, username, password) {
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${selectedMciId}/subgroup`;
+  
+  var spinnerId = addSpinnerTask("Loading SubGroup list");
+
+  axios({
+    method: "get",
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`,
+    },
+    timeout: 30000,
+  })
+    .then((res) => {
+      var subGroupOptions = '';
+      
+      if (res.data.output && res.data.output.length > 0) {
+        res.data.output.forEach((subGroupName) => {
+          if (subGroupName && subGroupName.trim() !== "") {
+            subGroupOptions += `<option value="${subGroupName}">${subGroupName}</option>`;
+          }
+        });
+
+        // Show SubGroup selection dialog
+        Swal.fire({
+          title: "Select SubGroup for Scale Out",
+          width: 600,
+          html:
+            "<div style='text-align: left; margin: 20px;'>" +
+            "<p><b>Step 2:</b> Select the SubGroup to scale out</p>" +
+            "<p><b>Selected MCI:</b> " + selectedMciId + "</p>" +
+            "<hr>" +
+            "<div class='form-group'>" +
+            "<label for='subgroup-select'><b>Available SubGroups:</b></label>" +
+            "<select id='subgroup-select' class='form-control' style='margin-top: 10px;'>" +
+            "<option value=''>-- Select SubGroup --</option>" +
+            subGroupOptions +
+            "</select>" +
+            "</div>" +
+            "</div>",
+          showCancelButton: true,
+          confirmButtonText: "Next: Configure Scale Out",
+          cancelButtonText: "Back",
+          confirmButtonColor: "#007bff",
+          preConfirm: () => {
+            const selectedSubGroup = document.getElementById('subgroup-select').value;
+            if (!selectedSubGroup) {
+              Swal.showValidationMessage('Please select a SubGroup');
+              return false;
+            }
+            return selectedSubGroup;
+          }
+        }).then((result) => {
+          if (result.isConfirmed) {
+            showScaleOutConfiguration(selectedMciId, result.value, namespace, hostname, port, username, password);
+          } else if (result.dismiss === Swal.DismissReason.cancel) {
+            // Go back to MCI selection
+            scaleOutSubGroupWithSelection();
+          }
+        });
+      } else {
+        errorAlert("No SubGroups found in the selected MCI");
+      }
+    })
+    .catch(function (error) {
+      console.log("Failed to get SubGroup list:", error);
+      errorAlert("Failed to load SubGroup list. Please check your connection.");
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
+}
+
+// Step 3: Show scale out configuration dialog
+function showScaleOutConfiguration(mciId, subGroupId, namespace, hostname, port, username, password) {
+  Swal.fire({
+    title: "Configure Scale Out",
+    width: 600,
+    html:
+      "<div style='text-align: left; margin: 20px;'>" +
+      "<p><b>Step 3:</b> Configure the scale out operation</p>" +
+      "<p><b>Selected MCI:</b> " + mciId + "</p>" +
+      "<p><b>Selected SubGroup:</b> " + subGroupId + "</p>" +
+      "<hr>" +
+      "<p><b>Enter the number of VMs to add:</b></p>" +
+      "</div>",
+    input: "number",
+    inputValue: 1,
+    inputAttributes: {
+      min: 1,
+      max: 20,
+      step: 1,
+      autocapitalize: "off"
+    },
+    showCancelButton: true,
+    confirmButtonText: "Scale Out",
+    confirmButtonColor: "#28a745",
+    cancelButtonText: "Back",
+    inputValidator: (value) => {
+      if (!value || value < 1) {
+        return 'Please enter a valid number (minimum 1)';
+      }
+      if (value > 20) {
+        return 'Maximum 20 VMs can be added at once';
+      }
+    }
+  }).then((result) => {
+    if (result.isConfirmed) {
+      var numVMsToAdd = parseInt(result.value);
+      
+      // Final confirmation dialog
+      Swal.fire({
+        title: "Confirm Scale Out",
+        html: 
+          "<div style='text-align: left; margin: 20px;'>" +
+          "<p>You are about to add <b>" + numVMsToAdd + " VM(s)</b> to:</p>" +
+          "<ul>" +
+          "<li>MCI: <b>" + mciId + "</b></li>" +
+          "<li>SubGroup: <b>" + subGroupId + "</b></li>" +
+          "</ul>" +
+          "<p style='color: #dc3545; margin-top: 15px;'><b>⚠️ Warning:</b> This will incur additional costs.</p>" +
+          "</div>",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Proceed with Scale Out",
+        cancelButtonText: "Cancel",
+        confirmButtonColor: "#28a745",
+        cancelButtonColor: "#dc3545"
+      }).then((confirmResult) => {
+        if (confirmResult.isConfirmed) {
+          executeScaleOut(namespace, mciId, subGroupId, numVMsToAdd, hostname, port, username, password);
+        }
+      });
+    } else if (result.dismiss === Swal.DismissReason.cancel) {
+      // Go back to SubGroup selection
+      showSubGroupSelectionForScaleOut(mciId, namespace, hostname, port, username, password);
+    }
+  });
+}
+
 // Function to execute the scale out operation
 function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, port, username, password) {
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/subgroup/${subgroupid}`;
@@ -7902,7 +8089,7 @@ function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, po
 
   var jsonBody = JSON.stringify(scaleOutReq, undefined, 4);
   
-  messageTextArea.value = ` Scaling out SubGroup ${subgroupid} by adding ${numVMsToAdd} VM(s)...`;
+  console.log(` Scaling out SubGroup ${subgroupid} by adding ${numVMsToAdd} VM(s)...`);
   var spinnerId = addSpinnerTask(`Scale Out: ${mciid}/${subgroupid} (+${numVMsToAdd} VMs)`);
   infoAlert(`Starting Scale Out: Adding ${numVMsToAdd} VM(s) to ${subgroupid}`);
 
@@ -7929,7 +8116,7 @@ function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, po
       displayJsonData(res.data, typeInfo);
       handleAxiosResponse(res);
       
-      messageTextArea.value = `Successfully scaled out SubGroup ${subgroupid} by adding ${numVMsToAdd} VM(s)`;
+      console.log(`Successfully scaled out SubGroup ${subgroupid} by adding ${numVMsToAdd} VM(s)`);
       
       Swal.fire({
         icon: "success",
@@ -7979,7 +8166,7 @@ function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, po
         console.log('Error', error.message);
       }
       
-      messageTextArea.value = errorMsg;
+      console.log(errorMsg);
       
       Swal.fire({
         icon: "error",
@@ -8011,7 +8198,7 @@ function showActionsMenu() {
 
   Swal.fire({
     title: "Control MCI",
-    width: 500,
+    width: 600,
     showCancelButton: true,
     showConfirmButton: false,
     cancelButtonText: "Cancel",
@@ -8023,29 +8210,43 @@ function showActionsMenu() {
         <p><b>Selected MCI:</b> ${mciid}</p>
         <hr>
         <p><b>Choose a lifecycle control action:</b></p>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px;">
+        
+        <!-- First row: 3 buttons -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 20px;">
           <button type="button" class="btn btn-warning" onclick="executeAction('suspend')" style="margin: 5px;">
             ⏸️ Suspend
           </button>
-          <button type="button" class="btn btn-primary" onclick="executeAction('resume')" style="margin: 5px;">
+          <button type="button" class="btn btn-warning" onclick="executeAction('resume')" style="margin: 5px;">
             ▶️ Resume
           </button>
-          <button type="button" class="btn btn-primary" onclick="executeAction('reboot')" style="margin: 5px;">
+          <button type="button" class="btn btn-warning" onclick="executeAction('reboot')" style="margin: 5px;">
             🔄 Reboot
           </button>
+        </div>
+        
+        <!-- Second row: 3 buttons -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px;">
           <button type="button" class="btn btn-primary" onclick="executeAction('refine')" style="margin: 5px;">
             ⬆️ Refine
           </button>
           <button type="button" class="btn btn-primary" onclick="executeAction('continue')" style="margin: 5px;">
             ⏭️ Continue
           </button>
-          <button type="button" class="btn btn-warning" onclick="executeAction('withdraw')" style="margin: 5px;">
+          <button type="button" class="btn btn-primary" onclick="executeAction('withdraw')" style="margin: 5px;">
             ⬅️ Withdraw
           </button>
-          <button type="button" class="btn btn-danger" onclick="executeAction('terminate')" style="margin: 5px;">
+        </div>
+        
+        <!-- Third row: Terminate button (full width) -->
+        <div style="margin-top: 10px;">
+          <button type="button" class="btn btn-secondary" onclick="executeAction('terminate')" style="margin: 5px; width: 100%;">
             ⏹️ Terminate
           </button>
-          <button type="button" class="btn btn-danger" onclick="executeAction('delete')" style="margin: 5px;">
+        </div>
+        
+        <!-- Fourth row: Delete button (full width) -->
+        <div style="margin-top: 10px;">
+          <button type="button" class="btn btn-danger" onclick="executeAction('delete')" style="margin: 5px; width: 100%;">
             ⬛ Delete
           </button>
         </div>
@@ -8160,3 +8361,374 @@ function executeAction(action) {
   }
 }
 window.executeAction = executeAction;
+
+// Common function for ScaleOut operations - MCI selection dialog
+function showMciSelectionForScaleOut(title, description, successCallback) {
+  // Get MCI list specifically for ScaleOut operations
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+  var username = usernameElement.value;
+  var password = passwordElement.value;
+  var namespace = namespaceElement.value;
+
+  if (!namespace || namespace === "") {
+    errorAlert("Please select a namespace first");
+    return;
+  }
+
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
+  var spinnerId = addSpinnerTask("Loading MCI list for ScaleOut");
+
+  axios({
+    method: "get",
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`,
+    },
+    timeout: 30000,
+  })
+    .then((res) => {
+      var mciOptions = '';
+      
+      if (res.data.output && res.data.output.length > 0) {
+        res.data.output.forEach((mciId) => {
+          if (mciId && mciId.trim() !== "") {
+            mciOptions += `<option value="${mciId}">${mciId}</option>`;
+          }
+        });
+
+        if (mciOptions) {
+          // Show MCI selection dialog
+          Swal.fire({
+            title: title,
+            width: 600,
+            html:
+              "<div style='text-align: left; margin: 20px;'>" +
+              "<p><b>Step 1:</b> " + description + "</p>" +
+              (vmReqeustFromSpecList && vmReqeustFromSpecList.length > 0 ? 
+                "<p><b>Available VM Configurations:</b> " + vmReqeustFromSpecList.length + " location(s)</p>" : "") +
+              "<hr>" +
+              "<div class='form-group'>" +
+              "<label for='mci-select'><b>Available MCIs:</b></label>" +
+              "<select id='mci-select' class='form-control' style='margin-top: 10px;'>" +
+              "<option value=''>-- Select MCI --</option>" +
+              mciOptions +
+              "</select>" +
+              "</div>" +
+              "</div>",
+            showCancelButton: true,
+            confirmButtonText: "Next",
+            cancelButtonText: "Cancel",
+            confirmButtonColor: "#28a745",
+            preConfirm: () => {
+              const selectedMci = document.getElementById('mci-select').value;
+              if (!selectedMci) {
+                Swal.showValidationMessage('Please select an MCI');
+                return false;
+              }
+              return selectedMci;
+            }
+          }).then((result) => {
+            if (result.isConfirmed) {
+              successCallback(result.value);
+            }
+          });
+        } else {
+          errorAlert("No MCIs found in the selected namespace");
+        }
+      } else {
+        errorAlert("No MCIs found in the selected namespace");
+      }
+    })
+    .catch(function (error) {
+      console.log("Failed to get MCI list for ScaleOut:", error);
+      errorAlert("Failed to load MCI list. Please check your connection.");
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
+}
+
+// ScaleOut MCI function with current map configuration
+function scaleOutMciWithConfiguration() {
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+  var username = usernameElement.value;
+  var password = passwordElement.value;
+  var namespace = namespaceElement.value;
+
+  if (!namespace) {
+    errorAlert("Please select a namespace first");
+    return;
+  }
+
+  // Check if we have any VM configuration from the map
+  if (!vmReqeustFromSpecList || vmReqeustFromSpecList.length === 0) {
+    errorAlert("Please configure VM specifications first by clicking on the map or using the configuration form");
+    return;
+  }
+
+  // Use the common MCI selection dialog for ScaleOut operations
+  showMciSelectionForScaleOut(
+    "Select MCI for VM Addition",
+    "Select the MCI to add new VMs",
+    (selectedMciId) => {
+      showMciScaleOutConfiguration(selectedMciId, namespace, hostname, port, username, password);
+    }
+  );
+}
+window.scaleOutMciWithConfiguration = scaleOutMciWithConfiguration;
+
+// Step 2: Show MCI scale out configuration dialog
+function showMciScaleOutConfiguration(selectedMciId, namespace, hostname, port, username, password) {
+  // Build VM configuration summary from current map settings
+  var vmConfigSummary = "";
+  var totalVMs = 0;
+  
+  if (vmReqeustFromSpecList && vmReqeustFromSpecList.length > 0) {
+    vmReqeustFromSpecList.forEach((vmConfig, index) => {
+      var vmCount = 1; // Default VM count per location
+      totalVMs += vmCount;
+      vmConfigSummary += 
+        "<div style='margin: 5px 0; padding: 8px; background: #f8f9fa; border-radius: 4px;'>" +
+        "<b>Location " + (index + 1) + ":</b><br>" +
+        "Spec: " + (vmConfig.specId || "Auto-selected") + "<br>" +
+        "Image: " + (vmConfig.imageId || "Auto-selected") + "<br>" +
+        "Count: " + vmCount + " VM(s)" +
+        "</div>";
+    });
+  }
+
+  Swal.fire({
+    title: "Configure MCI Scale Out",
+    width: 700,
+    html:
+      "<div style='text-align: left; margin: 20px;'>" +
+      "<p><b>Step 2:</b> Configure VM addition to MCI</p>" +
+      "<p><b>Selected MCI:</b> " + selectedMciId + "</p>" +
+      "<hr>" +
+      "<div style='margin-bottom: 15px;'>" +
+      "<label for='subgroup-name'><b>New SubGroup Name:</b></label>" +
+      "<input id='subgroup-name' class='form-control' style='margin-top: 5px;' " +
+      "placeholder='Enter subgroup name (e.g., web-servers-2)' value='dynamic-group-" + Date.now() + "'>" +
+      "</div>" +
+      "<div style='margin-bottom: 15px;'>" +
+      "<label for='vm-count'><b>Number of VMs per location:</b></label>" +
+      "<input id='vm-count' type='number' class='form-control' style='margin-top: 5px;' " +
+      "min='1' max='10' value='1' placeholder='Enter number of VMs'>" +
+      "</div>" +
+      "<hr>" +
+      "<p><b>VM Configuration Summary:</b></p>" +
+      "<div style='max-height: 200px; overflow-y: auto;'>" +
+      vmConfigSummary +
+      "</div>" +
+      "<hr>" +
+      "<p><b>Total VMs to add:</b> <span id='total-vms'>" + totalVMs + "</span></p>" +
+      "</div>",
+    showCancelButton: true,
+    confirmButtonText: "Add VMs to MCI",
+    cancelButtonText: "Back",
+    confirmButtonColor: "#28a745",
+    didOpen: () => {
+      // Update total VM count when VM count per location changes
+      document.getElementById('vm-count').addEventListener('input', function() {
+        var vmPerLocation = parseInt(this.value) || 1;
+        var totalLocations = vmReqeustFromSpecList.length;
+        var newTotal = vmPerLocation * totalLocations;
+        document.getElementById('total-vms').textContent = newTotal;
+      });
+    },
+    preConfirm: () => {
+      const subGroupName = document.getElementById('subgroup-name').value.trim();
+      const vmCount = parseInt(document.getElementById('vm-count').value) || 1;
+      
+      if (!subGroupName) {
+        Swal.showValidationMessage('Please enter a SubGroup name');
+        return false;
+      }
+      
+      if (vmCount < 1 || vmCount > 10) {
+        Swal.showValidationMessage('VM count must be between 1 and 10');
+        return false;
+      }
+      
+      return { subGroupName, vmCount };
+    }
+  }).then((result) => {
+    if (result.isConfirmed) {
+      var config = result.value;
+      showMciScaleOutConfirmation(selectedMciId, config.subGroupName, config.vmCount, namespace, hostname, port, username, password);
+    } else if (result.dismiss === Swal.DismissReason.cancel) {
+      // Go back to MCI selection
+      scaleOutMciWithConfiguration();
+    }
+  });
+}
+
+// Step 3: Show final confirmation and execute MCI scale out
+function showMciScaleOutConfirmation(mciId, subGroupName, vmCountPerLocation, namespace, hostname, port, username, password) {
+  var totalVMs = vmCountPerLocation * vmReqeustFromSpecList.length;
+  
+  Swal.fire({
+    title: "Confirm MCI Scale Out",
+    html: 
+      "<div style='text-align: left; margin: 20px;'>" +
+      "<p>You are about to add <b>" + totalVMs + " VM(s)</b> to MCI:</p>" +
+      "<ul>" +
+      "<li>MCI: <b>" + mciId + "</b></li>" +
+      "<li>New SubGroup: <b>" + subGroupName + "</b></li>" +
+      "<li>VMs per location: <b>" + vmCountPerLocation + "</b></li>" +
+      "<li>Total locations: <b>" + vmReqeustFromSpecList.length + "</b></li>" +
+      "</ul>" +
+      "<p style='color: #dc3545; margin-top: 15px;'><b>⚠️ Warning:</b> This will incur additional costs.</p>" +
+      "</div>",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Proceed with VM Addition",
+    cancelButtonText: "Cancel",
+    confirmButtonColor: "#28a745",
+    cancelButtonColor: "#dc3545"
+  }).then((confirmResult) => {
+    if (confirmResult.isConfirmed) {
+      executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, hostname, port, username, password);
+    }
+  });
+}
+
+// Execute MCI scale out operation
+function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, hostname, port, username, password) {
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciId}/vmDynamic`;
+  
+  // Build the request body using current map configuration
+  var vmDynamicReq = {
+    name: subGroupName,
+    subGroupSize: vmCountPerLocation.toString(),
+    description: "Dynamically added via CB-MapUI Scale Out MCI",
+    label: {
+      "created-by": "cb-mapui",
+      "creation-type": "scale-out-mci",
+      "timestamp": new Date().toISOString()
+    }
+  };
+
+  // Use the first VM configuration from the map as the template
+  // In a real scenario, you might want to let users select which configuration to use
+  if (vmReqeustFromSpecList && vmReqeustFromSpecList.length > 0) {
+    var templateVm = vmReqeustFromSpecList[0];
+    
+    if (templateVm.specId) {
+      vmDynamicReq.specId = templateVm.specId;
+    }
+    if (templateVm.imageId) {
+      vmDynamicReq.imageId = templateVm.imageId;
+    }
+    if (templateVm.rootDiskType) {
+      vmDynamicReq.rootDiskType = templateVm.rootDiskType;
+    }
+    if (templateVm.rootDiskSize) {
+      vmDynamicReq.rootDiskSize = templateVm.rootDiskSize;
+    }
+    if (templateVm.connectionName) {
+      vmDynamicReq.connectionName = templateVm.connectionName;
+    }
+  }
+
+  var jsonBody = JSON.stringify(vmDynamicReq, undefined, 4);
+  
+  console.log(`Adding VMs to MCI ${mciId} with subgroup ${subGroupName}...`);
+  var spinnerId = addSpinnerTask(`Scale Out MCI: ${mciId} (+${vmCountPerLocation * vmReqeustFromSpecList.length} VMs)`);
+  infoAlert(`Starting MCI Scale Out: Adding ${vmCountPerLocation * vmReqeustFromSpecList.length} VM(s) to ${mciId}`);
+
+  var requestId = generateRandomRequestId("mci-scaleout-" + mciId + "-" + subGroupName + "-", 10);
+  addRequestIdToSelect(requestId);
+
+  axios({
+    method: "post",
+    url: url,
+    headers: { 
+      "Content-Type": "application/json",
+      "x-request-id": requestId 
+    },
+    data: jsonBody,
+    auth: {
+      username: `${username}`,
+      password: `${password}`,
+    },
+    timeout: 600000  // 10 minutes timeout for scale out operation
+  })
+    .then((res) => {
+      console.log("MCI scale out response:", res);
+      
+      displayJsonData(res.data, typeInfo);
+      handleAxiosResponse(res);
+      
+      console.log(`Successfully added VMs to MCI ${mciId}`);
+      
+      Swal.fire({
+        icon: "success",
+        title: "MCI Scale Out Successful!",
+        html: 
+          "<div style='text-align: left;'>" +
+          "<p><b>" + (vmCountPerLocation * vmReqeustFromSpecList.length) + " VM(s)</b> have been successfully added to:</p>" +
+          "<ul>" +
+          "<li>MCI: <b>" + mciId + "</b></li>" +
+          "<li>SubGroup: <b>" + subGroupName + "</b></li>" +
+          "</ul>" +
+          "<p style='margin-top: 15px; color: #28a745;'>✓ The new VMs are being provisioned.</p>" +
+          "</div>",
+        confirmButtonText: "OK"
+      });
+      
+      // Refresh MCI status after scale out
+      setTimeout(() => {
+        getMci();
+        updateMciList();
+      }, 3000);
+    })
+    .catch(function (error) {
+      var errorMsg = "Failed to scale out MCI";
+      
+      if (error.response) {
+        console.log(error.response.data);
+        console.log(error.response.status);
+        
+        if (error.response.data) {
+          if (typeof error.response.data === 'string') {
+            errorMsg = error.response.data;
+          } else if (error.response.data.message) {
+            errorMsg = error.response.data.message;
+          } else if (error.response.data.error) {
+            errorMsg = error.response.data.error;
+          }
+        }
+        
+        displayJsonData(error.response.data, typeError);
+      } else if (error.request) {
+        errorMsg = "No response from server. Please check the connection.";
+        console.log(error.request);
+      } else {
+        errorMsg = error.message;
+        console.log('Error', error.message);
+      }
+      
+      console.log(errorMsg);
+      
+      Swal.fire({
+        icon: "error",
+        title: "MCI Scale Out Failed",
+        html: 
+          "<div style='text-align: left;'>" +
+          "<p>Failed to scale out MCI <b>" + mciId + "</b></p>" +
+          "<p style='margin-top: 10px; color: #dc3545;'>Error: " + errorMsg + "</p>" +
+          "</div>",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#dc3545"
+      });
+      
+      console.log(error.config);
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
+}

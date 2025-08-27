@@ -47,10 +47,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 <head>
   <title>CB-MapUI: Map Dashboard for Cloud-Barista</title>
-  
+
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  
+
   <!-- Polyfill for older environments like Internet Explorer and Android 4.x -->
   <script
     src="https://polyfill.io/v3/polyfill.min.js?features=requestAnimationFrame,Element.prototype.classList,URL"></script>
@@ -78,22 +78,92 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <style>
     .map {
       width: 100%;
-      height: 100%;
-      /* height:800px; */
+      height: 100vh;
+      min-width: 400px;
+      min-height: 300px;
+      box-sizing: border-box;
     }
 
     body {
       /* transform: scale(0.8);
       transform-origin: 0 0;
       width: 125%; */
-      margin-right: auto;
-      margin-left: auto;
-      overflow: auto;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .container-fluid {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .row {
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
     }
 
     .scrollable-column {
-      height: 100%;
+      height: 100vh;
       overflow-y: auto;
+      width: 385px;
+      min-width: 385px;
+      max-width: 385px;
+      flex: 0 0 385px;
+      box-sizing: border-box;
+      padding: 0;
+    }
+
+    /* Fixed left panel layout */
+    .col-md-3 {
+      flex: 0 0 385px !important;
+      max-width: 385px !important;
+      min-width: 385px !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    .col-md-9 {
+      flex: 1 !important;
+      max-width: calc(100vw - 385px) !important;
+      width: calc(100vw - 385px) !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Remove Bootstrap default margins and paddings */
+    .container-fluid {
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+    }
+
+    .row {
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+    }
+
+    .col-md-3,
+    .col-md-9 {
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+    }
+
+    /* Ensure no overflow on body and html */
+    html {
+      overflow: hidden;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      height: 100%;
     }
 
 
@@ -111,9 +181,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     }
 
     .input-group-text {
-      min-width: 93px;
+      min-width: 120px;
+      max-width: 120px;
+      width: 120px;
       height: 38.5px;
-
+      text-align: left;
+      justify-content: flex-start;
+      display: flex;
+      align-items: center;
+      padding-left: 12px;
     }
 
     .form-control {
@@ -161,6 +237,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     #jsonoutput .json-formatter-string:after {
       content: "" !important;
     }
+
     #jsonoutput .json-formatter-string {
       quotes: none !important;
     }
@@ -178,16 +255,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         <!-- Tab Navigation -->
         <ul class="nav nav-tabs" id="mainTabs" role="tablist">
           <li class="nav-item" role="presentation">
-            <a class="nav-link active" id="provision-tab" data-toggle="tab" href="#provision" role="tab" aria-controls="provision" aria-selected="true">Provision</a>
+            <a class="nav-link active" id="provision-tab" data-toggle="tab" href="#provision" role="tab"
+              aria-controls="provision" aria-selected="true">🚀Provision</a>
           </li>
           <li class="nav-item" role="presentation">
-            <a class="nav-link" id="control-tab" data-toggle="tab" href="#control" role="tab" aria-controls="control" aria-selected="false">Control</a>
+            <a class="nav-link" id="control-tab" data-toggle="tab" href="#control" role="tab" aria-controls="control"
+              aria-selected="false">🎮Control</a>
           </li>
           <li class="nav-item" role="presentation">
-            <a class="nav-link" id="resources-tab" data-toggle="tab" href="#resources" role="tab" aria-controls="resources" aria-selected="false">Resources</a>
-          </li>
-          <li class="nav-item" role="presentation">
-            <a class="nav-link" id="config-tab" data-toggle="tab" href="#config" role="tab" aria-controls="config" aria-selected="false">Config</a>
+            <a class="nav-link" id="config-tab" data-toggle="tab" href="#config" role="tab" aria-controls="config"
+              aria-selected="false">⚙️Config</a>
           </li>
         </ul>
 
@@ -196,192 +273,194 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           <!-- Configuration Tab -->
           <div class="tab-pane fade" id="config" role="tabpanel" aria-labelledby="config-tab">
             <div class="card mb-2">
-              <div class="card-header">Dashboard Configuration</div>
+              <div class="card-header">🔧 Dashboard Configuration</div>
               <div class="card-body d-flex flex-column">
-            <form id="configuration-form" class="form-row">
-              <!-- Hidden configuration fields - automatically managed -->
-              <div class="form-group col" style="display: none;">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">IP</span>
+                <form id="configuration-form" class="form-row">
+                  <!-- Hidden configuration fields - automatically managed -->
+                  <div class="form-group col-12" style="display: none;">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">IP</span>
+                      </div>
+                      <input type="text" class="form-control" id="hostname" name="hostname" value="localhost"
+                        onchange="endpointChanged();">
+                    </div>
                   </div>
-                  <input type="text" class="form-control" id="hostname" name="hostname" value="localhost"
-                    onchange="endpointChanged();">
-                </div>
-              </div>
-              <div class="form-group col" style="display: none;">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">Port</span>
+                  <div class="form-group col-12" style="display: none;">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">Port</span>
+                      </div>
+                      <input type="text" class="form-control" id="port" name="port" value="1323">
+                    </div>
                   </div>
-                  <input type="text" class="form-control" id="port" name="port" value="1323">
-                </div>
-              </div>
-              <div class="form-group col" style="display: none;">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">Username</span>
+                  <div class="form-group col-12" style="display: none;">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">Username</span>
+                      </div>
+                      <input type="text" class="form-control" id="username" name="username" value="default">
+                    </div>
                   </div>
-                  <input type="text" class="form-control" id="username" name="username" value="default">
-                </div>
-              </div>
-              <div class="form-group col" style="display: none;">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">Password</span>
+                  <div class="form-group col-12" style="display: none;">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">Password</span>
+                      </div>
+                      <input type="password" class="form-control" id="password" name="password" value="default">
+                    </div>
                   </div>
-                  <input type="password" class="form-control" id="password" name="password" value="default">
-                </div>
-              </div>
 
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text" id="refreshIntervalLabel">Refresh(s)</span>
+                  <div class="form-group col-12">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">⏱️ Refresh(s)</span>
+                      </div>
+                      <select id="refreshInterval" name="refreshInterval" class="form-control"
+                        aria-label="Display Interval" aria-describedby="refreshIntervalLabel">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="5" selected="selected">5</option>
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                      </select>
+                    </div>
                   </div>
-                  <select id="refreshInterval" name="refreshInterval" class="form-control" aria-label="Display Interval"
-                    aria-describedby="refreshIntervalLabel">
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="5" selected="selected">5</option>
-                    <option value="10">10</option>
-                    <option value="20">20</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                  </select>
-                </div>
-              </div>
 
-              <!-- X-Request-Id list -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text" id="xRequestIdLabel">Req Log</span>
+                  <!-- X-Request-Id list -->
+                  <div class="form-group col-12">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">📝 Req Log</span>
+                      </div>
+                      <select id="xRequestIdSelect" name="xRequestId" class="form-control" aria-label="X-Request-Id"
+                        aria-describedby="xRequestIdLabel" onchange="handleRequestIdSelection();">
+                        <option value="">Select ID</option>
+                        <!-- Options will be filled dynamically -->
+                      </select>
+                    </div>
                   </div>
-                  <select id="xRequestIdSelect" name="xRequestId" class="form-control" aria-label="X-Request-Id"
-                    aria-describedby="xRequestIdLabel" onchange="handleRequestIdSelection();">
-                    <option value="">Select ID</option>
-                    <!-- Options will be filled dynamically -->
-                  </select>
-                </div>
-              </div>
 
-              <div class="form-group col dropdown">
-                <button class="btn btn-secondary dropdown-toggle w-100" type="button" id="mapControlDropdown"
-                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                  Map Control
-                </button>
-                <div class="dropdown-menu" aria-labelledby="mapControlDropdown">
-                  <a class="dropdown-item" href="javascript:void(0)" onclick="getConnection();">Show all Clouds</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onclick="hideMCI();">Hide/Show MCI</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onclick="clearMap();">Clear Map</a>
-                  <a class="dropdown-item" href="javascript:void(0)"
-                    onclick="window.open('redoc-swagger.html', '_blank');">API Dashboard</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onclick="toggleView();">Toggle Map/API</a>
-                </div>
-              </div>
+                  <div class="form-group col-12 dropdown">
+                    <button class="btn btn-secondary dropdown-toggle w-100" type="button" id="mapControlDropdown"
+                      data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                      🗺️ Map Control
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="mapControlDropdown">
+                      <a class="dropdown-item" href="javascript:void(0)" onclick="getConnection();">☁️ Show all
+                        Clouds</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onclick="hideMCI();">👁️ Hide/Show MCI</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onclick="clearMap();">🧹 Clear Map</a>
+                      <a class="dropdown-item" href="javascript:void(0)"
+                        onclick="window.open('redoc-swagger.html', '_blank');">📊 API Dashboard</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onclick="toggleView();">🔄 Toggle Map/API</a>
+                    </div>
+                  </div>
 
-              <!-- Create toggleView Field -->
-              <div class="form-group col">
-                <button type="button" onClick="toggleView();" class="btn btn-info w-100">Toggle Map/API</button>
-                <!-- <button type="button" onclick="window.open('redoc-swagger.html', '_blank')" class="btn btn-info w-100">Redoc & Swagger</button> -->
-              </div>
+                  <!-- Create toggleView Field -->
+                  <div class="form-group col-12">
+                    <button type="button" onClick="toggleView();" class="btn btn-info w-100">🔄 Toggle Map/API</button>
+                    <!-- <button type="button" onclick="window.open('redoc-swagger.html', '_blank')" class="btn btn-info w-100">Redoc & Swagger</button> -->
+                  </div>
 
-            </form>
+                </form>
+              </div>
+            </div>
           </div>
-        </div>
-        </div>
 
-        <!-- Provisioning Tab -->
-        <div class="tab-pane fade show active" id="provision" role="tabpanel" aria-labelledby="provision-tab">
-          <div class="card mb-2">
-            <div class="card-header">MC-Infra Provisioning</div>
-            <div class="card-body d-flex flex-column">
-            <form id="mci-configuration-form" class="form-row">
+          <!-- Provisioning Tab -->
+          <div class="tab-pane fade show active" id="provision" role="tabpanel" aria-labelledby="provision-tab">
+            <div class="card mb-2">
+              <div class="card-header">🚀 MC-Infra Provisioning</div>
+              <div class="card-body d-flex flex-column">
+                <form id="mci-configuration-form">
 
-              <!-- Namespace ID Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text" id="namespaceLabel">NS ID</span>
+                  <!-- Namespace ID Field -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">🏷️ NS ID</span>
+                      </div>
+                      <select id="namespace" name="namespace" class="form-control" aria-label="Namespace ID"
+                        aria-describedby="namespaceLabel">
+                        <!-- Options will be filled dynamically -->
+                      </select>
+                    </div>
                   </div>
-                  <select id="namespace" name="namespace" class="form-control" aria-label="Namespace ID"
-                    aria-describedby="namespaceLabel">
-                    <!-- Options will be filled dynamically -->
-                  </select>
-                </div>
-              </div>
 
 
-              <!-- Recommendation Policy Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">Policy</span>
+                  <!-- Recommendation Policy Field -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">🎯 Policy</span>
+                      </div>
+                      <select id="recommendPolicy" name="recommendPolicy" class="form-control">
+                        <option value="location" selected="selected">Location-based</option>
+                        <option value="price">Cost-based</option>
+                        <option value="performance">Performance-based</option>
+                        <option value="random">Random-based</option>
+                      </select>
+                    </div>
                   </div>
-                  <select id="recommendPolicy" name="recommendPolicy" class="form-control">
-                    <option value="location" selected="selected">Location-based</option>
-                    <option value="price">Cost-based</option>
-                    <option value="performance">Performance-based</option>
-                    <option value="random">Random-based</option>
-                  </select>
-                </div>
-              </div>
 
-              <!-- Provider Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text" id="providerLabel">Provider</span>
+                  <!-- Provider Field -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">☁️ Provider</span>
+                      </div>
+                      <select id="provider" name="provider" class="form-control" aria-label="provider ID"
+                        aria-describedby="providerLabel">
+                        <!-- Options will be filled dynamically -->
+                      </select>
+                    </div>
                   </div>
-                  <select id="provider" name="provider" class="form-control" aria-label="provider ID"
-                    aria-describedby="providerLabel">
-                    <!-- Options will be filled dynamically -->
-                  </select>
-                </div>
-              </div>
 
 
-              <!-- CPU Range Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">vCPU</span>
+                  <!-- CPU Range Field -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">🖥️ vCPU</span>
+                      </div>
+                      <input type="number" class="form-control m-0" id='minVCPU' value="1" min="1" max="999447"
+                        step="1">
+                      <span class="mx-1">~</span>
+                      <input type="number" class="form-control m-0" id='maxVCPU' value="" min="1" max="999448" step="1">
+                    </div>
                   </div>
-                  <input type="number" class="form-control m-0" id='minVCPU' value="1" min="1" max="999447" step="1">
-                  <span class="mx-1">.</span>
-                  <input type="number" class="form-control m-0" id='maxVCPU' value="" min="1" max="999448" step="1">
-                </div>
-              </div>
 
 
-              <!-- Memory Range Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">Mem(Gi)</span>
+                  <!-- Memory Range Field -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">💾 Mem(Gi)</span>
+                      </div>
+                      <input type="number" class="form-control m-0" id='minRAM' value="0.5" min="0.5" max="99912288"
+                        step="0.5">
+                      <span class="mx-1">~</span>
+                      <input type="number" class="form-control m-0" id='maxRAM' value="" min="0.5" max="99912289"
+                        step="0.5">
+                    </div>
                   </div>
-                  <input type="number" class="form-control m-0" id='minRAM' value="0.5" min="0.5" max="99912288"
-                    step="0.5">
-                  <span class="mx-1">.</span>
-                  <input type="number" class="form-control m-0" id='maxRAM' value="" min="0.5" max="99912289"
-                    step="0.5">
-                </div>
-              </div>
 
-              <!-- Spec Name Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">SpecID</span>
+                  <!-- Spec Name Field -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">🏷️ SpecID</span>
+                      </div>
+                      <input type="text" class="form-control" id="specName" name="specName" value=""
+                        placeholder="Ex: 2xlarge">
+                    </div>
                   </div>
-                  <input type="text" class="form-control" id="specName" name="specName" value=""
-                    placeholder="Ex: 2xlarge">
-                </div>
-              </div>
 
-              <!-- Spec Architecture Type Field -->
-                 <!-- "osArchitecture": [
+                  <!-- Spec Architecture Type Field -->
+                  <!-- "osArchitecture": [
                     "arm64",
                     "arm64_mac",
                     "na",
@@ -390,336 +469,404 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                     "x86_64",
                     "x86_64_mac"
                   ], -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">SpecArch</span>
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">🏗️ SpecArch</span>
+                      </div>
+                      <select id="architecture" name="architecture" class="form-control">
+                        <option value="">Any</option>
+                        <option value="x86_64" selected="selected">x86_64</option>
+                        <option value="x86_64_mac">x86_64_mac</option>
+                        <option value="x86_32">x86_32</option>
+                        <option value="arm64">arm64</option>
+                        <option value="arm64_mac">arm64_mac</option>
+                        <option value="s390x">s390x</option>
+                        <option value="na">Undefined</option>
+                      </select>
+                    </div>
                   </div>
-                  <select id="architecture" name="architecture" class="form-control">
-                    <option value="">Any</option>
-                    <option value="x86_64" selected="selected">x86_64</option>
-                    <option value="x86_64_mac">x86_64_mac</option>
-                    <option value="x86_32">x86_32</option>
-                    <option value="arm64">arm64</option>
-                    <option value="arm64_mac">arm64_mac</option>
-                    <option value="s390x">s390x</option>
-                    <option value="na">Undefined</option>
-                  </select>
-                </div>
-              </div>               
 
-              <!-- OS Image Type Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">Image</span>
+                  <!-- OS Image Type Field -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">💽 Image</span>
+                      </div>
+                      <select id="osImage" name="osImage" class="form-control">
+                        <option value="">Any</option>
+                        <option value="Ubuntu 20.04">Ubuntu 20.04</option>
+                        <option value="Ubuntu 22.04" selected="selected">Ubuntu 22.04</option>
+                        <option value="Ubuntu 24.04">Ubuntu 24.04</option>
+                        <option value="Debian 10">Debian 10</option>
+                        <option value="Debian 11">Debian 11</option>
+                        <option value="Debian 12">Debian 12</option>
+                        <option value="Windows 2022">Windows 2022</option>
+                      </select>
+                    </div>
                   </div>
-                  <select id="osImage" name="osImage" class="form-control">
-                    <option value="">Any</option>
-                    <option value="Ubuntu 20.04">Ubuntu 20.04</option>
-                    <option value="Ubuntu 22.04" selected="selected">Ubuntu 22.04</option>
-                    <option value="Ubuntu 24.04">Ubuntu 24.04</option>                   
-                    <option value="Debian 10">Debian 10</option>
-                    <option value="Debian 11">Debian 11</option>
-                    <option value="Debian 12">Debian 12</option>                                        
-                    <option value="Windows 2022">Windows 2022</option>
-                  </select>
-                </div>
-              </div>
 
-              <!-- Disk Size Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text">Disk(GB)</span>
+                  <!-- Disk Size Field -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">💿 Disk(GB)</span>
+                      </div>
+                      <input type="text" class="form-control" id="diskSize" name="diskSize" placeholder="Ex: 250">
+                    </div>
                   </div>
-                  <input type="text" class="form-control" id="diskSize" name="diskSize" placeholder="Ex: 250">
-                </div>
-              </div>
 
-              <!-- Accelerator Configuration Field -->
-              <div class="form-group col">
-                <div id="headingAccelerator">
-                  <button class="btn btn-info w-100" type="button" data-toggle="collapse"
-                    data-target="#collapseAccelerator" aria-expanded="false" aria-controls="collapseAccelerator">
-                    Accelerator Config
-                </div>
-                <div id="collapseAccelerator" class="collapse" aria-labelledby="headingAccelerator"
-                  data-parent="#mci-configuration-form">
-                  <div class="px-0 py-0">
+                  <!-- Accelerator Configuration Field -->
+                  <div class="form-group">
+                    <div id="headingAccelerator">
+                      <button class="btn btn-info w-100" type="button" data-toggle="collapse"
+                        data-target="#collapseAccelerator" aria-expanded="false" aria-controls="collapseAccelerator">
+                        🧮 GPU Config
+                    </div>
+                    <div id="collapseAccelerator" class="collapse" aria-labelledby="headingAccelerator"
+                      data-parent="#mci-configuration-form">
+                      <div class="px-0 py-0">
 
-                    <!-- Accelerator Type Field -->
-                    <div class="form-group">
-                      <div class="input-group">
-                        <div class="input-group-prepend">
-                          <span class="input-group-text">Type</span>
+                        <!-- Accelerator Model Field -->
+                        <div class="form-group">
+                          <div class="input-group">
+                            <div class="input-group-prepend">
+                              <span class="input-group-text">🔧 Model</span>
+                            </div>
+                            <select class="form-control" id="acceleratorModel" name="acceleratorModel">
+                              <option value="" selected="selected">-- Select GPU Model --</option>
+                              <optgroup label="General Options">
+                                <option value="any">Any GPU - All Models</option>
+                                <option value="NVIDIA">NVIDIA - Any Model</option>
+                                <option value="AMD">AMD - Any Model</option>
+                              </optgroup>
+                              <optgroup label="NVIDIA Data Center (Hopper)">
+                                <option value="H100">H100 - HPC & AI Training</option>
+                                <option value="H200">H200 - Enhanced Hopper</option>
+                              </optgroup>
+                              <optgroup label="NVIDIA Data Center (Ampere)">
+                                <option value="A100">A100 - Enterprise AI</option>
+                                <option value="A800">A800 - China Compliant</option>
+                                <option value="A30">A30 - Mainstream AI</option>
+                                <option value="A10">A10 - Multi-Workload</option>
+                              </optgroup>
+                              <optgroup label="NVIDIA RTX & Professional">
+                                <option value="A10G">A10G - Cloud Graphics</option>
+                                <option value="L40S">L40S - Omniverse & AI</option>
+                                <option value="L40">L40 - Visual Computing</option>
+                                <option value="L4">L4 - AI Video Inference</option>
+                                <option value="L20">L20 - Entry AI Inference</option>
+                              </optgroup>
+                              <optgroup label="NVIDIA Tesla (Legacy)">
+                                <option value="V100">V100 - Volta Architecture</option>
+                                <option value="T4">T4 - Turing Inference</option>
+                                <option value="P100">P100 - Pascal HPC</option>
+                                <option value="P4">P4 - Pascal Inference</option>
+                              </optgroup>
+                              <optgroup label="AMD Instinct (CDNA)">
+                                <option value="MI300X">MI300X - Latest CDNA3</option>
+                                <option value="MI250X">MI250X - CDNA2 Flagship</option>
+                                <option value="MI210">MI210 - CDNA2 Mainstream</option>
+                                <option value="MI100">MI100 - First CDNA</option>
+                                <option value="MI50">MI50 - Vega 20 Based</option>
+                                <option value="MI25">MI25 - Fiji Based</option>
+                              </optgroup>
+                              <optgroup label="AMD Radeon Pro (Virtualization)">
+                                <option value="V620">V620 - Data Center GPU</option>
+                                <option value="V520">V520 - Entry Virtual GPU</option>
+                                <option value="V710">V710 - High-End Virtual</option>
+                              </optgroup>
+                              <optgroup label="Intel & Alternative">
+                                <option value="INTEL">Intel - Xe & Arc</option>
+                                <option value="XILINX">Xilinx - FPGA Accelerator</option>
+                              </optgroup>
+                            </select>
+                          </div>
                         </div>
-                        <select id="acceleratorType" name="acceleratorType" class="form-control">
-                          <option value="" selected="selected">----</option>
-                          <option value="gpu">GPU</option>
-                        </select>
+
+                        <!-- Accelerator Count Range Field -->
+                        <div class="form-group">
+                          <div class="input-group">
+                            <div class="input-group-prepend">
+                              <span class="input-group-text">🧮 Count</span>
+                            </div>
+                            <input type="number" class="form-control" id='minAcceleratorCount' min="1" max="999998"
+                              step="1">
+                            <span class="mx-1">~</span>
+                            <input type="number" class="form-control" id='maxAcceleratorCount' min="1" max="999999"
+                              step="1">
+                          </div>
+                        </div>
+
+                        <!-- Accelerator Memory Range Field -->
+                        <div class="form-group">
+                          <div class="input-group">
+                            <div class="input-group-prepend">
+                              <span class="input-group-text">🧠 Mem(GB)</span>
+                            </div>
+                            <input type="number" class="form-control" id='minAMEM' min="1" max="999998" step="1">
+                            <span class="mx-1">~</span>
+                            <input type="number" class="form-control" id='maxAMEM' min="1" max="999999" step="1">
+                          </div>
+                        </div>
+
                       </div>
                     </div>
-
-                    <!-- Accelerator Model Field -->
-                    <div class="form-group">
-                      <div class="input-group">
-                        <div class="input-group-prepend">
-                          <span class="input-group-text">Model</span>
-                        </div>
-                        <input type="text" class="form-control" id="acceleratorModel" name="acceleratorModel" value=""
-                          placeholder="Ex: A100">
-                      </div>
-                    </div>
-
-                    <!-- Accelerator Count Range Field -->
-                    <div class="form-group">
-                      <div class="input-group">
-                        <div class="input-group-prepend">
-                          <span class="input-group-text">Count</span>
-                        </div>
-                        <input type="number" class="form-control" id='minAcceleratorCount' min="1" max="999998"
-                          step="1">
-                        <span class="mx-1">.</span>
-                        <input type="number" class="form-control" id='maxAcceleratorCount' min="1" max="999999"
-                          step="1">
-                      </div>
-                    </div>
-
-                    <!-- Accelerator Memory Range Field -->
-                    <div class="form-group">
-                      <div class="input-group">
-                        <div class="input-group-prepend">
-                          <span class="input-group-text">Mem(GB)</span>
-                        </div>
-                        <input type="number" class="form-control" id='minAMEM' min="1" max="999998" step="1">
-                        <span class="mx-1">.</span>
-                        <input type="number" class="form-control" id='maxAMEM' min="1" max="999999" step="1">
-                      </div>
-                    </div>
-
                   </div>
-                </div>
+
+
+                  <!-- Create MCI Field -->
+                  <div class="form-group">
+                    <button type="button" id="createMciButton" onClick="createMci();" class="btn btn-primary w-100">🚀
+                      Create MCI</button>
+                  </div>
+
+
+
+                  <!-- Clear Selection Field -->
+                  <div class="form-group">
+                    <button type="button" onClick="clearCircle('clearText');" class="btn btn-secondary w-100">🗑️ Clear
+                      Configuration</button>
+                  </div>
+
+
+                </form>
               </div>
+            </div>
+
+            <!-- MC-Infra Expansion Card -->
+            <div class="card mb-2">
+              <div class="card-header">⚙️ MC-Infra Expansion</div>
+              <div class="card-body d-flex flex-column">
+                <form id="mci-config-form">
+
+                  <!-- Scale Out MCI Field -->
+                  <div class="form-group">
+                    <button type="button" id="scaleOutMciBtn" onClick="scaleOutMciWithConfiguration();"
+                      class="btn btn-success w-100">📈 ScaleOut MCI</button>
+                  </div>
+
+                  <!-- Scale Out SubGroup Field -->
+                  <div class="form-group">
+                    <button type="button" id="scaleOutBtn" onClick="scaleOutSubGroupWithSelection();"
+                      class="btn btn-primary w-100">📈 ScaleOut SubGroup</button>
+                  </div>
 
 
-
-              <!-- Clear Selection Field -->
-              <div class="form-group col">
-                <button type="button" onClick="clearCircle('clearText');" class="btn btn-secondary w-100">Clear
-                  Configuration</button>
+                </form>
               </div>
-
-              <!-- Create MCI Field -->
-              <div class="form-group col">
-                <button type="button" id="createMciButton" onClick="createMci();" class="btn btn-primary w-100">Create
-                  MCI</button>
-              </div>
-
-
-
-            </form>
+            </div>
           </div>
-        </div>
-        </div>
 
-        <!-- Control Tab -->
-        <div class="tab-pane fade" id="control" role="tabpanel" aria-labelledby="control-tab">
-          <div class="card mb-2">
-            <div class="card-header">MC-Infra Control</div>
-            <div class="card-body d-flex flex-column">
-            <form id="mci-control-form" class="form-row">
+          <!-- Control Tab -->
+          <div class="tab-pane fade" id="control" role="tabpanel" aria-labelledby="control-tab">
+            <div class="card mb-2">
+              <div class="card-header">🎮 MC-Infra Control</div>
+              <div class="card-body d-flex flex-column">
+                <form id="mci-control-form">
 
-              <!-- Namespace ID Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text" id="namespaceLabel">NS ID</span>
+                  <!-- Namespace ID Field -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">🏷️ NS ID</span>
+                      </div>
+                      <select id="namespace-control" name="namespace" class="form-control" aria-label="Namespace ID"
+                        aria-describedby="namespaceLabel">
+                        <!-- Options will be filled dynamically -->
+                      </select>
+                    </div>
                   </div>
-                  <select id="namespace-control" name="namespace" class="form-control" aria-label="Namespace ID"
-                    aria-describedby="namespaceLabel">
-                    <!-- Options will be filled dynamically -->
-                  </select>
-                </div>
-              </div>
 
 
-              <!-- MCI ID Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text" id="mciidLabel">MCI ID</span>
+                  <!-- MCI ID Field -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">🏗️ MCI ID</span>
+                      </div>
+                      <select id="mciid" name="mciid" class="form-control" aria-label="MCI ID"
+                        aria-describedby="mciidLabel">
+                        <!-- Options will be filled dynamically -->
+                      </select>
+                    </div>
                   </div>
-                  <select id="mciid" name="mciid" class="form-control" aria-label="MCI ID"
-                    aria-describedby="mciidLabel">
-                    <!-- Options will be filled dynamically -->
-                  </select>
-                </div>
-              </div>
 
-              <!-- SubGroup ID Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text" id="subgroupidLabel">Group ID</span>
+                  <!-- SubGroup ID Field -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">👥 Group ID</span>
+                      </div>
+                      <select id="subgroupid" name="subgroupid" class="form-control" aria-label="SubGroup ID"
+                        aria-describedby="subgroupidLabel">
+                        <!-- Options will be filled dynamically -->
+                      </select>
+                    </div>
                   </div>
-                  <select id="subgroupid" name="subgroupid" class="form-control" aria-label="SubGroup ID"
-                    aria-describedby="subgroupidLabel">
-                    <!-- Options will be filled dynamically -->
-                  </select>
-                </div>
-              </div>
 
-              <!-- VM ID Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text" id="vmidLabel">VM ID</span>
+                  <!-- VM ID Field -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">🖥️ VM ID</span>
+                      </div>
+                      <select id="vmid" name="vmid" class="form-control" aria-label="VM ID"
+                        aria-describedby="vmidLabel">
+                        <!-- Options will be filled dynamically -->
+                      </select>
+                    </div>
                   </div>
-                  <select id="vmid" name="vmid" class="form-control" aria-label="VM ID" aria-describedby="vmidLabel">
-                    <!-- Options will be filled dynamically -->
-                  </select>
-                </div>
-              </div>
 
-              <!-- VM Public IP Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text" id="pubipLabel">Pub IP</span>
+                  <!-- VM Public IP Field -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">🌐 Pub IP</span>
+                      </div>
+                      <select id="pubip" name="pubip" class="form-control" aria-label="Pub IP"
+                        aria-describedby="pubipLabel">
+                        <!-- Options will be filled dynamically -->
+                      </select>
+                    </div>
                   </div>
-                  <select id="pubip" name="pubip" class="form-control" aria-label="Pub IP"
-                    aria-describedby="pubipLabel">
-                    <!-- Options will be filled dynamically -->
-                  </select>
-                </div>
-              </div>
 
-
-              <!-- Control Actions Button (Primary) -->
-              <div class="form-group col">
-                <button type="button" id="controlActionsBtn" onClick="showActionsMenu();" class="btn btn-primary w-100">Control MCI</button>
-              </div>
-
-              <!-- Status Field (Primary) -->
-              <div class="form-group col">
-                <button type="button" id="statusBtn" onClick="statusMCI();" class="btn btn-primary w-100">Get Status</button>
-              </div>
-
-              <!-- MCI Access Field (Primary) -->
-              <div class="form-group col dropdown">
-                <button class="btn btn-primary dropdown-toggle w-100" type="button" id="accessDropdown"
-                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                  Get Access
-                </button>
-                <div class="dropdown-menu" aria-labelledby="accessDropdown">
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="getAccessInfo();">Get Access Info</a>
-                  <a class="dropdown-item save-file" href="javascript:void(0)">Save SSH Key</a>
-                </div>
-              </div>
-
-              <!-- Remote Command Field (Warning) -->
-              <div class="form-group col">
-                <button type="button" id="remoteCmd" onClick="executeRemoteCmd();" class="btn btn-warning w-100">Remote Command</button>
-              </div>
-
-              <!-- File Transfer Field (Warning) -->
-              <div class="form-group col">
-                <button type="button" id="filetransfer" onClick="transferFileToMci();"
-                  class="btn btn-warning w-100">Remote File Transfer</button>
-              </div>
-
-              <!-- Scale Out SubGroup Field (Success) -->
-              <div class="form-group col">
-                <button type="button" id="scaleOutBtn" onClick="scaleOutSubGroup();" class="btn btn-success w-100">ScaleOut SubGroup</button>
-              </div>
-
-              <!-- Update Firewall Rules Field (Success) -->
-              <div class="form-group col">
-                <button type="button" id="updateFirewall" onClick="updateFirewallRules();" class="btn btn-success w-100">Update Firewall</button>
-              </div>
-
-              <!-- NLB Control Dropdown (Success) -->
-              <div class="form-group col dropdown">
-                <button class="btn btn-success dropdown-toggle w-100" type="button" id="nlbControlDropdown"
-                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                  Control L4 NLB
-                </button>
-                <div class="dropdown-menu" aria-labelledby="nlbControlDropdown">
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="AddMcNLB();">Add Global-NLB</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="AddNLB();">Add Regional-NLB</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="DelNLB();">Del Regional-NLB</a>
-                </div>
-              </div>
-
-
-            </form>
-          </div>
-        </div>
-        </div>
-
-        <!-- Resources Tab -->
-        <div class="tab-pane fade" id="resources" role="tabpanel" aria-labelledby="resources-tab">
-          <div class="card mb-2">
-            <div class="card-header">Resource View</div>
-            <div class="card-body d-flex flex-column">
-            <form id="resource-view-form" class="form-row">
-
-              <!-- Namespace ID Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text" id="namespaceLabel">NS ID</span>
+                  <!-- Control Actions Button (Primary) -->
+                  <div class="form-group">
+                    <button type="button" id="controlActionsBtn" onClick="showActionsMenu();"
+                      class="btn btn-primary w-100">🎮 Control MCI</button>
                   </div>
-                  <select id="namespace-resources" name="namespace" class="form-control" aria-label="Namespace ID"
-                    aria-describedby="namespaceLabel">
-                    <!-- Options will be filled dynamically -->
-                  </select>
-                </div>
-              </div>
 
 
-              <!-- vNet ID Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text" id="vNetLabel">VNet</span>
+
+                  <!-- Status Field (Primary) -->
+                  <div class="form-group">
+                    <button type="button" id="statusBtn" onClick="statusMCI();" class="btn btn-success w-100">📊 Get
+                      Status</button>
                   </div>
-                  <select id="vNet" name="vNet" class="form-control" aria-label="vNet ID" aria-describedby="vNetLabel">
-                    <!-- Options will be filled dynamically -->
-                  </select>
-                </div>
-              </div>
 
-              <!-- securityGroup Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text" id="securityGroupLabel">Security</span>
+                  <!-- MCI Access Field (Primary) -->
+                  <div class="form-group dropdown">
+                    <button class="btn btn-success dropdown-toggle w-100" type="button" id="accessDropdown"
+                      data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                      🔑 Get Access
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="accessDropdown">
+                      <a class="dropdown-item" href="javascript:void(0)" onClick="getAccessInfo();">Get Access Info</a>
+                      <a class="dropdown-item save-file" href="javascript:void(0)">Save SSH Key</a>
+                    </div>
                   </div>
-                  <select id="securityGroup" name="securityGroup" class="form-control" aria-label="securityGroup ID"
-                    aria-describedby="securityGroupLabel">
-                    <!-- Options will be filled dynamically -->
-                  </select>
-                </div>
-              </div>
 
-
-              <!-- sshKey Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text" id="sshKeyLabel">SSHKey</span>
+                  <!-- Remote Command Field (Warning) -->
+                  <div class="form-group">
+                    <button type="button" id="remoteCmd" onClick="executeRemoteCmd();" class="btn btn-warning w-100">⚡
+                      Remote Command</button>
                   </div>
-                  <select id="sshKey" name="sshKey" class="form-control" aria-label="sshKey ID"
-                    aria-describedby="sshKeyLabel">
-                    <!-- Options will be filled dynamically -->
-                  </select>
-                </div>
-              </div>
 
-              <!-- image Field -->
-              <!-- <div class="form-group col">
+                  <!-- File Transfer Field (Warning) -->
+                  <div class="form-group">
+                    <button type="button" id="filetransfer" onClick="transferFileToMci();"
+                      class="btn btn-warning w-100">📁 Remote File Transfer</button>
+                  </div>
+
+
+                  <!-- Update Firewall Rules Field (Success) -->
+                  <div class="form-group">
+                    <button type="button" id="updateFirewall" onClick="updateFirewallRules();"
+                      class="btn btn btn-info w-100">🔥 Update Firewall</button>
+                  </div>
+
+                  <!-- NLB Control Dropdown (Success) -->
+                  <div class="form-group dropdown">
+                    <button class="btn btn btn-info dropdown-toggle w-100" type="button" id="nlbControlDropdown"
+                      data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                      ⚖️ Control L4 NLB
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="nlbControlDropdown">
+                      <a class="dropdown-item" href="javascript:void(0)" onClick="AddMcNLB();">Add Global-NLB</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onClick="AddNLB();">Add Regional-NLB</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onClick="DelNLB();">Del Regional-NLB</a>
+                    </div>
+                  </div>
+
+
+                </form>
+              </div>
+            </div>
+
+            <div class="card mb-2">
+              <div class="card-header">📦 Resource Control</div>
+              <div class="card-body d-flex flex-column">
+                <form id="resource-view-form" class="form-row">
+
+
+                  <!-- Release Resources Field -->
+                  <div class="form-group col-12">
+                    <button type="button" id="delResources" onClick="releaseResources();"
+                      class="btn btn-warning w-100">🗑️ Release Resources</button>
+                  </div>
+
+
+                  <!-- Resource Control Field -->
+                  <div class="form-group col dropdown">
+                    <button class="btn btn-primary dropdown-toggle w-100" type="button" id="resourceControlDropdown"
+                      data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                      🔧 Resource Control
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="resourceControlDropdown">
+                      <a class="dropdown-item" href="javascript:void(0)" onClick="releaseResources();">🗑️ Release
+                        Resources</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onClick="resourceOverview();">👁️ Overview
+                        Resources</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onClick="registerCspResource();">📝 Register
+                        Existing
+                        Resources</a>
+                    </div>
+                  </div>
+
+
+                  <!-- vNet ID Field -->
+                  <div class="form-group col-12">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">🌐 VNet</span>
+                      </div>
+                      <select id="vNet" name="vNet" class="form-control" aria-label="vNet ID"
+                        aria-describedby="vNetLabel">
+                        <!-- Options will be filled dynamically -->
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- securityGroup Field -->
+                  <div class="form-group col-12">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">🔒 Security</span>
+                      </div>
+                      <select id="securityGroup" name="securityGroup" class="form-control" aria-label="securityGroup ID"
+                        aria-describedby="securityGroupLabel">
+                        <!-- Options will be filled dynamically -->
+                      </select>
+                    </div>
+                  </div>
+
+
+                  <!-- sshKey Field -->
+                  <div class="form-group col-12">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">🔑 SSHKey</span>
+                      </div>
+                      <select id="sshKey" name="sshKey" class="form-control" aria-label="sshKey ID"
+                        aria-describedby="sshKeyLabel">
+                        <!-- Options will be filled dynamically -->
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- image Field -->
+                  <!-- <div class="form-group col-12">
                 <div class="input-group">
                   <div class="input-group-prepend">
                     <span class="input-group-text" id="imageLabel">Image</span>
@@ -730,8 +877,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 </div>
               </div> -->
 
-              <!-- spec Field -->
-              <!-- <div class="form-group col">
+                  <!-- spec Field -->
+                  <!-- <div class="form-group col-12">
                 <div class="input-group">
                   <div class="input-group-prepend">
                     <span class="input-group-text" id="specLabel">Spec</span>
@@ -741,81 +888,27 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 </div>
               </div> -->
 
-              <!-- connection Field -->
-              <div class="form-group col">
-                <div class="input-group">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text" id="connectionLabel">Connect</span>
+                  <!-- connection Field -->
+                  <div class="form-group col-12">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">🔗 Connect</span>
+                      </div>
+                      <select id="connection" name="connection" class="form-control" aria-label="connection ID"
+                        aria-describedby="connectionLabel">
+                        <!-- Options will be filled dynamically -->
+                      </select>
+                    </div>
                   </div>
-                  <select id="connection" name="connection" class="form-control" aria-label="connection ID"
-                    aria-describedby="connectionLabel">
-                    <!-- Options will be filled dynamically -->
-                  </select>
-                </div>
-              </div>
-
-              <!-- Release Resources Field -->
-              <div class="form-group col">
-                <button type="button" id="delResources" onClick="releaseResources();"
-                  class="btn btn-warning w-100">Release Resources</button>
-              </div>
 
 
-              <!-- Resource Control Field -->
-              <div class="form-group col dropdown">
-                <button class="btn btn-primary dropdown-toggle w-100" type="button" id="resourceControlDropdown"
-                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                  Resource Control
-                </button>
-                <div class="dropdown-menu" aria-labelledby="resourceControlDropdown">
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="releaseResources();">Release Resources</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="resourceOverview();">Overview
-                    Resources</a>
-                  <a class="dropdown-item" href="javascript:void(0)" onClick="registerCspResource();">Register Existing
-                    Resources</a>
-                </div>
-              </div>
 
-
-            </form>
-          </div>
-        </div>
-        </div>
-        </div>
-
-        <!-- Message Area (outside tabs) -->
-        <div class="card mb-2">
-          <div class="card-header">Message Area</div>
-          <div class="card-body d-flex flex-column">
-            <div class="row">
-              <div class="col-md-12">
-                <textarea id="message" rows="5" name="message" readonly class="form-control"></textarea>
-              </div>
-              <!-- <div class="col-md-3">
-                <div class="form-check mb-2">
-                  <label class="form-check-label" for="tableOn">Display table</label>
-                  <input type="checkbox" class="form-check-input" id="tableOn" name="tableOn"
-                    onClick="displayTableOn();" value="on">
-                </div>
-              </div> -->
-              <div class="col-md-12">
-                <div id="jsonoutput" class="form-control" readonly
-                  style="height: auto; background-color: black; color: white; padding: 10px; overflow: auto; max-height: 400px; word-wrap: break-word; overflow-wrap: break-word;">
-                </div>
+                </form>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Detail Table 
-        <div class="card mb-2">
-          <div class="card-header">Detail Table</div>
-          <div class="card-body d-flex flex-column">
-            <table id="detailTable" border="1" style="text-align:center; width:1111px" class="table table-bordered">
-               ... (Table headers and data rows) ... 
-            </table>
-          </div>
-        </div>-->
+        </div>
 
       </div>
 
@@ -841,7 +934,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         <!-- Admin dashboards -->
         <div id="console" style="display:none; width:100%; height:100%; position:absolute; top:0; left:0;">
           <iframe id="iframe" src="http://localhost:1324/swagger.html"
-            style="visibility:visible; width:100%; height:100%; position:relative;"></iframe>          
+            style="visibility:visible; width:100%; height:100%; position:relative;"></iframe>
           <!-- <iframe id="iframe" src="http://localhost:1324/swagger.html"
             style="visibility:visible; width:50%; height:100%; position:relative;"></iframe>
           <iframe id="iframe2" src="http://localhost:1024/spider/adminweb"
@@ -855,7 +948,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <script type="module" src="./index.js"></script>
     <script type="text/javascript">
       // Tab functionality
-      $(document).ready(function() {
+      $(document).ready(function () {
         // Enable Bootstrap tab functionality
         $('#mainTabs a').on('click', function (e) {
           e.preventDefault()
@@ -878,14 +971,69 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     </script>
 
     <script type="text/javascript">
-      window.addEventListener('resize', setColumnHeight);
+      window.addEventListener('resize', setLayoutSizes);
 
-      function setColumnHeight() {
+      function setLayoutSizes() {
         var windowHeight = window.innerHeight;
-        document.querySelector('.scrollable-column').style.height = windowHeight * 1.0 + 'px';
+        var windowWidth = window.innerWidth;
+
+        // Fixed left panel dimensions
+        var leftPanelWidth = 385;
+
+        // Set left panel height (fixed width, responsive height)
+        var leftPanel = document.querySelector('.scrollable-column');
+        if (leftPanel) {
+          leftPanel.style.height = windowHeight + 'px';
+          leftPanel.style.width = leftPanelWidth + 'px';
+        }
+
+        // Set left column fixed width
+        var leftColumn = document.querySelector('.col-md-3');
+        if (leftColumn) {
+          leftColumn.style.width = leftPanelWidth + 'px';
+          leftColumn.style.minWidth = leftPanelWidth + 'px';
+          leftColumn.style.maxWidth = leftPanelWidth + 'px';
+          leftColumn.style.height = windowHeight + 'px';
+        }
+
+        // Set right column size
+        var rightColumn = document.querySelector('.col-md-9');
+        if (rightColumn) {
+          var rightWidth = windowWidth - leftPanelWidth;
+          rightColumn.style.width = rightWidth + 'px';
+          rightColumn.style.height = windowHeight + 'px';
+        }
+
+        // Set map container size with exact dimensions
+        var mapContainer = document.getElementById('map');
+        if (mapContainer) {
+          // Calculate exact available width for map
+          var availableWidth = windowWidth - leftPanelWidth;
+          var availableHeight = windowHeight;
+
+          // Ensure minimum dimensions but don't exceed window
+          availableWidth = Math.max(400, Math.min(availableWidth, windowWidth - leftPanelWidth));
+          availableHeight = Math.max(300, Math.min(availableHeight, windowHeight));
+
+          mapContainer.style.width = availableWidth + 'px';
+          mapContainer.style.height = availableHeight + 'px';
+
+          // Trigger map resize if OpenLayers map exists
+          if (window.map && window.map.updateSize) {
+            setTimeout(() => {
+              window.map.updateSize();
+            }, 100);
+          }
+        }
       }
 
-      setColumnHeight();
+      // Initial setup
+      setLayoutSizes();
+
+      // Legacy function name for compatibility
+      function setColumnHeight() {
+        setLayoutSizes();
+      }
     </script>
 
 
