@@ -616,10 +616,10 @@ function changeColorStatus(status) {
 }
 
 // Helper function to truncate MCI name with ellipsis
-function truncateMciName(name, maxLength = 12) {
+function truncateMciName(name, maxLength = 30) {
   if (!name) return '';
   if (name.length <= maxLength) return name;
-  return name.substring(0, maxLength) + '...';
+  return name.substring(0, maxLength) + '..';
 }
 
 function changeSizeStatus(status) {
@@ -915,6 +915,16 @@ function errorAlert(message) {
   });
 }
 
+function successAlert(message) {
+  Swal.fire({
+    // position: 'top-end',
+    icon: "success",
+    title: message,
+    showConfirmButton: false,
+    timer: 2500,
+  });
+}
+
 function outputAlert(jsonData, type) {
   const jsonOutputConfig = {
     theme: "dark",
@@ -999,10 +1009,20 @@ function displayJsonData(jsonData, type) {
 
 // Handle MCI without VMs (preparing, prepared states)
 function handleMciWithoutVms(mciItem, cnt) {
-  // Get current map center coordinates
-  var mapCenter = map.getView().getCenter();
-  var defaultLon = mapCenter[0];
-  var defaultLat = mapCenter[1];
+  // Get current map extent to position MCIs in upper-left area
+  var mapView = map.getView();
+  var mapExtent = mapView.calculateExtent(map.getSize());
+  
+  // Position MCIs in the upper-left quadrant of the visible map area
+  var leftBound = mapExtent[0]; // minimum longitude
+  var rightBound = mapExtent[2]; // maximum longitude  
+  var bottomBound = mapExtent[1]; // minimum latitude
+  var topBound = mapExtent[3]; // maximum latitude
+  
+  // Calculate upper-left position (offset from the edge for better visibility)
+  var edgeOffset = 0.1; // Offset from map edge as percentage of total extent
+  var defaultLon = leftBound + (rightBound - leftBound) * edgeOffset;
+  var defaultLat = topBound - (topBound - bottomBound) * edgeOffset;
   
   // If MCI has label with location info, try to extract it (optional override)
   if (mciItem.label && typeof mciItem.label === 'object') {
@@ -1019,11 +1039,20 @@ function handleMciWithoutVms(mciItem, cnt) {
     }
   }
   
-  // Add slight offset to avoid overlapping if multiple preparing MCIs exist
-  var offsetDistance = 0.1; // Distance offset in degrees (reduced for closer positioning)
-  var offsetAngle = (cnt * 45) * (Math.PI / 180); // 45 degrees apart for each MCI
-  defaultLon += offsetDistance * Math.cos(offsetAngle);
-  defaultLat += offsetDistance * Math.sin(offsetAngle);
+  // Add vertical offset to avoid overlapping if multiple preparing MCIs exist
+  // Stack them vertically downward from the upper-left position
+  var verticalSpacing = (topBound - bottomBound) * 0.05; // 5% of map height per MCI
+  var preparingMciCount = 0;
+  
+  // Count how many preparing/prepared MCIs we already have to determine stacking position
+  for (var k = 0; k < cnt; k++) {
+    if (mciStatus[k] && (mciStatus[k] === "Preparing" || mciStatus[k] === "Prepared")) {
+      preparingMciCount++;
+    }
+  }
+  
+  // Apply vertical offset based on the count of existing preparing MCIs
+  defaultLat -= verticalSpacing * preparingMciCount;
   
   // Create a simple point geometry for text positioning (no background shape)
   geometries[cnt] = new Point([defaultLon, defaultLat]);
@@ -1039,7 +1068,7 @@ function handleMciWithoutVms(mciItem, cnt) {
   }
   
   // Store only the clean name
-  mciName[cnt] = "[" + newName + "]";
+  mciName[cnt] = newName;
   
   // Store targetAction information separately
   mciTargetAction[cnt] = (mciItem.targetAction && mciItem.targetAction !== "None" && mciItem.targetAction !== "") 
@@ -1232,7 +1261,7 @@ function getMci() {
               }
 
               // Store only the clean name
-              mciName[cnt] = "[" + newName + "]";
+              mciName[cnt] = newName;
               
               // Store targetAction information separately
               mciTargetAction[cnt] = (item.targetAction && item.targetAction !== "None" && item.targetAction !== "") 
@@ -6670,7 +6699,7 @@ function drawObjects(event) {
       text: new Text({
         text: displayText,
         font: "bold 10px sans-serif",
-        scale: changeSizeByName(mciName[i] + mciStatus[i]) + 0.3,
+        scale: changeSizeByName(mciName[i] + mciStatus[i]) + 0.1,
         offsetY: 32 * changeSizeByName(mciName[i] + mciStatus[i]),
         stroke: new Stroke({
           color: [255, 255, 255, 1], //white
@@ -8267,15 +8296,8 @@ function showActionsMenu() {
         
         <!-- Third row: Terminate button (full width) -->
         <div style="margin-top: 10px;">
-          <button type="button" class="btn btn-secondary" onclick="executeAction('terminate')" style="margin: 5px; width: 100%;">
+          <button type="button" class="btn btn-danger" onclick="executeAction('terminate')" style="margin: 5px; width: 100%;">
             ⏹️ Terminate
-          </button>
-        </div>
-        
-        <!-- Fourth row: Delete button (full width) -->
-        <div style="margin-top: 10px;">
-          <button type="button" class="btn btn-danger" onclick="executeAction('delete')" style="margin: 5px; width: 100%;">
-            ⬛ Delete
           </button>
         </div>
       </div>
@@ -8555,9 +8577,9 @@ function showMciScaleOutConfiguration(selectedMciId, namespace, hostname, port, 
       "<p><b>Total VMs to add:</b> <span id='total-vms'>" + totalVMs + "</span></p>" +
       "</div>",
     showCancelButton: true,
-    confirmButtonText: "Add VMs to MCI",
+    confirmButtonText: "Review Configuration",
     cancelButtonText: "Back",
-    confirmButtonColor: "#28a745",
+    confirmButtonColor: "#17a2b8",
     didOpen: () => {
       // Update total VM count when VM count per location changes
       document.getElementById('vm-count').addEventListener('input', function() {
@@ -8586,10 +8608,209 @@ function showMciScaleOutConfiguration(selectedMciId, namespace, hostname, port, 
   }).then((result) => {
     if (result.isConfirmed) {
       var config = result.value;
-      showMciScaleOutConfirmation(selectedMciId, config.subGroupName, config.vmCount, namespace, hostname, port, username, password);
+      // Go to review step first
+      showMciScaleOutReview(selectedMciId, config.subGroupName, config.vmCount, namespace, hostname, port, username, password);
     } else if (result.dismiss === Swal.DismissReason.cancel) {
       // Go back to MCI selection
       scaleOutMciWithConfiguration();
+    }
+  });
+}
+
+// Step 2.5: Show MCI scale out review
+function showMciScaleOutReview(selectedMciId, subGroupName, vmCountPerLocation, namespace, hostname, port, username, password) {
+  // Use the first VM configuration from the map as the template for review
+  if (!vmReqeustFromSpecList || vmReqeustFromSpecList.length === 0) {
+    errorAlert("No VM configuration available for review");
+    return;
+  }
+
+  var vmTemplate = vmReqeustFromSpecList[0];
+  
+  // Build the review request using the template
+  var reviewReq = {
+    name: subGroupName,
+    subGroupSize: vmCountPerLocation.toString(),
+    specId: vmTemplate.specId,
+    imageId: vmTemplate.imageId,
+    description: "Dynamically added via CB-MapUI Scale Out MCI",
+    label: {
+      "created-by": "cb-mapui",
+      "creation-type": "scale-out-mci",
+      "timestamp": new Date().toISOString()
+    }
+  };
+
+  // Add optional fields if available
+  if (vmTemplate.rootDiskType) {
+    reviewReq.rootDiskType = vmTemplate.rootDiskType;
+  }
+  if (vmTemplate.rootDiskSize) {
+    reviewReq.rootDiskSize = vmTemplate.rootDiskSize;
+  }
+  if (vmTemplate.connectionName) {
+    reviewReq.connectionName = vmTemplate.connectionName;
+  }
+
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${selectedMciId}/subGroupDynamicReview`;
+  var jsonBody = JSON.stringify(reviewReq, undefined, 4);
+  
+  console.log("Reviewing SubGroup configuration...");
+  var spinnerId = addSpinnerTask(`Reviewing SubGroup: ${subGroupName}`);
+  infoAlert(`Reviewing SubGroup configuration for ${selectedMciId}...`);
+
+  var requestId = generateRandomRequestId("review-subgroup-" + selectedMciId + "-" + subGroupName + "-", 10);
+  addRequestIdToSelect(requestId);
+
+  axios({
+    method: "post",
+    url: url,
+    headers: { 
+      "Content-Type": "application/json",
+      "x-request-id": requestId 
+    },
+    data: jsonBody,
+    auth: {
+      username: `${username}`,
+      password: `${password}`,
+    },
+    timeout: 60000
+  })
+    .then((res) => {
+      console.log("SubGroup review completed successfully");
+      console.log("Review response data:", res.data);
+      successAlert("SubGroup configuration reviewed successfully");
+      
+      var reviewData = res.data;
+      showMciScaleOutReviewResults(selectedMciId, subGroupName, vmCountPerLocation, reviewData, namespace, hostname, port, username, password);
+    })
+    .catch(function (error) {
+      console.log("Failed to review SubGroup configuration:", error);
+      console.log("Error details:", error.response ? error.response.data : error.message);
+      
+      var errorMsg = "Failed to review SubGroup configuration";
+      if (error.response && error.response.data) {
+        if (typeof error.response.data === 'string') {
+          errorMsg += ": " + error.response.data;
+        } else if (error.response.data.message) {
+          errorMsg += ": " + error.response.data.message;
+        } else if (error.response.data.error) {
+          errorMsg += ": " + error.response.data.error;
+        }
+      } else if (error.message) {
+        errorMsg += ": " + error.message;
+      }
+      errorAlert(errorMsg);
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
+}
+
+// Step 2.6: Show review results and proceed to confirmation
+function showMciScaleOutReviewResults(selectedMciId, subGroupName, vmCountPerLocation, reviewData, namespace, hostname, port, username, password) {
+  console.log("Processing review results:", reviewData);
+  
+  // Safely extract data with fallbacks
+  var canCreate = reviewData.canCreate !== undefined ? reviewData.canCreate : true;
+  var status = reviewData.status || 'Unknown';
+  var message = reviewData.message || 'No detailed message available';
+  var estimatedCost = reviewData.estimatedCost || 'Cost estimation unavailable';
+  
+  // Build status display
+  var statusColor = canCreate ? 
+    (status === 'Ready' ? '#28a745' : '#ffc107') : '#dc3545';
+  var statusIcon = canCreate ? 
+    (status === 'Ready' ? '✅' : '⚠️') : '❌';
+  
+  // Build warnings and errors display
+  var warningsHtml = '';
+  if (reviewData.warnings && Array.isArray(reviewData.warnings) && reviewData.warnings.length > 0) {
+    warningsHtml = '<div style="margin-top: 15px;"><strong>⚠️ Warnings:</strong><ul>';
+    reviewData.warnings.forEach(warning => {
+      warningsHtml += `<li style="color: #856404;">${warning}</li>`;
+    });
+    warningsHtml += '</ul></div>';
+  }
+  
+  var errorsHtml = '';
+  if (reviewData.errors && Array.isArray(reviewData.errors) && reviewData.errors.length > 0) {
+    errorsHtml = '<div style="margin-top: 15px;"><strong>❌ Errors:</strong><ul>';
+    reviewData.errors.forEach(error => {
+      errorsHtml += `<li style="color: #721c24;">${error}</li>`;
+    });
+    errorsHtml += '</ul></div>';
+  }
+  
+  // Build resource validation display
+  var validationHtml = '';
+  if (reviewData.specValidation) {
+    var specStatus = reviewData.specValidation.isAvailable ? '✅' : '❌';
+    var specStatusText = reviewData.specValidation.status || 'No status';
+    validationHtml += `<p><strong>Spec Validation:</strong> ${specStatus} ${specStatusText}</p>`;
+  }
+  if (reviewData.imageValidation) {
+    var imageStatus = reviewData.imageValidation.isAvailable ? '✅' : '❌';
+    var imageStatusText = reviewData.imageValidation.status || 'No status';
+    validationHtml += `<p><strong>Image Validation:</strong> ${imageStatus} ${imageStatusText}</p>`;
+  }
+  
+  // Add info section if available
+  var infoHtml = '';
+  if (reviewData.info && Array.isArray(reviewData.info) && reviewData.info.length > 0) {
+    infoHtml = '<div style="margin-top: 15px;"><strong>ℹ️ Additional Information:</strong><ul>';
+    reviewData.info.forEach(info => {
+      infoHtml += `<li style="color: #0c5460;">${info}</li>`;
+    });
+    infoHtml += '</ul></div>';
+  }
+  
+  var totalVMs = vmCountPerLocation * vmReqeustFromSpecList.length;
+  
+  Swal.fire({
+    title: "SubGroup Configuration Review",
+    width: 700,
+    html:
+      "<div style='text-align: left; margin: 20px;'>" +
+      "<p><b>Review Results for SubGroup Addition</b></p>" +
+      "<hr>" +
+      "<div style='background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;'>" +
+      "<h5>📋 Configuration Summary</h5>" +
+      "<p><b>Target MCI:</b> " + selectedMciId + "</p>" +
+      "<p><b>SubGroup Name:</b> " + subGroupName + "</p>" +
+      "<p><b>VMs per location:</b> " + vmCountPerLocation + "</p>" +
+      "<p><b>Total locations:</b> " + vmReqeustFromSpecList.length + "</p>" +
+      "<p><b>Total VMs to add:</b> " + totalVMs + "</p>" +
+      "<p><b>Estimated Cost:</b> " + estimatedCost + "</p>" +
+      "</div>" +
+      "<div style='background: " + statusColor + "20; padding: 15px; border-radius: 8px; border-left: 4px solid " + statusColor + "; margin-bottom: 15px;'>" +
+      "<h5>" + statusIcon + " Review Status</h5>" +
+      "<p><b>Status:</b> <span style='color: " + statusColor + "; font-weight: bold;'>" + status + "</span></p>" +
+      "<p><b>Message:</b> " + message + "</p>" +
+      validationHtml +
+      "</div>" +
+      infoHtml +
+      warningsHtml +
+      errorsHtml +
+      "</div>",
+    showCancelButton: true,
+    confirmButtonText: canCreate ? "Proceed with Creation" : "Back to Configuration",
+    cancelButtonText: "Cancel",
+    confirmButtonColor: canCreate ? "#28a745" : "#6c757d",
+    cancelButtonColor: "#dc3545",
+    allowOutsideClick: false
+  }).then((result) => {
+    if (result.isConfirmed) {
+      if (canCreate) {
+        // Proceed to final confirmation
+        showMciScaleOutConfirmation(selectedMciId, subGroupName, vmCountPerLocation, namespace, hostname, port, username, password);
+      } else {
+        // Go back to configuration
+        showMciScaleOutConfiguration(selectedMciId, namespace, hostname, port, username, password);
+      }
+    } else {
+      // Cancel the entire operation
+      infoAlert("SubGroup addition cancelled");
     }
   });
 }
