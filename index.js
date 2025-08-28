@@ -3506,9 +3506,9 @@ function getRecommendedSpec(idx, latitude, longitude) {
         </tbody>
       </table>
     </div>
-    <div id="specDetailsContainer" style="margin-top:15px;padding:8px;border:1px solid #ddd;border-radius:5px;">
-      <h5 style="font-size: 0.85rem;margin-bottom:5px;">Selected Spec Details</h5>
-      <div id="specDetailsContent"></div>
+    <div id="specDetailsContainer" style="margin-top:15px;padding:8px;border:1px solid #ddd;border-radius:5px;height:280px;overflow-y:auto;display:flex;flex-direction:column;">
+      <h5 style="font-size: 0.85rem;margin-bottom:5px;flex-shrink:0;">Selected Spec Details</h5>
+      <div id="specDetailsContent" style="flex:1;overflow-y:auto;"></div>
     </div>
     <input type="hidden" id="selectedSpecIndex" value="0">
   </div>
@@ -3573,46 +3573,74 @@ function getRecommendedSpec(idx, latitude, longitude) {
           const spec = res.data[index];
           let costPerHour = spec.costPerHour === "-1" || spec.costPerHour === "" ? "unknown" : `$${spec.costPerHour}`;
 
-          let acceleratorDetails = "";
-          if (spec.acceleratorType === "gpu") {
-            acceleratorDetails = `
-              <div class="row">
-                <div class="col-md-6">
-                  <p><strong>Accelerator Type:</strong> <span style="color:red">GPU</span></p>
-                  <p><strong>Accelerator Model:</strong> <span style="color:red">${spec.acceleratorModel}</span></p>
+          // Basic spec information - styled to match image details
+          const specInfoHTML = `
+            <div style="margin:0; padding:0; text-align: left;">
+              <div style="margin-bottom:3px; text-align: left;">
+                <strong>CSP:</strong> ${spec.providerName.toUpperCase()}
+              </div>
+              <div style="margin-bottom:3px; text-align: left;">
+                <strong>Region:</strong> ${spec.regionName}
+              </div>
+              <div style="margin-bottom:3px; text-align: left;">
+                <strong>Spec Name:</strong> ${spec.cspSpecName}
+              </div>
+              <div style="margin-bottom:3px; text-align: left;">
+                <strong>Architecture:</strong> ${spec.architecture}
+              </div>
+              <div style="margin-bottom:3px; text-align: left;">
+                <strong>vCPU:</strong> ${spec.vCPU}
+              </div>
+              <div style="margin-bottom:3px; text-align: left;">
+                <strong>Memory:</strong> ${spec.memoryGiB} GiB
+              </div>
+              <div style="margin-bottom:3px; text-align: left;">
+                <strong>Cost:</strong> <span style="color: ${costPerHour === 'unknown' ? 'orange' : 'green'};">${costPerHour}/hour</span>
+              </div>
+              ${spec.acceleratorType === "gpu" ? `
+                <div style="margin-bottom:3px; text-align: left;">
+                  <strong>Accelerator:</strong> <span style="color: red; font-weight: bold;">✓ GPU (${spec.acceleratorModel})</span>
                 </div>
-                <div class="col-md-6">
-                  <p><strong>Accelerator Count:</strong> ${spec.acceleratorCount}</p>
-                  <p><strong>Accelerator Memory:</strong> ${spec.acceleratorMemoryGB} GB</p>
+                <div style="margin-bottom:3px; text-align: left;">
+                  <strong>GPU Count:</strong> ${spec.acceleratorCount}
                 </div>
+                <div style="margin-bottom:3px; text-align: left;">
+                  <strong>GPU Memory:</strong> ${spec.acceleratorMemoryGB} GB
+                </div>
+              ` : `
+                <div style="margin-bottom:3px; text-align: left;">
+                  <strong>Accelerator:</strong> <span style="color: gray;">None</span>
+                </div>
+              `}
+            </div>
+          `;
+
+          // Details table - styled to match image details
+          let detailsTableHTML = "";
+          if (spec.details && Array.isArray(spec.details) && spec.details.length > 0) {
+            detailsTableHTML = `
+              <div style="margin-top: 8px; text-align: left;">
+                <table style="width:100%; border-collapse: collapse; font-size: 0.75rem; text-align: left;">
+                  <thead>
+                    <tr>
+                      <th style="width: 35%; padding: 3px; border: 1px solid #ddd; background: #f8f9fa; text-align: left;">Property</th>
+                      <th style="padding: 3px; border: 1px solid #ddd; background: #f8f9fa; text-align: left;">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${spec.details.map(item =>
+                      `<tr>
+                        <td style="padding: 3px; border: 1px solid #ddd; text-align: left;"><strong>${item.key}</strong></td>
+                        <td style="padding: 3px; border: 1px solid #ddd; word-wrap: break-word; text-align: left;">${item.value}</td>
+                      </tr>`
+                    ).join('')}
+                  </tbody>
+                </table>
               </div>
             `;
           }
 
-          // Format the details as key-value pairs
-          let specDetailsHTML = "";
-          if (spec.details && Array.isArray(spec.details) && spec.details.length > 0) {
-            specDetailsHTML = `
-              <div class="mt-2">
-                <div style="max-height: 140px; overflow-y: auto; font-size: 0.75rem;">
-                  <table class="table table-sm table-bordered">
-                    <tbody>
-                      ${spec.details.map(item =>
-              `<tr>
-                          <td style="width: 40%"><strong>${item.key}</strong></td>
-                          <td>${item.value}</td>
-                        </tr>`
-            ).join('')}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            `;
-          }
-          const detailsHTML = `
-            ${acceleratorDetails}
-            ${specDetailsHTML}
-          `;
+          const detailsHTML = specInfoHTML + detailsTableHTML;
 
           document.getElementById('specDetailsContent').innerHTML = detailsHTML;
         }
