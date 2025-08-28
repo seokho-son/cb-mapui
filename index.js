@@ -8626,10 +8626,10 @@ function showMciScaleOutConfirmation(mciId, subGroupName, vmCountPerLocation, na
 
 // Execute MCI scale out operation
 function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, hostname, port, username, password) {
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciId}/vmDynamic`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciId}/subGroupDynamic`;
   
   // Build the request body using current map configuration
-  var vmDynamicReq = {
+  var subGroupDynamicReq = {
     name: subGroupName,
     subGroupSize: vmCountPerLocation.toString(),
     description: "Dynamically added via CB-MapUI Scale Out MCI",
@@ -8646,23 +8646,23 @@ function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, 
     var templateVm = vmReqeustFromSpecList[0];
     
     if (templateVm.specId) {
-      vmDynamicReq.specId = templateVm.specId;
+      subGroupDynamicReq.specId = templateVm.specId;
     }
     if (templateVm.imageId) {
-      vmDynamicReq.imageId = templateVm.imageId;
+      subGroupDynamicReq.imageId = templateVm.imageId;
     }
     if (templateVm.rootDiskType) {
-      vmDynamicReq.rootDiskType = templateVm.rootDiskType;
+      subGroupDynamicReq.rootDiskType = templateVm.rootDiskType;
     }
     if (templateVm.rootDiskSize) {
-      vmDynamicReq.rootDiskSize = templateVm.rootDiskSize;
+      subGroupDynamicReq.rootDiskSize = templateVm.rootDiskSize;
     }
     if (templateVm.connectionName) {
-      vmDynamicReq.connectionName = templateVm.connectionName;
+      subGroupDynamicReq.connectionName = templateVm.connectionName;
     }
   }
 
-  var jsonBody = JSON.stringify(vmDynamicReq, undefined, 4);
+  var jsonBody = JSON.stringify(subGroupDynamicReq, undefined, 4);
   
   console.log(`Adding VMs to MCI ${mciId} with subgroup ${subGroupName}...`);
   var spinnerId = addSpinnerTask(`Scale Out MCI: ${mciId} (+${vmCountPerLocation * vmReqeustFromSpecList.length} VMs)`);
