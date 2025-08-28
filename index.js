@@ -3420,17 +3420,17 @@ function getRecommendedSpec(idx, latitude, longitude) {
   var jsonBody = JSON.stringify(struct);
   console.log("Request body for mciDynamicCheckRequest:", jsonBody);
 
-  // Show loading popup while API is processing
-  Swal.fire({
-    title: 'Recommending Specification list',
-    text: 'Please wait for a moment...',
-    allowOutsideClick: false,
-    allowEscapeKey: false,
-    showConfirmButton: false,
-    didOpen: () => {
-      Swal.showLoading();
-    }
-  });
+  // // Show loading popup while API is processing
+  // Swal.fire({
+  //   title: 'Recommending Specification list',
+  //   text: 'Please wait for a moment...',
+  //   allowOutsideClick: false,
+  //   allowEscapeKey: false,
+  //   showConfirmButton: false,
+  //   didOpen: () => {
+  //     Swal.showLoading();
+  //   }
+  // });
 
   axios({
     method: "post",
