@@ -260,7 +260,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           </li>
           <li class="nav-item" role="presentation">
             <a class="nav-link" id="control-tab" data-toggle="tab" href="#control" role="tab" aria-controls="control"
-              aria-selected="false">🎮Control</a>
+              aria-selected="false">🕹️Control</a>
           </li>
           <li class="nav-item" role="presentation">
             <a class="nav-link" id="config-tab" data-toggle="tab" href="#config" role="tab" aria-controls="config"
@@ -625,8 +625,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
                   <!-- Clear Selection Field -->
                   <div class="form-group">
-                    <button type="button" onClick="clearCircle('clearText');" class="btn btn-secondary w-100">🗑️ Clear
-                      Configuration</button>
+                    <button type="button" onClick="clearCircle('clearText');" class="btn btn-secondary w-100">
+                      🗑️ Clear Configuration</button>
                   </div>
 
 
@@ -643,13 +643,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <!-- Scale Out MCI Field -->
                   <div class="form-group">
                     <button type="button" id="scaleOutMciBtn" onClick="scaleOutMciWithConfiguration();"
-                      class="btn btn-primary w-100">📈 ScaleOut MCI</button>
+                      class="btn btn-primary w-100">🚀 Add New SubGroup</button>
                   </div>
 
                   <!-- Scale Out SubGroup Field -->
                   <div class="form-group">
                     <button type="button" id="scaleOutBtn" onClick="scaleOutSubGroupWithSelection();"
-                      class="btn btn-primary w-100">📈 ScaleOut SubGroup</button>
+                      class="btn btn-primary w-100">📈 Scale SubGroup</button>
                   </div>
 
 
@@ -661,7 +661,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           <!-- Control Tab -->
           <div class="tab-pane fade" id="control" role="tabpanel" aria-labelledby="control-tab">
             <div class="card mb-2">
-              <div class="card-header">🎮 MC-Infra Control</div>
+              <div class="card-header">🕹️ MC-Infra Control</div>
               <div class="card-body d-flex flex-column">
                 <form id="mci-control-form">
 
@@ -731,21 +731,19 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                     </div>
                   </div>
 
-                  <!-- Control Actions Button (Primary) -->
+                  <!-- Control Actions Button (success) -->
                   <div class="form-group">
                     <button type="button" id="controlActionsBtn" onClick="showActionsMenu();"
-                      class="btn btn-primary w-100">🎮 Control MCI</button>
+                      class="btn btn-success w-100">🕹️ Control MCI</button>
                   </div>
 
-
-
-                  <!-- Status Field (Primary) -->
+                  <!-- Status Field (success) -->
                   <div class="form-group">
                     <button type="button" id="statusBtn" onClick="statusMCI();" class="btn btn-success w-100">📊 Get
                       Status</button>
                   </div>
 
-                  <!-- MCI Access Field (Primary) -->
+                  <!-- MCI Access Field (success) -->
                   <div class="form-group dropdown">
                     <button class="btn btn-success dropdown-toggle w-100" type="button" id="accessDropdown"
                       data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -759,8 +757,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
                   <!-- Remote Command Field (Warning) -->
                   <div class="form-group">
-                    <button type="button" id="remoteCmd" onClick="executeRemoteCmd();" class="btn btn-warning w-100">⚡
-                      Remote Command</button>
+                    <button type="button" id="remoteCmd" onClick="executeRemoteCmd();" class="btn btn-warning w-100">
+                      💻 Remote Command</button>
                   </div>
 
                   <!-- File Transfer Field (Warning) -->
@@ -789,6 +787,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                     </div>
                   </div>
 
+                  <!-- Delete MCI Field (secondary) -->
+                  <div class="form-group">
+                    <button type="button" id="deleteMciBtn" onClick="executeAction('delete');"
+                      class="btn btn-secondary w-100">🛑 Delete MCI</button>
+                  </div>
 
                 </form>
               </div>
@@ -803,13 +806,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <!-- Release Resources Field -->
                   <div class="form-group col-12">
                     <button type="button" id="delResources" onClick="releaseResources();"
-                      class="btn btn-warning w-100">🗑️ Release Resources</button>
+                      class="btn btn-secondary w-100">🛑 Release Resources</button>
                   </div>
 
 
                   <!-- Resource Control Field -->
                   <div class="form-group col dropdown">
-                    <button class="btn btn-primary dropdown-toggle w-100" type="button" id="resourceControlDropdown"
+                    <button class="btn btn-info dropdown-toggle w-100" type="button" id="resourceControlDropdown"
                       data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                       🔧 Resource Control
                     </button>
