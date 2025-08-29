@@ -197,6 +197,33 @@ map.on("singleclick", function (event) {
   // document.getElementById('latitude').value = coord[1];
   // document.getElementById('longitude').value = coord[0];
 
+  // Activate provision-tab when user clicks on map to place circle
+  try {
+    // Remove active class from all tabs
+    document.querySelectorAll('.nav-link').forEach(tab => {
+      tab.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-pane').forEach(pane => {
+      pane.classList.remove('show', 'active');
+    });
+    
+    // Activate provision-tab
+    const provisionTab = document.getElementById('provision-tab');
+    const provisionPane = document.getElementById('provision');
+    
+    if (provisionTab && provisionPane) {
+      provisionTab.classList.add('active');
+      provisionPane.classList.add('show', 'active');
+      
+      // Trigger Bootstrap tab shown event if needed
+      if (typeof $ !== 'undefined' && $.fn.tab) {
+        $(provisionTab).tab('show');
+      }
+    }
+  } catch (error) {
+    console.log('Failed to activate provision tab:', error);
+  }
+
   writeLatLonInputPair(latLonInputPairIdx, coord[1], coord[0]);
   latLonInputPairIdx++;
 });
@@ -616,10 +643,78 @@ function changeColorStatus(status) {
 }
 
 // Helper function to truncate MCI name with ellipsis
-function truncateMciName(name, maxLength = 30) {
+function truncateMciName(name, maxLength = 25) {
   if (!name) return '';
   if (name.length <= maxLength) return name;
   return name.substring(0, maxLength) + '..';
+}
+
+// Helper function to split MCI name into multiple lines for better display
+function splitMciNameToLines(name, maxLineLength = 12) {
+  if (!name) return [''];
+  
+  // If the name is short enough, return as single line
+  if (name.length <= maxLineLength) {
+    return [name];
+  }
+  
+  // Split by common separators first
+  const separators = ['-', '_', '.', ' '];
+  let parts = [name];
+  
+  for (const sep of separators) {
+    if (name.includes(sep)) {
+      parts = name.split(sep);
+      break;
+    }
+  }
+  
+  // If no separators found or parts are still too long, split by length
+  if (parts.length === 1 || parts.some(part => part.length > maxLineLength)) {
+    const lines = [];
+    let currentLine = '';
+    
+    for (let i = 0; i < name.length; i++) {
+      if (currentLine.length >= maxLineLength && (name[i] === '-' || name[i] === '_' || name[i] === '.' || name[i] === ' ')) {
+        lines.push(currentLine);
+        currentLine = '';
+      } else if (currentLine.length >= maxLineLength * 1.5) {
+        lines.push(currentLine);
+        currentLine = '';
+      }
+      currentLine += name[i];
+    }
+    
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+    
+    return lines.slice(0, 3); // Limit to 3 lines maximum
+  }
+  
+  // Combine parts intelligently to create 2-3 lines
+  const lines = [];
+  let currentLine = '';
+  
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    const separator = i < parts.length - 1 ? (name.includes('-') ? '-' : name.includes('_') ? '_' : '.') : '';
+    
+    if (currentLine.length + part.length + separator.length <= maxLineLength || currentLine === '') {
+      currentLine += part + separator;
+    } else {
+      if (currentLine) {
+        lines.push(currentLine.replace(/[-_.]$/, '')); // Remove trailing separator
+        currentLine = part + separator;
+      }
+    }
+  }
+  
+  if (currentLine) {
+    lines.push(currentLine.replace(/[-_.]$/, '')); // Remove trailing separator
+  }
+  
+  return lines.slice(0, 3); // Limit to 3 lines maximum
 }
 
 function changeSizeStatus(status) {
@@ -1020,10 +1115,11 @@ function handleMciWithoutVms(mciItem, cnt) {
   var topBound = mapExtent[3]; // maximum latitude
   
   // Calculate upper-left position (offset from the edge for better visibility)
-  var edgeOffset = 0.1; // Offset from map edge as percentage of total extent
-  var defaultLon = leftBound + (rightBound - leftBound) * edgeOffset;
-  var defaultLat = topBound - (topBound - bottomBound) * edgeOffset;
-  
+  var edgeLeftOffset = 0.2;
+  var edgeTopOffset = 0.05;
+  var defaultLon = leftBound + (rightBound - leftBound) * edgeLeftOffset;
+  var defaultLat = topBound - (topBound - bottomBound) * edgeTopOffset;
+
   // If MCI has label with location info, try to extract it (optional override)
   if (mciItem.label && typeof mciItem.label === 'object') {
     if (mciItem.label.location) {
@@ -1859,6 +1955,33 @@ function proceedWithMciCreation(createMciReq, url, username, password) {
   })
     .then((res) => {
       console.log(res); // for debug
+
+      // Activate control-tab after successful MCI creation
+      try {
+        // Remove active class from all tabs
+        document.querySelectorAll('.nav-link').forEach(tab => {
+          tab.classList.remove('active');
+        });
+        document.querySelectorAll('.tab-pane').forEach(pane => {
+          pane.classList.remove('show', 'active');
+        });
+        
+        // Activate control-tab
+        const controlTab = document.getElementById('control-tab');
+        const controlPane = document.getElementById('control');
+        
+        if (controlTab && controlPane) {
+          controlTab.classList.add('active');
+          controlPane.classList.add('show', 'active');
+          
+          // Trigger Bootstrap tab shown event if needed
+          if (typeof $ !== 'undefined' && $.fn.tab) {
+            $(controlTab).tab('show');
+          }
+        }
+      } catch (error) {
+        console.log('Failed to activate control tab:', error);
+      }
 
       displayJsonData(res.data, typeInfo);
       handleAxiosResponse(res);
@@ -4367,6 +4490,33 @@ function getRecommendedSpec(idx, latitude, longitude) {
               );
               vmReqeustFromSpecList.push(createMciReqVm);
               recommendedSpecList.push(recommendedSpec);
+              
+              // Activate provision-tab after successful configuration
+              try {
+                // Remove active class from all tabs
+                document.querySelectorAll('.nav-link').forEach(tab => {
+                  tab.classList.remove('active');
+                });
+                document.querySelectorAll('.tab-pane').forEach(pane => {
+                  pane.classList.remove('show', 'active');
+                });
+                
+                // Activate provision-tab
+                const provisionTab = document.getElementById('provision-tab');
+                const provisionPane = document.getElementById('provision');
+                
+                if (provisionTab && provisionPane) {
+                  provisionTab.classList.add('active');
+                  provisionPane.classList.add('show', 'active');
+                  
+                  // Trigger Bootstrap tab shown event if needed
+                  if (typeof $ !== 'undefined' && $.fn.tab) {
+                    $(provisionTab).tab('show');
+                  }
+                }
+              } catch (error) {
+                console.log('Failed to activate provision tab:', error);
+              }
             } else {
               console.log("VM configuration failed for this location");
               latLonInputPairIdx--;
@@ -6662,6 +6812,13 @@ function drawObjects(event) {
   for (i = geometries.length - 1; i >= 0; --i) {
     const statusColors = getVmStatusColor(mciStatus[i]);
     
+    // Calculate dynamic offset for status text based on MCI name lines
+    const nameLines = splitMciNameToLines(mciName[i]);
+    const baseScale = changeSizeByName(mciName[i] + mciStatus[i]) + 0.1;
+    const lineHeight = 12 * baseScale;
+    const nameHeight = nameLines.length * lineHeight;
+    const statusOffsetY = 32 * changeSizeByName(mciName[i] + mciStatus[i]) + nameHeight + 8; // 8px gap between name and status
+    
     // MCI status style
     var polyStatusTextStyle = new Style({
       // MCI status text style
@@ -6669,7 +6826,7 @@ function drawObjects(event) {
         text: mciStatus[i],
         font: "bold 10px sans-serif",
         scale: changeSizeStatus(mciName[i] + mciStatus[i]),
-        offsetY: 44 * changeSizeStatus(mciName[i] + mciStatus[i]),
+        offsetY: statusOffsetY,
         stroke: new Stroke({
           color: statusColors.stroke,
           width: 2, // Slightly thicker stroke for better readability
@@ -6684,35 +6841,42 @@ function drawObjects(event) {
   }
 
   for (i = geometries.length - 1; i >= 0; --i) {
-    // MCI text style with real-time animation
-    var displayText = truncateMciName(mciName[i]);
+    // MCI text style with multi-line support
+    const nameLines = splitMciNameToLines(mciName[i]);
+    const baseScale = changeSizeByName(mciName[i] + mciStatus[i]) + 0.1;
+    const baseOffsetY = 32 * changeSizeByName(mciName[i] + mciStatus[i]);
+    const lineHeight = 12 * baseScale; // Spacing between lines
     
-    // Add animation if targetAction is active
-    if (mciTargetAction[i]) {
-      const spinChars = ['⠿', '⠷', '⠯', '⠟', '⠻', '⠽', '⠾', '⠷','⠿'];
-      // const spinChars = ['🔴', '🟠', '🟡', '🟠', '🔵', '🟣'];
-      const animIndex = Math.floor(drawCounter / 10 + i) % spinChars.length;
-      displayText = spinChars[animIndex] + ' ' + displayText;
-    }
-    
-    var polyNameTextStyle = new Style({
-      text: new Text({
-        text: displayText,
-        font: "bold 10px sans-serif",
-        scale: changeSizeByName(mciName[i] + mciStatus[i]) + 0.1,
-        offsetY: 32 * changeSizeByName(mciName[i] + mciStatus[i]),
-        stroke: new Stroke({
-          color: [255, 255, 255, 1], //white
-          width: 1,
+    // Draw each line of the MCI name
+    nameLines.forEach((line, lineIndex) => {
+      let displayText = line;
+      
+      // Add animation only to the first line if targetAction is active
+      if (lineIndex === 0 && mciTargetAction[i]) {
+        const spinChars = ['⠿', '⠷', '⠯', '⠟', '⠻', '⠽', '⠾', '⠷','⠿'];
+        const animIndex = Math.floor(drawCounter / 10 + i) % spinChars.length;
+        displayText = spinChars[animIndex] + ' ' + displayText;
+      }
+      
+      var polyNameTextStyle = new Style({
+        text: new Text({
+          text: displayText,
+          font: "bold 10px sans-serif",
+          scale: baseScale,
+          offsetY: baseOffsetY + (lineIndex * lineHeight), // Offset each line down
+          stroke: new Stroke({
+            color: [255, 255, 255, 1], //white
+            width: 1,
+          }),
+          fill: new Fill({
+            color: [0, 0, 0, 1], //black
+          }),
         }),
-        fill: new Fill({
-          color: [0, 0, 0, 1], //black //changeColorStatus(mciStatus[i])
-        }),
-      }),
-    });
+      });
 
-    vectorContext.setStyle(polyNameTextStyle);
-    vectorContext.drawGeometry(geometries[i]);
+      vectorContext.setStyle(polyNameTextStyle);
+      vectorContext.drawGeometry(geometries[i]);
+    });
   }
 
   map.render();
