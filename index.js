@@ -100,6 +100,29 @@ function getActionAnimation(targetAction) {
   return ' ' + spinChars[index];
 }
 
+// Get color for target action spinner
+function getTargetActionColor(targetAction) {
+  if (!targetAction) return [0, 0, 0, 1]; // black for default/no action
+  
+  const action = targetAction.toLowerCase();
+  
+  switch (action) {
+    case 'create':
+      return [59, 130, 246, 1]; // blue #3b82f6
+    case 'terminate':
+      return [239, 68, 68, 1]; // red #ef4444
+    case 'suspend':
+      return [107, 114, 128, 1]; // gray #6b7280
+    case 'resume':
+      return [59, 130, 246, 1]; // blue #3b82f6
+    case 'restart':
+    case 'reboot':
+      return [249, 115, 22, 1]; // orange #f97316
+    default:
+      return [0, 0, 0, 1]; // black for unknown actions
+  }
+}
+
 //var n = 1000;
 var geometries = new Array();
 var geometriesPoints = new Array();
@@ -1021,16 +1044,26 @@ function successAlert(message) {
 }
 
 function outputAlert(jsonData, type) {
+  // Estimate JSON data size
+  const jsonString = JSON.stringify(jsonData);
+  const isLargeData = jsonString.length > 50000; // 50KB threshold
+  
+  // Check if it's MCI data with many VMs
+  const hasLargeVmList = jsonData?.subGroups?.some(subGroup => 
+    subGroup?.vms && Array.isArray(subGroup.vms) && subGroup.vms.length > 20
+  ) || (Array.isArray(jsonData?.vm) && jsonData.vm.length > 20);
+  
   const jsonOutputConfig = {
     theme: "dark",
-    hoverPreviewEnabled: true,
-    hoverPreviewArrayCount: 100,
-    hoverPreviewFieldCount: 5,
-    animateOpen: true,
-    animateClose: true,
+    hoverPreviewEnabled: !isLargeData, // Disable hover preview for large data
+    hoverPreviewArrayCount: isLargeData ? 10 : 100,
+    hoverPreviewFieldCount: isLargeData ? 3 : 5,
+    animateOpen: !isLargeData, // Disable animation for large data
+    animateClose: !isLargeData,
     useToJSON: true,
     quotesOnKeys: false,
-    quotesOnValues: false
+    quotesOnValues: false,
+    open: isLargeData || hasLargeVmList ? 1 : 2  // More conservative opening for large data
   };
   Swal.fire({
     position: "top-end",
@@ -1041,23 +1074,49 @@ function outputAlert(jsonData, type) {
     width: '40%',
     //backdrop: false,
     didOpen: () => {
-      // Use setTimeout to ensure DOM is fully ready
+      // Use setTimeout to ensure DOM is fully ready and improve perceived performance
       setTimeout(() => {
         const container = document.getElementById("json-output");
         if (container) {
-          const formatter = new JSONFormatter(jsonData, Infinity, jsonOutputConfig);
-          const renderedElement = formatter.render();
-          container.appendChild(renderedElement);
-          
-          // Remove quotes from string values using DOM manipulation
-          setTimeout(() => {
-            const stringElements = container.querySelectorAll('.json-formatter-string');
-            stringElements.forEach(element => {
-              if (element.textContent.startsWith('"') && element.textContent.endsWith('"')) {
-                element.textContent = element.textContent.slice(1, -1);
+          // Show loading message for large data
+          if (isLargeData || hasLargeVmList) {
+            container.innerHTML = '<div style="color: #888; padding: 10px;">Loading large dataset... Please wait.</div>';
+            
+            // Delay rendering for large data to improve UX
+            setTimeout(() => {
+              container.innerHTML = ''; // Clear loading message
+              const formatter = new JSONFormatter(jsonData, isLargeData ? 1 : 2, jsonOutputConfig);
+              const renderedElement = formatter.render();
+              container.appendChild(renderedElement);
+              
+              // Apply string cleanup for large data too
+              if (!isLargeData) {
+                setTimeout(() => {
+                  const stringElements = container.querySelectorAll('.json-formatter-string');
+                  stringElements.forEach(element => {
+                    if (element.textContent.startsWith('"') && element.textContent.endsWith('"')) {
+                      element.textContent = element.textContent.slice(1, -1);
+                    }
+                  });
+                }, 100);
               }
-            });
-          }, 100);
+            }, 100);
+          } else {
+            // Normal rendering for small data
+            const formatter = new JSONFormatter(jsonData, 2, jsonOutputConfig);
+            const renderedElement = formatter.render();
+            container.appendChild(renderedElement);
+            
+            // Remove quotes from string values using DOM manipulation
+            setTimeout(() => {
+              const stringElements = container.querySelectorAll('.json-formatter-string');
+              stringElements.forEach(element => {
+                if (element.textContent.startsWith('"') && element.textContent.endsWith('"')) {
+                  element.textContent = element.textContent.slice(1, -1);
+                }
+              });
+            }, 100);
+          }
           
           // Apply custom styles for JSONFormatter value strings
           const style = document.createElement('style');
@@ -1080,7 +1139,7 @@ function outputAlert(jsonData, type) {
         } else {
           console.error("json-output container not found");
         }
-      }, 50);
+      }, isLargeData ? 100 : 50); // Longer delay for large data
     },
   });
 }
@@ -4338,7 +4397,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
               // vm count input field
               "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
               "<tr><th style='width: 50%;'>SubGroup Scale</th><td>" +
-              "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Enter the number of VMs for scaling (1 ~ 100)</span>" +
+              "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Enter the number of VMs for scaling (1 ~ 1000)</span>" +
               "<input type='number' id='vmCount' style='width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px;' min='1' max='10' value='1'>" +
               "</td></tr>" +
               "</table><br>",
@@ -4354,7 +4413,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
               if (vmCountInput) {
                 vmCountInput.addEventListener('input', function() {
                   const value = parseInt(this.value, 10);
-                  const isValid = !isNaN(value) && value >= 1 && value <= 100;
+                  const isValid = !isNaN(value) && value >= 1 && value <= 1000;
                   
                   if (isValid) {
                     this.style.borderColor = '#28a745';
@@ -6686,206 +6745,6 @@ function shuffleKeys() {
     .map(({ key }) => key); // Extract the keys
 }
 
-// Draw Objects
-function drawObjects(event) {
-  //event.frameState = event.frameState / 10;
-  //console.log("event.frameState");
-  //console.log(event.frameState);
-
-  var vectorContext = getVectorContext(event);
-  var frameState = event.frameState;
-  var theta = (2 * Math.PI * frameState.time) / omegaTheta;
-
-  // Shuffle keys every shuffleInterval draws
-  drawCounter++;
-  if (drawCounter % shuffleInterval === 0) {
-    shuffleKeys();
-  }
-
-  // Get the selected provider from the dropdown
-  var selectedProvider = document.getElementById(typeStringProvider).value;
-
-  // Draw CSP location first with the stored random order
-  shuffledKeys.forEach((key) => {
-    if (selectedProvider === "" || selectedProvider === key) {
-      if (Array.isArray(geoCspPoints[key]) && geoCspPoints[key].length) {
-        vectorContext.setStyle(cspIconStyles[key]);
-        vectorContext.drawGeometry(geoCspPoints[key][0]);
-      }
-    }
-  });
-
-  // Draw MCI Geometry
-  for (i = geometries.length - 1; i >= 0; --i) {
-    var polyStyle = new Style({
-      stroke: new Stroke({
-        width: 1,
-        color: cororLineList[i % cororList.length],
-      }),
-      fill: new Fill({
-        color: cororList[i % cororList.length],
-      }),
-    });
-
-    vectorContext.setStyle(polyStyle);
-    vectorContext.drawGeometry(geometries[i]);
-  }
-
-  if (cspPointsCircle.length) {
-    //console.log("cspPointsCircle.length:" +cspPointsCircle.length + "cspPointsCircle["+cspPointsCircle+"]")
-    //geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
-    vectorContext.setStyle(iconStyleCircle);
-    vectorContext.drawGeometry(geoCspPointsCircle[0]);
-  }
-
-  if (geoResourceLocation.vnet[0]) {
-    vectorContext.setStyle(iconStyleVnet);
-    vectorContext.drawGeometry(geoResourceLocation.vnet[0]);
-  }
-  if (geoResourceLocation.sg[0]) {
-    vectorContext.setStyle(iconStyleSG);
-    vectorContext.drawGeometry(geoResourceLocation.sg[0]);
-  }
-  if (geoResourceLocation.sshKey[0]) {
-    vectorContext.setStyle(iconStyleKey);
-    vectorContext.drawGeometry(geoResourceLocation.sshKey[0]);
-  }
-  if (geoResourceLocation.k8s[0]) {
-    vectorContext.setStyle(iconStyleK8s);
-    vectorContext.drawGeometry(geoResourceLocation.k8s[0]);
-  }
-  if (geoResourceLocation.vpn[0]) {
-    vectorContext.setStyle(iconStyleVPN);
-    vectorContext.drawGeometry(geoResourceLocation.vpn[0]);
-  }
-
-  // Draw MCI Points and Individual VM Status Badges
-  for (i = geometries.length - 1; i >= 0; --i) {
-    const geometryPoint = geometriesPoints[i];
-    
-    // Skip if no geometry point (e.g., preparing/prepared MCI)
-    if (!geometryPoint) {
-      continue;
-    }
-    
-    // Check if geometryPoint has the new structure with VM data
-    if (geometryPoint && typeof geometryPoint === 'object' && geometryPoint.geometry) {
-      // New structure: Draw individual VMs with status badges and provider icons
-      const { geometry, vmPoints, vmStatuses, vmProviders } = geometryPoint;
-      const vmBaseScale = changeSizeStatus(mciName[i] + mciStatus[i]);
-      
-      // Draw individual VM icons with status badges and provider icons
-      if (vmPoints && vmStatuses) {
-        vmStatuses.forEach((vmStatus, vmIndex) => {
-          if (vmPoints[vmIndex]) {
-            const vmCoords = vmPoints[vmIndex];
-            const vmProvider = vmProviders ? vmProviders[vmIndex] : null;
-            const vmStyles = createVmStyleWithStatusBadge(vmStatus, vmProvider, vmBaseScale, vmCoords);
-            
-            // Test displacement approach - apply all styles to same geometry
-            const vmPoint = new Point(vmCoords);
-            
-            vmStyles.forEach(style => {
-              vectorContext.setStyle(style);
-              vectorContext.drawGeometry(vmPoint);
-            });
-          }
-        });
-      }
-    } else {
-      // Legacy structure: Draw single MCI icon (fallback)
-      if (mciName[i].includes("NLB")) {
-        vectorContext.setStyle(iconStyleNlb);
-      } else {
-        vectorContext.setStyle(iconStyleVm);
-      }
-      
-      // Handle legacy geometry structure
-      const legacyGeometry = geometryPoint || geometriesPoints[i];
-      if (legacyGeometry) {
-        vectorContext.drawGeometry(legacyGeometry);
-      }
-    }
-  }
-
-  // Draw MCI status text
-  for (i = geometries.length - 1; i >= 0; --i) {
-    const statusColors = getVmStatusColor(mciStatus[i]);
-    
-    // Calculate dynamic offset for status text based on MCI name lines
-    const nameLines = splitMciNameToLines(mciName[i]);
-    const baseScale = changeSizeByName(mciName[i] + mciStatus[i]) + 0.1;
-    const lineHeight = 12 * baseScale;
-    const nameHeight = nameLines.length * lineHeight;
-    const statusOffsetY = 32 * changeSizeByName(mciName[i] + mciStatus[i]) + nameHeight + 8; // 8px gap between name and status
-    
-    // MCI status style
-    var polyStatusTextStyle = new Style({
-      // MCI status text style
-      text: new Text({
-        text: mciStatus[i],
-        font: "bold 10px sans-serif",
-        scale: changeSizeStatus(mciName[i] + mciStatus[i]),
-        offsetY: statusOffsetY,
-        stroke: new Stroke({
-          color: statusColors.stroke,
-          width: 2, // Slightly thicker stroke for better readability
-        }),
-        fill: new Fill({
-          color: statusColors.fill,
-        }),
-      }),
-    });
-    vectorContext.setStyle(polyStatusTextStyle);
-    vectorContext.drawGeometry(geometries[i]);
-  }
-
-  for (i = geometries.length - 1; i >= 0; --i) {
-    // MCI text style with multi-line support
-    const nameLines = splitMciNameToLines(mciName[i]);
-    const baseScale = changeSizeByName(mciName[i] + mciStatus[i]) + 0.1;
-    const baseOffsetY = 32 * changeSizeByName(mciName[i] + mciStatus[i]);
-    const lineHeight = 12 * baseScale; // Spacing between lines
-    
-    // Draw each line of the MCI name
-    nameLines.forEach((line, lineIndex) => {
-      let displayText = line;
-      
-      // Add animation only to the first line if targetAction is active
-      if (lineIndex === 0 && mciTargetAction[i]) {
-        const spinChars = ['⠿', '⠷', '⠯', '⠟', '⠻', '⠽', '⠾', '⠷','⠿'];
-        const animIndex = Math.floor(drawCounter / 10 + i) % spinChars.length;
-        displayText = spinChars[animIndex] + ' ' + displayText;
-      }
-      
-      var polyNameTextStyle = new Style({
-        text: new Text({
-          text: displayText,
-          font: "bold 10px sans-serif",
-          scale: baseScale,
-          offsetY: baseOffsetY + (lineIndex * lineHeight), // Offset each line down
-          stroke: new Stroke({
-            color: [255, 255, 255, 1], //white
-            width: 1,
-          }),
-          fill: new Fill({
-            color: [0, 0, 0, 1], //black
-          }),
-        }),
-      });
-
-      vectorContext.setStyle(polyNameTextStyle);
-      vectorContext.drawGeometry(geometries[i]);
-    });
-  }
-
-  map.render();
-}
-
-tileLayer.on("postrender", function (event) {
-  drawObjects(event);
-});
-
 // Section for general tools
 
 function jsonToTable(jsonText) {
@@ -9145,3 +9004,209 @@ function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, 
       removeSpinnerTask(spinnerId);
     });
 }
+
+
+// Draw Objects to the Map
+function drawObjects(event) {
+  //event.frameState = event.frameState / 10;
+  //console.log("event.frameState");
+  //console.log(event.frameState);
+
+  var vectorContext = getVectorContext(event);
+  var frameState = event.frameState;
+  var theta = (2 * Math.PI * frameState.time) / omegaTheta;
+
+  // Shuffle keys every shuffleInterval draws
+  drawCounter++;
+  if (drawCounter % shuffleInterval === 0) {
+    shuffleKeys();
+  }
+
+  // Get the selected provider from the dropdown
+  var selectedProvider = document.getElementById(typeStringProvider).value;
+
+  // Draw CSP location first with the stored random order
+  shuffledKeys.forEach((key) => {
+    if (selectedProvider === "" || selectedProvider === key) {
+      if (Array.isArray(geoCspPoints[key]) && geoCspPoints[key].length) {
+        vectorContext.setStyle(cspIconStyles[key]);
+        vectorContext.drawGeometry(geoCspPoints[key][0]);
+      }
+    }
+  });
+
+  // Draw MCI Geometry
+  for (i = geometries.length - 1; i >= 0; --i) {
+    var polyStyle = new Style({
+      stroke: new Stroke({
+        width: 1,
+        color: cororLineList[i % cororList.length],
+      }),
+      fill: new Fill({
+        color: cororList[i % cororList.length],
+      }),
+    });
+
+    vectorContext.setStyle(polyStyle);
+    vectorContext.drawGeometry(geometries[i]);
+  }
+
+  if (cspPointsCircle.length) {
+    //console.log("cspPointsCircle.length:" +cspPointsCircle.length + "cspPointsCircle["+cspPointsCircle+"]")
+    //geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+    vectorContext.setStyle(iconStyleCircle);
+    vectorContext.drawGeometry(geoCspPointsCircle[0]);
+  }
+
+  if (geoResourceLocation.vnet[0]) {
+    vectorContext.setStyle(iconStyleVnet);
+    vectorContext.drawGeometry(geoResourceLocation.vnet[0]);
+  }
+  if (geoResourceLocation.sg[0]) {
+    vectorContext.setStyle(iconStyleSG);
+    vectorContext.drawGeometry(geoResourceLocation.sg[0]);
+  }
+  if (geoResourceLocation.sshKey[0]) {
+    vectorContext.setStyle(iconStyleKey);
+    vectorContext.drawGeometry(geoResourceLocation.sshKey[0]);
+  }
+  if (geoResourceLocation.k8s[0]) {
+    vectorContext.setStyle(iconStyleK8s);
+    vectorContext.drawGeometry(geoResourceLocation.k8s[0]);
+  }
+  if (geoResourceLocation.vpn[0]) {
+    vectorContext.setStyle(iconStyleVPN);
+    vectorContext.drawGeometry(geoResourceLocation.vpn[0]);
+  }
+
+  // Draw MCI Points and Individual VM Status Badges
+  for (i = geometries.length - 1; i >= 0; --i) {
+    const geometryPoint = geometriesPoints[i];
+    
+    // Skip if no geometry point (e.g., preparing/prepared MCI)
+    if (!geometryPoint) {
+      continue;
+    }
+    
+    // Check if geometryPoint has the new structure with VM data
+    if (geometryPoint && typeof geometryPoint === 'object' && geometryPoint.geometry) {
+      // New structure: Draw individual VMs with status badges and provider icons
+      const { geometry, vmPoints, vmStatuses, vmProviders } = geometryPoint;
+      const vmBaseScale = changeSizeStatus(mciName[i] + mciStatus[i]);
+      
+      // Draw individual VM icons with status badges and provider icons
+      if (vmPoints && vmStatuses) {
+        vmStatuses.forEach((vmStatus, vmIndex) => {
+          if (vmPoints[vmIndex]) {
+            const vmCoords = vmPoints[vmIndex];
+            const vmProvider = vmProviders ? vmProviders[vmIndex] : null;
+            const vmStyles = createVmStyleWithStatusBadge(vmStatus, vmProvider, vmBaseScale, vmCoords);
+            
+            // Test displacement approach - apply all styles to same geometry
+            const vmPoint = new Point(vmCoords);
+            
+            vmStyles.forEach(style => {
+              vectorContext.setStyle(style);
+              vectorContext.drawGeometry(vmPoint);
+            });
+          }
+        });
+      }
+    } else {
+      // Legacy structure: Draw single MCI icon (fallback)
+      if (mciName[i].includes("NLB")) {
+        vectorContext.setStyle(iconStyleNlb);
+      } else {
+        vectorContext.setStyle(iconStyleVm);
+      }
+      
+      // Handle legacy geometry structure
+      const legacyGeometry = geometryPoint || geometriesPoints[i];
+      if (legacyGeometry) {
+        vectorContext.drawGeometry(legacyGeometry);
+      }
+    }
+  }
+
+  // Draw MCI status text
+  for (i = geometries.length - 1; i >= 0; --i) {
+    const statusColors = getVmStatusColor(mciStatus[i]);
+    
+    // Calculate dynamic offset for status text based on MCI name lines
+    const nameLines = splitMciNameToLines(mciName[i]);
+    const baseScale = changeSizeByName(mciName[i] + mciStatus[i]) + 0.1;
+    const lineHeight = 12 * baseScale;
+    const nameHeight = nameLines.length * lineHeight;
+    const statusOffsetY = 32 * changeSizeByName(mciName[i] + mciStatus[i]) + nameHeight + 8; // 8px gap between name and status
+    
+    // MCI status style
+    var polyStatusTextStyle = new Style({
+      // MCI status text style
+      text: new Text({
+        text: mciStatus[i],
+        font: "bold 10px sans-serif",
+        scale: changeSizeStatus(mciName[i] + mciStatus[i]),
+        offsetY: statusOffsetY,
+        stroke: new Stroke({
+          color: statusColors.stroke,
+          width: 2, // Slightly thicker stroke for better readability
+        }),
+        fill: new Fill({
+          color: statusColors.fill,
+        }),
+      }),
+    });
+    vectorContext.setStyle(polyStatusTextStyle);
+    vectorContext.drawGeometry(geometries[i]);
+  }
+
+  for (i = geometries.length - 1; i >= 0; --i) {
+    // MCI text style with multi-line support
+    const nameLines = splitMciNameToLines(mciName[i]);
+    const baseScale = changeSizeByName(mciName[i] + mciStatus[i]) + 0.1;
+    const baseOffsetY = 32 * changeSizeByName(mciName[i] + mciStatus[i]);
+    const lineHeight = 12 * baseScale; // Spacing between lines
+    
+    // Draw each line of the MCI name
+    nameLines.forEach((line, lineIndex) => {
+      let displayText = line;
+      
+      // Add animation only to the first line if targetAction is active
+      if (lineIndex === 0 && mciTargetAction[i]) {
+        const spinChars = ['⠿', '⠷', '⠯', '⠟', '⠻', '⠽', '⠾', '⠷','⠿'];
+        const animIndex = Math.floor(drawCounter / 10 + i) % spinChars.length;
+        displayText = spinChars[animIndex] + ' ' + displayText;
+      }
+      
+      // Get text color - use targetAction color for spinner lines, black for others
+      const textColor = (lineIndex === 0 && mciTargetAction[i]) 
+        ? getTargetActionColor(mciTargetAction[i])
+        : [0, 0, 0, 1]; // black for default
+      
+      var polyNameTextStyle = new Style({
+        text: new Text({
+          text: displayText,
+          font: "bold 10px sans-serif",
+          scale: baseScale,
+          offsetY: baseOffsetY + (lineIndex * lineHeight), // Offset each line down
+          stroke: new Stroke({
+            color: [255, 255, 255, 1], //white
+            width: 1,
+          }),
+          fill: new Fill({
+            color: textColor,
+          }),
+        }),
+      });
+
+      vectorContext.setStyle(polyNameTextStyle);
+      vectorContext.drawGeometry(geometries[i]);
+    });
+  }
+
+  map.render();
+}
+
+tileLayer.on("postrender", function (event) {
+  drawObjects(event);
+});
