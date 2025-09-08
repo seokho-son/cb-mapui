@@ -92,7 +92,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       color: #333;
       padding: 2px 5px;
       border-radius: 3px;
-      font-size: 13px;
+      font-size: 15px;
       font-weight: 500;
       pointer-events: none;
       z-index: 10000;
@@ -270,6 +270,62 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     #jsonoutput .json-formatter-string {
       quotes: none !important;
     }
+
+    /* Context menu styles for SweetAlert */
+    .swal2-mci-context {
+      font-family: inherit !important;
+    }
+
+    .swal2-mci-context .btn-context {
+      width: 100% !important;
+      padding: 10px 8px !important;
+      font-size: 1.1rem !important;
+      font-weight: 500 !important;
+      border-radius: 6px !important;
+      margin: 0 !important;
+      transition: all 0.2s ease !important;
+    }
+
+    .swal2-mci-context .btn-context:hover {
+      transform: translateY(-1px) !important;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
+
+    .swal2-mci-context .btn-context:focus {
+      outline: none !important;
+      box-shadow: none !important;
+    }
+
+    .swal2-mci-context .btn-success {
+      background-color: #28a745 !important;
+      border-color: #28a745 !important;
+    }
+
+    .swal2-mci-context .btn-info {
+      background-color: #17a2b8 !important;
+      border-color: #17a2b8 !important;
+    }
+
+    .swal2-mci-context .btn-warning {
+      background-color: #ffc107 !important;
+      border-color: #ffc107 !important;
+      color: #212529 !important;
+    }
+
+    .swal2-mci-context .btn-primary {
+      background-color: #007bff !important;
+      border-color: #007bff !important;
+    }
+
+    .swal2-mci-context .btn-danger {
+      background-color: #dc3545 !important;
+      border-color: #dc3545 !important;
+    }
+
+    .swal2-mci-context .btn-secondary {
+      background-color: #6c757d !important;
+      border-color: #6c757d !important;
+    }
   </style>
 </head>
 
@@ -402,7 +458,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           <!-- Provisioning Tab -->
           <div class="tab-pane fade show active" id="provision" role="tabpanel" aria-labelledby="provision-tab">
             <div class="card mb-2">
-              <div class="card-header">🚀 MC-Infra Provisioning</div>
+              <div class="card-header">🚀 MC-Infra Recommendation</div>
               <div class="card-body d-flex flex-column">
                 <form id="mci-configuration-form">
 
@@ -644,22 +700,20 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   </div>
 
 
-                  <!-- Create MCI Field -->
-                  <div class="form-group">
-                    <button type="button" id="createMciButton" onClick="createMci();" class="btn btn-success w-100">🚀
-                      Create MCI</button>
-                  </div>
-
-
-
-                  <!-- Clear Selection Field -->
-                  <div class="form-group">
-                    <button type="button" onClick="clearCircle('clearText');" class="btn btn-secondary w-100">
-                      🗑️ Clear Configuration</button>
-                  </div>
-
-
                 </form>
+              </div>
+            </div>
+
+            <!-- MC-Infra Configuration Review Card -->
+            <div class="card mb-2" id="mci-review-card" style="display: none;">
+              <div class="card-header">📋 MC-Infra Configuration</div>
+              <div class="card-body">
+                <div id="subgroup-list" class="list-group">
+                  <!-- Dynamic SubGroup items will be added here -->
+                </div>
+                <div class="text-center mt-2" id="no-subgroups" style="color: #6c757d; font-style: italic;">
+                  No SubGroups configured yet. Click on the map to add locations.
+                </div>
               </div>
             </div>
 
@@ -950,7 +1004,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           <div id="popup"></div>
 
           <!-- Mouse tooltip -->
-          <div id="mouseTooltip" class="mouse-tooltip">click</div>
+          <div id="mouseTooltip" class="mouse-tooltip">➕ ┃ 🗂️</div>
 
           <!-- Spinner for request status -->
           <div id="spinner-container"

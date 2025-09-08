@@ -195,6 +195,11 @@ function clearCircle(option) {
   recommendedSpecList = [];
   cspPointsCircle = [];
   geoCspPointsCircle = [];
+  
+  // Update SubGroup review panel
+  if (typeof updateSubGroupReview === 'function') {
+    updateSubGroupReview();
+  }
 }
 window.clearCircle = clearCircle;
 
@@ -250,6 +255,108 @@ map.on("singleclick", function (event) {
   writeLatLonInputPair(latLonInputPairIdx, coord[1], coord[0]);
   latLonInputPairIdx++;
 });
+
+// Right-click context menu for MCI control
+map.on("contextmenu", function (event) {
+  event.preventDefault(); // Prevent default browser context menu
+  
+  const coord = event.coordinate;
+  const nearestMci = findNearestMci(coord);
+  
+  if (nearestMci) {
+    showMciContextMenu(event.pixel, nearestMci);
+  }
+});
+
+// Function to find the nearest MCI to clicked coordinates
+function findNearestMci(clickCoord) {
+  let nearestMci = null;
+  let minDistance = Infinity;
+  
+  // Search through all MCI geometries
+  for (let i = 0; i < geometries.length; i++) {
+    if (geometries[i] && mciName[i]) {
+      let mciCoord;
+      
+      // Handle different geometry types
+      if (geometries[i].getType() === 'Point') {
+        mciCoord = geometries[i].getCoordinates();
+      } else if (geometries[i].getType() === 'Polygon') {
+        // For polygon, use centroid
+        const extent = geometries[i].getExtent();
+        mciCoord = [(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2];
+      }
+      
+      if (mciCoord) {
+        // Calculate distance
+        const dx = clickCoord[0] - mciCoord[0];
+        const dy = clickCoord[1] - mciCoord[1];
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestMci = {
+            name: mciName[i],
+            status: mciStatus[i],
+            index: i,
+            distance: distance
+          };
+        }
+      }
+    }
+  }
+  
+  // Only return if MCI is reasonably close (within ~1 degree)
+  return (minDistance < 10.0) ? nearestMci : null;
+}
+
+// Function to show MCI context menu
+function showMciContextMenu(pixel, mciInfo) {
+  // Set the selected MCI in the control panel
+  const mciSelect = document.getElementById('mciid');
+  if (mciSelect) {
+    // Find and select the MCI option
+    for (let option of mciSelect.options) {
+      if (option.value === mciInfo.name) {
+        mciSelect.value = mciInfo.name;
+        // Trigger change event to update dependent fields
+        mciSelect.dispatchEvent(new Event('change'));
+        break;
+      }
+    }
+  }
+  
+  // Show context menu using SweetAlert
+  Swal.fire({
+    title: `🕹️ Control MCI: ${mciInfo.name}`,
+    html: `
+      <div style="text-align: left; margin-bottom: 20px;">
+        <p><strong>Status:</strong> ${mciInfo.status}</p>
+        <p><strong>Distance:</strong> ${mciInfo.distance.toFixed(3)} units</p>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 15px;">
+
+        <button onclick="showActionsMenu(); Swal.close();" class="btn btn-success btn-context">🕹️ Control</button>      
+        <button onclick="statusMCI(); Swal.close();" class="btn btn-success btn-context">📊 Status</button>
+        <button onclick="getAccessInfo(); Swal.close();" class="btn btn-success btn-context">🔑 Access Info</button>
+
+        <button onclick="executeRemoteCmd(); Swal.close();" class="btn btn-warning btn-context">💻 Remote Cmd</button>
+        <button onclick="transferFileToMci(); Swal.close();" class="btn btn-warning btn-context">📁 File Transfer</button>
+        <button onclick="document.querySelector('.save-file').click(); Swal.close();" class="btn btn-warning btn-context">💾 Download Key</button>
+
+        <button onclick="updateFirewallRules(); Swal.close();" class="btn btn-info btn-context">🔥 Firewall</button>
+        <button onclick="executeAction('delete'); Swal.close();" class="btn btn-danger btn-context" style="grid-column: span 2;">🗑️ Delete MCI</button>
+      </div>
+    `,
+    showConfirmButton: false,
+    showCancelButton: true,
+    cancelButtonText: '❌ Close',
+    width: '700px',
+    customClass: {
+      popup: 'swal2-mci-context'
+    }
+  });
+}
 
 // Initialize an object to keep track of the active spinner tasks
 let spinnerStack = {};
@@ -504,18 +611,21 @@ var iconStyleKey = new Style({
 });
 
 addIconToMap("img/circle.png", pnt, "001");
+// Pin emoji style for MCI configuration points
 var iconStyleCircle = new Style({
-  image: new Icon({
-    crossOrigin: "anonymous",
-    src: "img/circle.png",
-    opacity: 1.0,
-
-    anchor: [0.4, 0.4],
-    anchorXUnits: "fraction",
-    anchorYUnits: "fraction",
-    scale: 1.5,
-    //imgSize: [50, 50]
-  }),
+  text: new Text({
+    text: '📍',
+    font: '32px Arial', 
+    fill: new Fill({
+      color: '#ff4444'
+    }),
+    stroke: new Stroke({
+      color: '#ffffff',
+      width: 4
+    }),
+    offsetY: -16, 
+    scale: 1.0   
+  })
 });
 
 // CSP location icon styles
@@ -524,7 +634,6 @@ const cspIconImg = {
   aws: "img/ht-aws.png",
   gcp: "img/ht-gcp.png",
   alibaba: "img/ht-alibaba.png",
-  cloudit: "img/ht-cloudit.png",
   ibm: "img/ibm.png",
   tencent: "img/tencent.png",
   ncp: "img/ncp.png",
@@ -771,7 +880,7 @@ function changeSizeStatus(status) {
 }
 
 // Create VM icon style with status badge and provider icon
-function createVmStyleWithStatusBadge(vmStatus, providerName = null, baseScale = 1.0, vmCoords = null) {
+function createVmStyleWithStatusBadge(vmStatus, providerName = null, baseScale = 1.0, vmCoords = null, commandStatus = "None") {
   const statusColors = getVmStatusColor(vmStatus);
   
   const styles = [
@@ -802,6 +911,32 @@ function createVmStyleWithStatusBadge(vmStatus, providerName = null, baseScale =
       }),
     })
   ];
+
+  // Add command status icon if there are active commands
+  if (commandStatus === "Queued" || commandStatus === "Handling") {
+    // Create gear icon using text symbol
+    const gearSymbol = commandStatus === "Handling" ? "⚡" : "⏳"; // Same gear symbol
+    const rotation = commandStatus === "Handling" ? (Date.now() / 100) % (2 * Math.PI) : 0; // Rotate for Handling
+    
+    styles.push(
+      new Style({
+        text: new Text({
+          text: gearSymbol,
+          font: commandStatus === "Queued" ? '16px sans-serif' : '12px sans-serif', // Larger for Queued
+          fill: new Fill({
+            color: commandStatus === "Handling" ? '#FF6B35' : '#FFB84D', // Orange for Handling, Yellow-orange for Queued
+          }),
+          stroke: new Stroke({
+            color: '#333',
+            width: 0.5,
+          }),
+          offsetX: 8, // Reduced radius - smaller circular motion
+          offsetY: -2, // Adjusted Y offset proportionally
+          rotation: rotation, // Animate rotation for Handling
+        }),
+      })
+    );
+  }
 
   // Add provider icon if provider information is available (center-top using anchor)
   if (providerName && providerName !== 'unknown') {
@@ -908,19 +1043,20 @@ function makeTria(ip1, ip2, ip3) {
   //cnt++;
 }
 
-function makePolyDot(vmPoints, vmStatuses = [], vmProviders = []) {
+function makePolyDot(vmPoints, vmStatuses = [], vmProviders = [], vmCommandStatuses = []) {
   var resourcePoints = [];
 
   for (i = 0; i < vmPoints.length; i++) {
     resourcePoints.push(vmPoints[i]);
   }
 
-  // Store geometry and VM metadata including provider info in the geometriesPoints
+  // Store geometry and VM metadata including provider info and command status in the geometriesPoints
   geometriesPoints[cnt] = {
     geometry: new MultiPoint(resourcePoints),
     vmPoints: vmPoints,
     vmStatuses: vmStatuses,
-    vmProviders: vmProviders
+    vmProviders: vmProviders,
+    vmCommandStatuses: vmCommandStatuses
   };
 }
 
@@ -1174,8 +1310,8 @@ function handleMciWithoutVms(mciItem, cnt) {
   var topBound = mapExtent[3]; // maximum latitude
   
   // Calculate upper-left position (offset from the edge for better visibility)
-  var edgeLeftOffset = 0.2;
-  var edgeTopOffset = 0.05;
+  var edgeLeftOffset = 0.08;
+  var edgeTopOffset = 0.02;
   var defaultLon = leftBound + (rightBound - leftBound) * edgeLeftOffset;
   var defaultLat = topBound - (topBound - bottomBound) * edgeTopOffset;
 
@@ -1351,6 +1487,7 @@ function getMci() {
               // Store VM-specific data for makePolyDot
               var vmStatuses = [];
               var vmProviders = [];
+              var vmCommandStatuses = []; // Add command status array
               var vmPoints = [];
               
               for (let vmIndex = 0; vmIndex < item.vm.length; vmIndex++) {
@@ -1362,6 +1499,26 @@ function getMci() {
                 }
                 
                 vmStatuses.push(vm.status || "Undefined");
+                
+                // Check command status for "Queued" or "Handling"
+                let commandStatus = "None";
+                if (vm.commandStatus) {
+                  const queuedCmd = vm.commandStatus.find(cmd => cmd.status === "Queued");
+                  const handlingCmd = vm.commandStatus.find(cmd => cmd.status === "Handling");
+                  
+                  if (handlingCmd) {
+                    commandStatus = "Handling"; // Handling has priority over Queued
+                  } else if (queuedCmd) {
+                    commandStatus = "Queued";
+                  }
+                }
+                vmCommandStatuses.push(commandStatus);
+                
+                // Debug: Log command status for first VM
+                if (vmIndex === 0 && vm.commandStatus) {
+                  console.log(`Debug VM ${vm.id || 'unknown'} commandStatus:`, vm.commandStatus);
+                  console.log(`VM ${vm.id} command status:`, commandStatus);
+                }
                 
                 // Extract provider from connectionConfig (full API response)
                 let provider = "unknown";
@@ -1405,7 +1562,7 @@ function getMci() {
               }
 
               //make dots without convexHull - now includes VM status and provider info
-              makePolyDot(vmGeo, vmStatuses, vmProviders);
+              makePolyDot(vmGeo, vmStatuses, vmProviders, vmCommandStatuses);
               vmGeo = convexHull(vmGeo);
 
               mciStatus[cnt] = item.status;
@@ -4550,6 +4707,9 @@ function getRecommendedSpec(idx, latitude, longitude) {
               vmReqeustFromSpecList.push(createMciReqVm);
               recommendedSpecList.push(recommendedSpec);
               
+              // Update SubGroup review panel
+              updateSubGroupReview();
+              
               // Activate provision-tab after successful configuration
               try {
                 // Remove active class from all tabs
@@ -4622,6 +4782,259 @@ function getRecommendedSpec(idx, latitude, longitude) {
 }
 window.getRecommendedSpec = getRecommendedSpec;
 
+// SubGroup Management Functions
+function updateSubGroupReview() {
+  const reviewCard = document.getElementById('mci-review-card');
+  const subgroupList = document.getElementById('subgroup-list');
+  const noSubgroups = document.getElementById('no-subgroups');
+  
+  // Clear existing items
+  subgroupList.innerHTML = '';
+  
+  if (vmReqeustFromSpecList.length === 0) {
+    reviewCard.style.display = 'none';
+    return;
+  }
+  
+  // Show review card
+  reviewCard.style.display = 'block';
+  noSubgroups.style.display = 'none';
+  
+  // Add each SubGroup item
+  vmReqeustFromSpecList.forEach((vm, index) => {
+    const spec = recommendedSpecList[index];
+    const subgroupItem = createSubGroupItem(vm, spec, index);
+    subgroupList.appendChild(subgroupItem);
+  });
+  
+  // Add action buttons at the bottom of the SubGroup list
+  const actionButtonsContainer = document.createElement('div');
+  actionButtonsContainer.className = 'mt-3 pt-3 border-top';
+  actionButtonsContainer.innerHTML = `
+    <div class="d-flex" style="gap: 8px;">
+      <button type="button" onClick="createMci();" class="btn btn-success btn-sm" style="font-size: 0.85rem; padding: 8px 12px; flex: 1;">
+        🚀 Create MCI
+      </button>
+      <button type="button" onClick="clearCircle('clearText');" class="btn btn-outline-secondary btn-sm" style="font-size: 0.85rem; padding: 8px 12px; flex: 0 0 auto; min-width: 80px;">
+        🗑️ Clear
+      </button>
+    </div>
+  `;
+  subgroupList.appendChild(actionButtonsContainer);
+  
+  // Auto-scroll to bottom when new items are added (with safety checks)
+  setTimeout(() => {
+    try {
+      const scrollableColumn = document.querySelector('.scrollable-column');
+      if (scrollableColumn && scrollableColumn.scrollHeight > scrollableColumn.clientHeight) {
+        scrollableColumn.scrollTo({
+          top: scrollableColumn.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
+    } catch (error) {
+      console.log('Auto-scroll failed:', error);
+    }
+  }, 100);
+}
+
+function createSubGroupItem(vm, spec, index) {
+  const item = document.createElement('div');
+  item.className = 'list-group-item p-2 mb-2 border rounded';
+  item.style.backgroundColor = '#f8f9fa';
+  
+  const providerColor = getProviderColor(spec?.providerName);
+  
+  item.innerHTML = `
+    <div class="d-flex align-items-start justify-content-between">
+      <div class="flex-grow-1" style="min-width: 0;">
+        <div class="d-flex align-items-center mb-1 flex-wrap">
+          <span class="badge badge-primary mr-2" style="font-size: 0.75rem;">${vm.name || `SubGroup-${index + 1}`}</span>
+          <span class="badge mr-2" style="background-color: ${providerColor}; color: white; font-size: 0.7rem;">
+            ${spec?.providerName || 'Unknown'} - ${spec?.regionName || 'Unknown Region'}
+          </span>
+          <span class="badge badge-secondary mr-2" style="font-size: 0.75rem; font-weight: bold;">
+            💻 ${vm.subGroupSize}
+          </span>
+        </div>
+        <div class="small text-muted" style="font-size: 0.7rem; line-height: 1.2;">
+          <div style="margin-bottom: 2px;"><strong>Spec:</strong> ${spec?.cspSpecName || vm.specId}</div>
+          <div style="margin-bottom: 2px;"><strong>Image:</strong> ${vm.imageId}</div>
+          <div><strong>vCPU:</strong> ${spec?.vCPU || 'N/A'} | <strong>Memory:</strong> ${spec?.memoryGiB || 'N/A'}GB | <strong>Cost:</strong> $${spec?.costPerHour || 'N/A'}/h</div>
+        </div>
+      </div>
+      <div class="d-flex flex-column ml-2" style="gap: 2px;">
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editSubGroup(${index})" title="Edit" style="width: 28px; height: 28px; padding: 2px; font-size: 0.7rem;">
+          ✏️
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeSubGroup(${index})" title="Remove" style="width: 28px; height: 28px; padding: 2px; font-size: 0.7rem;">
+          🗑️
+        </button>
+      </div>
+    </div>
+  `;
+  
+  return item;
+}
+
+function getProviderColor(provider) {
+  const definedColors = {
+    'aws': '#FF9900',
+    'azure': '#0078D4',
+    'gcp': '#4285F4',
+    'alibaba': '#FF6A00',
+    'ibm': '#1261FE',
+    'tencent': '#006EFF',
+    'ncp': '#03C75A',
+    'kt': '#E31837',
+    'nhn': '#FF6B35'
+  };
+  
+  if (!provider) return '#6c757d';
+  
+  const providerKey = provider.toLowerCase();
+  
+  if (definedColors[providerKey]) {
+    return definedColors[providerKey];
+  }
+  
+  return generateProviderColor(provider);
+}
+
+// Generate a consistent color for unknown providers based on provider name
+function generateProviderColor(provider) {
+  if (!provider) return '#6c757d';
+  
+  // Simple hash function to generate consistent colors
+  let hash = 0;
+  const str = provider.toLowerCase();
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  
+  // Generate a color from the hash
+  const hue = Math.abs(hash) % 360;
+  const saturation = 60 + (Math.abs(hash >> 8) % 40); // 60-100%
+  const lightness = 40 + (Math.abs(hash >> 16) % 20); // 40-60%
+  
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+}
+
+function editSubGroup(index) {
+  const vm = vmReqeustFromSpecList[index];
+  const spec = recommendedSpecList[index];
+  
+  Swal.fire({
+    title: `✏️ Edit ${vm.name || `SubGroup-${index + 1}`}`,
+    html: `
+      <div class="text-left">
+        <div class="form-group">
+          <label>SubGroup Name:</label>
+          <input type="text" id="edit-name" class="form-control" value="${vm.name}" placeholder="SubGroup Name">
+        </div>
+        <div class="form-group">
+          <label>VM Count:</label>
+          <input type="number" id="edit-count" class="form-control" value="${vm.subGroupSize}" min="1" max="100">
+        </div>
+        <div class="form-group">
+          <label>Root Disk Size:</label>
+          <input type="text" id="edit-disk" class="form-control" value="${vm.rootDiskSize}" placeholder="default or size in GB">
+        </div>
+        <div class="form-group">
+          <label>Labels (key=value, comma separated):</label>
+          <input type="text" id="edit-labels" class="form-control" value="${vm.label ? Object.entries(vm.label).map(([k,v]) => `${k}=${v}`).join(', ') : ''}" placeholder="env=prod, team=dev">
+        </div>
+      </div>
+    `,
+    showCancelButton: true,
+    confirmButtonText: 'Save Changes',
+    cancelButtonText: 'Cancel',
+    preConfirm: () => {
+      const name = document.getElementById('edit-name').value.trim();
+      const count = parseInt(document.getElementById('edit-count').value);
+      const disk = document.getElementById('edit-disk').value.trim();
+      const labelsText = document.getElementById('edit-labels').value.trim();
+      
+      if (!name || isNaN(count) || count < 1) {
+        Swal.showValidationMessage('Please provide valid name and VM count');
+        return false;
+      }
+      
+      // Parse labels
+      const labels = {};
+      if (labelsText) {
+        labelsText.split(',').forEach(pair => {
+          const [key, value] = pair.trim().split('=');
+          if (key && value) {
+            labels[key.trim()] = value.trim();
+          }
+        });
+      }
+      
+      return { name, count, disk: disk || 'default', labels };
+    }
+  }).then((result) => {
+    if (result.isConfirmed) {
+      // Update the VM configuration
+      vmReqeustFromSpecList[index].name = result.value.name;
+      vmReqeustFromSpecList[index].subGroupSize = result.value.count.toString();
+      vmReqeustFromSpecList[index].rootDiskSize = result.value.disk;
+      if (Object.keys(result.value.labels).length > 0) {
+        vmReqeustFromSpecList[index].label = result.value.labels;
+      } else {
+        delete vmReqeustFromSpecList[index].label;
+      }
+      
+      updateSubGroupReview();
+      successAlert('SubGroup updated successfully!');
+    }
+  });
+}
+
+function removeSubGroup(index) {
+  const vm = vmReqeustFromSpecList[index];
+  
+  Swal.fire({
+    title: 'Remove SubGroup?',
+    text: `Are you sure you want to remove "${vm.name || `SubGroup-${index + 1}`}"?`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Yes, Remove',
+    cancelButtonText: 'Cancel',
+    confirmButtonColor: '#dc3545'
+  }).then((result) => {
+    if (result.isConfirmed) {
+      // Remove from arrays
+      vmReqeustFromSpecList.splice(index, 1);
+      recommendedSpecList.splice(index, 1);
+      
+      // Remove corresponding coordinate point
+      if (cspPointsCircle.length > index) {
+        cspPointsCircle.splice(index, 1);
+        if (cspPointsCircle.length > 0) {
+          geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+        } else {
+          geoCspPointsCircle = [];
+        }
+      }
+      
+      // Decrease the index counter
+      if (latLonInputPairIdx > 0) {
+        latLonInputPairIdx--;
+      }
+      
+      updateSubGroupReview();
+      successAlert('SubGroup removed successfully!');
+    }
+  });
+}
+
+// Make functions available globally
+window.updateSubGroupReview = updateSubGroupReview;
+window.editSubGroup = editSubGroup;
+window.removeSubGroup = removeSubGroup;
 
 function range_change(obj) {
   document.getElementById("myvalue").value = obj.value;
@@ -9091,7 +9504,7 @@ function drawObjects(event) {
     // Check if geometryPoint has the new structure with VM data
     if (geometryPoint && typeof geometryPoint === 'object' && geometryPoint.geometry) {
       // New structure: Draw individual VMs with status badges and provider icons
-      const { geometry, vmPoints, vmStatuses, vmProviders } = geometryPoint;
+      const { geometry, vmPoints, vmStatuses, vmProviders, vmCommandStatuses } = geometryPoint;
       const vmBaseScale = changeSizeStatus(mciName[i] + mciStatus[i]);
       
       // Draw individual VM icons with status badges and provider icons
@@ -9100,7 +9513,8 @@ function drawObjects(event) {
           if (vmPoints[vmIndex]) {
             const vmCoords = vmPoints[vmIndex];
             const vmProvider = vmProviders ? vmProviders[vmIndex] : null;
-            const vmStyles = createVmStyleWithStatusBadge(vmStatus, vmProvider, vmBaseScale, vmCoords);
+            const commandStatus = vmCommandStatuses ? vmCommandStatuses[vmIndex] : "None";
+            const vmStyles = createVmStyleWithStatusBadge(vmStatus, vmProvider, vmBaseScale, vmCoords, commandStatus);
             
             // Test displacement approach - apply all styles to same geometry
             const vmPoint = new Point(vmCoords);
