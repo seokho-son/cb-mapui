@@ -82,6 +82,35 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       min-width: 400px;
       min-height: 300px;
       box-sizing: border-box;
+      cursor: crosshair;
+    }
+
+    /* Mouse tooltip */
+    .mouse-tooltip {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.95);
+      color: #333;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-size: 13px;
+      font-weight: 500;
+      pointer-events: none;
+      z-index: 10000;
+      display: none;
+      transform: translate(-50%, 100%);
+      margin-top: 2px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .mouse-tooltip::before {
+      content: '';
+      position: absolute;
+      top: -3px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 3px solid transparent;
+      border-right: 3px solid transparent;
+      border-bottom: 3px solid rgba(255, 255, 255, 0.95);
     }
 
     body {
@@ -920,6 +949,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         <div id="map" class="map" style="display:block;">
           <div id="popup"></div>
 
+          <!-- Mouse tooltip -->
+          <div id="mouseTooltip" class="mouse-tooltip">click</div>
+
           <!-- Spinner for request status -->
           <div id="spinner-container"
             style="display: none; position: absolute; bottom: 10px; left: 20px; z-index: 1000; align-items: center;">
@@ -1027,6 +1059,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               window.map.updateSize();
             }, 100);
           }
+          
+          // Update cached rect when layout changes
+          if (window.cachedMapRect !== undefined) {
+            window.cachedMapRect = mapContainer.getBoundingClientRect();
+          }
         }
       }
 
@@ -1062,6 +1099,43 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             }
           });
         });
+      });
+
+      // Simple drag detection for map cursor with tooltip
+      const map = document.getElementById('map');
+      const tooltip = document.getElementById('mouseTooltip');
+      let isMouseDown = false;
+      window.cachedMapRect = map.getBoundingClientRect(); // Cache the rect globally
+      
+      map.addEventListener('mouseenter', () => tooltip.style.display = 'block');
+      map.addEventListener('mouseleave', () => { 
+        isMouseDown = false; 
+        map.style.cursor = 'crosshair'; 
+        tooltip.style.display = 'none';
+      });
+      
+      map.addEventListener('mousemove', (e) => {
+        // Update tooltip position using cached rect
+        tooltip.style.left = (e.clientX - window.cachedMapRect.left) + 'px';
+        tooltip.style.top = (e.clientY - window.cachedMapRect.top) + 'px';
+        
+        // Update cursor and tooltip visibility if dragging
+        if (isMouseDown) {
+          map.style.cursor = 'grabbing';
+          tooltip.style.display = 'none';
+        }
+      });
+      
+      map.addEventListener('mousedown', () => { 
+        isMouseDown = true; 
+        map.style.cursor = 'none'; 
+        tooltip.style.display = 'none';
+      });
+      
+      map.addEventListener('mouseup', () => { 
+        isMouseDown = false; 
+        map.style.cursor = 'crosshair'; 
+        tooltip.style.display = 'block';
       });
 
     </script>
