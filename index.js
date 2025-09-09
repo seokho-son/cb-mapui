@@ -273,6 +273,9 @@ function findNearestMci(clickCoord) {
   let nearestMci = null;
   let minDistance = Infinity;
   
+  // Convert click coordinate to pixel coordinate for easier calculation
+  const clickPixel = map.getPixelFromCoordinate(clickCoord);
+  
   // Search through all MCI geometries
   for (let i = 0; i < geometries.length; i++) {
     if (geometries[i] && mciName[i]) {
@@ -288,9 +291,22 @@ function findNearestMci(clickCoord) {
       }
       
       if (mciCoord) {
-        // Calculate distance
-        const dx = clickCoord[0] - mciCoord[0];
-        const dy = clickCoord[1] - mciCoord[1];
+        // Convert MCI coordinate to pixel coordinate
+        const mciPixel = map.getPixelFromCoordinate(mciCoord);
+        
+        // Calculate text position in pixels (same calculation as in drawObjects)
+        const nameLines = splitMciNameToLines(mciName[i]);
+        const baseScale = changeSizeByName(mciName[i] + mciStatus[i]) + 0.1;
+        const baseOffsetY = 32 * changeSizeByName(mciName[i] + mciStatus[i]);
+        const lineHeight = 12 * baseScale;
+        
+        // Calculate the center of the text block
+        const textCenterY = mciPixel[1] + baseOffsetY + (nameLines.length * lineHeight / 2);
+        const textPixel = [mciPixel[0], textCenterY];
+        
+        // Calculate distance in pixels
+        const dx = clickPixel[0] - textPixel[0];
+        const dy = clickPixel[1] - textPixel[1];
         const distance = Math.sqrt(dx * dx + dy * dy);
         
         if (distance < minDistance) {
@@ -306,8 +322,8 @@ function findNearestMci(clickCoord) {
     }
   }
   
-  // Only return if MCI is reasonably close (within ~1 degree)
-  return (minDistance < 10.0) ? nearestMci : null;
+  // Only return if MCI is reasonably close (within 100 pixels)
+  return (minDistance < 100) ? nearestMci : null;
 }
 
 // Function to show MCI context menu
@@ -899,7 +915,7 @@ function createVmStyleWithStatusBadge(vmStatus, providerName = null, baseScale =
     // Status badge (bottom-right using displacement)
     new Style({
       image: new CircleStyle({
-        radius: 3,
+        radius: 4,
         fill: new Fill({
           color: statusColors.fill,
         }),
@@ -4740,7 +4756,11 @@ function getRecommendedSpec(idx, latitude, longitude) {
               console.log("VM configuration failed for this location");
               latLonInputPairIdx--;
               cspPointsCircle.pop();
-              geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+              if (cspPointsCircle.length > 0) {
+                geoCspPointsCircle[0] = new MultiPoint(cspPointsCircle);
+              } else {
+                geoCspPointsCircle = [];
+              }
             }
           });
             } else {
@@ -4748,7 +4768,11 @@ function getRecommendedSpec(idx, latitude, longitude) {
               console.log("Image selection canceled");
               latLonInputPairIdx--;
               cspPointsCircle.pop();
-              geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+              if (cspPointsCircle.length > 0) {
+                geoCspPointsCircle[0] = new MultiPoint(cspPointsCircle);
+              } else {
+                geoCspPointsCircle = [];
+              }
             }
           });
         }).catch(error => {
@@ -4759,7 +4783,11 @@ function getRecommendedSpec(idx, latitude, longitude) {
         console.log("Spec selection canceled");
         latLonInputPairIdx--;
         cspPointsCircle.pop();
-        geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+        if (cspPointsCircle.length > 0) {
+          geoCspPointsCircle[0] = new MultiPoint(cspPointsCircle);
+        } else {
+          geoCspPointsCircle = [];
+        }
         return;
       }
     }).catch(function (error) {
@@ -4810,14 +4838,25 @@ function updateSubGroupReview() {
   // Add action buttons at the bottom of the SubGroup list
   const actionButtonsContainer = document.createElement('div');
   actionButtonsContainer.className = 'mt-3 pt-3 border-top';
+  
+  // Check if only one SubGroup exists to enable Append SubGroup button
+  const hasOneSubGroup = vmReqeustFromSpecList.length === 1;
+  
   actionButtonsContainer.innerHTML = `
-    <div class="d-flex" style="gap: 8px;">
-      <button type="button" onClick="createMci();" class="btn btn-success btn-sm" style="font-size: 0.85rem; padding: 8px 12px; flex: 1;">
+    <div class="d-flex flex-column" style="gap: 8px;">
+      <button type="button" onClick="createMci();" class="btn btn-success btn-sm" style="font-size: 0.85rem; padding: 8px 12px;">
         🚀 Create MCI
       </button>
-      <button type="button" onClick="clearCircle('clearText');" class="btn btn-outline-secondary btn-sm" style="font-size: 0.85rem; padding: 8px 12px; flex: 0 0 auto; min-width: 80px;">
-        🗑️ Clear
-      </button>
+      <div class="d-flex" style="gap: 4px;">
+        <button type="button" onClick="scaleOutMciWithConfiguration();" class="btn btn-info btn-sm ${!hasOneSubGroup ? 'disabled' : ''}" 
+                style="font-size: 0.75rem; padding: 6px 8px; flex: 1;" ${!hasOneSubGroup ? 'disabled' : ''}>
+          ➕ ScaleOut existing MCI
+        </button>
+        <button type="button" onClick="clearCircle('clearText');" class="btn btn-outline-secondary btn-sm" 
+                style="font-size: 0.7rem; padding: 6px 8px; min-width: 60px;">
+          🗑️
+        </button>
+      </div>
     </div>
   `;
   subgroupList.appendChild(actionButtonsContainer);
@@ -5014,7 +5053,7 @@ function removeSubGroup(index) {
       if (cspPointsCircle.length > index) {
         cspPointsCircle.splice(index, 1);
         if (cspPointsCircle.length > 0) {
-          geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+          geoCspPointsCircle[0] = new MultiPoint(cspPointsCircle);
         } else {
           geoCspPointsCircle = [];
         }
@@ -5026,7 +5065,7 @@ function removeSubGroup(index) {
       }
       
       updateSubGroupReview();
-      successAlert('SubGroup removed successfully!');
+      // successAlert('SubGroup removed successfully!');
     }
   });
 }
@@ -5128,7 +5167,7 @@ function addRegionMarker(spec) {
         res2.data.regionDetail.location.longitude,
         res2.data.regionDetail.location.latitude,
       ]);
-      geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+      geoCspPointsCircle[0] = new MultiPoint(cspPointsCircle);
     });
   });
 }
@@ -9348,6 +9387,33 @@ function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, 
       displayJsonData(res.data, typeInfo);
       handleAxiosResponse(res);
       
+      // Switch to Control tab after successful scale out (like createMci)
+      try {
+        // Deactivate all tabs first
+        document.querySelectorAll('.nav-link').forEach(tab => {
+          tab.classList.remove('active');
+        });
+        document.querySelectorAll('.tab-pane').forEach(pane => {
+          pane.classList.remove('show', 'active');
+        });
+        
+        // Activate control-tab
+        const controlTab = document.getElementById('control-tab');
+        const controlPane = document.getElementById('control');
+        
+        if (controlTab && controlPane) {
+          controlTab.classList.add('active');
+          controlPane.classList.add('show', 'active');
+          
+          // Trigger Bootstrap tab shown event if needed
+          if (typeof $ !== 'undefined' && $.fn.tab) {
+            $(controlTab).tab('show');
+          }
+        }
+      } catch (error) {
+        console.log('Failed to activate control tab:', error);
+      }
+      
       console.log(`Successfully added VMs to MCI ${mciId}`);
       
       Swal.fire({
@@ -9364,6 +9430,9 @@ function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, 
           "</div>",
         confirmButtonText: "OK"
       });
+      
+      // Clear MCI configuration pins and settings after successful scale out (like createMci)
+      clearCircle("none");
       
       // Refresh MCI status after scale out
       setTimeout(() => {
@@ -9466,9 +9535,43 @@ function drawObjects(event) {
 
   if (cspPointsCircle.length) {
     //console.log("cspPointsCircle.length:" +cspPointsCircle.length + "cspPointsCircle["+cspPointsCircle+"]")
-    //geoCspPointsCircle[0] = new MultiPoint([cspPointsCircle]);
+    // Fix: Create MultiPoint with proper coordinate structure
+    geoCspPointsCircle[0] = new MultiPoint(cspPointsCircle);
     vectorContext.setStyle(iconStyleCircle);
     vectorContext.drawGeometry(geoCspPointsCircle[0]);
+    
+    // Draw convex hull polygon for configuration points (like existing MCI VMs)
+    if (cspPointsCircle.length >= 3) {
+      // Create deep copy to avoid modifying original array (convexHull sorts input)
+      const pointsCopy = cspPointsCircle.map(point => [point[0], point[1]]);
+      
+      // Debug: log points before convex hull
+      console.log("Original points:", cspPointsCircle);
+      console.log("Points copy:", pointsCopy);
+      
+      const hullPoints = convexHull(pointsCopy);
+      
+      // Debug: log hull result
+      console.log("Hull points:", hullPoints);
+      
+      if (hullPoints.length >= 3) {
+        // Ensure the polygon is closed by adding the first point at the end
+        const closedHull = [...hullPoints, hullPoints[0]];
+        const configPolygon = new Polygon([closedHull]);
+        const configPolyStyle = new Style({
+          stroke: new Stroke({
+            width: 2,
+            color: [169, 169, 169, 0.8], // Light gray with transparency
+            lineDash: [5, 5] // Dashed line for config state
+          }),
+          fill: new Fill({
+            color: [192, 192, 192, 0.1], // Very light gray fill
+          }),
+        });
+        vectorContext.setStyle(configPolyStyle);
+        vectorContext.drawGeometry(configPolygon);
+      }
+    }
   }
 
   if (geoResourceLocation.vnet[0]) {
