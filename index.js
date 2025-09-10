@@ -265,6 +265,44 @@ map.on("contextmenu", function (event) {
   
   if (nearestMci) {
     showMciContextMenu(event.pixel, nearestMci);
+  } else {
+    // Show message when no MCI is found nearby
+    Swal.fire({
+      icon: 'info',
+      title: 'Right-click Menu: No MC-Infra Selected!',
+      text: 'Right-click near a MCI Name to open the Menu.',
+      toast: true,
+      position: 'top-end',
+      showConfirmButton: false,
+      timer: 3000,
+      timerProgressBar: true
+    });
+  }
+});
+
+// Mouse hover effect to show when MCI is selectable
+map.on("pointermove", function (event) {
+  const coord = event.coordinate;
+  const nearestMci = findNearestMci(coord);
+  const mapElement = map.getTargetElement();
+  const tooltip = document.getElementById('mouseTooltip');
+  
+  if (nearestMci) {
+    // Change cursor to pointer when MCI is nearby
+    mapElement.style.cursor = 'pointer';
+    
+    // Update tooltip to show MCI name and hint
+    if (tooltip) {
+      tooltip.innerHTML = `➕ ┃ 🕹️ ${nearestMci.name}`;
+    }
+  } else {
+    // Reset cursor to default crosshair
+    mapElement.style.cursor = 'crosshair';
+    
+    // Reset tooltip to original content
+    if (tooltip) {
+      tooltip.innerHTML = '➕ ┃ 🕹️';
+    }
   }
 });
 
@@ -360,8 +398,10 @@ function showMciContextMenu(pixel, mciInfo) {
         <button onclick="transferFileToMci(); Swal.close();" class="btn btn-warning btn-context">📁 File Transfer</button>
         <button onclick="document.querySelector('.save-file').click(); Swal.close();" class="btn btn-warning btn-context">💾 Download Key</button>
 
+        <button onclick="scaleOutMciFromContext('` + mciInfo.name + `'); Swal.close();" class="btn btn-primary btn-context">⬆️ Scale Out</button>
+        <button onclick="manageNLB(); Swal.close();" class="btn btn-info btn-context">⚖️ NLB</button>
         <button onclick="updateFirewallRules(); Swal.close();" class="btn btn-info btn-context">🔥 Firewall</button>
-        <button onclick="executeAction('delete'); Swal.close();" class="btn btn-danger btn-context" style="grid-column: span 2;">🗑️ Delete MCI</button>
+        <button onclick="executeAction('delete'); Swal.close();" class="btn btn-danger btn-context" style="grid-column: span 3;">🗑️ Delete MCI</button>
       </div>
     `,
     showConfirmButton: false,
@@ -5701,9 +5741,7 @@ function updateMciList() {
         }
       })
       .finally(function () {
-        updateSubGroupList();
-        updateVmList();
-        updateIpList();
+        updateVmAndIpListsFromMci();
         updateResourceList(typeStringVNet);
         updateResourceList(typeStringSG);
         updateResourceList(typeStringSshKey);
@@ -5718,132 +5756,57 @@ document.getElementById("mciid").onmouseover = function () {
   updateMciList();
 };
 document.getElementById("mciid").onchange = function () {
-  updateSubGroupList();
+  updateVmAndIpListsFromMci();
 };
 
 function updateVmList() {
-  // Clear options in 'select'
-  var selectElement = document.getElementById("vmid");
-  var previousSelection = selectElement.value;
-  var i,
-    L = selectElement.options.length - 1;
-  for (i = L; i >= 0; i--) {
-    selectElement.remove(i);
-  }
-
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
-  var namespace = namespaceElement.value;
-  var mciid = mciidElement.value;
-  var subgroupid = document.getElementById("subgroupid").value;
-
-  if (namespace && namespace != "" && mciid && mciid != "" && subgroupid && subgroupid != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/subgroup/${subgroupid}`;
-
-    axios({
-      method: "get",
-      url: url,
-      auth: {
-        username: `${username}`,
-        password: `${password}`,
-      },
-    })
-      .then((res) => {
-        if (res.data.output != null) {
-          for (let item of res.data.output) {
-            if (item && item.trim() !== "") {
-              var option = document.createElement("option");
-              option.value = item;
-              option.text = item;
-              selectElement.appendChild(option);
-            }
-          }
-          for (let i = 0; i < selectElement.options.length; i++) {
-            if (selectElement.options[i].value == previousSelection) {
-              selectElement.options[i].selected = true;
-              break;
-            }
-          }
-        }
-      })
-      .finally(function () {
-
-      });
-  } else {
-    // clear public ip
-    var pubip = document.getElementById("pubip");
-    while (pubip.options.length > 0) {
-      pubip.remove(0);
-    }
-  }
+  // This function is now deprecated as VM list is updated via updateVmAndIpListsFromMci()
+  // Keeping for backward compatibility, but functionality moved to unified function
 }
 window.updateVmList = updateVmList;
 
-document.getElementById("vmid").onmouseover = function () {
-  updateVmList();
-};
 document.getElementById("vmid").addEventListener('change', function () {
-  updateIpList();
+  // When VM is selected, auto-select corresponding IP
+  var selectedVmId = this.value;
+  var pubipSelect = document.getElementById("pubip");
+  
+  // Find and select the IP option that contains this VM ID
+  for (let i = 0; i < pubipSelect.options.length; i++) {
+    var optionText = pubipSelect.options[i].text;
+    if (optionText.includes(`(${selectedVmId},`)) {
+      pubipSelect.options[i].selected = true;
+      break;
+    }
+  }
 });
 
 function updateIpList() {
-  var pubip = document.getElementById("pubip");
-
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
-  var namespace = namespaceElement.value;
-  var mciid = mciidElement.value;
-  var groupid = document.getElementById("subgroupid").value;
-  var vmid = document.getElementById("vmid").value;
-
-  if (namespace && namespace != "" && mciid && mciid != "" && subgroupid && subgroupid != "" && vmid && vmid != "") {
-    while (pubip.options.length > 0) {
-      pubip.remove(0);
-    }
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=accessinfo`;
-
-    axios({
-      method: "get",
-      url: url,
-      auth: {
-        username: `${username}`,
-        password: `${password}`,
-      },
-    }).then((res) => {
-      for (let subGroupAccessInfo of res.data.MciSubGroupAccessInfo) {
-        if (subGroupAccessInfo.SubGroupId == groupid) {
-          for (let vmAccessInfo of subGroupAccessInfo.MciVmAccessInfo) {
-            if (vmAccessInfo.vmId == vmid) {
-              var optionPublicIP = document.createElement("option");
-              optionPublicIP.value = vmAccessInfo.publicIP;
-              optionPublicIP.text = vmAccessInfo.publicIP;
-              pubip.appendChild(optionPublicIP);
-            }
-          }
-        }
-      }
-    });
-  } else {
-    pubip.options.length = 0;
-  }
+  // This function is now deprecated as IP list is updated via updateVmAndIpListsFromMci()
+  // Keeping for backward compatibility, but functionality moved to unified function
 }
 window.updateIpList = updateIpList;
 
-document.getElementById("pubip").onmouseover = function () {
-  updateIpList();
-};
-
 function updateSubGroupList() {
-  var selectElement = document.getElementById("subgroupid");
-  var previousSelection = selectElement.value;
-  var i,
-    L = selectElement.options.length - 1;
-  for (i = L; i >= 0; i--) {
-    selectElement.remove(i);
+  // This function is now deprecated as SubGroup selection is removed from UI
+  // SubGroup information is now shown in VM ID dropdown as "vm-id (subgroup-id)"
+}
+window.updateSubGroupList = updateSubGroupList;
+
+// SubGroup selection element no longer exists in UI
+
+// New unified function to update VM and IP lists from MCI data
+function updateVmAndIpListsFromMci() {
+  var vmSelectElement = document.getElementById("vmid");
+  var ipSelectElement = document.getElementById("pubip");
+  var previousVmSelection = vmSelectElement.value;
+  var previousIpSelection = ipSelectElement.value;
+  
+  // Clear existing options
+  while (vmSelectElement.options.length > 0) {
+    vmSelectElement.remove(0);
+  }
+  while (ipSelectElement.options.length > 0) {
+    ipSelectElement.remove(0);
   }
 
   var hostname = hostnameElement.value;
@@ -5854,7 +5817,7 @@ function updateSubGroupList() {
   var mciid = mciidElement.value;
 
   if (namespace && namespace != "" && mciid && mciid != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/subgroup`;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}`;
 
     axios({
       method: "get",
@@ -5865,34 +5828,58 @@ function updateSubGroupList() {
       },
     })
       .then((res) => {
-        if (res.data.output != null) {
-          // console.log("in updateSubGroupList(); res.data.output: " + res.data.output);
-          for (let item of res.data.output) {
-            if (item && item.trim() !== "") {
-              var option = document.createElement("option");
-              option.value = item;
-              option.text = item;
-              document.getElementById("subgroupid").appendChild(option);
+        if (res.data && res.data.vm) {
+          res.data.vm.forEach(vm => {
+            // Add VM option with SubGroup info
+            var vmOption = document.createElement("option");
+            vmOption.value = vm.id;
+            vmOption.text = `${vm.id} (${vm.subGroupId || 'default'})`;
+            vmSelectElement.appendChild(vmOption);
+
+            // Add IP option with VM and SubGroup info
+            if (vm.publicIP && vm.publicIP.trim() !== "") {
+              var ipOption = document.createElement("option");
+              ipOption.value = vm.publicIP;
+              ipOption.text = `${vm.publicIP} (${vm.id}, ${vm.subGroupId || 'default'})`;
+              ipSelectElement.appendChild(ipOption);
+            }
+          });
+
+          // Restore previous selections if they still exist
+          for (let i = 0; i < vmSelectElement.options.length; i++) {
+            if (vmSelectElement.options[i].value === previousVmSelection) {
+              vmSelectElement.options[i].selected = true;
+              break;
             }
           }
-          for (let i = 0; i < selectElement.options.length; i++) {
-            if (selectElement.options[i].value == previousSelection) {
-              selectElement.options[i].selected = true;
+          for (let i = 0; i < ipSelectElement.options.length; i++) {
+            if (ipSelectElement.options[i].value === previousIpSelection) {
+              ipSelectElement.options[i].selected = true;
               break;
             }
           }
         }
       })
-      .finally(function () {
-        updateVmList();
+      .catch(function (error) {
+        console.error("Error updating VM and IP lists:", error);
       });
   }
 }
-window.updateSubGroupList = updateSubGroupList;
+window.updateVmAndIpListsFromMci = updateVmAndIpListsFromMci;
 
-document.getElementById("subgroupid").onmouseover = function () {
-  updateSubGroupList();
-};
+// Helper function to extract SubGroup ID from VM selection text
+function getSubGroupIdFromVmSelection() {
+  var vmSelect = document.getElementById("vmid");
+  var selectedOption = vmSelect.options[vmSelect.selectedIndex];
+  if (selectedOption && selectedOption.text) {
+    // Extract SubGroup ID from text like "vm-id (subgroup-id)"
+    var match = selectedOption.text.match(/\(([^)]+)\)$/);
+    if (match) {
+      return match[1];
+    }
+  }
+  return "";
+}
 
 function updateResourceList(resourceType) {
   var selectElement = document.getElementById(resourceType);
@@ -6048,8 +6035,7 @@ document.getElementById(typeStringConnection).onmouseover = function () {
 };
 
 function AddMcNLB() {
-  var mciid = document.getElementById("mciid").value;
-  // var nlbport = document.getElementById("nlbport").value;
+  var mciid = mciidElement.value;
 
   if (!mciid) {
     errorAlert("You need to specify the ID of MCI");
@@ -6061,48 +6047,50 @@ function AddMcNLB() {
   var username = usernameElement.value;
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
-  var mciid = mciidElement.value;
+
+  if (!namespace) {
+    errorAlert("Please select a namespace first");
+    return;
+  }
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/mcSwNlb`;
 
   Swal.fire({
-    title: "Configuration for a new NLB",
+    title: "Configuration for Global NLB",
     width: 600,
     html:
-      "<font size=3>" +
-      "Target MCI: <b>" +
-      mciid +
-      "<br></b> Protocol: <b>" +
-      "TCP" +
-      "<br></b> Port (listen/target): <b>",
+      "<div style='text-align: left; margin: 20px;'>" +
+      "<p><b>Global NLB Configuration:</b></p>" +
+      "<p><b>Target MCI:</b> " + mciid + "</p>" +
+      "<p><b>Protocol:</b> TCP</p>" +
+      "<hr>" +
+      "<p><b>Port (listen/target):</b></p>" +
+      "</div>",
     input: "number",
     inputValue: 80,
     didOpen: () => {
       const input = Swal.getInput();
-      //input.setSelectionRange(0, input.value.length)
+      if (input) {
+        input.focus();
+        input.select();
+      }
     },
     inputAttributes: {
       autocapitalize: "off",
     },
     showCancelButton: true,
-    confirmButtonText: "Confirm",
-    //showLoaderOnConfirm: true,
+    confirmButtonText: "Create Global NLB",
+    confirmButtonColor: "#28a745",
     position: "top-end",
-    //back(disabled section)ground color
     backdrop: `rgba(0, 0, 0, 0.08)`,
   }).then((result) => {
-    // result.value is false if result.isDenied or another key such as result.isDismissed
     if (result.value) {
-      infoAlert("Creating MC-NLB(special MCI) to : " + mciid);
-      console.log(" Creating Multi-Cloud NLB (special MCI)");
-      var spinnerId = addSpinnerTask(
-        "Creating MC-NLB(special MCI) to : " + mciid
-      );
-
       var nlbport = result.value;
       if (isNaN(nlbport) || nlbport <= 0) {
         nlbport = 80;
       }
+
+      var spinnerId = addSpinnerTask("Creating Global NLB");
 
       var nlbReqTmp = {
         type: "PUBLIC",
@@ -6114,7 +6102,6 @@ function AddMcNLB() {
         targetGroup: {
           Protocol: "TCP",
           Port: `${nlbport}`,
-          // subGroupId: `${subgroupid}`,
         },
         HealthChecker: {
           Interval: "default",
@@ -6122,41 +6109,27 @@ function AddMcNLB() {
           Threshold: "default",
         },
       };
-      var jsonBody = JSON.stringify(nlbReqTmp, undefined, 4);
 
       axios({
         method: "post",
         url: url,
         headers: { "Content-Type": "application/json" },
-        data: jsonBody,
+        data: JSON.stringify(nlbReqTmp, undefined, 4),
         auth: {
           username: `${username}`,
           password: `${password}`,
         },
       })
         .then((res) => {
-          console.log(res); // for debug
-          displayJsonData(res.data, typeInfo);
+          successAlert("Global NLB created successfully");
+          getMci();
         })
         .catch(function (error) {
-          if (error.response) {
-            // status code is not 2xx
-            console.log(error.response.data);
-            console.log(error.response.status);
-            console.log(error.response.headers);
-          } else {
-            console.log("Error", error.message);
-          }
-          console.log(error.config);
-
-          errorAlert(
-            JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, "")
-          );
+          errorAlert("Error creating Global NLB: " + (error.response?.data?.message || error.message));
         })
         .finally(function () {
           removeSpinnerTask(spinnerId);
         });
-    } else {
     }
   });
 }
@@ -6169,115 +6142,156 @@ function AddNLB() {
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
-  var subgroupid = document.getElementById("subgroupid").value;
-  // var nlbport = document.getElementById("nlbport").value;
 
   if (!mciid) {
-    console.log(
-      "When calling AddNLB(), you must specify the mciid."
-    );
+    errorAlert("You need to specify the ID of MCI");
+    return;
   }
 
-  if (!subgroupid) {
-    console.log(
-      "When calling AddNLB(), you must specify the subgroupid."
-    );
+  if (!namespace) {
+    errorAlert("Please select a namespace first");
+    return;
   }
 
-  console.log(" Creating NLB " + subgroupid);
+  // Load SubGroup list for selection
+  var subGroupUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/subgroup`;
+  var spinnerId = addSpinnerTask("Loading SubGroup list");
 
+  axios({
+    method: "get",
+    url: subGroupUrl,
+    auth: {
+      username: `${username}`,
+      password: `${password}`,
+    },
+    timeout: 30000,
+  })
+    .then((res) => {
+      var subGroupOptions = '';
+      
+      if (res.data.output && res.data.output.length > 0) {
+        res.data.output.forEach((subGroupName) => {
+          if (subGroupName && subGroupName.trim() !== "") {
+            subGroupOptions += `<option value="${subGroupName}">${subGroupName}</option>`;
+          }
+        });
+
+        // Show SubGroup selection dialog with port configuration
+        Swal.fire({
+          title: "Create Regional NLB",
+          width: 600,
+          html:
+            "<div style='text-align: left; margin: 20px;'>" +
+            "<p><b>Regional NLB Configuration:</b></p>" +
+            "<p><b>Target MCI:</b> " + mciid + "</p>" +
+            "<hr>" +
+            "<div class='form-group' style='margin-bottom: 20px;'>" +
+            "<label for='subgroup-select'><b>Available SubGroups:</b></label>" +
+            "<select id='subgroup-select' class='form-control' style='margin-top: 10px;'>" +
+            "<option value=''>-- Select SubGroup --</option>" +
+            subGroupOptions +
+            "</select>" +
+            "</div>" +
+            "<div class='form-group'>" +
+            "<label for='nlb-port'><b>Port (listen/target):</b></label>" +
+            "<input type='number' id='nlb-port' class='form-control' value='80' min='1' max='65535' style='margin-top: 10px;'>" +
+            "<small class='form-text text-muted'>TCP protocol will be used</small>" +
+            "</div>" +
+            "</div>",
+          showCancelButton: true,
+          confirmButtonText: "Create Regional NLB",
+          cancelButtonText: "Cancel",
+          confirmButtonColor: "#17a2b8",
+          position: "top-end",
+          backdrop: `rgba(0, 0, 0, 0.08)`,
+          didOpen: () => {
+            // Focus on port input after dialog opens
+            const portInput = document.getElementById('nlb-port');
+            if (portInput) {
+              portInput.focus();
+              portInput.select();
+            }
+          },
+          preConfirm: () => {
+            const selectedSubGroup = document.getElementById('subgroup-select').value;
+            const nlbPort = document.getElementById('nlb-port').value;
+            
+            if (!selectedSubGroup) {
+              Swal.showValidationMessage('Please select a SubGroup');
+              return false;
+            }
+            
+            if (!nlbPort || isNaN(nlbPort) || nlbPort <= 0 || nlbPort > 65535) {
+              Swal.showValidationMessage('Please enter a valid port number (1-65535)');
+              return false;
+            }
+            
+            return { subGroup: selectedSubGroup, port: parseInt(nlbPort) };
+          }
+        }).then((result) => {
+          if (result.isConfirmed) {
+            createRegionalNLB(mciid, result.value.subGroup, result.value.port, namespace, hostname, port, username, password);
+          }
+        });
+      } else {
+        errorAlert("No SubGroups found in the selected MCI");
+      }
+    })
+    .catch(function (error) {
+      errorAlert("Error loading SubGroups: " + (error.response?.data?.message || error.message));
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
+}
+
+// Create Regional NLB with selected SubGroup and port
+function createRegionalNLB(mciid, subgroupid, nlbport, namespace, hostname, port, username, password) {
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/nlb`;
 
-  Swal.fire({
-    title: "Configuration for a new NLB",
-    width: 600,
-    html:
-      "<font size=3>" +
-      "Target MCI: <b>" +
-      mciid +
-      "<br></b> Target SubGroup: <b>" +
-      subgroupid +
-      "<br></b> Protocol: <b>" +
-      "TCP" +
-      "<br></b> Port (listen/target): <b>",
-    input: "number",
-    inputValue: 80,
-    didOpen: () => {
-      const input = Swal.getInput();
-      //input.setSelectionRange(0, input.value.length)
+  var nlbReqTmp = {
+    type: "PUBLIC",
+    scope: "REGION",
+    listener: {
+      Protocol: "TCP",
+      Port: `${nlbport}`,
     },
-    inputAttributes: {
-      autocapitalize: "off",
+    targetGroup: {
+      Protocol: "TCP",
+      Port: `${nlbport}`,
+      subGroupId: `${subgroupid}`,
     },
-    showCancelButton: true,
-    confirmButtonText: "Confirm",
-    //showLoaderOnConfirm: true,
-    position: "top-end",
-    //back(disabled section)ground color
-    backdrop: `rgba(0, 0, 0, 0.08)`,
-  }).then((result) => {
-    // result.value is false if result.isDenied or another key such as result.isDismissed
-    if (result.value) {
-      var nlbport = result.value;
-      if (isNaN(nlbport) || nlbport <= 0) {
-        nlbport = 80;
-      }
+    HealthChecker: {
+      Interval: "default",
+      Timeout: "default",
+      Threshold: "default",
+    },
+  };
 
-      var nlbReqTmp = {
-        type: "PUBLIC",
-        scope: "REGION",
-        listener: {
-          Protocol: "TCP",
-          Port: `${nlbport}`,
-        },
-        targetGroup: {
-          Protocol: "TCP",
-          Port: `${nlbport}`,
-          subGroupId: `${subgroupid}`,
-        },
-        HealthChecker: {
-          Interval: "default",
-          Timeout: "default",
-          Threshold: "default",
-        },
-      };
-      var jsonBody = JSON.stringify(nlbReqTmp, undefined, 4);
-
-      axios({
-        method: "post",
-        url: url,
-        headers: { "Content-Type": "application/json" },
-        data: jsonBody,
-        auth: {
-          username: `${username}`,
-          password: `${password}`,
-        },
-      })
-        .then((res) => {
-          console.log(res); // for debug
-
-          displayJsonData(res.data, typeInfo);
-        })
-        .catch(function (error) {
-          console.log(error);
-          if (error.response) {
-            // status code is not 2xx
-            console.log(error.response.data);
-            console.log(error.response.status);
-            console.log(error.response.headers);
-          } else {
-            console.log("Error", error.message);
-          }
-          console.log(error.config);
-
-          errorAlert(
-            JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, "")
-          );
-        });
-    } else {
-    }
-  });
+  var spinnerId = addSpinnerTask("Creating Regional NLB");
+  
+  axios({
+    method: "post",
+    url: url,
+    headers: { "Content-Type": "application/json" },
+    data: JSON.stringify(nlbReqTmp, undefined, 4),
+    auth: {
+      username: `${username}`,
+      password: `${password}`,
+    },
+  })
+    .then((res) => {
+      successAlert("Regional NLB created successfully");
+      getMci();
+    })
+    .catch(function (error) {
+      errorAlert("Error creating Regional NLB: " + (error.response?.data?.message || error.message));
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
 }
+
 window.AddNLB = AddNLB;
 
 function DelNLB() {
@@ -6287,24 +6301,98 @@ function DelNLB() {
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
-  var subgroupid = document.getElementById("subgroupid").value;
 
   if (!mciid) {
-    console.log(
-      "When calling DelNLB(), you must specify the mciid."
-    );
+    errorAlert("You need to specify the ID of MCI");
+    return;
   }
 
-  if (!subgroupid) {
-    console.log(
-      "When calling DelNLB(), you must specify the subgroupid."
-    );
+  if (!namespace) {
+    errorAlert("Please select a namespace first");
+    return;
   }
 
-  console.log(" Deleting NLB " + subgroupid);
+  // Load SubGroup list for selection
+  var subGroupUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/subgroup`;
+  var spinnerId = addSpinnerTask("Loading SubGroup list");
 
+  axios({
+    method: "get",
+    url: subGroupUrl,
+    auth: {
+      username: `${username}`,
+      password: `${password}`,
+    },
+    timeout: 30000,
+  })
+    .then((res) => {
+      var subGroupOptions = '';
+      
+      if (res.data.output && res.data.output.length > 0) {
+        res.data.output.forEach((subGroupName) => {
+          if (subGroupName && subGroupName.trim() !== "") {
+            subGroupOptions += `<option value="${subGroupName}">${subGroupName}</option>`;
+          }
+        });
+
+        // Show SubGroup selection dialog with deletion confirmation
+        Swal.fire({
+          title: "Delete Regional NLB",
+          width: 600,
+          html:
+            "<div style='text-align: left; margin: 20px;'>" +
+            "<p><b>⚠️ Warning:</b> This action cannot be undone.</p>" +
+            "<p><b>Target MCI:</b> " + mciid + "</p>" +
+            "<hr>" +
+            "<div class='form-group' style='margin-bottom: 20px;'>" +
+            "<label for='subgroup-select'><b>Select SubGroup to Delete NLB:</b></label>" +
+            "<select id='subgroup-select' class='form-control' style='margin-top: 10px;'>" +
+            "<option value=''>-- Select SubGroup --</option>" +
+            subGroupOptions +
+            "</select>" +
+            "</div>" +
+            "<div class='alert alert-danger' style='margin-top: 15px; padding: 10px; border-radius: 5px;'>" +
+            "<strong>Confirmation:</strong> The Regional NLB for the selected SubGroup will be permanently deleted." +
+            "</div>" +
+            "</div>",
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: "Delete Regional NLB",
+          cancelButtonText: "Cancel",
+          confirmButtonColor: "#dc3545",
+          position: "top-end",
+          backdrop: `rgba(0, 0, 0, 0.08)`,
+          preConfirm: () => {
+            const selectedSubGroup = document.getElementById('subgroup-select').value;
+            if (!selectedSubGroup) {
+              Swal.showValidationMessage('Please select a SubGroup');
+              return false;
+            }
+            return selectedSubGroup;
+          }
+        }).then((result) => {
+          if (result.isConfirmed) {
+            deleteRegionalNLB(mciid, result.value, namespace, hostname, port, username, password);
+          }
+        });
+      } else {
+        errorAlert("No SubGroups found in the selected MCI");
+      }
+    })
+    .catch(function (error) {
+      errorAlert("Error loading SubGroups: " + (error.response?.data?.message || error.message));
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
+}
+
+// Show deletion confirmation dialog after SubGroup selection
+// Separate function to handle the actual deletion
+function deleteRegionalNLB(mciid, subgroupid, namespace, hostname, port, username, password) {
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/nlb/${subgroupid}`;
-
+  var spinnerId = addSpinnerTask("Deleting Regional NLB");
+  
   axios({
     method: "delete",
     url: url,
@@ -6314,28 +6402,69 @@ function DelNLB() {
     },
   })
     .then((res) => {
-      console.log(res); // for debug
-
-      console.log("[Deleted NLB]\n");
-      displayJsonData(res.data, typeInfo);
+      successAlert("Regional NLB deleted successfully");
+      getMci();
     })
     .catch(function (error) {
-      if (error.response) {
-        // status code is not 2xx
-        console.log(error.response.data);
-        console.log(error.response.status);
-        console.log(error.response.headers);
-      } else {
-        console.log("Error", error.message);
-      }
-      console.log(error.config);
-
-      errorAlert(
-        JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, "")
-      );
+      errorAlert("Error deleting Regional NLB: " + (error.response?.data?.message || error.message));
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
     });
 }
 window.DelNLB = DelNLB;
+
+// Unified NLB Management function
+function manageNLB() {
+  Swal.fire({
+    title: '⚖️ NLB Management',
+    html: `
+      <div style="text-align: left; margin-bottom: 20px;">
+        <p><strong>Select NLB Operation:</strong></p>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 15px;">
+        <button onclick="executeNLBAction('addGlobal')" class="btn btn-success btn-context" style="width: 100%; padding: 12px;">
+          🌍 Add Global-NLB (Multi-Cloud SW NLB)
+        </button>
+        <button onclick="executeNLBAction('addRegional')" class="btn btn-info btn-context" style="width: 100%; padding: 12px;">
+          🏗️ Add Regional-NLB (CSP NLB)
+        </button>
+        <button onclick="executeNLBAction('delete')" class="btn btn-danger btn-context" style="width: 100%; padding: 12px;">
+          🗑️ Delete Regional-NLB
+        </button>
+      </div>
+    `,
+    showConfirmButton: false,
+    showCancelButton: true,
+    cancelButtonText: '❌ Close',
+    width: '500px',
+    customClass: {
+      popup: 'swal2-mci-context'
+    }
+  });
+}
+window.manageNLB = manageNLB;
+
+// Function to execute selected NLB action and close SweetAlert
+function executeNLBAction(action) {
+  Swal.close(); // Close the current SweetAlert
+  
+  switch(action) {
+    case 'addGlobal':
+      AddMcNLB();
+      break;
+    case 'addRegional':
+      AddNLB();
+      break;
+    case 'delete':
+      DelNLB();
+      break;
+    default:
+      console.log('Unknown NLB action:', action);
+  }
+}
+window.executeNLBAction = executeNLBAction;
+window.manageNLB = manageNLB;
 
 // function for sleep
 function sleep(ms) {
@@ -6639,7 +6768,7 @@ function executeRemoteCmd() {
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
-  var subgroupid = document.getElementById("subgroupid").value;
+  var subgroupid = getSubGroupIdFromVmSelection();
   var vmid = document.getElementById("vmid").value;
 
   let cmdCount = 3; // Initial number of textboxes
@@ -6883,7 +7012,7 @@ function transferFileToMci() {
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
-  var subgroupid = document.getElementById("subgroupid").value;
+  var subgroupid = getSubGroupIdFromVmSelection();
   var vmid = document.getElementById("vmid").value;
 
   if (mciid) {
@@ -7062,7 +7191,7 @@ saveBtn.addEventListener("click", function () {
   var password = passwordElement.value;
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
-  var groupid = document.getElementById("subgroupid").value;
+  var groupid = getSubGroupIdFromVmSelection();
   var vmid = document.getElementById("vmid").value;
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=accessinfo&accessInfoOption=showSshKey`;
@@ -7282,7 +7411,7 @@ function updateFirewallRules() {
   var password = passwordElement.value;
   var nsId = namespaceElement.value;
   var mciId = mciidElement.value;
-  var subgroupid = document.getElementById("subgroupid").value;
+  var subgroupid = getSubGroupIdFromVmSelection();
   var vmid = document.getElementById("vmid").value;
 
   const assocUrl = `http://${hostname}:${port}/tumblebug/ns/${nsId}/mci/${mciId}/associatedResources`;
@@ -8361,7 +8490,7 @@ window.addNewRuleToSg = addNewRuleToSg;
 // Function for Scale Out SubGroup
 function scaleOutSubGroup() {
   var mciid = document.getElementById("mciid").value;
-  var subgroupid = document.getElementById("subgroupid").value;
+  var subgroupid = getSubGroupIdFromVmSelection();
 
   if (!mciid) {
     errorAlert("Please select an MCI first");
@@ -8468,6 +8597,29 @@ function scaleOutSubGroupWithSelection() {
   );
 }
 window.scaleOutSubGroupWithSelection = scaleOutSubGroupWithSelection;
+
+// Scale Out function for context menu - bypasses MCI selection
+function scaleOutMciFromContext(mciId) {
+  var hostname = hostnameElement.value;
+  var port = portElement.value;
+  var username = usernameElement.value;
+  var password = passwordElement.value;
+  var namespace = namespaceElement.value;
+
+  if (!namespace) {
+    errorAlert("Please select a namespace first");
+    return;
+  }
+
+  if (!mciId) {
+    errorAlert("MCI ID is required");
+    return;
+  }
+
+  // Directly show SubGroup selection for the specified MCI
+  showSubGroupSelectionForScaleOut(mciId, namespace, hostname, port, username, password);
+}
+window.scaleOutMciFromContext = scaleOutMciFromContext;
 
 // Step 2: Show SubGroup selection dialog
 function showSubGroupSelectionForScaleOut(selectedMciId, namespace, hostname, port, username, password) {

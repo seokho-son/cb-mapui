@@ -232,12 +232,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     /* dropdown button style */
     .dropdown-menu {
       width: 98%;
-      font-size: 1.2rem;
+      font-size: 1.0rem;
     }
 
     .dropdown-menu a {
       border-bottom: 1px solid #b4b4b4;
-      padding: 20px;
+      padding: 12px 15px;
     }
 
     .dropdown-menu a:hover {
@@ -349,7 +349,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           </li>
           <li class="nav-item" role="presentation">
             <a class="nav-link" id="config-tab" data-toggle="tab" href="#config" role="tab" aria-controls="config"
-              aria-selected="false">⚙️Config</a>
+              aria-selected="false">⚙️View</a>
           </li>
         </ul>
 
@@ -462,19 +462,43 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <!-- Swagger API Dashboard -->
                   <div class="form-group">
                     <button type="button" id="swaggerButton" onClick="showSwagger();" 
-                      class="btn btn-info w-100">📋 Swagger API</button>
-                  </div>
-
-                  <!-- Metabase Analytics Dashboard -->
-                  <div class="form-group">
-                    <button type="button" id="metabaseButton" onClick="showMetabase();" 
-                      class="btn btn-success w-100">📈 Metabase</button>
+                      class="btn btn-info w-100">🛠️ TB API</button>
                   </div>
 
                   <!-- GitHub Repository -->
                   <div class="form-group">
                     <button type="button" id="githubButton" onClick="showGitHub();" 
-                      class="btn btn-dark w-100">🐙 TB GitHub</button>
+                      class="btn btn-info w-100">⭐ TB GitHub</button>
+                  </div>
+
+                  <!-- Spec Info Dashboard -->
+                  <div class="form-group dropdown">
+                    <button class="btn btn-success dropdown-toggle w-100" type="button" id="specInfoDropdown"
+                      data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                      💻 TB Spec Info
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="specInfoDropdown">
+                      <a class="dropdown-item" href="javascript:void(0)" onclick="openSpecInfo('table/9');">📊 Spec Info</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onclick="openSpecInfo('field/130');">☁️ Spec by Provider</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onclick="openSpecInfo('field/154');">🖥️ Spec by CPU</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onclick="openSpecInfo('field/157');">💰 Spec by Cost</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onclick="openSpecInfo('field/123');">🏗️ Spec by Architecture</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onclick="openSpecInfo('field/133');">🧮 Spec by Accelerator</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onclick="openSpecInfo('table/11');">🌍 Inter-Region Latency</a>
+                    </div>
+                  </div>
+
+                  <!-- Image Info Dashboard -->
+                  <div class="form-group dropdown">
+                    <button class="btn btn-warning dropdown-toggle w-100" type="button" id="imageInfoDropdown"
+                      data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                      💿 TB Image Info
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="imageInfoDropdown">
+                      <a class="dropdown-item" href="javascript:void(0)" onclick="openImageInfo('table/10');">📊 Image Info</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onclick="openImageInfo('field/102');">☁️ Image by Provider</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onclick="openImageInfo('field/99');">🏗️ Image by Architecture</a>
+                    </div>
                   </div>
 
                 </form>
@@ -632,7 +656,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <!-- Accelerator Configuration Field -->
                   <div class="form-group">
                     <div id="headingAccelerator">
-                      <button class="btn btn-info w-100" type="button" data-toggle="collapse"
+                      <button class="btn btn-outline-primary w-100" type="button" data-toggle="collapse"
                         data-target="#collapseAccelerator" aria-expanded="false" aria-controls="collapseAccelerator">
                         🧮 GPU Config
                     </div>
@@ -745,24 +769,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               </div>
             </div>
 
-            <!-- MC-Infra Scaling Card -->
-            <div class="card mb-2">
-              <div class="card-header">⚙️ MC-Infra Scaling</div>
-              <div class="card-body d-flex flex-column">
-                <form id="mci-config-form">
-
-
-
-                  <!-- Scale Out SubGroup Field -->
-                  <div class="form-group">
-                    <button type="button" id="scaleOutBtn" onClick="scaleOutSubGroupWithSelection();"
-                      class="btn btn-primary w-100">📈 Scale SubGroup</button>
-                  </div>
-
-
-                </form>
-              </div>
-            </div>
           </div>
 
           <!-- Control Tab -->
@@ -794,19 +800,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                       </div>
                       <select id="mciid" name="mciid" class="form-control" aria-label="MCI ID"
                         aria-describedby="mciidLabel">
-                        <!-- Options will be filled dynamically -->
-                      </select>
-                    </div>
-                  </div>
-
-                  <!-- SubGroup ID Field -->
-                  <div class="form-group">
-                    <div class="input-group">
-                      <div class="input-group-prepend">
-                        <span class="input-group-text">👥 Group ID</span>
-                      </div>
-                      <select id="subgroupid" name="subgroupid" class="form-control" aria-label="SubGroup ID"
-                        aria-describedby="subgroupidLabel">
                         <!-- Options will be filled dynamically -->
                       </select>
                     </div>
@@ -871,7 +864,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <!-- File Transfer Field (Warning) -->
                   <div class="form-group">
                     <button type="button" id="filetransfer" onClick="transferFileToMci();"
-                      class="btn btn-warning w-100">📁 Remote File Transfer</button>
+                      class="btn btn-warning w-100">💾 Remote File Transfer</button>
+                  </div>
+
+                  <!-- Scale Out SubGroup Field -->
+                  <div class="form-group">
+                    <button type="button" id="scaleOutBtn" onClick="scaleOutSubGroupWithSelection();"
+                      class="btn btn-info w-100">⬆️ ScaleOut SubGroup</button>
                   </div>
 
 
@@ -881,17 +880,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                       class="btn btn btn-info w-100">🔥 Update Firewall</button>
                   </div>
 
-                  <!-- NLB Control Dropdown (Success) -->
-                  <div class="form-group dropdown">
-                    <button class="btn btn btn-info dropdown-toggle w-100" type="button" id="nlbControlDropdown"
-                      data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                      ⚖️ Control L4 NLB
-                    </button>
-                    <div class="dropdown-menu" aria-labelledby="nlbControlDropdown">
-                      <a class="dropdown-item" href="javascript:void(0)" onClick="AddMcNLB();">Add Global-NLB</a>
-                      <a class="dropdown-item" href="javascript:void(0)" onClick="AddNLB();">Add Regional-NLB</a>
-                      <a class="dropdown-item" href="javascript:void(0)" onClick="DelNLB();">Del Regional-NLB</a>
-                    </div>
+                  <!-- NLB Control Field (Info) -->
+                  <div class="form-group">
+                    <button type="button" id="nlbControlBtn" onClick="manageNLB();"
+                      class="btn btn-info w-100">⚖️ Control L4 NLB</button>
                   </div>
 
                   <!-- Delete MCI Field (secondary) -->
@@ -1079,8 +1071,48 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         document.getElementById('console').style.display = "flex";
       }
 
+      function openSpecInfo(path) {
+        var currentHost = window.location.hostname;
+        var url = `http://${currentHost}:3000/auto/dashboard/${path}`;
+        
+        // Try to open the specific dashboard
+        var newWindow = window.open(url, '_blank');
+        
+        // Fallback: if the page doesn't load, redirect to Info Home after a short delay
+        setTimeout(() => {
+          try {
+            if (newWindow.document.readyState === 'complete' && newWindow.document.title.includes('Not found')) {
+              newWindow.location.href = `http://${currentHost}:3000`;
+            }
+          } catch (e) {
+            // Cross-origin restrictions may prevent access, so we'll use a simpler fallback approach
+            console.log('Opening Spec Info dashboard:', url);
+          }
+        }, 2000);
+      }
+
+      function openImageInfo(path) {
+        var currentHost = window.location.hostname;
+        var url = `http://${currentHost}:3000/auto/dashboard/${path}`;
+        
+        // Try to open the specific dashboard
+        var newWindow = window.open(url, '_blank');
+        
+        // Fallback: if the page doesn't load, redirect to Info Home after a short delay
+        setTimeout(() => {
+          try {
+            if (newWindow.document.readyState === 'complete' && newWindow.document.title.includes('Not found')) {
+              newWindow.location.href = `http://${currentHost}:3000`;
+            }
+          } catch (e) {
+            // Cross-origin restrictions may prevent access, so we'll use a simpler fallback approach
+            console.log('Opening Image Info dashboard:', url);
+          }
+        }, 2000);
+      }
+
       function showMetabase() {
-        // Simply open Metabase in new tab
+        // Legacy function - redirect to Info Home
         var currentHost = window.location.hostname;
         window.open(`http://${currentHost}:3000`, '_blank');
       }
@@ -1184,8 +1216,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             // get seleted option
             const select = label.parentElement.nextElementSibling;
             if (select && select.options[select.selectedIndex]) {
-              var toCopy = select.options[select.selectedIndex].text;
               var labelText = label.textContent || label.innerText;
+              var selectedOption = select.options[select.selectedIndex];
+              
+              // Copy the value (not the display text) for all fields
+              var toCopy = selectedOption.value;
+              
               navigator.clipboard.writeText(toCopy)
                 .then(() => {
                   console.log('Text copied to clipboard: ' + toCopy);
