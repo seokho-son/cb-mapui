@@ -1,0 +1,642 @@
+<!-- 
+Copyright 2019 The Cloud-Barista Authors.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>Multi-Cloud Management Dashboard</title>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+  <!-- Bootstrap CSS and JS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css"
+    integrity="sha384-xOolHFLEh07PJGoPkLv1IbcEPTNtaed2xpHsD9ESMhqIYd0nLMwNLD69Npy4HI+N" crossorigin="anonymous">
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.slim.min.js"
+    integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj"
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"
+    integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN"
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.min.js"
+    integrity="sha384-+sLIOodYLS7CIrQpBjl+C7nPvqq+FbNUBDunl/OZv93DB7Ln/533i8e/mZXLi/P+"
+    crossorigin="anonymous"></script>
+
+  <!-- DataTables -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/2.0.8/css/dataTables.dataTables.css" />
+  <script src="https://cdn.datatables.net/2.0.8/js/dataTables.js"></script>
+
+  <!-- JSON Formatter -->
+  <script src="https://cdn.jsdelivr.net/npm/json-formatter-js@2.3.4/dist/json-formatter.umd.min.js"></script>
+
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <!-- Axios -->
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+  <!-- Chart.js for dashboard charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Font Awesome for icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f8f9fa;
+    }
+
+    .dashboard-header {
+      background-color: #f8f9fa;
+      color: #495057;
+      padding: 0.2rem 0;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid #dee2e6;
+    }
+
+    .stat-card {
+      background: white;
+      border-radius: 10px;
+      padding: 1.5rem;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      border-left: 4px solid;
+      margin-bottom: 1.5rem;
+      transition: transform 0.2s ease;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+
+    .stat-card.primary { border-left-color: #007bff; }
+    .stat-card.success { border-left-color: #28a745; }
+    .stat-card.warning { border-left-color: #ffc107; }
+    .stat-card.danger { border-left-color: #dc3545; }
+    .stat-card.info { border-left-color: #17a2b8; }
+
+    .stat-icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-number {
+      font-size: 2rem;
+      font-weight: bold;
+      margin: 0;
+    }
+
+    .stat-label {
+      color: #6c757d;
+      font-size: 0.9rem;
+      margin: 0;
+    }
+
+    .content-card {
+      background: white;
+      border-radius: 10px;
+      padding: 1.5rem;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      margin-bottom: 1.5rem;
+    }
+
+    .content-card h5 {
+      margin-bottom: 1rem;
+      color: #495057;
+      border-bottom: 2px solid #e9ecef;
+      padding-bottom: 0.5rem;
+    }
+
+    .table-responsive {
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .table thead th {
+      background-color: #f8f9fa;
+      border: none;
+      font-weight: 600;
+      color: #495057;
+    }
+
+    .status-badge {
+      padding: 0.25rem 0.5rem;
+      border-radius: 15px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .status-running { background-color: #d4edda; color: #155724; }
+    .status-suspended { background-color: #fff3cd; color: #856404; }
+    .status-failed { background-color: #f8d7da; color: #721c24; }
+    .status-creating { background-color: #d1ecf1; color: #0c5460; }
+    .status-preparing { background-color: #e2e3e5; color: #495057; }
+    .status-partial-failed { background-color: #ffeaa7; color: #d63031; }
+    .status-terminating { background-color: #f5c6cb; color: #721c24; }
+    .status-unknown { background-color: #f8f9fa; color: #6c757d; }
+
+    .provider-icon {
+      width: 24px;
+      height: 24px;
+      margin-right: 0.5rem;
+      vertical-align: middle;
+    }
+
+    .action-buttons .btn {
+      margin: 0 0.25rem;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+    }
+
+    /* Table cell text overflow handling */
+    #vmTable td {
+      max-width: 150px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Specific column width constraints */
+    #vmTable th:nth-child(1), /* VM ID */
+    #vmTable td:nth-child(1) {
+      max-width: 120px;
+    }
+
+    #vmTable th:nth-child(2), /* MCI ID */
+    #vmTable td:nth-child(2) {
+      max-width: 120px;
+    }
+
+    #vmTable th:nth-child(4), /* Provider */
+    #vmTable td:nth-child(4) {
+      max-width: 100px;
+    }
+
+    #vmTable th:nth-child(5), /* Region */
+    #vmTable td:nth-child(5) {
+      max-width: 120px;
+    }
+
+    #vmTable th:nth-child(6), /* Spec */
+    #vmTable td:nth-child(6) {
+      max-width: 140px;
+    }
+
+    #vmTable th:nth-child(7), /* Public IP */
+    #vmTable td:nth-child(7) {
+      max-width: 120px;
+    }
+
+    #vmTable th:nth-child(8), /* Private IP */
+    #vmTable td:nth-child(8) {
+      max-width: 120px;
+    }
+
+    /* Actions column - always visible and fixed width */
+    #vmTable th:nth-child(9), /* Actions */
+    #vmTable td:nth-child(9) {
+      width: 200px;
+      min-width: 200px;
+      max-width: 200px;
+      position: sticky;
+      right: 0;
+      background-color: white;
+      border-left: 1px solid #dee2e6;
+      z-index: 10;
+    }
+
+    #vmTable thead th:nth-child(9) {
+      background-color: #f8f9fa;
+    }
+
+    /* Add tooltip for truncated text */
+    #vmTable td[title] {
+      cursor: help;
+    }
+
+    /* MCI Table cell overflow handling */
+    #mciTable td {
+      max-width: 150px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* MCI Table specific column constraints */
+    #mciTable th:nth-child(1), /* MCI ID */
+    #mciTable td:nth-child(1) {
+      max-width: 150px;
+    }
+
+    #mciTable th:nth-child(3), /* Provider */
+    #mciTable td:nth-child(3) {
+      max-width: 120px;
+    }
+
+    #mciTable th:nth-child(5), /* Target Action */
+    #mciTable td:nth-child(5) {
+      max-width: 100px;
+    }
+
+    #mciTable th:nth-child(6), /* Description */
+    #mciTable td:nth-child(6) {
+      max-width: 200px;
+    }
+
+    /* MCI Actions column */
+    #mciTable th:nth-child(7), /* Actions */
+    #mciTable td:nth-child(7) {
+      width: 200px;
+      min-width: 200px;
+      max-width: 200px;
+    }
+
+    #mciTable td[title] {
+      cursor: help;
+    }
+
+    .refresh-indicator {
+      display: inline-block;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .navbar-brand {
+      font-weight: bold;
+      font-size: 1.1rem;
+    }
+
+    .chart-container {
+      position: relative;
+      height: 300px;
+      margin: 1rem 0;
+    }
+
+    .loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255,255,255,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .loading-overlay.hidden {
+      display: none;
+    }
+
+    /* Custom scrollbar */
+    .table-container {
+      max-height: 500px;
+      overflow-y: auto;
+    }
+
+    .table-container::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .table-container::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 4px;
+    }
+
+    .table-container::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 4px;
+    }
+
+    .table-container::-webkit-scrollbar-thumb:hover {
+      background: #a8a8a8;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Navigation Header -->
+  <nav class="navbar navbar-expand-lg dashboard-header">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#" style="color: #495057;">
+        <i class="fas fa-cloud"></i> Multi-Cloud Dashboard
+      </a>
+      <div class="navbar-nav ml-auto">
+        <span class="navbar-text" style="color: #6c757d;">
+          <span id="connectionStatus" class="badge badge-secondary">
+            <i class="fas fa-question-circle"></i> Unknown
+          </span>
+          <i class="fas fa-sync-alt refresh-indicator" id="refreshIndicator" style="display: none;"></i>
+          Last Updated: <span id="lastUpdated">Never</span>
+        </span>
+        <div class="nav-item dropdown ml-3">
+          <a class="nav-link dropdown-toggle" href="#" id="settingsDropdown" role="button" data-toggle="dropdown" style="color: #495057;">
+            <i class="fas fa-cog"></i> Settings
+          </a>
+          <div class="dropdown-menu dropdown-menu-right">
+            <a class="dropdown-item" href="#" onclick="showSettings()">
+              <i class="fas fa-sliders-h"></i> Configuration
+            </a>
+            <a class="dropdown-item" href="#" onclick="refreshDashboard()">
+              <i class="fas fa-sync-alt"></i> Refresh
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Dashboard Content -->
+  <div class="container-fluid" style="margin-top: 2rem;">
+    
+    <!-- Statistics Overview -->
+    <div class="row">
+      <div class="col-md-2 col-sm-6">
+        <div class="stat-card primary">
+          <div class="text-center">
+            <i class="fas fa-server stat-icon text-primary"></i>
+            <h3 class="stat-number" id="totalMciCount">0</h3>
+            <p class="stat-label">Total MCIs</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-2 col-sm-6">
+        <div class="stat-card success">
+          <div class="text-center">
+            <i class="fas fa-play-circle stat-icon text-success"></i>
+            <h3 class="stat-number" id="runningMciCount">0</h3>
+            <p class="stat-label">Running</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-2 col-sm-6">
+        <div class="stat-card warning">
+          <div class="text-center">
+            <i class="fas fa-pause-circle stat-icon text-warning"></i>
+            <h3 class="stat-number" id="suspendedMciCount">0</h3>
+            <p class="stat-label">Suspended</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-2 col-sm-6">
+        <div class="stat-card danger">
+          <div class="text-center">
+            <i class="fas fa-exclamation-triangle stat-icon text-danger"></i>
+            <h3 class="stat-number" id="failedMciCount">0</h3>
+            <p class="stat-label">Failed</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-2 col-sm-6">
+        <div class="stat-card info">
+          <div class="text-center">
+            <i class="fas fa-desktop stat-icon text-info"></i>
+            <h3 class="stat-number" id="totalVmCount">0</h3>
+            <p class="stat-label">Total VMs</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-2 col-sm-6">
+        <div class="stat-card primary">
+          <div class="text-center">
+            <i class="fas fa-cloud stat-icon text-primary"></i>
+            <h3 class="stat-number" id="totalProviderCount">0</h3>
+            <p class="stat-label">Providers</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row">
+      <div class="col-md-4">
+        <div class="content-card">
+          <h5><i class="fas fa-chart-pie"></i> MCI Status Distribution</h5>
+          <div class="chart-container">
+            <canvas id="mciStatusChart"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="content-card">
+          <h5><i class="fas fa-chart-bar"></i> Provider Distribution</h5>
+          <div class="chart-container">
+            <canvas id="providerChart"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="content-card">
+          <h5><i class="fas fa-globe"></i> Regional Distribution</h5>
+          <div class="chart-container">
+            <canvas id="regionChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MCI Management Table -->
+    <div class="row">
+      <div class="col-12">
+        <div class="content-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5><i class="fas fa-list"></i> Multi-Cloud Infrastructure</h5>
+            <div>
+              <button class="btn btn-primary btn-sm" onclick="refreshMciList()">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+              <button class="btn btn-success btn-sm" onclick="showCreateMciModal()">
+                <i class="fas fa-plus"></i> Create MCI
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive table-container">
+            <table class="table table-hover" id="mciTable">
+              <thead>
+                <tr>
+                  <th>MCI ID</th>
+                  <th>Status</th>
+                  <th>Provider</th>
+                  <th>VMs</th>
+                  <th>Target Action</th>
+                  <th>Description</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="mciTableBody">
+                <!-- Data will be populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VM Details Table -->
+    <div class="row">
+      <div class="col-12">
+        <div class="content-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5>
+              <i class="fas fa-server me-2"></i> Virtual Machine Details 
+              <span class="badge badge-secondary ml-2" id="vmCountBadge">0</span>
+            </h5>
+            <div>
+              <button class="btn btn-outline-secondary btn-sm mr-2" onclick="showAllVms()" id="showAllBtn">
+                <i class="fas fa-list"></i> Show All VMs
+              </button>
+              <button class="btn btn-primary btn-sm" onclick="refreshVmList()">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive table-container">
+            <table class="table table-hover" id="vmTable">
+              <thead>
+                <tr>
+                  <th>VM ID</th>
+                  <th>MCI ID</th>
+                  <th>Status</th>
+                  <th>Provider</th>
+                  <th>Region</th>
+                  <th>Spec</th>
+                  <th>Public IP</th>
+                  <th>Private IP</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="vmTableBody">
+                <!-- Data will be populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resource Overview -->
+    <div class="row">
+      <div class="col-md-4">
+        <div class="content-card">
+          <h5><i class="fas fa-network-wired"></i> Network Resources</h5>
+          <div id="networkResourcesContent">
+            <div class="loading-overlay">
+              <div class="spinner-border" role="status">
+                <span class="sr-only">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="content-card">
+          <h5><i class="fas fa-shield-alt"></i> Security Groups</h5>
+          <div id="securityGroupsContent">
+            <div class="loading-overlay">
+              <div class="spinner-border" role="status">
+                <span class="sr-only">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="content-card">
+          <h5><i class="fas fa-key"></i> SSH Keys</h5>
+          <div id="sshKeysContent">
+            <div class="loading-overlay">
+              <div class="spinner-border" role="status">
+                <span class="sr-only">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay hidden" id="globalLoader">
+    <div class="spinner-border text-primary" role="status">
+      <span class="sr-only">Loading...</span>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal fade" id="settingsModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Dashboard Settings</h5>
+          <button type="button" class="close" data-dismiss="modal">
+            <span>&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <form id="settingsForm">
+            <div class="form-group">
+              <label for="hostname">Hostname</label>
+              <input type="text" class="form-control" id="hostname" value="localhost">
+            </div>
+            <div class="form-group">
+              <label for="port">Port</label>
+              <input type="text" class="form-control" id="port" value="1323">
+            </div>
+            <div class="form-group">
+              <label for="username">Username</label>
+              <input type="text" class="form-control" id="username" value="default">
+            </div>
+            <div class="form-group">
+              <label for="password">Password</label>
+              <input type="password" class="form-control" id="password" value="default">
+            </div>
+            <div class="form-group">
+              <label for="namespace">Namespace</label>
+              <select class="form-control" id="namespace">
+                <option value="default">default</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="refreshInterval">Refresh Interval (seconds)</label>
+              <select class="form-control" id="refreshInterval">
+                <option value="5">5</option>
+                <option value="10">10</option>
+                <option value="30">30</option>
+                <option value="60">60</option>
+              </select>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" onclick="saveSettings()">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Include the dashboard JavaScript -->
+  <script src="./dashboard.js"></script>
+
+</body>
+
+</html>

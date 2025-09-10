@@ -6,6 +6,25 @@ Check CB-Tumblebug project. (https://github.com/cloud-barista/cb-tumblebug)
 [NOTE] This project is not for a production, used only for development and demonstation of CB-Tumblebug. 
 - This project utilizes Openlayers. You need to know this includes temporal codes which are not readable.
 
+## 주요 기능
+
+### 1. Map View (기존 기능)
+- 지도 기반 인터랙티브 멀티클라우드 인프라 시각화
+- OpenLayers 기반 지도 렌더링
+- MCI/VM 생성, 제어, 모니터링
+
+### 2. Dashboard View (신규 기능)
+- 전통적인 대시보드 스타일의 멀티클라우드 관리 인터페이스
+- 통계 카드 및 차트를 통한 인프라 현황 요약
+- 테이블 기반 MCI/VM 목록 및 관리
+- 실시간 자동 새로고침 기능
+- 리소스 오버뷰 (vNet, Security Groups, SSH Keys)
+
+### 3. 접근 방법
+- **Map View**: 기본 인터페이스에서 `🗺️ Map View` 버튼 클릭
+- **Dashboard View**: 기본 인터페이스에서 `📊 MC Dashboard` 버튼 클릭
+- **API View**: 기본 인터페이스에서 `🛠️ TB API` 버튼 클릭
+
 ## cb-mapui 설치 및 실행 방법
 
 ### Prerequisite
