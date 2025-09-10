@@ -358,7 +358,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           <!-- Configuration Tab -->
           <div class="tab-pane fade" id="config" role="tabpanel" aria-labelledby="config-tab">
             <div class="card mb-2">
-              <div class="card-header">🔧 Dashboard Configuration</div>
+              <div class="card-header">🎮 View Control</div>
               <div class="card-body d-flex flex-column">
                 <form id="configuration-form" class="form-row">
                   <!-- Hidden configuration fields - automatically managed -->
@@ -444,15 +444,43 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                     </div>
                   </div>
 
-                  <!-- Create toggleView Field -->
-                  <div class="form-group col-12">
-                    <button type="button" onClick="toggleView();" class="btn btn-info w-100">🔄 Toggle Map/API</button>
-                    <!-- <button type="button" onclick="window.open('redoc-swagger.html', '_blank')" class="btn btn-info w-100">Redoc & Swagger</button> -->
+                </form>
+              </div>
+            </div>
+
+            <div class="card mb-2">
+              <div class="card-header">🔀 View Navigation</div>
+              <div class="card-body d-flex flex-column">
+                <form id="dashboard-control-form">
+
+                  <!-- Map View -->
+                  <div class="form-group">
+                    <button type="button" id="mapButton" onClick="showMap();" 
+                      class="btn btn-outline-primary w-100">🗺️ Map View</button>
+                  </div>
+
+                  <!-- Swagger API Dashboard -->
+                  <div class="form-group">
+                    <button type="button" id="swaggerButton" onClick="showSwagger();" 
+                      class="btn btn-info w-100">📋 Swagger API</button>
+                  </div>
+
+                  <!-- Metabase Analytics Dashboard -->
+                  <div class="form-group">
+                    <button type="button" id="metabaseButton" onClick="showMetabase();" 
+                      class="btn btn-success w-100">📈 Metabase</button>
+                  </div>
+
+                  <!-- GitHub Repository -->
+                  <div class="form-group">
+                    <button type="button" id="githubButton" onClick="showGitHub();" 
+                      class="btn btn-dark w-100">🐙 TB GitHub</button>
                   </div>
 
                 </form>
               </div>
             </div>
+
           </div>
 
           <!-- Provisioning Tab -->
@@ -988,6 +1016,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 </form>
               </div>
             </div>
+
+
           </div>
 
         </div>
@@ -1041,17 +1071,36 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         })
       });
 
-      function toggleView() {
-        var map = document.getElementById('map');
-        var console = document.getElementById('console');
+      function showSwagger() {
+        // Hide all views
+        document.getElementById('map').style.display = "none";
+        
+        // Show Swagger console
+        document.getElementById('console').style.display = "flex";
+      }
 
-        if (console.style.display === "none") {
-          map.style.display = "none";
-          console.style.display = "flex";
-        } else {
-          map.style.display = "block";
-          console.style.display = "none";
-        }
+      function showMetabase() {
+        // Simply open Metabase in new tab
+        var currentHost = window.location.hostname;
+        window.open(`http://${currentHost}:3000`, '_blank');
+      }
+
+      function showGitHub() {
+        // Simply open GitHub in new tab
+        window.open('https://github.com/cloud-barista/cb-tumblebug', '_blank');
+      }
+
+      function showMap() {
+        // Hide all dashboard views and show map
+        document.getElementById('console').style.display = "none";
+        
+        // Show map
+        document.getElementById('map').style.display = "block";
+      }
+
+      // Legacy function for backward compatibility
+      function toggleView() {
+        showSwagger();
       }
     </script>
 
