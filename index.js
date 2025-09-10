@@ -9879,3 +9879,35 @@ function drawObjects(event) {
 tileLayer.on("postrender", function (event) {
   drawObjects(event);
 });
+
+// Function to sync MCI selection from Dashboard
+function syncMciSelectionFromDashboard(mciId) {
+  console.log(`[SYNC] Attempting to sync MCI selection: ${mciId}`);
+  console.log(`[SYNC] mciidElement exists:`, !!mciidElement);
+  
+  if (mciidElement && mciId) {
+    console.log(`[SYNC] Current value: ${mciidElement.value}, New value: ${mciId}`);
+    
+    // Check if the option exists in the select element
+    const optionExists = Array.from(mciidElement.options).some(option => option.value === mciId);
+    console.log(`[SYNC] Option exists in select:`, optionExists);
+    
+    if (optionExists) {
+      // Set the value in the MCI select element
+      mciidElement.value = mciId;
+      
+      // Trigger change event to update dependent dropdowns
+      const changeEvent = new Event('change', { bubbles: true });
+      mciidElement.dispatchEvent(changeEvent);
+      
+      console.log(`[SYNC] MCI selection synced successfully: ${mciId}`);
+    } else {
+      console.log(`[SYNC] MCI ${mciId} not found in select options`);
+    }
+  } else {
+    console.log(`[SYNC] Failed - mciidElement:`, !!mciidElement, `mciId:`, mciId);
+  }
+}
+
+// Make function available globally for Dashboard to call
+window.syncMciSelectionFromDashboard = syncMciSelectionFromDashboard;
