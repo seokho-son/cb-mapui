@@ -584,7 +584,8 @@ function updateResourceCounts() {
     const sshKeyCount = centralData.sshKey ? centralData.sshKey.length : 0;
     const sshKeyElement = document.getElementById('sshKeyCount');
     if (sshKeyElement) sshKeyElement.textContent = sshKeyCount;
-    console.log('SSH Key count:', sshKeyCount, 'Data:', centralData.sshKey);    // Update K8s Cluster count
+    console.log('SSH Key count:', sshKeyCount, 'Data:', centralData.sshKey);
+    // Update K8s Cluster count
     const k8sClusterCount = centralData.k8sCluster ? centralData.k8sCluster.length : 0;
     const k8sClusterElement = document.getElementById('k8sClusterCount');
     if (k8sClusterElement) k8sClusterElement.textContent = k8sClusterCount;
