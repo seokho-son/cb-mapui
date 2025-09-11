@@ -161,15 +161,25 @@ limitations under the License.
       font-size: 0.75rem;
     }
 
-    /* Table cell text overflow handling */
-    #vmTable td {
-      max-width: 150px;
+    /* Table cell text overflow handling - Applied to all resource tables */
+    /* Remove global max-width constraint to allow flexible column widths */
+    #vmTable td,
+    #mciTable td,
+    #vNetTable td,
+    #securityGroupTable td,
+    #sshKeyTable td,
+    #k8sClusterTable td,
+    #customImageTable td,
+    #dataDiskTable td,
+    #connectionTable td,
+    [id$="-connectionTable"] td {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    /* Specific column width constraints */
+    /* Specific column width constraints for long content only */
+    /* VM Table - only constrain ID columns and very long content */
     #vmTable th:nth-child(1), /* VM ID */
     #vmTable td:nth-child(1) {
       max-width: 120px;
@@ -180,34 +190,97 @@ limitations under the License.
       max-width: 120px;
     }
 
-    #vmTable th:nth-child(4), /* Provider */
-    #vmTable td:nth-child(4) {
-      max-width: 100px;
+    /* MCI Table - only constrain ID and description columns */
+    #mciTable th:nth-child(1), /* MCI ID */
+    #mciTable td:nth-child(1) {
+      max-width: 150px;
     }
 
-    #vmTable th:nth-child(5), /* Region */
-    #vmTable td:nth-child(5) {
+    #mciTable th:nth-child(6), /* Description */
+    #mciTable td:nth-child(6) {
+      max-width: 200px;
+    }
+
+    /* vNet Table - only constrain ID columns */
+    #vNetTable th:nth-child(1), /* vNet ID */
+    #vNetTable td:nth-child(1) {
+      max-width: 150px;
+    }
+
+    /* Security Group Table - only constrain ID and description columns */
+    #securityGroupTable th:nth-child(1), /* Security Group ID */
+    #securityGroupTable td:nth-child(1) {
+      max-width: 150px;
+    }
+
+    #securityGroupTable th:nth-child(5), /* vNet ID */
+    #securityGroupTable td:nth-child(5) {
       max-width: 120px;
     }
 
-    #vmTable th:nth-child(6), /* Spec */
-    #vmTable td:nth-child(6) {
-      max-width: 140px;
+    #securityGroupTable th:nth-child(7), /* Description */
+    #securityGroupTable td:nth-child(7) {
+      max-width: 200px;
     }
 
-    #vmTable th:nth-child(7), /* Public IP */
-    #vmTable td:nth-child(7) {
-      max-width: 120px;
+    /* SSH Key Table - only constrain ID and fingerprint columns */
+    #sshKeyTable th:nth-child(1), /* SSH Key ID */
+    #sshKeyTable td:nth-child(1) {
+      max-width: 150px;
     }
 
-    #vmTable th:nth-child(8), /* Private IP */
-    #vmTable td:nth-child(8) {
-      max-width: 120px;
+    #sshKeyTable th:nth-child(5), /* Fingerprint */
+    #sshKeyTable td:nth-child(5) {
+      max-width: 180px;
     }
 
-    /* Actions column - always visible and fixed width */
-    #vmTable th:nth-child(9), /* Actions */
-    #vmTable td:nth-child(9) {
+    /* K8s Cluster Table - only constrain ID columns */
+    #k8sClusterTable th:nth-child(1), /* Cluster ID */
+    #k8sClusterTable td:nth-child(1) {
+      max-width: 150px;
+    }
+
+    /* Custom Image Table - only constrain ID columns */
+    #customImageTable th:nth-child(1), /* Image ID */
+    #customImageTable td:nth-child(1) {
+      max-width: 150px;
+    }
+
+    /* Data Disk Table - only constrain ID columns */
+    #dataDiskTable th:nth-child(1), /* Disk ID */
+    #dataDiskTable td:nth-child(1) {
+      max-width: 150px;
+    }
+
+    /* Connection Table - only constrain config name */
+    #connectionTable th:nth-child(1), /* Config Name */
+    #connectionTable td:nth-child(1),
+    [id$="-connectionTable"] th:nth-child(1),
+    [id$="-connectionTable"] td:nth-child(1) {
+      max-width: 150px;
+    }
+
+    /* Actions column - always visible and fixed width for all tables */
+    #vmTable th:last-child, 
+    #vmTable td:last-child,
+    #mciTable th:last-child, 
+    #mciTable td:last-child,
+    #vNetTable th:last-child, 
+    #vNetTable td:last-child,
+    #securityGroupTable th:last-child, 
+    #securityGroupTable td:last-child,
+    #sshKeyTable th:last-child, 
+    #sshKeyTable td:last-child,
+    #k8sClusterTable th:last-child, 
+    #k8sClusterTable td:last-child,
+    #customImageTable th:last-child, 
+    #customImageTable td:last-child,
+    #dataDiskTable th:last-child, 
+    #dataDiskTable td:last-child,
+    #connectionTable th:last-child,
+    #connectionTable td:last-child,
+    [id$="-connectionTable"] th:last-child,
+    [id$="-connectionTable"] td:last-child {
       width: 200px;
       min-width: 200px;
       max-width: 200px;
@@ -218,53 +291,31 @@ limitations under the License.
       z-index: 10;
     }
 
-    #vmTable thead th:nth-child(9) {
+    /* Actions column header background */
+    #vmTable thead th:last-child,
+    #mciTable thead th:last-child,
+    #vNetTable thead th:last-child,
+    #securityGroupTable thead th:last-child,
+    #sshKeyTable thead th:last-child,
+    #k8sClusterTable thead th:last-child,
+    #customImageTable thead th:last-child,
+    #dataDiskTable thead th:last-child,
+    #connectionTable thead th:last-child,
+    [id$="-connectionTable"] thead th:last-child {
       background-color: #f8f9fa;
     }
 
     /* Add tooltip for truncated text */
-    #vmTable td[title] {
-      cursor: help;
-    }
-
-    /* MCI Table cell overflow handling */
-    #mciTable td {
-      max-width: 150px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    /* MCI Table specific column constraints */
-    #mciTable th:nth-child(1), /* MCI ID */
-    #mciTable td:nth-child(1) {
-      max-width: 150px;
-    }
-
-    #mciTable th:nth-child(3), /* Provider */
-    #mciTable td:nth-child(3) {
-      max-width: 120px;
-    }
-
-    #mciTable th:nth-child(5), /* Target Action */
-    #mciTable td:nth-child(5) {
-      max-width: 100px;
-    }
-
-    #mciTable th:nth-child(6), /* Description */
-    #mciTable td:nth-child(6) {
-      max-width: 200px;
-    }
-
-    /* MCI Actions column */
-    #mciTable th:nth-child(7), /* Actions */
-    #mciTable td:nth-child(7) {
-      width: 200px;
-      min-width: 200px;
-      max-width: 200px;
-    }
-
-    #mciTable td[title] {
+    #vmTable td[title],
+    #mciTable td[title],
+    #vNetTable td[title],
+    #securityGroupTable td[title],
+    #sshKeyTable td[title],
+    #k8sClusterTable td[title],
+    #customImageTable td[title],
+    #dataDiskTable td[title],
+    #connectionTable td[title],
+    [id$="-connectionTable"] td[title] {
       cursor: help;
     }
 
@@ -308,7 +359,7 @@ limitations under the License.
 
     /* Custom scrollbar */
     .table-container {
-      max-height: 500px;
+      max-height: 320px;
       overflow-y: auto;
     }
 
@@ -328,6 +379,145 @@ limitations under the License.
 
     .table-container::-webkit-scrollbar-thumb:hover {
       background: #a8a8a8;
+    }
+
+    /* CSP Connection Tabs Styles */
+    .nav-tabs {
+      border-bottom: 2px solid #dee2e6;
+      margin-bottom: 1rem;
+    }
+
+    .nav-tabs .nav-link {
+      border: 1px solid transparent;
+      border-radius: 0.375rem 0.375rem 0 0;
+      color: #495057;
+      padding: 0.75rem 1rem;
+      transition: all 0.15s ease-in-out;
+    }
+
+    .nav-tabs .nav-link:hover {
+      border-color: #e9ecef #e9ecef #dee2e6;
+      background-color: #f8f9fa;
+    }
+
+    .nav-tabs .nav-link.active {
+      color: #495057;
+      background-color: #fff;
+      border-color: #dee2e6 #dee2e6 #fff;
+      font-weight: 500;
+    }
+
+    /* Provider Badge Styles */
+    .provider-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: white;
+    }
+
+    .provider-badge i {
+      margin-right: 0.375rem;
+    }
+
+    .provider-aws {
+      background-color: #FF9900;
+    }
+
+    .provider-azure {
+      background-color: #0078D4;
+    }
+
+    .provider-gcp {
+      background-color: #4285F4;
+    }
+
+    .provider-alibaba {
+      background-color: #FF6A00;
+    }
+
+    .provider-tencent {
+      background-color: #00A971;
+    }
+
+    .provider-ncp {
+      background-color: #03C75A;
+    }
+
+    .provider-nhncloud {
+      background-color: #2F7CD6;
+    }
+
+    .provider-cloudit {
+      background-color: #673AB7;
+    }
+
+    .provider-openstack {
+      background-color: #ED1944;
+    }
+
+    .provider-ibm {
+      background-color: #1261FE;
+    }
+
+    .provider-oracle {
+      background-color: #F80000;
+    }
+
+    .provider-nhn {
+      background-color: #2F7CD6;
+    }
+
+    .provider-unknown {
+      background-color: #6c757d;
+    }
+
+    /* Default fallback color for any provider not explicitly defined */
+    .provider-badge:not([class*="provider-aws"]):not([class*="provider-azure"]):not([class*="provider-gcp"]):not([class*="provider-alibaba"]):not([class*="provider-tencent"]):not([class*="provider-ncp"]):not([class*="provider-nhncloud"]):not([class*="provider-cloudit"]):not([class*="provider-openstack"]):not([class*="provider-ibm"]):not([class*="provider-oracle"]):not([class*="provider-nhn"]):not([class*="provider-unknown"]) {
+      background-color: #17a2b8 !important;
+    }
+
+    /* Tab Content Styling */
+    .tab-content {
+      background-color: white;
+      border-radius: 0 0.375rem 0.375rem 0.375rem;
+      padding: 1rem;
+    }
+
+    .tab-pane {
+      animation: fadeIn 0.3s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Zone highlighting styles */
+    .zone-active {
+      color: #28a745;
+      font-weight: 600;
+      font-size: 0.875rem;
+      margin: 0 2px;
+    }
+
+    .zone-available {
+      color: #6c757d;
+      font-weight: 400;
+      font-size: 0.875rem;
+      margin: 0 2px;
+    }
+
+    .zone-active::before {
+      content: "📍";
+      font-size: 0.8rem;
+    }
+
+    .zone-available::before {
+      content: "";
+      font-size: 0.7rem;
     }
   </style>
 </head>
@@ -453,12 +643,127 @@ limitations under the License.
       </div>
     </div>
 
+    <!-- Resource Overview -->
+    <div class="row">
+      <div class="col-md-12">
+        <div class="content-card">
+          <h5><i class="fas fa-tools"></i> Infrastructure Resources</h5>
+          <div class="row">
+            <div class="col-2">
+              <div class="text-center p-2">
+                <i class="fas fa-cloud text-primary" style="font-size: 1.5rem;"></i>
+                <div class="mt-1">
+                  <strong id="vNetCount">0</strong>
+                  <div class="text-muted small">Virtual Networks</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-2">
+              <div class="text-center p-2">
+                <i class="fas fa-shield-alt text-warning" style="font-size: 1.5rem;"></i>
+                <div class="mt-1">
+                  <strong id="securityGroupCount">0</strong>
+                  <div class="text-muted small">Security Groups</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-2">
+              <div class="text-center p-2">
+                <i class="fas fa-key text-success" style="font-size: 1.5rem;"></i>
+                <div class="mt-1">
+                  <strong id="sshKeyCount">0</strong>
+                  <div class="text-muted small">SSH Keys</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-2">
+              <div class="text-center p-2">
+                <i class="fas fa-dharmachakra text-info" style="font-size: 1.5rem;"></i>
+                <div class="mt-1">
+                  <strong id="k8sClusterCount">0</strong>
+                  <div class="text-muted small">K8s Clusters</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-2">
+              <div class="text-center p-2">
+                <i class="fas fa-project-diagram text-secondary" style="font-size: 1.5rem;"></i>
+                <div class="mt-1">
+                  <strong id="connectionCount">0</strong>
+                  <div class="text-muted small">Connections</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-2">
+              <div class="text-center p-2">
+                <i class="fas fa-shield-alt text-primary" style="font-size: 1.5rem;"></i>
+                <div class="mt-1">
+                  <strong id="vpnCount">0</strong>
+                  <div class="text-muted small">VPN</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Additional Resources Row -->
+    <div class="row">
+      <div class="col-md-12">
+        <div class="content-card">
+          <h5><i class="fas fa-database"></i> Storage & Data Resources</h5>
+          <div class="row">
+            <div class="col-3">
+              <div class="text-center p-2">
+                <i class="fas fa-compact-disc text-info" style="font-size: 1.5rem;"></i>
+                <div class="mt-1">
+                  <strong id="customImageCount">0</strong>
+                  <div class="text-muted small">Custom Images</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-3">
+              <div class="text-center p-2">
+                <i class="fas fa-hdd text-primary" style="font-size: 1.5rem;"></i>
+                <div class="mt-1">
+                  <strong id="dataDiskCount">0</strong>
+                  <div class="text-muted small">Data Disks</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-3">
+              <div class="text-center p-2">
+                <i class="fas fa-cube text-success" style="font-size: 1.5rem;"></i>
+                <div class="mt-1">
+                  <strong id="objectStorageCount">0</strong>
+                  <div class="text-muted small">Object Storage</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-3">
+              <div class="text-center p-2">
+                <i class="fas fa-database text-warning" style="font-size: 1.5rem;"></i>
+                <div class="mt-1">
+                  <strong id="sqlDbCount">0</strong>
+                  <div class="text-muted small">SQL Databases</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- MCI Management Table -->
     <div class="row">
       <div class="col-12">
         <div class="content-card">
           <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5><i class="fas fa-list"></i> Multi-Cloud Infrastructure</h5>
+            <h5>
+              <i class="fas fa-list"></i> Multi-Cloud Infrastructure 
+              <span class="badge badge-secondary ml-2" id="mciCountBadge">0</span>
+            </h5>
             <div>
               <button class="btn btn-primary btn-sm" onclick="refreshMciList()">
                 <i class="fas fa-sync-alt"></i> Refresh
@@ -532,47 +837,271 @@ limitations under the License.
       </div>
     </div>
 
-    <!-- Resource Overview -->
+    <!-- Resource Details Tables -->
+    
+    <!-- Network Resources Table -->
     <div class="row">
-      <div class="col-md-4">
+      <div class="col-12">
         <div class="content-card">
-          <h5><i class="fas fa-network-wired"></i> Network Resources</h5>
-          <div id="networkResourcesContent">
-            <div class="loading-overlay">
-              <div class="spinner-border" role="status">
-                <span class="sr-only">Loading...</span>
-              </div>
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5><i class="fas fa-network-wired"></i> Network Resources (vNet) <span class="badge badge-secondary ml-2" id="vNetCountBadge">0</span></h5>
+            <div>
+              <button class="btn btn-primary btn-sm" onclick="refreshResourceList('vNet')">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
             </div>
           </div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="content-card">
-          <h5><i class="fas fa-shield-alt"></i> Security Groups</h5>
-          <div id="securityGroupsContent">
-            <div class="loading-overlay">
-              <div class="spinner-border" role="status">
-                <span class="sr-only">Loading...</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="content-card">
-          <h5><i class="fas fa-key"></i> SSH Keys</h5>
-          <div id="sshKeysContent">
-            <div class="loading-overlay">
-              <div class="spinner-border" role="status">
-                <span class="sr-only">Loading...</span>
-              </div>
-            </div>
+          <div class="table-responsive table-container">
+            <table class="table table-hover" id="vNetTable">
+              <thead>
+                <tr>
+                  <th>vNet ID</th>
+                  <th>Name</th>
+                  <th>Status</th>
+                  <th>Provider</th>
+                  <th>Region</th>
+                  <th>CIDR</th>
+                  <th>Subnets</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="vNetTableBody">
+                <!-- Data will be populated by JavaScript -->
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
     </div>
 
-  </div>
+    <!-- Security Groups Table -->
+    <div class="row">
+      <div class="col-12">
+        <div class="content-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5><i class="fas fa-shield-alt"></i> Security Groups <span class="badge badge-secondary ml-2" id="securityGroupCountBadge">0</span></h5>
+            <div>
+              <button class="btn btn-primary btn-sm" onclick="refreshResourceList('securityGroup')">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive table-container">
+            <table class="table table-hover" id="securityGroupTable">
+              <thead>
+                <tr>
+                  <th>Security Group ID</th>
+                  <th>Name</th>
+                  <th>Provider</th>
+                  <th>Region</th>
+                  <th>vNet ID</th>
+                  <th>Rules</th>
+                  <th>Description</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="securityGroupTableBody">
+                <!-- Data will be populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SSH Keys Table -->
+    <div class="row">
+      <div class="col-12">
+        <div class="content-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5><i class="fas fa-key"></i> SSH Keys <span class="badge badge-secondary ml-2" id="sshKeyCountBadge">0</span></h5>
+            <div>
+              <button class="btn btn-primary btn-sm" onclick="refreshResourceList('sshKey')">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive table-container">
+            <table class="table table-hover" id="sshKeyTable">
+              <thead>
+                <tr>
+                  <th>SSH Key ID</th>
+                  <th>Name</th>
+                  <th>Provider</th>
+                  <th>Region</th>
+                  <th>Fingerprint</th>
+                  <th>Key Material</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="sshKeyTableBody">
+                <!-- Data will be populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- K8s Clusters Table -->
+    <div class="row">
+      <div class="col-12">
+        <div class="content-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5><i class="fas fa-dharmachakra"></i> Kubernetes Clusters <span class="badge badge-secondary ml-2" id="k8sClusterCountBadge">0</span></h5>
+            <div>
+              <button class="btn btn-primary btn-sm" onclick="refreshResourceList('k8sCluster')">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive table-container">
+            <table class="table table-hover" id="k8sClusterTable">
+              <thead>
+                <tr>
+                  <th>Cluster ID</th>
+                  <th>Name</th>
+                  <th>Status</th>
+                  <th>Provider</th>
+                  <th>Region</th>
+                  <th>Version</th>
+                  <th>Node Groups</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="k8sClusterTableBody">
+                <!-- Data will be populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connections Table with CSP Tabs -->
+    <div class="row">
+      <div class="col-12">
+        <div class="content-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5><i class="fas fa-project-diagram"></i> Cloud Connections</h5>
+            <div>
+              <button class="btn btn-primary btn-sm" onclick="refreshResourceList('connection')">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+            </div>
+          </div>
+          
+          <!-- CSP Tabs -->
+          <ul class="nav nav-tabs" id="connectionTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <a class="nav-link active" id="all-connections-tab" data-toggle="tab" href="#all-connections" role="tab">
+                <i class="fas fa-globe"></i> All
+              </a>
+            </li>
+            <!-- Dynamic CSP tabs will be added here -->
+          </ul>
+          
+          <!-- Tab Content -->
+          <div class="tab-content" id="connectionTabContent">
+            <!-- All Connections Tab -->
+            <div class="tab-pane fade show active" id="all-connections" role="tabpanel">
+              <div class="table-responsive table-container">
+                <table class="table table-hover" id="connectionTable">
+                  <thead>
+                    <tr>
+                      <th>Connection ID</th>
+                      <th>Provider</th>
+                      <th>Region</th>
+                      <th>Zone</th>
+                      <th>Verified</th>
+                      <th>Representative</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="connectionTableBody">
+                    <!-- Data will be populated by JavaScript -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            <!-- Dynamic CSP-specific tabs will be added here by JavaScript -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Custom Images Table -->
+    <div class="row">
+      <div class="col-12">
+        <div class="content-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5><i class="fas fa-compact-disc"></i> Custom Images <span class="badge badge-secondary ml-2" id="customImageCountBadge">0</span></h5>
+            <div>
+              <button class="btn btn-primary btn-sm" onclick="refreshResourceList('customImage')">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive table-container">
+            <table class="table table-hover" id="customImageTable">
+              <thead>
+                <tr>
+                  <th>Image ID</th>
+                  <th>Name</th>
+                  <th>Status</th>
+                  <th>Provider</th>
+                  <th>Region</th>
+                  <th>OS Platform</th>
+                  <th>Creation Date</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="customImageTableBody">
+                <!-- Data will be populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data Disks Table -->
+    <div class="row">
+      <div class="col-12">
+        <div class="content-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5><i class="fas fa-hdd"></i> Data Disks <span class="badge badge-secondary ml-2" id="dataDiskCountBadge">0</span></h5>
+            <div>
+              <button class="btn btn-primary btn-sm" onclick="refreshResourceList('dataDisk')">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive table-container">
+            <table class="table table-hover" id="dataDiskTable">
+              <thead>
+                <tr>
+                  <th>Disk ID</th>
+                  <th>Name</th>
+                  <th>Status</th>
+                  <th>Provider</th>
+                  <th>Region</th>
+                  <th>Size (GB)</th>
+                  <th>Disk Type</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="dataDiskTableBody">
+                <!-- Data will be populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+      </div>
 
   <!-- Loading Overlay -->
   <div class="loading-overlay hidden" id="globalLoader">

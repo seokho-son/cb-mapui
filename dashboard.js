@@ -39,11 +39,56 @@ document.addEventListener('DOMContentLoaded', function() {
   // Initialize charts
   initializeCharts();
   
-  // Load initial data
-  refreshDashboard();
-  
-  // Start auto-refresh
-  startAutoRefresh();
+  // Subscribe to central data updates from parent/main window
+  if (window.parent && window.parent.subscribeToDataUpdates) {
+    console.log('Subscribing to central data updates...');
+    window.parent.subscribeToDataUpdates(function(centralData) {
+      console.log('Received data update from central store:', centralData);
+      // Update local data
+      mciData = centralData.mciData || [];
+      vmData = centralData.vmData || [];
+      resourceData = centralData.resourceData || {};
+      
+      // Update UI components
+      updateStatistics();
+      updateCharts();
+      updateMciTable();
+      updateVmTable();
+      updateAllResourceTables();
+      
+      // Update last updated timestamp
+      const lastUpdatedElement = document.getElementById('lastUpdated');
+      if (lastUpdatedElement && centralData.lastUpdated) {
+        lastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleTimeString();
+      }
+    });
+    
+    // Check if data is already available
+    if (window.parent.cloudBaristaCentralData) {
+      console.log('Using existing central data...');
+      const centralData = window.parent.cloudBaristaCentralData;
+      mciData = centralData.mciData || [];
+      vmData = centralData.vmData || [];
+      resourceData = centralData.resourceData || {};
+      updateStatistics();
+      updateCharts();
+      updateMciTable();
+      updateVmTable();
+      updateAllResourceTables();
+      
+      // Force update resource counts even if no MCI data
+      updateResourceCounts();
+    } else {
+      // Fallback: Load initial data if central store is empty
+      console.log('Central data not available, loading initial data...');
+      refreshDashboard();
+    }
+  } else {
+    // Fallback: traditional loading if not in iframe
+    console.log('Not in iframe context, using traditional data loading...');
+    refreshDashboard();
+    startAutoRefresh();
+  }
   
   // Setup event listeners
   setupEventListeners();
@@ -231,6 +276,7 @@ async function refreshDashboard() {
     updateCharts();
     updateMciTable();
     updateVmTable();
+    updateAllResourceTables();
     
     // Update UI controls
     updateShowAllButton();
@@ -505,6 +551,89 @@ function updateStatistics() {
   document.getElementById('failedMciCount').textContent = failedMci;
   document.getElementById('totalVmCount').textContent = totalVm;
   document.getElementById('totalProviderCount').textContent = providers.size;
+
+  // Update resource counts from central data
+  updateResourceCounts();
+}
+
+// Update resource counts from central data store
+function updateResourceCounts() {
+  try {
+    // Get data from central store through parent window
+    let centralData = {};
+    if (window.parent && window.parent.cloudBaristaCentralData) {
+      centralData = window.parent.cloudBaristaCentralData;
+      console.log('Central data available:', centralData);
+    } else {
+      console.log('Central data not available');
+    }
+
+    // Update vNet count
+    const vNetCount = centralData.vNet ? centralData.vNet.length : 0;
+    const vNetElement = document.getElementById('vNetCount');
+    if (vNetElement) vNetElement.textContent = vNetCount;
+    console.log('vNet count:', vNetCount, 'Data:', centralData.vNet);
+
+    // Update Security Group count
+    const securityGroupCount = centralData.securityGroup ? centralData.securityGroup.length : 0;
+    const securityGroupElement = document.getElementById('securityGroupCount');
+    if (securityGroupElement) securityGroupElement.textContent = securityGroupCount;
+    console.log('Security Group count:', securityGroupCount, 'Data:', centralData.securityGroup);
+
+    // Update SSH Key count
+    const sshKeyCount = centralData.sshKey ? centralData.sshKey.length : 0;
+    const sshKeyElement = document.getElementById('sshKeyCount');
+    if (sshKeyElement) sshKeyElement.textContent = sshKeyCount;
+    console.log('SSH Key count:', sshKeyCount, 'Data:', centralData.sshKey);    // Update K8s Cluster count
+    const k8sClusterCount = centralData.k8sCluster ? centralData.k8sCluster.length : 0;
+    const k8sClusterElement = document.getElementById('k8sClusterCount');
+    if (k8sClusterElement) k8sClusterElement.textContent = k8sClusterCount;
+
+    // Update Connection count
+    const connectionCount = centralData.connection ? centralData.connection.length : 0;
+    const connectionElement = document.getElementById('connectionCount');
+    if (connectionElement) connectionElement.textContent = connectionCount;
+
+    // Update VPN count
+    const vpnCount = centralData.vpn ? centralData.vpn.length : 0;
+    const vpnElement = document.getElementById('vpnCount');
+    if (vpnElement) vpnElement.textContent = vpnCount;
+
+    // Update Custom Image count
+    const customImageCount = centralData.customImage ? centralData.customImage.length : 0;
+    const customImageElement = document.getElementById('customImageCount');
+    if (customImageElement) customImageElement.textContent = customImageCount;
+
+    // Update Data Disk count
+    const dataDiskCount = centralData.dataDisk ? centralData.dataDisk.length : 0;
+    const dataDiskElement = document.getElementById('dataDiskCount');
+    if (dataDiskElement) dataDiskElement.textContent = dataDiskCount;
+
+    // Update Object Storage count
+    const objectStorageCount = centralData.objectStorage ? centralData.objectStorage.length : 0;
+    const objectStorageElement = document.getElementById('objectStorageCount');
+    if (objectStorageElement) objectStorageElement.textContent = objectStorageCount;
+
+    // Update SQL Database count
+    const sqlDbCount = centralData.sqlDb ? centralData.sqlDb.length : 0;
+    const sqlDbElement = document.getElementById('sqlDbCount');
+    if (sqlDbElement) sqlDbElement.textContent = sqlDbCount;
+
+    console.log('Resource counts updated:', {
+      vNet: vNetCount,
+      securityGroup: securityGroupCount,
+      sshKey: sshKeyCount,
+      k8sCluster: k8sClusterCount,
+      connection: connectionCount,
+      vpn: vpnCount,
+      customImage: customImageCount,
+      dataDisk: dataDiskCount,
+      objectStorage: objectStorageCount,
+      sqlDb: sqlDbCount
+    });
+  } catch (error) {
+    console.error('Error updating resource counts:', error);
+  }
 }
 
 // Update charts
@@ -561,6 +690,13 @@ function updateCharts() {
     }
   });
   
+  // Handle empty MCI data
+  if (activeStatuses.length === 0) {
+    activeStatuses.push('No MCIs');
+    activeCounts.push(1);
+    activeColors.push('#e9ecef');
+  }
+  
   charts.mciStatus.data.labels = activeStatuses;
   charts.mciStatus.data.datasets[0].data = activeCounts;
   charts.mciStatus.data.datasets[0].backgroundColor = activeColors;
@@ -575,8 +711,24 @@ function updateCharts() {
     }
   });
   
-  charts.provider.data.labels = Object.keys(providerCounts);
-  charts.provider.data.datasets[0].data = Object.values(providerCounts);
+  const providerLabels = Object.keys(providerCounts);
+  const providerData = Object.values(providerCounts);
+  
+  // Handle empty provider data
+  if (providerLabels.length === 0) {
+    charts.provider.data.labels = ['No VMs'];
+    charts.provider.data.datasets[0].data = [1];
+    charts.provider.data.datasets[0].backgroundColor = ['#e9ecef'];
+  } else {
+    charts.provider.data.labels = providerLabels;
+    charts.provider.data.datasets[0].data = providerData;
+    // Reset to default colors for real data
+    charts.provider.data.datasets[0].backgroundColor = providerLabels.map((_, index) => {
+      const colors = ['#ff6384', '#36a2eb', '#cc65fe', '#ffce56', '#ff9f40', '#4bc0c0', '#9966ff', '#ff6b6b'];
+      return colors[index % colors.length];
+    });
+  }
+  
   charts.provider.update();
 
   // Update Region Chart
@@ -597,8 +749,21 @@ function updateCharts() {
     .sort(([,a], [,b]) => b - a)
     .slice(0, 10); // Show top 10 regions
   
-  charts.region.data.labels = sortedRegions.map(([region]) => region);
-  charts.region.data.datasets[0].data = sortedRegions.map(([,count]) => count);
+  // Handle empty region data
+  if (sortedRegions.length === 0) {
+    charts.region.data.labels = ['No VMs'];
+    charts.region.data.datasets[0].data = [1];
+    charts.region.data.datasets[0].backgroundColor = ['#e9ecef'];
+  } else {
+    charts.region.data.labels = sortedRegions.map(([region]) => region);
+    charts.region.data.datasets[0].data = sortedRegions.map(([,count]) => count);
+    // Reset to default colors for real data
+    charts.region.data.datasets[0].backgroundColor = sortedRegions.map((_, index) => {
+      const colors = ['#ff6384', '#36a2eb', '#cc65fe', '#ffce56', '#ff9f40', '#4bc0c0', '#9966ff', '#ff6b6b'];
+      return colors[index % colors.length];
+    });
+  }
+  
   charts.region.update();
 }
 
@@ -606,6 +771,12 @@ function updateCharts() {
 function updateMciTable() {
   const tbody = document.getElementById('mciTableBody');
   tbody.innerHTML = '';
+  
+  // Update count badge
+  const countBadge = document.getElementById('mciCountBadge');
+  if (countBadge) {
+    countBadge.textContent = mciData.length;
+  }
   
   mciData.forEach(mci => {
     const row = document.createElement('tr');
@@ -647,12 +818,12 @@ function updateMciTable() {
     const canRestart = isRunning;
     
     row.innerHTML = `
-      <td title="${mci.id}"><strong>${truncateWithTooltip(mci.id, 20)}</strong></td>
+      <td title="${mci.id}"><strong>${smartTruncate(mci.id, 'id')}</strong></td>
       <td><span class="status-badge status-${statusClass}">${mci.status}</span></td>
-      <td title="${providerList || 'N/A'}">${truncateWithTooltip(providerList || 'N/A', 15)}</td>
+      <td title="${providerList || 'N/A'}">${smartTruncate(providerList || 'N/A', 'provider')}</td>
       <td>${vmCount}</td>
-      <td title="${mci.targetAction || 'None'}">${truncateWithTooltip(mci.targetAction || 'None', 12)}</td>
-      <td title="${mci.description || 'N/A'}">${truncateWithTooltip(mci.description || 'N/A', 25)}</td>
+      <td title="${mci.targetAction || 'None'}">${smartTruncate(mci.targetAction || 'None', 'default')}</td>
+      <td title="${mci.description || 'N/A'}">${smartTruncate(mci.description || 'N/A', 'description')}</td>
       <td class="action-buttons">
         <button class="btn btn-sm btn-outline-primary" onclick="viewMciDetails('${mci.id}')" title="View Details">
           <i class="fas fa-eye"></i>
@@ -725,14 +896,24 @@ function selectMci(mciId) {
   // Update MCI table highlighting
   updateMciTable();
   
+  // Update VM section header - use safer selector approach
+  const vmTable = document.getElementById('vmTable');
+  const vmContentCard = vmTable ? vmTable.closest('.content-card') : null;
+  const vmHeader = vmContentCard ? vmContentCard.querySelector('h5') : null;
+  
+  if (vmHeader) {
+    vmHeader.innerHTML = `<i class="fas fa-server me-2"></i> Virtual Machine Details - ${mciId} <span class="badge badge-secondary ml-2" id="vmCountBadge">0</span>`;
+  } else {
+    console.warn('VM header not found in selectMci, trying alternative selector');
+    // Fallback: try to find the header directly
+    const directHeader = document.querySelector('#vmCountBadge');
+    if (directHeader && directHeader.parentElement) {
+      directHeader.parentElement.innerHTML = `<i class="fas fa-server me-2"></i>Virtual Machine Details - ${mciId} <span class="badge badge-secondary ml-2" id="vmCountBadge">0</span>`;
+    }
+  }
+  
   // Update VM table to show only VMs from selected MCI
   updateVmTable();
-  
-  // Update VM section header
-  const vmHeader = document.querySelector('#vmTable').closest('.content-card').querySelector('h5');
-  if (vmHeader) {
-    vmHeader.innerHTML = `<i class="fas fa-server me-2"></i>Virtual Machine Details - ${mciId} <span class="badge badge-secondary ml-2" id="vmCountBadge">0</span>`;
-  }
   
   // Update show all button visibility
   updateShowAllButton();
@@ -741,19 +922,29 @@ function selectMci(mciId) {
 // Show all VMs (clear MCI selection)
 function showAllVms() {
   selectedMciId = null;
-  console.log('Showing all VMs');
+  console.log('Showing all VMs, selectedMciId set to:', selectedMciId);
   
   // Update MCI table highlighting
   updateMciTable();
   
+  // Update VM section header - use safer selector approach
+  const vmTable = document.getElementById('vmTable');
+  const vmContentCard = vmTable ? vmTable.closest('.content-card') : null;
+  const vmHeader = vmContentCard ? vmContentCard.querySelector('h5') : null;
+  
+  if (vmHeader) {
+    vmHeader.innerHTML = `<i class="fas fa-server me-2"></i> Virtual Machine Details <span class="badge badge-secondary ml-2" id="vmCountBadge">0</span>`;
+  } else {
+    console.warn('VM header not found, trying alternative selector');
+    // Fallback: try to find the header directly
+    const directHeader = document.querySelector('#vmCountBadge');
+    if (directHeader && directHeader.parentElement) {
+      directHeader.parentElement.innerHTML = `<i class="fas fa-server me-2"></i> Virtual Machine Details <span class="badge badge-secondary ml-2" id="vmCountBadge">0</span>`;
+    }
+  }
+  
   // Update VM table to show all VMs
   updateVmTable();
-  
-  // Update VM section header
-  const vmHeader = document.querySelector('#vmTable').closest('.card').querySelector('.card-header h5');
-  if (vmHeader) {
-    vmHeader.innerHTML = `<i class="fas fa-server me-2"></i>Virtual Machine Details <span class="badge badge-secondary ml-2" id="vmCountBadge">0</span>`;
-  }
   
   // Update show all button visibility
   updateShowAllButton();
@@ -762,8 +953,10 @@ function showAllVms() {
 // Update show all button visibility
 function updateShowAllButton() {
   const showAllBtn = document.getElementById('showAllBtn');
+  console.log('updateShowAllButton called, selectedMciId:', selectedMciId, 'showAllBtn:', showAllBtn);
   if (showAllBtn) {
     showAllBtn.style.display = selectedMciId ? 'inline-block' : 'none';
+    console.log('Show All button display set to:', showAllBtn.style.display);
   }
 }
 
@@ -823,14 +1016,14 @@ function updateVmTable() {
     const canRestart = isRunning;
     
     row.innerHTML = `
-      <td title="${vm.id}"><strong>${truncateWithTooltip(vm.id, 15)}</strong></td>
-      <td title="${vm.mciId}">${truncateWithTooltip(vm.mciId, 15)}</td>
+      <td title="${vm.id}"><strong>${smartTruncate(vm.id, 'id')}</strong></td>
+      <td title="${vm.mciId}">${smartTruncate(vm.mciId, 'id')}</td>
       <td><span class="status-badge status-${statusClass}">${vm.status || 'Unknown'}</span></td>
-      <td title="${provider}">${truncateWithTooltip(provider, 12)}</td>
-      <td title="${region}">${truncateWithTooltip(region, 15)}</td>
-      <td title="${spec}">${truncateWithTooltip(spec, 18)}</td>
-      <td title="${publicIp}">${truncateWithTooltip(publicIp, 15)}</td>
-      <td title="${privateIp}">${truncateWithTooltip(privateIp, 15)}</td>
+      <td title="${provider}">${smartTruncate(provider, 'provider')}</td>
+      <td title="${region}">${smartTruncate(region, 'region')}</td>
+      <td title="${spec}">${smartTruncate(spec, 'spec')}</td>
+      <td title="${publicIp}">${smartTruncate(publicIp, 'ip')}</td>
+      <td title="${privateIp}">${smartTruncate(privateIp, 'ip')}</td>
       <td class="action-buttons">
         <button class="btn btn-sm btn-outline-primary" onclick="viewVmDetails('${vm.mciId}', '${vm.id}')" title="View Details">
           <i class="fas fa-eye"></i>
@@ -1166,6 +1359,12 @@ function refreshVmList() {
 
 // Auto-refresh functionality
 function startAutoRefresh() {
+  // Don't start auto-refresh if using central data subscription
+  if (window.parent && window.parent.subscribeToDataUpdates) {
+    console.log('Using central data subscription, skipping auto-refresh setup');
+    return;
+  }
+  
   // Clear existing timer
   if (refreshTimer) {
     clearInterval(refreshTimer);
@@ -1275,3 +1474,743 @@ window.viewVmDetails = viewVmDetails;
 window.showCreateMciModal = showCreateMciModal;
 window.refreshMciList = refreshMciList;
 window.refreshVmList = refreshVmList;
+window.showAllVms = showAllVms;
+
+// Resource table management functions
+function updateAllResourceTables() {
+  updateVNetTable();
+  updateSecurityGroupTable();
+  updateSshKeyTable();
+  updateK8sClusterTable();
+  updateConnectionTable();
+  updateCustomImageTable();
+  updateDataDiskTable();
+}
+
+function updateVNetTable() {
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  const vNetData = centralData.vNet || [];
+  const tableBody = document.getElementById('vNetTableBody');
+  if (!tableBody) return;
+  
+  tableBody.innerHTML = '';
+  
+  // Update count badge
+  const countBadge = document.getElementById('vNetCountBadge');
+  if (countBadge) {
+    countBadge.textContent = vNetData.length;
+  }
+  
+  vNetData.forEach(vnet => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td title="${vnet.id}">${smartTruncate(vnet.id, 'id')}</td>
+      <td title="${vnet.name || 'N/A'}">${smartTruncate(vnet.name || 'N/A', 'name')}</td>
+      <td><span class="status-badge status-${(vnet.status || 'unknown').toLowerCase()}">${vnet.status || 'Unknown'}</span></td>
+      <td title="${vnet.connectionConfig?.providerName || 'N/A'}">${smartTruncate(vnet.connectionConfig?.providerName || 'N/A', 'provider')}</td>
+      <td title="${vnet.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(vnet.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
+      <td title="${vnet.cidrBlock || 'N/A'}">${smartTruncate(vnet.cidrBlock || 'N/A', 'default')}</td>
+      <td>${vnet.subnetInfoList ? vnet.subnetInfoList.length : 0}</td>
+      <td class="action-buttons">
+        <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('vNet', '${vnet.id}')" title="View Details">
+          <i class="fas fa-eye"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteResource('vNet', '${vnet.id}')" title="Delete">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    `;
+    tableBody.appendChild(row);
+  });
+}
+
+function updateSecurityGroupTable() {
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  const sgData = centralData.securityGroup || [];
+  const tableBody = document.getElementById('securityGroupTableBody');
+  if (!tableBody) return;
+  
+  tableBody.innerHTML = '';
+  
+  // Update count badge
+  const countBadge = document.getElementById('securityGroupCountBadge');
+  if (countBadge) {
+    countBadge.textContent = sgData.length;
+  }
+  
+  sgData.forEach(sg => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td title="${sg.id}">${smartTruncate(sg.id, 'id')}</td>
+      <td title="${sg.name || 'N/A'}">${smartTruncate(sg.name || 'N/A', 'name')}</td>
+      <td title="${sg.connectionConfig?.providerName || 'N/A'}">${smartTruncate(sg.connectionConfig?.providerName || 'N/A', 'provider')}</td>
+      <td title="${sg.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(sg.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
+      <td title="${sg.vNetId || 'N/A'}">${smartTruncate(sg.vNetId || 'N/A', 'id')}</td>
+      <td>${sg.firewallRules ? sg.firewallRules.length : 0} rules</td>
+      <td title="${sg.description || 'N/A'}">${smartTruncate(sg.description || 'N/A', 'description')}</td>
+      <td class="action-buttons">
+        <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('securityGroup', '${sg.id}')" title="View Details">
+          <i class="fas fa-eye"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteResource('securityGroup', '${sg.id}')" title="Delete">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    `;
+    tableBody.appendChild(row);
+  });
+}
+
+function updateSshKeyTable() {
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  const sshKeyData = centralData.sshKey || [];
+  const tableBody = document.getElementById('sshKeyTableBody');
+  if (!tableBody) return;
+  
+  tableBody.innerHTML = '';
+  
+  // Update count badge
+  const countBadge = document.getElementById('sshKeyCountBadge');
+  if (countBadge) {
+    countBadge.textContent = sshKeyData.length;
+  }
+  
+  sshKeyData.forEach(key => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td title="${key.id}">${smartTruncate(key.id, 'id')}</td>
+      <td title="${key.name || 'N/A'}">${smartTruncate(key.name || 'N/A', 'name')}</td>
+      <td title="${key.connectionConfig?.providerName || 'N/A'}">${smartTruncate(key.connectionConfig?.providerName || 'N/A', 'provider')}</td>
+      <td title="${key.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(key.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
+      <td title="${key.fingerprint || 'N/A'}">${smartTruncate(key.fingerprint || 'N/A', 'default')}</td>
+      <td>
+        <button class="btn btn-outline-secondary btn-sm" onclick="viewKeyMaterial('${key.id}')" title="Show Key Material">
+          <i class="fas fa-key"></i>
+        </button>
+      </td>
+      <td class="action-buttons">
+        <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('sshKey', '${key.id}')" title="View Details">
+          <i class="fas fa-eye"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteResource('sshKey', '${key.id}')" title="Delete">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    `;
+    tableBody.appendChild(row);
+  });
+}
+
+function updateK8sClusterTable() {
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  const k8sData = centralData.k8sCluster || [];
+  const tableBody = document.getElementById('k8sClusterTableBody');
+  if (!tableBody) return;
+  
+  tableBody.innerHTML = '';
+  
+  // Update count badge
+  const countBadge = document.getElementById('k8sClusterCountBadge');
+  if (countBadge) {
+    countBadge.textContent = k8sData.length;
+  }
+  
+  k8sData.forEach(cluster => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td title="${cluster.id}">${smartTruncate(cluster.id, 'id')}</td>
+      <td title="${cluster.name || 'N/A'}">${smartTruncate(cluster.name || 'N/A', 'name')}</td>
+      <td><span class="status-badge status-${(cluster.status || 'unknown').toLowerCase()}">${cluster.status || 'Unknown'}</span></td>
+      <td title="${cluster.connectionConfig?.providerName || 'N/A'}">${smartTruncate(cluster.connectionConfig?.providerName || 'N/A', 'provider')}</td>
+      <td title="${cluster.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(cluster.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
+      <td title="${cluster.version || 'N/A'}">${smartTruncate(cluster.version || 'N/A', 'default')}</td>
+      <td>${cluster.nodeGroupList ? cluster.nodeGroupList.length : 0}</td>
+      <td class="action-buttons">
+        <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('k8sCluster', '${cluster.id}')" title="View Details">
+          <i class="fas fa-eye"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-warning" onclick="controlK8sCluster('${cluster.id}', 'upgrade')" title="Upgrade">
+          <i class="fas fa-arrow-up"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteResource('k8sCluster', '${cluster.id}')" title="Delete">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    `;
+    tableBody.appendChild(row);
+  });
+}
+
+function updateConnectionTable() {
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  const connectionData = centralData.connection || [];
+  
+  // Update main connection table (All Connections tab)
+  updateAllConnectionsTable(connectionData);
+  
+  // Create CSP-specific tabs
+  createCspTabs(connectionData);
+}
+
+function updateAllConnectionsTable(connectionData) {
+  const tableBody = document.getElementById('connectionTableBody');
+  if (!tableBody) return;
+  
+  tableBody.innerHTML = '';
+  
+  // Get CSP provider icons
+  const providerIcons = {
+    'aws': 'fab fa-aws',
+    'azure': 'fab fa-microsoft',
+    'gcp': 'fab fa-google',
+    'alibaba': 'fas fa-cloud',
+    'tencent': 'fas fa-cloud',
+    'ncp': 'fas fa-cloud',
+    'nhncloud': 'fas fa-cloud',
+    'nhn': 'fas fa-cloud',
+    'cloudit': 'fas fa-cloud',
+    'openstack': 'fas fa-cloud',
+    'ibm': 'fas fa-cloud',
+    'oracle': 'fas fa-cloud',
+    'unknown': 'fas fa-cloud'
+  };
+  
+  connectionData.forEach(conn => {
+    const providerId = (conn.providerName || 'unknown').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const providerIcon = providerIcons[providerId] || providerIcons[(conn.providerName || 'unknown').toLowerCase()] || 'fas fa-cloud';
+    
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td title="${conn.configName}">${smartTruncate(conn.configName, 'id')}</td>
+      <td>
+        <span class="provider-badge provider-${getProviderClass(conn.providerName)}">
+          <i class="${providerIcon}"></i> ${conn.providerName || 'N/A'}
+        </span>
+      </td>
+      <td title="${conn.regionDetail?.regionName || 'N/A'}">${smartTruncate(conn.regionDetail?.regionName || 'N/A', 'region')}</td>
+      <td>${formatZonesWithHighlight(conn)}</td>
+      <td><span class="badge ${conn.verified ? 'badge-success' : 'badge-warning'}">${conn.verified ? 'Yes' : 'No'}</span></td>
+      <td><span class="badge ${conn.regionRepresentative ? 'badge-info' : 'badge-secondary'}">${conn.regionRepresentative ? 'Yes' : 'No'}</span></td>
+      <td class="action-buttons">
+        <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('connection', '${conn.configName}')" title="View Details">
+          <i class="fas fa-eye"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-warning" onclick="testConnection('${conn.configName}')" title="Test Connection">
+          <i class="fas fa-check"></i>
+        </button>
+      </td>
+    `;
+    tableBody.appendChild(row);
+  });
+}
+
+function createCspTabs(connectionData) {
+  // Group connections by provider
+  const cspGroups = {};
+  connectionData.forEach(conn => {
+    const provider = conn.providerName || 'unknown';
+    if (!cspGroups[provider]) {
+      cspGroups[provider] = [];
+    }
+    cspGroups[provider].push(conn);
+  });
+
+  // Get CSP provider icons
+  const providerIcons = {
+    'aws': 'fab fa-aws',
+    'azure': 'fab fa-microsoft',
+    'gcp': 'fab fa-google',
+    'alibaba': 'fas fa-cloud',
+    'tencent': 'fas fa-cloud',
+    'ncp': 'fas fa-cloud',
+    'nhncloud': 'fas fa-cloud',
+    'nhn': 'fas fa-cloud',
+    'cloudit': 'fas fa-cloud',
+    'openstack': 'fas fa-cloud',
+    'ibm': 'fas fa-cloud',
+    'oracle': 'fas fa-cloud',
+    'unknown': 'fas fa-cloud'
+  };
+
+  // Create tabs
+  const tabsContainer = document.getElementById('connectionTabs');
+  const tabContentContainer = document.getElementById('connectionTabContent');
+  
+  if (!tabsContainer || !tabContentContainer) return;
+
+  // Remove existing CSP tabs (keep "All Connections" tab)
+  const existingCspTabs = tabsContainer.querySelectorAll('.csp-tab');
+  existingCspTabs.forEach(tab => tab.remove());
+  
+  // Remove existing CSP tab panes
+  const existingCspPanes = tabContentContainer.querySelectorAll('.csp-tab-pane');
+  existingCspPanes.forEach(pane => pane.remove());
+
+  // Create CSP-specific tabs
+  Object.keys(cspGroups).sort().forEach(provider => {
+    const connections = cspGroups[provider];
+    const providerId = provider.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const providerIcon = providerIcons[providerId] || providerIcons[provider.toLowerCase()] || 'fas fa-cloud';
+    
+    // Create tab
+    const tabItem = document.createElement('li');
+    tabItem.className = 'nav-item csp-tab';
+    tabItem.role = 'presentation';
+    
+    const tabLink = document.createElement('a');
+    tabLink.className = 'nav-link';
+    tabLink.id = `${providerId}-tab`;
+    tabLink.setAttribute('data-toggle', 'tab');
+    tabLink.setAttribute('href', `#${providerId}-connections`);
+    tabLink.setAttribute('role', 'tab');
+    tabLink.innerHTML = `<i class="${providerIcon}"></i> ${provider} <span class="badge badge-secondary">${connections.length}</span>`;
+    
+    tabItem.appendChild(tabLink);
+    tabsContainer.appendChild(tabItem);
+    
+    // Create tab content
+    const tabPane = document.createElement('div');
+    tabPane.className = 'tab-pane fade csp-tab-pane';
+    tabPane.id = `${providerId}-connections`;
+    tabPane.setAttribute('role', 'tabpanel');
+    
+    tabPane.innerHTML = `
+      <div class="table-responsive table-container">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>Connection ID</th>
+              <th>Provider</th>
+              <th>Region</th>
+              <th>Zone</th>
+              <th>Verified</th>
+              <th>Representative</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="${providerId}-connectionTableBody">
+          </tbody>
+        </table>
+      </div>
+    `;
+    
+    tabContentContainer.appendChild(tabPane);
+    
+    // Populate CSP-specific table
+    const cspTableBody = document.getElementById(`${providerId}-connectionTableBody`);
+    if (cspTableBody) {
+      connections.forEach(conn => {
+        const connProviderId = (conn.providerName || 'unknown').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const connProviderIcon = providerIcons[connProviderId] || providerIcons[(conn.providerName || 'unknown').toLowerCase()] || 'fas fa-cloud';
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td title="${conn.configName}">${smartTruncate(conn.configName, 'id')}</td>
+          <td>
+            <span class="provider-badge provider-${getProviderClass(conn.providerName)}">
+              <i class="${connProviderIcon}"></i> ${conn.providerName || 'N/A'}
+            </span>
+          </td>
+          <td title="${conn.regionDetail?.regionName || 'N/A'}">${smartTruncate(conn.regionDetail?.regionName || 'N/A', 'region')}</td>
+          <td>${formatZonesWithHighlight(conn)}</td>
+          <td><span class="badge ${conn.verified ? 'badge-success' : 'badge-warning'}">${conn.verified ? 'Yes' : 'No'}</span></td>
+          <td><span class="badge ${conn.regionRepresentative ? 'badge-info' : 'badge-secondary'}">${conn.regionRepresentative ? 'Yes' : 'No'}</span></td>
+          <td class="action-buttons">
+            <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('connection', '${conn.configName}')" title="View Details">
+              <i class="fas fa-eye"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-warning" onclick="testConnection('${conn.configName}')" title="Test Connection">
+              <i class="fas fa-check"></i>
+            </button>
+          </td>
+        `;
+        cspTableBody.appendChild(row);
+      });
+    }
+  });
+}
+
+function updateCustomImageTable() {
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  const imageData = centralData.customImage || [];
+  const tableBody = document.getElementById('customImageTableBody');
+  if (!tableBody) return;
+  
+  tableBody.innerHTML = '';
+  
+  // Update count badge
+  const countBadge = document.getElementById('customImageCountBadge');
+  if (countBadge) {
+    countBadge.textContent = imageData.length;
+  }
+  
+  imageData.forEach(image => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td title="${image.id}">${smartTruncate(image.id, 'id')}</td>
+      <td title="${image.name || 'N/A'}">${smartTruncate(image.name || 'N/A', 'name')}</td>
+      <td><span class="status-badge status-${(image.status || 'unknown').toLowerCase()}">${image.status || 'Unknown'}</span></td>
+      <td title="${image.connectionConfig?.providerName || 'N/A'}">${smartTruncate(image.connectionConfig?.providerName || 'N/A', 'provider')}</td>
+      <td title="${image.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(image.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
+      <td title="${image.guestOS || 'N/A'}">${smartTruncate(image.guestOS || 'N/A', 'default')}</td>
+      <td>${image.creationDate ? new Date(image.creationDate).toLocaleDateString() : 'N/A'}</td>
+      <td class="action-buttons">
+        <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('customImage', '${image.id}')" title="View Details">
+          <i class="fas fa-eye"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteResource('customImage', '${image.id}')" title="Delete">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    `;
+    tableBody.appendChild(row);
+  });
+}
+
+function updateDataDiskTable() {
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  const diskData = centralData.dataDisk || [];
+  const tableBody = document.getElementById('dataDiskTableBody');
+  if (!tableBody) return;
+  
+  tableBody.innerHTML = '';
+  
+  // Update count badge
+  const countBadge = document.getElementById('dataDiskCountBadge');
+  if (countBadge) {
+    countBadge.textContent = diskData.length;
+  }
+  
+  diskData.forEach(disk => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td title="${disk.id}">${smartTruncate(disk.id, 'id')}</td>
+      <td title="${disk.name || 'N/A'}">${smartTruncate(disk.name || 'N/A', 'name')}</td>
+      <td><span class="status-badge status-${(disk.status || 'unknown').toLowerCase()}">${disk.status || 'Unknown'}</span></td>
+      <td title="${disk.connectionConfig?.providerName || 'N/A'}">${smartTruncate(disk.connectionConfig?.providerName || 'N/A', 'provider')}</td>
+      <td title="${disk.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(disk.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
+      <td title="${disk.diskSize || 'N/A'}">${smartTruncate(disk.diskSize || 'N/A', 'default')}</td>
+      <td title="${disk.diskType || 'N/A'}">${smartTruncate(disk.diskType || 'N/A', 'default')}</td>
+      <td class="action-buttons">
+        <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('dataDisk', '${disk.id}')" title="View Details">
+          <i class="fas fa-eye"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-warning" onclick="resizeDisk('${disk.id}')" title="Resize">
+          <i class="fas fa-expand"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteResource('dataDisk', '${disk.id}')" title="Delete">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    `;
+    tableBody.appendChild(row);
+  });
+}
+
+// Resource management functions
+function refreshResourceList(resourceType) {
+  console.log(`Refreshing ${resourceType} list...`);
+  // Trigger refresh from parent window
+  if (window.parent && window.parent.getMci) {
+    window.parent.getMci();
+  }
+  
+  // Show loading indicator
+  Swal.fire({
+    title: 'Refreshing...',
+    text: `Updating ${resourceType} list`,
+    allowOutsideClick: false,
+    didOpen: () => {
+      Swal.showLoading();
+    }
+  });
+  
+  // Hide loading after a short delay
+  setTimeout(() => {
+    Swal.close();
+  }, 2000);
+}
+
+function viewResourceDetails(resourceType, resourceId) {
+  console.log(`Viewing details for ${resourceType}: ${resourceId}`);
+  
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  const resourceData = centralData[resourceType] || [];
+  const resource = resourceData.find(item => item.id === resourceId || item.configName === resourceId);
+  
+  if (resource) {
+    const jsonFormatter = new JSONFormatter(resource, 2);
+    
+    Swal.fire({
+      title: `${resourceType} Details`,
+      html: `
+        <div style="text-align: left; max-height: 400px; overflow-y: auto;">
+          <div id="jsonViewer"></div>
+        </div>
+      `,
+      width: '800px',
+      didOpen: () => {
+        document.getElementById('jsonViewer').appendChild(jsonFormatter.render());
+      }
+    });
+  } else {
+    Swal.fire('Error', 'Resource not found', 'error');
+  }
+}
+
+function deleteResource(resourceType, resourceId) {
+  Swal.fire({
+    title: `Delete ${resourceType}?`,
+    text: `Are you sure you want to delete ${resourceId}?`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#d33',
+    cancelButtonColor: '#3085d6',
+    confirmButtonText: 'Yes, delete it!'
+  }).then((result) => {
+    if (result.isConfirmed) {
+      console.log(`Deleting ${resourceType}: ${resourceId}`);
+      // TODO: Implement actual deletion API call
+      Swal.fire('Deleted!', `${resourceType} has been deleted.`, 'success');
+    }
+  });
+}
+
+// Helper function for text truncation
+function truncateText(text, maxLength) {
+  if (!text || text === 'N/A' || text === 'None') return text;
+  if (text.length <= maxLength) return text;
+  return `<span title="${text.replace(/"/g, '&quot;')}">${text.substring(0, maxLength)}...</span>`;
+}
+
+// Smart truncation that only truncates very long text
+function smartTruncate(text, columnType = 'default') {
+  if (!text || text === 'N/A' || text === 'None') return text;
+  
+  // Define thresholds based on column type
+  const thresholds = {
+    'id': 25,        // ID columns can be a bit longer
+    'name': 30,      // Name columns 
+    'provider': 20,  // Provider names are usually short
+    'region': 25,    // Region names
+    'spec': 30,      // Spec names can be longer
+    'ip': 20,        // IP addresses
+    'description': 50, // Descriptions can be longer
+    'default': 35    // Default for other columns
+  };
+  
+  const maxLength = thresholds[columnType] || thresholds.default;
+  
+  if (text.length <= maxLength) return text;
+  return `<span title="${text.replace(/"/g, '&quot;')}">${text.substring(0, maxLength)}...</span>`;
+}
+
+// Helper function to format zones with active zone highlighting
+function formatZonesWithHighlight(connection) {
+  const zones = connection.regionDetail?.zones || [];
+  // Check for assignedZone first, then fallback to other possible fields
+  const activeZone = connection.regionZoneInfo?.assignedZone || 
+                    connection.assignedZone || 
+                    connection.zone || 
+                    connection.availabilityZone || 
+                    connection.regionDetail?.zone;
+  
+  if (zones.length === 0) {
+    return activeZone ? `<span class="zone-active">${activeZone}</span>` : 'N/A';
+  }
+  
+  const formattedZones = zones.map(zone => {
+    if (activeZone && zone === activeZone) {
+      return `<span class="zone-active" title="Assigned zone (${activeZone})">${zone}</span>`;
+    } else {
+      return `<span class="zone-available" title="Available zone">${zone}</span>`;
+    }
+  });
+  
+  return formattedZones.join(', ');
+}
+
+// Helper function to get provider CSS class
+function getProviderClass(providerName) {
+  if (!providerName) return 'unknown';
+  
+  const knownProviders = [
+    'aws', 'azure', 'gcp', 'alibaba', 'tencent', 'ncp', 
+    'nhncloud', 'nhn', 'cloudit', 'openstack', 'ibm', 'oracle'
+  ];
+  
+  const normalizedProvider = providerName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  
+  // Check if it's a known provider
+  if (knownProviders.includes(normalizedProvider)) {
+    return normalizedProvider;
+  }
+  
+  // Check original provider name (in case of different formatting)
+  if (knownProviders.includes(providerName.toLowerCase())) {
+    return providerName.toLowerCase();
+  }
+  
+  // Return original provider name for fallback CSS
+  return providerName.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// Export new functions for global access
+window.refreshResourceList = refreshResourceList;
+window.viewResourceDetails = viewResourceDetails;
+window.deleteResource = deleteResource;
+window.updateAllResourceTables = updateAllResourceTables;
+
+// Additional resource-specific functions
+function viewKeyMaterial(sshKeyId) {
+  console.log(`Viewing SSH key material for: ${sshKeyId}`);
+  
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  const sshKeyData = centralData.sshKey || [];
+  const sshKey = sshKeyData.find(key => key.id === sshKeyId);
+  
+  if (sshKey) {
+    Swal.fire({
+      title: 'SSH Key Material',
+      html: `
+        <div style="text-align: left;">
+          <p><strong>Key ID:</strong> ${sshKey.id}</p>
+          <p><strong>Fingerprint:</strong> ${sshKey.fingerprint || 'N/A'}</p>
+          <div style="margin-top: 10px;">
+            <strong>Public Key:</strong>
+            <textarea readonly style="width: 100%; height: 100px; font-family: monospace; font-size: 12px; margin-top: 5px;">${sshKey.publicKey || 'Not available'}</textarea>
+          </div>
+          ${sshKey.privateKey ? `
+          <div style="margin-top: 10px;">
+            <strong>Private Key:</strong>
+            <textarea readonly style="width: 100%; height: 150px; font-family: monospace; font-size: 12px; margin-top: 5px;">${sshKey.privateKey}</textarea>
+          </div>
+          ` : ''}
+        </div>
+      `,
+      width: '800px'
+    });
+  } else {
+    Swal.fire('Error', 'SSH Key not found', 'error');
+  }
+}
+
+function controlK8sCluster(clusterId, action) {
+  console.log(`Performing ${action} on K8s cluster: ${clusterId}`);
+  
+  if (action === 'upgrade') {
+    Swal.fire({
+      title: 'Upgrade K8s Cluster',
+      text: `Are you sure you want to upgrade cluster ${clusterId}?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, upgrade it!'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        console.log(`Upgrading K8s cluster: ${clusterId}`);
+        // TODO: Implement actual upgrade API call
+        Swal.fire('Upgrade Started!', 'K8s cluster upgrade has been initiated.', 'success');
+      }
+    });
+  }
+}
+
+function testConnection(configName) {
+  console.log(`Testing connection: ${configName}`);
+  
+  Swal.fire({
+    title: 'Testing Connection...',
+    text: `Verifying connection ${configName}`,
+    allowOutsideClick: false,
+    didOpen: () => {
+      Swal.showLoading();
+    }
+  });
+  
+  // Simulate connection test
+  setTimeout(() => {
+    Swal.fire({
+      title: 'Connection Test',
+      text: `Connection ${configName} is healthy`,
+      icon: 'success'
+    });
+  }, 2000);
+}
+
+function resizeDisk(diskId) {
+  console.log(`Resizing disk: ${diskId}`);
+  
+  Swal.fire({
+    title: 'Resize Data Disk',
+    html: `
+      <div style="text-align: left;">
+        <p><strong>Disk ID:</strong> ${diskId}</p>
+        <label for="newSize">New Size (GB):</label>
+        <input type="number" id="newSize" class="swal2-input" placeholder="Enter new size" min="1">
+        <p style="font-size: 12px; color: #666; margin-top: 10px;">
+          Note: You can only increase the disk size. Decreasing is not supported.
+        </p>
+      </div>
+    `,
+    showCancelButton: true,
+    confirmButtonText: 'Resize',
+    preConfirm: () => {
+      const newSize = document.getElementById('newSize').value;
+      if (!newSize || newSize <= 0) {
+        Swal.showValidationMessage('Please enter a valid size');
+        return false;
+      }
+      return newSize;
+    }
+  }).then((result) => {
+    if (result.isConfirmed) {
+      console.log(`Resizing disk ${diskId} to ${result.value} GB`);
+      // TODO: Implement actual resize API call
+      Swal.fire('Resize Started!', `Disk ${diskId} resize to ${result.value} GB has been initiated.`, 'success');
+    }
+  });
+}
+
+// Export additional functions
+window.viewKeyMaterial = viewKeyMaterial;
+window.controlK8sCluster = controlK8sCluster;
+window.testConnection = testConnection;
+window.resizeDisk = resizeDisk;

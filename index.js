@@ -142,6 +142,42 @@ var passwordElement = document.getElementById("password");
 var namespaceElement = document.getElementById("namespace");
 var mciidElement = document.getElementById("mciid");
 
+// Central Data Store for sharing with Dashboard
+window.cloudBaristaCentralData = {
+  mciData: [],
+  vmData: [],
+  resourceData: {},
+  vNet: [],
+  securityGroup: [],
+  sshKey: [],
+  k8sCluster: [],
+  connection: [],
+  vpn: [],
+  customImage: [],
+  dataDisk: [],
+  objectStorage: [],
+  sqlDb: [],
+  lastUpdated: null,
+  subscribers: []
+};
+
+// Subscribe to data updates
+window.subscribeToDataUpdates = function(callback) {
+  window.cloudBaristaCentralData.subscribers.push(callback);
+};
+
+// Notify all subscribers when data changes
+function notifyDataSubscribers() {
+  window.cloudBaristaCentralData.lastUpdated = new Date();
+  window.cloudBaristaCentralData.subscribers.forEach(callback => {
+    try {
+      callback(window.cloudBaristaCentralData);
+    } catch (error) {
+      console.log('Error notifying subscriber:', error);
+    }
+  });
+}
+
 const typeStringConnection = "connection";
 const typeStringProvider = "provider";
 const typeStringImage = "image";
@@ -1391,9 +1427,9 @@ function handleMciWithoutVms(mciItem, cnt) {
   var verticalSpacing = (topBound - bottomBound) * 0.05; // 5% of map height per MCI
   var preparingMciCount = 0;
   
-  // Count how many preparing/prepared MCIs we already have to determine stacking position
+  // Count how many preparing/prepared/failed MCIs we already have to determine stacking position
   for (var k = 0; k < cnt; k++) {
-    if (mciStatus[k] && (mciStatus[k] === "Preparing" || mciStatus[k] === "Prepared")) {
+    if (mciStatus[k] && (mciStatus[k] === "Preparing" || mciStatus[k] === "Prepared" || mciStatus[k] === "Failed")) {
       preparingMciCount++;
     }
   }
@@ -1428,6 +1464,13 @@ function handleMciWithoutVms(mciItem, cnt) {
 }
 
 function getMci() {
+  // Skip if dashboard is active to avoid duplicate API calls
+  if (window.mapUpdatesPaused) {
+    var filteredRefreshInterval = isNormalInteger(refreshInterval) ? refreshInterval : 5;
+    setTimeout(() => getMci(), filteredRefreshInterval * 1000);
+    return;
+  }
+
   var hostname = hostnameElement.value;
   var port = portElement.value;
   var username = usernameElement.value;
@@ -1459,6 +1502,29 @@ function getMci() {
       .then((res) => {
         var obj = res.data;
 
+        // Update central data store for Dashboard
+        if (obj.mci) {
+          window.cloudBaristaCentralData.mciData = obj.mci;
+          
+          // Extract VM data from MCI data
+          const allVms = [];
+          obj.mci.forEach(mci => {
+            if (mci.vm && Array.isArray(mci.vm)) {
+              mci.vm.forEach(vm => {
+                allVms.push({
+                  ...vm,
+                  mciId: mci.id,
+                  mciName: mci.name
+                });
+              });
+            }
+          });
+          window.cloudBaristaCentralData.vmData = allVms;
+          
+          // Notify Dashboard subscribers
+          notifyDataSubscribers();
+        }
+
         cnt = cntInit;
         
         if (obj.mci != null && obj.mci.length > 0) {
@@ -1479,7 +1545,7 @@ function getMci() {
             // Handle MCI without VMs (preparing, prepared states)
             if (item.vm == null || item.vm.length === 0) {
               console.log("MCI without VMs:", item);
-              if (item.status === "Preparing" || item.status === "Prepared") {
+              if (item.status === "Preparing" || item.status === "Prepared" || item.status === "Failed") {
                 handleMciWithoutVms(item, cnt);
                 cnt++;
               }
@@ -1671,6 +1737,15 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
+      console.log('vNet API response:', obj);
+      
+      // Update central data store
+      if (obj.vNet) {
+        window.cloudBaristaCentralData.vNet = obj.vNet;
+        window.cloudBaristaCentralData.resourceData.vNet = obj.vNet;
+        console.log('vNet data stored in central store:', obj.vNet.length, 'items');
+      }
+      
       if (obj.vNet != null && obj.vNet.length > 0) {
         var resourceLocation = [];
         for (let item of obj.vNet) {
@@ -1686,6 +1761,9 @@ function getMci() {
         // Clear vnet icons when list is empty
         geoResourceLocation.vnet = [];
       }
+      
+      // Notify Dashboard of data update
+      notifyDataSubscribers();
     })
       .catch(function (error) {
         console.log("vNet API error:", error);
@@ -1704,6 +1782,15 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
+      console.log('Security Group API response:', obj);
+      
+      // Update central data store
+      if (obj.securityGroup) {
+        window.cloudBaristaCentralData.securityGroup = obj.securityGroup;
+        window.cloudBaristaCentralData.resourceData.securityGroup = obj.securityGroup;
+        console.log('Security Group data stored in central store:', obj.securityGroup.length, 'items');
+      }
+      
       if (obj.securityGroup != null && obj.securityGroup.length > 0) {
         var resourceLocation = [];
         for (let item of obj.securityGroup) {
@@ -1717,6 +1804,9 @@ function getMci() {
         // Clear securityGroup icons when list is empty
         geoResourceLocation.sg = [];
       }
+      
+      // Notify Dashboard of data update
+      notifyDataSubscribers();
     })
       .catch(function (error) {
         console.log("securityGroup API error:", error);
@@ -1736,6 +1826,15 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
+      console.log('SSH Key API response:', obj);
+      
+      // Update central data store
+      if (obj.sshKey) {
+        window.cloudBaristaCentralData.sshKey = obj.sshKey;
+        window.cloudBaristaCentralData.resourceData.sshKey = obj.sshKey;
+        console.log('SSH Key data stored in central store:', obj.sshKey.length, 'items');
+      }
+      
       if (obj.sshKey != null && obj.sshKey.length > 0) {
         var resourceLocation = [];
         for (let item of obj.sshKey) {
@@ -1749,6 +1848,9 @@ function getMci() {
         // Clear sshKey icons when list is empty
         geoResourceLocation.sshKey = [];
       }
+      
+      // Notify Dashboard of data update
+      notifyDataSubscribers();
     })
       .catch(function (error) {
         console.log("sshKey API error:", error);
@@ -1767,6 +1869,13 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
+      
+      // Update central data store
+      if (obj.K8sClusterInfo) {
+        window.cloudBaristaCentralData.k8sCluster = obj.K8sClusterInfo;
+        window.cloudBaristaCentralData.resourceData.k8sCluster = obj.K8sClusterInfo;
+      }
+      
       if (obj.K8sClusterInfo != null && obj.K8sClusterInfo.length > 0) {
         var resourceLocation = [];
         console.log("resourceLocation k8s[0]");
@@ -1804,6 +1913,9 @@ function getMci() {
         var resourceLocation = [];
         var hasValidVpnSites = false;
         
+        // Store VPN data in central store
+        window.cloudBaristaCentralData.vpn = obj.results;
+        
         for (let result of obj.results) {
           if (result.vpnSites != null && result.vpnSites.length > 0) {
             hasValidVpnSites = true;
@@ -1833,6 +1945,82 @@ function getMci() {
         console.log("VPN API error:", error);
         // Don't update icons on API error to preserve current state
       });
+
+    // Get custom images
+    var customImageUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/customImage`;
+    axios({
+      method: "get",
+      url: customImageUrl,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+      timeout: 10000,
+    }).then((res) => {
+      var obj = res.data;
+      if (obj && obj.customImages) {
+        window.cloudBaristaCentralData.customImage = obj.customImages;
+      }
+    }).catch(function (error) {
+      console.log("Custom Image API error:", error);
+    });
+
+    // Get data disks
+    var dataDiskUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/dataDisk`;
+    axios({
+      method: "get",
+      url: dataDiskUrl,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+      timeout: 10000,
+    }).then((res) => {
+      var obj = res.data;
+      if (obj && obj.dataDiskInfo) {
+        window.cloudBaristaCentralData.dataDisk = obj.dataDiskInfo;
+      }
+    }).catch(function (error) {
+      console.log("Data Disk API error:", error);
+    });
+
+    // Get object storage
+    var objectStorageUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/objectStorage`;
+    axios({
+      method: "get",
+      url: objectStorageUrl,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+      timeout: 10000,
+    }).then((res) => {
+      var obj = res.data;
+      if (obj && obj.objectStorages) {
+        window.cloudBaristaCentralData.objectStorage = obj.objectStorages;
+      }
+    }).catch(function (error) {
+      console.log("Object Storage API error:", error);
+    });
+
+    // Get SQL databases
+    var sqlDbUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/sqlDb`;
+    axios({
+      method: "get",
+      url: sqlDbUrl,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+      timeout: 10000,
+    }).then((res) => {
+      var obj = res.data;
+      if (obj && obj.sqlDbs) {
+        window.cloudBaristaCentralData.sqlDb = obj.sqlDbs;
+      }
+    }).catch(function (error) {
+      console.log("SQL DB API error:", error);
+    });
   }
 }
 
@@ -1905,6 +2093,9 @@ function getConnection() {
           "[Complete] Registered Cloud Regions: " +
           obj.connectionconfig.length
         );
+
+        // Store connection data in central store
+        window.cloudBaristaCentralData.connection = obj.connectionconfig;
 
         obj.connectionconfig.forEach((config, i) => {
           const providerName = config.providerName;
