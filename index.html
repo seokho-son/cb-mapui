@@ -1133,6 +1133,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         console.innerHTML = '<iframe src="swagger.html" style="width:100%; height:100%; border:none;"></iframe>';
         console.style.display = "flex";
         
+        // Switch to Control tab using Bootstrap tab API
+        $('#control-tab').tab('show');
+        
         // Update toggle buttons
         updateToggleButtons('api');
       }
@@ -1141,13 +1144,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         // Hide all dashboard views and show dashboard iframe
         document.getElementById('map').style.display = "none";
         
-        // Pause map updates to avoid duplicate API calls
-        window.mapUpdatesPaused = true;
+        // Continue map data updates in background for dashboard sync
+        // Don't pause updates - just hide map rendering
         
         // Create or update dashboard iframe
         var console = document.getElementById('console');
         console.innerHTML = '<iframe src="dashboard.html" style="width:100%; height:100%; border:none;"></iframe>';
         console.style.display = "flex";
+        
+        // Switch to Control tab using Bootstrap tab API
+        $('#control-tab').tab('show');
         
         // Update toggle buttons
         updateToggleButtons('dashboard');
@@ -1207,9 +1213,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       function showMap() {
         // Hide all dashboard views and show map
         document.getElementById('console').style.display = "none";
-        
-        // Resume map updates
-        window.mapUpdatesPaused = false;
         
         // Show map
         document.getElementById('map').style.display = "block";
