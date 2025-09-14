@@ -559,6 +559,17 @@ limitations under the License.
     
     <!-- Statistics Overview -->
     <div class="row">
+
+      <div class="col-md-2 col-sm-6">
+        <div class="stat-card primary">
+          <div class="text-center">
+            <i class="fas fa-cloud stat-icon text-primary"></i>
+            <h3 class="stat-number" id="totalProviderCount">0</h3>
+            <p class="stat-label">Providers</p>
+          </div>
+        </div>
+      </div>
+
       <div class="col-md-2 col-sm-6">
         <div class="stat-card primary">
           <div class="text-center">
@@ -568,6 +579,7 @@ limitations under the License.
           </div>
         </div>
       </div>
+
       <div class="col-md-2 col-sm-6">
         <div class="stat-card success">
           <div class="text-center">
@@ -595,6 +607,7 @@ limitations under the License.
           </div>
         </div>
       </div>
+
       <div class="col-md-2 col-sm-6">
         <div class="stat-card info">
           <div class="text-center">
@@ -604,40 +617,25 @@ limitations under the License.
           </div>
         </div>
       </div>
-      <div class="col-md-2 col-sm-6">
-        <div class="stat-card primary">
-          <div class="text-center">
-            <i class="fas fa-cloud stat-icon text-primary"></i>
-            <h3 class="stat-number" id="totalProviderCount">0</h3>
-            <p class="stat-label">Providers</p>
-          </div>
-        </div>
-      </div>
+
+
     </div>
 
     <!-- Charts Row -->
     <div class="row">
-      <div class="col-md-4">
+      <div class="col-md-6">
         <div class="content-card">
-          <h5><i class="fas fa-chart-pie"></i> MCI Status Distribution</h5>
+          <h5><i class="fas fa-chart-bar"></i> MCI & VM Status Distribution</h5>
           <div class="chart-container">
-            <canvas id="mciStatusChart"></canvas>
+            <canvas id="combinedStatusChart"></canvas>
           </div>
         </div>
       </div>
-      <div class="col-md-4">
+      <div class="col-md-6">
         <div class="content-card">
-          <h5><i class="fas fa-chart-bar"></i> Provider Distribution</h5>
+          <h5><i class="fas fa-chart-bar"></i> Provider & Regional Distribution</h5>
           <div class="chart-container">
-            <canvas id="providerChart"></canvas>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="content-card">
-          <h5><i class="fas fa-globe"></i> Regional Distribution</h5>
-          <div class="chart-container">
-            <canvas id="regionChart"></canvas>
+            <canvas id="providerRegionChart"></canvas>
           </div>
         </div>
       </div>
@@ -649,42 +647,7 @@ limitations under the License.
         <div class="content-card">
           <h5><i class="fas fa-tools"></i> Infrastructure Resources</h5>
           <div class="row">
-            <div class="col-2">
-              <div class="text-center p-2">
-                <i class="fas fa-cloud text-primary" style="font-size: 1.5rem;"></i>
-                <div class="mt-1">
-                  <strong id="vNetCount">0</strong>
-                  <div class="text-muted small">Virtual Networks</div>
-                </div>
-              </div>
-            </div>
-            <div class="col-2">
-              <div class="text-center p-2">
-                <i class="fas fa-shield-alt text-warning" style="font-size: 1.5rem;"></i>
-                <div class="mt-1">
-                  <strong id="securityGroupCount">0</strong>
-                  <div class="text-muted small">Security Groups</div>
-                </div>
-              </div>
-            </div>
-            <div class="col-2">
-              <div class="text-center p-2">
-                <i class="fas fa-key text-success" style="font-size: 1.5rem;"></i>
-                <div class="mt-1">
-                  <strong id="sshKeyCount">0</strong>
-                  <div class="text-muted small">SSH Keys</div>
-                </div>
-              </div>
-            </div>
-            <div class="col-2">
-              <div class="text-center p-2">
-                <i class="fas fa-dharmachakra text-info" style="font-size: 1.5rem;"></i>
-                <div class="mt-1">
-                  <strong id="k8sClusterCount">0</strong>
-                  <div class="text-muted small">K8s Clusters</div>
-                </div>
-              </div>
-            </div>
+
             <div class="col-2">
               <div class="text-center p-2">
                 <i class="fas fa-project-diagram text-secondary" style="font-size: 1.5rem;"></i>
@@ -694,6 +657,37 @@ limitations under the License.
                 </div>
               </div>
             </div>
+
+            <div class="col-2">
+              <div class="text-center p-2">
+                <i class="fas fa-cloud text-primary" style="font-size: 1.5rem;"></i>
+                <div class="mt-1">
+                  <strong id="vNetCount">0</strong>
+                  <div class="text-muted small">Virtual Networks</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-2">
+              <div class="text-center p-2">
+                <i class="fas fa-shield-alt text-warning" style="font-size: 1.5rem;"></i>
+                <div class="mt-1">
+                  <strong id="securityGroupCount">0</strong>
+                  <div class="text-muted small">Security Groups</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-2">
+              <div class="text-center p-2">
+                <i class="fas fa-key text-success" style="font-size: 1.5rem;"></i>
+                <div class="mt-1">
+                  <strong id="sshKeyCount">0</strong>
+                  <div class="text-muted small">SSH Keys</div>
+                </div>
+              </div>
+            </div>
+
             <div class="col-2">
               <div class="text-center p-2">
                 <i class="fas fa-shield-alt text-primary" style="font-size: 1.5rem;"></i>
@@ -703,6 +697,17 @@ limitations under the License.
                 </div>
               </div>
             </div>
+
+            <div class="col-2">
+              <div class="text-center p-2">
+                <i class="fas fa-dharmachakra text-info" style="font-size: 1.5rem;"></i>
+                <div class="mt-1">
+                  <strong id="k8sClusterCount">0</strong>
+                  <div class="text-muted small">K8s Clusters</div>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       </div>

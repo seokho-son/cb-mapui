@@ -49,6 +49,13 @@ document.addEventListener('DOMContentLoaded', function() {
       vmData = centralData.vmData || [];
       resourceData = centralData.resourceData || {};
       
+      // Update connection status based on data freshness
+      if (centralData.lastUpdated && (Date.now() - new Date(centralData.lastUpdated).getTime()) < 30000) {
+        updateConnectionStatus('connected');
+      } else {
+        updateConnectionStatus('disconnected');
+      }
+      
       // Update UI components
       updateStatistics();
       updateCharts();
@@ -59,7 +66,9 @@ document.addEventListener('DOMContentLoaded', function() {
       // Update last updated timestamp
       const lastUpdatedElement = document.getElementById('lastUpdated');
       if (lastUpdatedElement && centralData.lastUpdated) {
-        lastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleTimeString();
+        lastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleString('en-US');
+      } else {
+        lastUpdatedElement.textContent = 'No data';
       }
     });
     
@@ -70,6 +79,22 @@ document.addEventListener('DOMContentLoaded', function() {
       mciData = centralData.mciData || [];
       vmData = centralData.vmData || [];
       resourceData = centralData.resourceData || {};
+      
+      // Update connection status based on data availability
+      if (centralData.lastUpdated && (Date.now() - new Date(centralData.lastUpdated).getTime()) < 30000) {
+        updateConnectionStatus('connected');
+      } else {
+        updateConnectionStatus('disconnected');
+      }
+      
+      // Update last updated timestamp
+      const lastUpdatedElement = document.getElementById('lastUpdated');
+      if (lastUpdatedElement && centralData.lastUpdated) {
+        lastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleString('en-US');
+      } else {
+        lastUpdatedElement.textContent = 'No data';
+      }
+      
       updateStatistics();
       updateCharts();
       updateMciTable();
@@ -79,9 +104,10 @@ document.addEventListener('DOMContentLoaded', function() {
       // Force update resource counts even if no MCI data
       updateResourceCounts();
     } else {
-      // Fallback: Load initial data if central store is empty
-      console.log('Central data not available, loading initial data...');
-      refreshDashboard();
+      // No central data available yet
+      console.log('Central data not available, waiting for data from Map...');
+      updateConnectionStatus('disconnected');
+      document.getElementById('lastUpdated').textContent = 'Waiting for Map data...';
     }
   } else {
     // Fallback: traditional loading if not in iframe
@@ -141,101 +167,94 @@ function showSettings() {
 
 // Initialize Chart.js charts
 function initializeCharts() {
-  // MCI Status Chart
-  const mciStatusCtx = document.getElementById('mciStatusChart').getContext('2d');
-  charts.mciStatus = new Chart(mciStatusCtx, {
-    type: 'doughnut',
-    data: {
-      labels: ['Running', 'Suspended', 'Failed', 'Creating', 'Other'],
-      datasets: [{
-        data: [0, 0, 0, 0, 0],
-        backgroundColor: [
-          '#28a745',
-          '#ffc107',
-          '#dc3545',
-          '#17a2b8',
-          '#6c757d'
-        ]
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'bottom'
-        }
-      }
-    }
-  });
-
-  // Provider Chart
-  const providerCtx = document.getElementById('providerChart').getContext('2d');
-  charts.provider = new Chart(providerCtx, {
+  // Combined MCI & VM Status Chart
+  const combinedStatusCtx = document.getElementById('combinedStatusChart').getContext('2d');
+  charts.combinedStatus = new Chart(combinedStatusCtx, {
     type: 'bar',
     data: {
-      labels: [],
-      datasets: [{
-        label: 'VM Count',
-        data: [],
-        backgroundColor: [
-          '#007bff',
-          '#28a745',
-          '#ffc107',
-          '#dc3545',
-          '#17a2b8',
-          '#6f42c1',
-          '#e83e8c',
-          '#fd7e14'
-        ]
-      }]
+      labels: ['Running', 'Creating', 'Preparing', 'Suspended', 'Failed', 'Terminating', 'Terminated', 'Other'],
+      datasets: [
+        {
+          label: 'MCI Count',
+          data: [0, 0, 0, 0, 0, 0, 0, 0],
+          backgroundColor: 'rgba(40, 167, 69, 0.8)',   // Green with transparency
+          borderColor: '#28a745',
+          borderWidth: 1
+        },
+        {
+          label: 'VM Count',
+          data: [0, 0, 0, 0, 0, 0, 0, 0],
+          backgroundColor: 'rgba(23, 162, 184, 0.8)',  // Blue with transparency
+          borderColor: '#17a2b8',
+          borderWidth: 1
+        }
+      ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: {
+        duration: 0 // Disable animations for frequent updates
+      },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: {
+            boxWidth: 12,
+            fontSize: 12
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const label = context.dataset.label || '';
+              const value = context.parsed.y || 0;
+              return `${label}: ${value}`;
+            }
+          }
+        }
+      },
       scales: {
         y: {
           beginAtZero: true,
           ticks: {
             stepSize: 1
+          },
+          title: {
+            display: true,
+            text: 'Count'
           }
-        }
-      },
-      plugins: {
-        legend: {
-          display: false
+        },
+        x: {
+          title: {
+            display: true,
+            text: 'Status'
+          }
         }
       }
     }
   });
 
-  // Region Chart
-  const regionCtx = document.getElementById('regionChart').getContext('2d');
-  charts.region = new Chart(regionCtx, {
+  // Provider & Region Combined Chart
+  const providerRegionCtx = document.getElementById('providerRegionChart').getContext('2d');
+  charts.providerRegion = new Chart(providerRegionCtx, {
     type: 'bar',
     data: {
-      labels: [],
-      datasets: [{
-        label: 'VM Count',
-        data: [],
-        backgroundColor: [
-          '#20c997',
-          '#fd7e14',
-          '#6610f2',
-          '#e83e8c',
-          '#6f42c1',
-          '#17a2b8',
-          '#ffc107',
-          '#dc3545'
-        ]
-      }]
+      labels: [], // Provider names
+      datasets: [] // Will be dynamically populated with regions
     },
     options: {
-      indexAxis: 'y', // This makes it horizontal
       responsive: true,
       maintainAspectRatio: false,
+      animation: {
+        duration: 0 // Disable animations for frequent updates
+      },
       scales: {
         x: {
+          stacked: true
+        },
+        y: {
+          stacked: true,
           beginAtZero: true,
           ticks: {
             stepSize: 1
@@ -244,45 +263,88 @@ function initializeCharts() {
       },
       plugins: {
         legend: {
-          display: false
+          position: 'bottom',
+          labels: {
+            boxWidth: 12,
+            fontSize: 10
+          }
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          callbacks: {
+            title: function(tooltipItems) {
+              return 'Provider: ' + tooltipItems[0].label;
+            },
+            label: function(context) {
+              return context.dataset.label + ': ' + context.parsed.y + ' VMs';
+            }
+          }
         }
+      },
+      interaction: {
+        mode: 'index',
+        intersect: false
       }
     }
   });
 }
 
-// Main refresh function
+// Main refresh function - now uses shared data from index.js
 async function refreshDashboard() {
-  console.log('Refreshing dashboard...');
+  console.log('Refreshing dashboard using shared data...');
   showRefreshIndicator(true);
-  updateConnectionStatus('connecting');
   
   try {
-    // Test connection first
-    await testConnection();
-    updateConnectionStatus('connected');
+    // Trigger data update from parent window (Map)
+    if (window.parent && typeof window.parent.getMci === 'function') {
+      console.log('Requesting data update from Map...');
+      window.parent.getMci();
+      
+      // Wait a moment for data to be updated
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
     
-    // Load namespaces first
-    await loadNamespaces();
-    
-    // Load MCI data
-    await loadMciData();
-    
-    // Load resource overview
-    await loadResourceOverview();
-    
-    // Update all displays
-    updateStatistics();
-    updateCharts();
-    updateMciTable();
-    updateVmTable();
-    updateAllResourceTables();
-    
-    // Update UI controls
-    updateShowAllButton();
-    
-    // Update last refresh time
-    document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString('en-US');
+    // Check if parent window has central data
+    if (window.parent && window.parent.cloudBaristaCentralData) {
+      const centralData = window.parent.cloudBaristaCentralData;
+      
+      // Update local data references
+      mciData = centralData.mciData || [];
+      vmData = centralData.vmData || [];
+      resourceData = centralData.resourceData || {};
+      
+      // Update connection status based on data availability
+      if (centralData.lastUpdated && (Date.now() - new Date(centralData.lastUpdated).getTime()) < 30000) {
+        updateConnectionStatus('connected');
+      } else {
+        updateConnectionStatus('disconnected');
+      }
+      
+      // Update all displays
+      updateStatistics();
+      updateCharts();
+      updateMciTable();
+      updateVmTable();
+      updateAllResourceTables();
+      
+      // Update UI controls
+      updateShowAllButton();
+      
+      // Update last refresh time from central data
+      const lastUpdatedElement = document.getElementById('lastUpdated');
+      if (lastUpdatedElement && centralData.lastUpdated) {
+        lastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleString('en-US');
+      } else {
+        lastUpdatedElement.textContent = 'No data';
+      }
+      
+      console.log('Dashboard refreshed with shared data');
+    } else {
+      console.warn('No shared data available from parent window');
+      updateConnectionStatus('disconnected');
+      document.getElementById('lastUpdated').textContent = 'No connection';
+    }
   } catch (error) {
     console.error('Error refreshing dashboard:', error);
     updateConnectionStatus('disconnected');
@@ -322,11 +384,11 @@ function updateConnectionStatus(status) {
       break;
     case 'connecting':
       statusElement.className = 'badge badge-warning';
-      statusElement.innerHTML = '<i class="fas fa-sync fa-spin"></i> Connecting';
+      statusElement.innerHTML = '<i class="fas fa-sync fa-spin"></i> Updating';
       break;
     case 'disconnected':
       statusElement.className = 'badge badge-danger';
-      statusElement.innerHTML = '<i class="fas fa-times-circle"></i> Disconnected';
+      statusElement.innerHTML = '<i class="fas fa-times-circle"></i> No Data';
       break;
     default:
       statusElement.className = 'badge badge-secondary';
@@ -691,81 +753,166 @@ function updateCharts() {
     }
   });
   
-  // Handle empty MCI data
-  if (activeStatuses.length === 0) {
-    activeStatuses.push('No MCIs');
-    activeCounts.push(1);
-    activeColors.push('#e9ecef');
-  }
+  // Update Combined MCI & VM Status Chart
+  const mciStatusCounts = {
+    'Running': 0,
+    'Creating': 0,
+    'Preparing': 0,
+    'Suspended': 0,
+    'Failed': 0,
+    'Terminating': 0,
+    'Terminated': 0,
+    'Other': 0
+  };
   
-  charts.mciStatus.data.labels = activeStatuses;
-  charts.mciStatus.data.datasets[0].data = activeCounts;
-  charts.mciStatus.data.datasets[0].backgroundColor = activeColors;
-  charts.mciStatus.update();
+  const vmStatusCounts = {
+    'Running': 0,
+    'Creating': 0,
+    'Preparing': 0,
+    'Suspended': 0,
+    'Failed': 0,
+    'Terminating': 0,
+    'Terminated': 0,
+    'Other': 0
+  };
   
-  // Update Provider Chart
-  const providerCounts = {};
+  // Count MCI statuses
+  mciData.forEach(mci => {
+    const status = mci.status || 'Unknown';
+    let normalizedStatus = 'Other';
+    
+    if (status.includes('Running') || status === 'Running') {
+      normalizedStatus = 'Running';
+    } else if (status.includes('Creating') || status === 'Creating') {
+      normalizedStatus = 'Creating';
+    } else if (status.includes('Preparing') || status === 'Preparing') {
+      normalizedStatus = 'Preparing';
+    } else if (status.includes('Suspended') || status === 'Suspended') {
+      normalizedStatus = 'Suspended';
+    } else if (status.includes('Failed') || status === 'Failed' || status.includes('Partial-Failed')) {
+      normalizedStatus = 'Failed';
+    } else if (status.includes('Terminating') || status === 'Terminating') {
+      normalizedStatus = 'Terminating';
+    } else if (status.includes('Terminated') || status === 'Terminated') {
+      normalizedStatus = 'Terminated';
+    }
+    
+    if (mciStatusCounts.hasOwnProperty(normalizedStatus)) {
+      mciStatusCounts[normalizedStatus]++;
+    } else {
+      mciStatusCounts['Other']++;
+    }
+  });
+  
+  // Count VM statuses
   vmData.forEach(vm => {
+    const vmStatus = vm.status || 'Unknown';
+    let normalizedVmStatus = 'Other';
+    
+    if (vmStatus.includes('Running') || vmStatus === 'Running') {
+      normalizedVmStatus = 'Running';
+    } else if (vmStatus.includes('Creating') || vmStatus === 'Creating') {
+      normalizedVmStatus = 'Creating';
+    } else if (vmStatus.includes('Preparing') || vmStatus === 'Preparing') {
+      normalizedVmStatus = 'Preparing';
+    } else if (vmStatus.includes('Suspended') || vmStatus === 'Suspended') {
+      normalizedVmStatus = 'Suspended';
+    } else if (vmStatus.includes('Failed') || vmStatus === 'Failed') {
+      normalizedVmStatus = 'Failed';
+    } else if (vmStatus.includes('Terminating') || vmStatus === 'Terminating') {
+      normalizedVmStatus = 'Terminating';
+    } else if (vmStatus.includes('Terminated') || vmStatus === 'Terminated') {
+      normalizedVmStatus = 'Terminated';
+    }
+    
+    if (vmStatusCounts.hasOwnProperty(normalizedVmStatus)) {
+      vmStatusCounts[normalizedVmStatus]++;
+    } else {
+      vmStatusCounts['Other']++;
+    }
+  });
+  
+  // Prepare data for combined chart
+  const statusLabels = ['Running', 'Creating', 'Preparing', 'Suspended', 'Failed', 'Terminating', 'Terminated', 'Other'];
+  const mciDataArray = statusLabels.map(label => mciStatusCounts[label] || 0);
+  const vmDataArray = statusLabels.map(label => vmStatusCounts[label] || 0);
+  
+  // Update combined chart
+  charts.combinedStatus.data.labels = statusLabels;
+  charts.combinedStatus.data.datasets[0].data = mciDataArray;  // MCI Count
+  charts.combinedStatus.data.datasets[1].data = vmDataArray;   // VM Count
+  charts.combinedStatus.update('none'); // Disable animation for this update
+  
+  // Update Provider & Region Combined Chart
+  const providerRegionData = {};
+  
+  // Collect data by provider and region
+  vmData.forEach(vm => {
+    let provider = 'Unknown';
+    let region = 'Unknown';
+    
+    // Extract provider information
     if (vm.connectionConfig && vm.connectionConfig.providerName) {
-      const provider = vm.connectionConfig.providerName;
-      providerCounts[provider] = (providerCounts[provider] || 0) + 1;
-    }
-  });
-  
-  const providerLabels = Object.keys(providerCounts);
-  const providerData = Object.values(providerCounts);
-  
-  // Handle empty provider data
-  if (providerLabels.length === 0) {
-    charts.provider.data.labels = ['No VMs'];
-    charts.provider.data.datasets[0].data = [1];
-    charts.provider.data.datasets[0].backgroundColor = ['#e9ecef'];
-  } else {
-    charts.provider.data.labels = providerLabels;
-    charts.provider.data.datasets[0].data = providerData;
-    // Reset to default colors for real data
-    charts.provider.data.datasets[0].backgroundColor = providerLabels.map((_, index) => {
-      const colors = ['#ff6384', '#36a2eb', '#cc65fe', '#ffce56', '#ff9f40', '#4bc0c0', '#9966ff', '#ff6b6b'];
-      return colors[index % colors.length];
-    });
-  }
-  
-  charts.provider.update();
-
-  // Update Region Chart
-  const regionCounts = {};
-  vmData.forEach(vm => {
-    if (vm.region && vm.region.Region) {
-      const region = vm.region.Region;
-      regionCounts[region] = (regionCounts[region] || 0) + 1;
+      provider = vm.connectionConfig.providerName;
     } else if (vm.location && vm.location.cloudType) {
-      // Fallback to cloudType if region is not available
-      const region = vm.location.cloudType;
-      regionCounts[region] = (regionCounts[region] || 0) + 1;
+      provider = vm.location.cloudType;
     }
+    
+    // Extract region information
+    if (vm.region && vm.region.Region) {
+      region = vm.region.Region;
+    } else if (vm.location && vm.location.region) {
+      region = vm.location.region;
+    }
+    
+    // Initialize provider if not exists
+    if (!providerRegionData[provider]) {
+      providerRegionData[provider] = {};
+    }
+    
+    // Count VMs by provider and region
+    providerRegionData[provider][region] = (providerRegionData[provider][region] || 0) + 1;
   });
   
-  // Sort regions by VM count for better visualization
-  const sortedRegions = Object.entries(regionCounts)
-    .sort(([,a], [,b]) => b - a)
-    .slice(0, 10); // Show top 10 regions
+  // Process data for stacked bar chart
+  const providers = Object.keys(providerRegionData);
+  const allRegions = new Set();
   
-  // Handle empty region data
-  if (sortedRegions.length === 0) {
-    charts.region.data.labels = ['No VMs'];
-    charts.region.data.datasets[0].data = [1];
-    charts.region.data.datasets[0].backgroundColor = ['#e9ecef'];
-  } else {
-    charts.region.data.labels = sortedRegions.map(([region]) => region);
-    charts.region.data.datasets[0].data = sortedRegions.map(([,count]) => count);
-    // Reset to default colors for real data
-    charts.region.data.datasets[0].backgroundColor = sortedRegions.map((_, index) => {
-      const colors = ['#ff6384', '#36a2eb', '#cc65fe', '#ffce56', '#ff9f40', '#4bc0c0', '#9966ff', '#ff6b6b'];
-      return colors[index % colors.length];
+  // Get all unique regions
+  providers.forEach(provider => {
+    Object.keys(providerRegionData[provider]).forEach(region => {
+      allRegions.add(region);
     });
+  });
+  
+  const regionColors = [
+    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40',
+    '#FF6B6B', '#C9CBCF', '#4BC0C0', '#FFA07A', '#98D8C8', '#F7DC6F'
+  ];
+  
+  // Prepare datasets for each region
+  const datasets = Array.from(allRegions).map((region, index) => ({
+    label: region,
+    data: providers.map(provider => providerRegionData[provider][region] || 0),
+    backgroundColor: regionColors[index % regionColors.length],
+    borderColor: regionColors[index % regionColors.length],
+    borderWidth: 1
+  }));
+  
+  // Handle empty data
+  if (providers.length === 0) {
+    charts.providerRegion.data.labels = ['No Data'];
+    charts.providerRegion.data.datasets = [{
+      label: 'No VMs',
+      data: [1],
+      backgroundColor: ['#e9ecef']
+    }];
+  } else {
+    charts.providerRegion.data.labels = providers;
+    charts.providerRegion.data.datasets = datasets;
   }
   
-  charts.region.update();
+  charts.providerRegion.update('none'); // Disable animation for this update
 }
 
 // Update MCI table
@@ -1288,52 +1435,23 @@ async function viewVmDetails(mciId, vmId) {
 
 // Show create MCI modal
 function showCreateMciModal() {
-  Swal.fire({
-    title: 'Create New MCI',
-    html: `
-      <div class="form-group text-left">
-        <label for="newMciId">MCI ID:</label>
-        <input type="text" id="newMciId" class="form-control" placeholder="Enter MCI ID">
-      </div>
-      <div class="form-group text-left">
-        <label for="newMciDescription">Description:</label>
-        <input type="text" id="newMciDescription" class="form-control" placeholder="Enter description">
-      </div>
-      <div class="form-group text-left">
-        <label for="newMciPolicy">Recommendation Policy:</label>
-        <select id="newMciPolicy" class="form-control">
-          <option value="location">Location-based</option>
-          <option value="price">Cost-based</option>
-          <option value="performance">Performance-based</option>
-          <option value="random">Random-based</option>
-        </select>
-      </div>
-      <div class="alert alert-info text-left">
-        <small><i class="fas fa-info-circle"></i> For advanced MCI configuration, please use the Map view interface.</small>
-      </div>
-    `,
-    showCancelButton: true,
-    confirmButtonText: 'Create MCI',
-    cancelButtonText: 'Cancel',
-    preConfirm: () => {
-      const mciId = document.getElementById('newMciId').value;
-      const description = document.getElementById('newMciDescription').value;
-      const policy = document.getElementById('newMciPolicy').value;
-      
-      if (!mciId) {
-        Swal.showValidationMessage('Please enter MCI ID');
-        return false;
-      }
-      
-      return { mciId, description, policy };
+  // Switch to Map view and Provision tab directly
+  if (window.parent && window.parent !== window) {
+    // If in iframe, call parent's functions
+    if (typeof window.parent.showMap === 'function') {
+      window.parent.showMap();
     }
-  }).then((result) => {
-    if (result.isConfirmed) {
-      // For now, redirect to map view for MCI creation
-      window.open('index.html', '_blank');
-      showInfoMessage('Please use the Map view for detailed MCI configuration and creation.');
+    
+    // Switch to Provision tab using Bootstrap tab API
+    if (window.parent.$ && window.parent.document) {
+      window.parent.$('#provision-tab').tab('show');
     }
-  });
+    
+    showInfoMessage('Switched to Map view for MCI creation. Check the Provision tab.');
+  } else {
+    // If not in iframe, redirect to index.html
+    window.location.href = 'index.html';
+  }
 }
 
 // Refresh specific lists

@@ -1464,13 +1464,6 @@ function handleMciWithoutVms(mciItem, cnt) {
 }
 
 function getMci() {
-  // Skip if dashboard is active to avoid duplicate API calls
-  if (window.mapUpdatesPaused) {
-    var filteredRefreshInterval = isNormalInteger(refreshInterval) ? refreshInterval : 5;
-    setTimeout(() => getMci(), filteredRefreshInterval * 1000);
-    return;
-  }
-
   var hostname = hostnameElement.value;
   var port = portElement.value;
   var username = usernameElement.value;
