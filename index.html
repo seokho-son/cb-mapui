@@ -75,6 +75,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link rel="stylesheet" href="https://cdn.datatables.net/2.0.8/css/dataTables.dataTables.css" />
   <script src="https://cdn.datatables.net/2.0.8/js/dataTables.js"></script>
 
+  <!-- Font Awesome for icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" 
+        integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" 
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+
   <style>
     .map {
       width: 100%;
@@ -111,6 +116,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       border-left: 3px solid transparent;
       border-right: 3px solid transparent;
       border-bottom: 3px solid rgba(255, 255, 255, 0.95);
+    }
+
+    /* Spin animation for refresh indicator */
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
     }
 
     body {
@@ -384,6 +395,19 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       background-color: #6c757d !important;
       border-color: #6c757d !important;
     }
+
+    /* Ensure consistent icon spacing and prevent layout shift */
+    .fas, .far, .fal, .fab {
+      display: inline-block;
+      width: 1em;
+      text-align: center;
+    }
+
+    /* Prevent layout shift during icon loading */
+    #mapConnectionStatus i {
+      min-width: 12px;
+      display: inline-block;
+    }
   </style>
 </head>
 
@@ -418,156 +442,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             <a class="nav-link" id="control-tab" data-toggle="tab" href="#control" role="tab" aria-controls="control"
               aria-selected="false">🕹️ Control</a>
           </li>
-          <li class="nav-item" role="presentation">
-            <a class="nav-link" id="config-tab" data-toggle="tab" href="#config" role="tab" aria-controls="config"
-              aria-selected="false">⚙️ View</a>
-          </li>
         </ul>
 
         <!-- Tab Content -->
         <div class="tab-content" id="mainTabContent">
-          <!-- Configuration Tab -->
-          <div class="tab-pane fade" id="config" role="tabpanel" aria-labelledby="config-tab">
-            <div class="card mb-2">
-              <div class="card-header">🎮 View Control</div>
-              <div class="card-body d-flex flex-column">
-                <form id="configuration-form" class="form-row">
-                  <!-- Hidden configuration fields - automatically managed -->
-                  <div class="form-group col-12" style="display: none;">
-                    <div class="input-group">
-                      <div class="input-group-prepend">
-                        <span class="input-group-text">IP</span>
-                      </div>
-                      <input type="text" class="form-control" id="hostname" name="hostname" value="localhost"
-                        onchange="endpointChanged();">
-                    </div>
-                  </div>
-                  <div class="form-group col-12" style="display: none;">
-                    <div class="input-group">
-                      <div class="input-group-prepend">
-                        <span class="input-group-text">Port</span>
-                      </div>
-                      <input type="text" class="form-control" id="port" name="port" value="1323">
-                    </div>
-                  </div>
-                  <div class="form-group col-12" style="display: none;">
-                    <div class="input-group">
-                      <div class="input-group-prepend">
-                        <span class="input-group-text">Username</span>
-                      </div>
-                      <input type="text" class="form-control" id="username" name="username" value="default">
-                    </div>
-                  </div>
-                  <div class="form-group col-12" style="display: none;">
-                    <div class="input-group">
-                      <div class="input-group-prepend">
-                        <span class="input-group-text">Password</span>
-                      </div>
-                      <input type="password" class="form-control" id="password" name="password" value="default">
-                    </div>
-                  </div>
-
-                  <div class="form-group col-12">
-                    <div class="input-group">
-                      <div class="input-group-prepend">
-                        <span class="input-group-text">⏱️ Refresh(s)</span>
-                      </div>
-                      <select id="refreshInterval" name="refreshInterval" class="form-control"
-                        aria-label="Display Interval" aria-describedby="refreshIntervalLabel">
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="5" selected="selected">5</option>
-                        <option value="10">10</option>
-                        <option value="20">20</option>
-                        <option value="50">50</option>
-                        <option value="100">100</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <!-- X-Request-Id list -->
-                  <div class="form-group col-12">
-                    <div class="input-group">
-                      <div class="input-group-prepend">
-                        <span class="input-group-text">📝 Req Log</span>
-                      </div>
-                      <select id="xRequestIdSelect" name="xRequestId" class="form-control" aria-label="X-Request-Id"
-                        aria-describedby="xRequestIdLabel" onchange="handleRequestIdSelection();">
-                        <option value="">Select ID</option>
-                        <!-- Options will be filled dynamically -->
-                      </select>
-                    </div>
-                  </div>
-
-                  <div class="form-group col-12 dropdown">
-                    <button class="btn btn-secondary dropdown-toggle w-100" type="button" id="mapControlDropdown"
-                      data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                      🗺️ Map Control
-                    </button>
-                    <div class="dropdown-menu" aria-labelledby="mapControlDropdown">
-                      <a class="dropdown-item" href="javascript:void(0)" onclick="getConnection();">☁️ Show all
-                        Clouds</a>
-                      <a class="dropdown-item" href="javascript:void(0)" onclick="hideMCI();">👁️ Hide/Show MCI</a>
-                      <a class="dropdown-item" href="javascript:void(0)" onclick="clearMap();">🧹 Clear Map</a>
-                      <a class="dropdown-item" href="javascript:void(0)"
-                        onclick="window.open('redoc-swagger.html', '_blank');">📊 API Dashboard</a>
-                      <a class="dropdown-item" href="javascript:void(0)" onclick="toggleView();">🔄 Toggle Map/API</a>
-                    </div>
-                  </div>
-
-                </form>
-              </div>
-            </div>
-
-            <div class="card mb-2">
-              <div class="card-header">🔀 Addtional Information</div>
-              <div class="card-body d-flex flex-column">
-                <form id="dashboard-control-form">
-
-
-
-                  <!-- GitHub Repository -->
-                  <div class="form-group">
-                    <button type="button" id="githubButton" onClick="showGitHub();" 
-                      class="btn btn-info w-100">⭐ TB GitHub</button>
-                  </div>
-
-                  <!-- Spec Info Dashboard -->
-                  <div class="form-group dropdown">
-                    <button class="btn btn-success dropdown-toggle w-100" type="button" id="specInfoDropdown"
-                      data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                      💻 TB Spec Info
-                    </button>
-                    <div class="dropdown-menu" aria-labelledby="specInfoDropdown">
-                      <a class="dropdown-item" href="javascript:void(0)" onclick="openSpecInfo('table/9');">📊 Spec Info</a>
-                      <a class="dropdown-item" href="javascript:void(0)" onclick="openSpecInfo('field/130');">☁️ Spec by Provider</a>
-                      <a class="dropdown-item" href="javascript:void(0)" onclick="openSpecInfo('field/154');">🖥️ Spec by CPU</a>
-                      <a class="dropdown-item" href="javascript:void(0)" onclick="openSpecInfo('field/157');">💰 Spec by Cost</a>
-                      <a class="dropdown-item" href="javascript:void(0)" onclick="openSpecInfo('field/123');">🏗️ Spec by Architecture</a>
-                      <a class="dropdown-item" href="javascript:void(0)" onclick="openSpecInfo('field/133');">🧮 Spec by Accelerator</a>
-                      <a class="dropdown-item" href="javascript:void(0)" onclick="openSpecInfo('table/11');">🌍 Inter-Region Latency</a>
-                    </div>
-                  </div>
-
-                  <!-- Image Info Dashboard -->
-                  <div class="form-group dropdown">
-                    <button class="btn btn-warning dropdown-toggle w-100" type="button" id="imageInfoDropdown"
-                      data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                      💿 TB Image Info
-                    </button>
-                    <div class="dropdown-menu" aria-labelledby="imageInfoDropdown">
-                      <a class="dropdown-item" href="javascript:void(0)" onclick="openImageInfo('table/10');">📊 Image Info</a>
-                      <a class="dropdown-item" href="javascript:void(0)" onclick="openImageInfo('field/102');">☁️ Image by Provider</a>
-                      <a class="dropdown-item" href="javascript:void(0)" onclick="openImageInfo('field/99');">🏗️ Image by Architecture</a>
-                    </div>
-                  </div>
-
-                </form>
-              </div>
-            </div>
-
-          </div>
-
           <!-- Provisioning Tab -->
           <div class="tab-pane fade show active" id="provision" role="tabpanel" aria-labelledby="provision-tab">
             <div class="card mb-2">
@@ -839,6 +717,20 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               <div class="card-body d-flex flex-column">
                 <form id="mci-control-form">
 
+                  <!-- X-Request-Id list -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">📝 Req Log</span>
+                      </div>
+                      <select id="xRequestIdSelect" name="xRequestId" class="form-control" aria-label="X-Request-Id"
+                        aria-describedby="xRequestIdLabel" onchange="handleRequestIdSelection();">
+                        <option value="">Select ID</option>
+                        <!-- Options will be filled dynamically -->
+                      </select>
+                    </div>
+                  </div>
+
                   <!-- Namespace ID Field -->
                   <div class="form-group">
                     <div class="input-group">
@@ -1084,6 +976,31 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
           <!-- Mouse tooltip -->
           <div id="mouseTooltip" class="mouse-tooltip">➕ ┃ 🗂️</div>
+
+          <!-- Map Controls (top-right floating) - Dashboard style -->
+          <div id="map-controls" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(255, 255, 255, 0.95); border-radius: 8px; padding: 8px 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 1px solid rgba(0,0,0,0.1); backdrop-filter: blur(10px);">
+            <div style="display: flex; align-items: center; gap: 12px; font-size: 12px; color: #6c757d; white-space: nowrap;">
+              
+              <!-- Connection Status -->
+              <span id="mapConnectionStatus" class="badge badge-secondary" style="font-size: 10px; min-width: 95px; width: 95px; text-align: center; display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <i class="fas fa-question-circle" style="margin-right: 3px;"></i>Unknown
+              </span>
+              
+              <!-- Refresh Indicator -->
+              <i class="fas fa-sync-alt" id="mapRefreshIndicator" style="visibility: hidden; animation: spin 1s linear infinite; width: 12px; text-align: center;"></i>
+              
+              <!-- Last Updated -->
+              <span>
+                at <span id="mapLastUpdatedTime" style="font-weight: 500;">Never</span>
+              </span>
+              
+              <!-- Settings Button -->
+              <button onclick="showMapSettings()" style="background: none; border: none; color: #495057; padding: 2px 6px; border-radius: 4px; cursor: pointer; font-size: 12px;" onmouseover="this.style.backgroundColor='rgba(0,0,0,0.1)'" onmouseout="this.style.backgroundColor='transparent'">
+                <i class="fas fa-cog"></i> Settings
+              </button>
+              
+            </div>
+          </div>
 
           <!-- Spinner for request status -->
           <div id="spinner-container"
