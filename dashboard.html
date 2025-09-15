@@ -146,6 +146,7 @@ limitations under the License.
     .status-preparing { background-color: #e2e3e5; color: #495057; }
     .status-partial-failed { background-color: #ffeaa7; color: #d63031; }
     .status-terminating { background-color: #f5c6cb; color: #721c24; }
+    .status-terminated { background-color: #6c757d; color: #ffffff; }
     .status-unknown { background-color: #f8f9fa; color: #6c757d; }
 
     .provider-icon {
@@ -519,6 +520,37 @@ limitations under the License.
       content: "";
       font-size: 0.7rem;
     }
+
+    /* Scroll to top button */
+    .scroll-to-top {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 50px;
+      height: 50px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+      transition: all 0.3s ease;
+      z-index: 1000;
+    }
+
+    .scroll-to-top:hover {
+      background-color: #1e7e34;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(40, 167, 69, 0.4);
+    }
+
+    .scroll-to-top.show {
+      display: flex;
+    }
   </style>
 </head>
 
@@ -535,7 +567,7 @@ limitations under the License.
             <i class="fas fa-question-circle"></i> Unknown
           </span>
           <i class="fas fa-sync-alt refresh-indicator" id="refreshIndicator" style="display: none;"></i>
-          Last Updated: <span id="lastUpdated">Never</span>
+          at <span id="lastUpdated">Never</span>
         </span>
         <div class="nav-item dropdown ml-3">
           <a class="nav-link dropdown-toggle" href="#" id="settingsDropdown" role="button" data-toggle="dropdown" style="color: #495057;">
@@ -571,7 +603,7 @@ limitations under the License.
       </div>
 
       <div class="col-md-2 col-sm-6">
-        <div class="stat-card primary">
+        <div class="stat-card primary" style="cursor: pointer;" onclick="scrollToSection('mciTable')" title="Click to view MCI details">
           <div class="text-center">
             <i class="fas fa-server stat-icon text-primary"></i>
             <h3 class="stat-number" id="totalMciCount">0</h3>
@@ -581,7 +613,7 @@ limitations under the License.
       </div>
 
       <div class="col-md-2 col-sm-6">
-        <div class="stat-card success">
+        <div class="stat-card success" style="cursor: pointer;" onclick="scrollToSection('mciTable')" title="Click to view MCI details">
           <div class="text-center">
             <i class="fas fa-play-circle stat-icon text-success"></i>
             <h3 class="stat-number" id="runningMciCount">0</h3>
@@ -590,7 +622,7 @@ limitations under the License.
         </div>
       </div>
       <div class="col-md-2 col-sm-6">
-        <div class="stat-card warning">
+        <div class="stat-card warning" style="cursor: pointer;" onclick="scrollToSection('mciTable')" title="Click to view MCI details">
           <div class="text-center">
             <i class="fas fa-pause-circle stat-icon text-warning"></i>
             <h3 class="stat-number" id="suspendedMciCount">0</h3>
@@ -599,7 +631,7 @@ limitations under the License.
         </div>
       </div>
       <div class="col-md-2 col-sm-6">
-        <div class="stat-card danger">
+        <div class="stat-card danger" style="cursor: pointer;" onclick="scrollToSection('mciTable')" title="Click to view MCI details">
           <div class="text-center">
             <i class="fas fa-exclamation-triangle stat-icon text-danger"></i>
             <h3 class="stat-number" id="failedMciCount">0</h3>
@@ -609,7 +641,7 @@ limitations under the License.
       </div>
 
       <div class="col-md-2 col-sm-6">
-        <div class="stat-card info">
+        <div class="stat-card info" style="cursor: pointer;" onclick="scrollToSection('vmTable')" title="Click to view VM details">
           <div class="text-center">
             <i class="fas fa-desktop stat-icon text-info"></i>
             <h3 class="stat-number" id="totalVmCount">0</h3>
@@ -649,7 +681,7 @@ limitations under the License.
           <div class="row">
 
             <div class="col-2">
-              <div class="text-center p-2">
+              <div class="text-center p-2" style="cursor: pointer;" onclick="scrollToSection('connectionSection')" title="Click to view details">
                 <i class="fas fa-project-diagram text-secondary" style="font-size: 1.5rem;"></i>
                 <div class="mt-1">
                   <strong id="connectionCount">0</strong>
@@ -659,7 +691,7 @@ limitations under the License.
             </div>
 
             <div class="col-2">
-              <div class="text-center p-2">
+              <div class="text-center p-2" style="cursor: pointer;" onclick="scrollToSection('vNetSection')" title="Click to view details">
                 <i class="fas fa-cloud text-primary" style="font-size: 1.5rem;"></i>
                 <div class="mt-1">
                   <strong id="vNetCount">0</strong>
@@ -669,7 +701,7 @@ limitations under the License.
             </div>
 
             <div class="col-2">
-              <div class="text-center p-2">
+              <div class="text-center p-2" style="cursor: pointer;" onclick="scrollToSection('securityGroupSection')" title="Click to view details">
                 <i class="fas fa-shield-alt text-warning" style="font-size: 1.5rem;"></i>
                 <div class="mt-1">
                   <strong id="securityGroupCount">0</strong>
@@ -679,7 +711,7 @@ limitations under the License.
             </div>
 
             <div class="col-2">
-              <div class="text-center p-2">
+              <div class="text-center p-2" style="cursor: pointer;" onclick="scrollToSection('sshKeySection')" title="Click to view details">
                 <i class="fas fa-key text-success" style="font-size: 1.5rem;"></i>
                 <div class="mt-1">
                   <strong id="sshKeyCount">0</strong>
@@ -689,7 +721,7 @@ limitations under the License.
             </div>
 
             <div class="col-2">
-              <div class="text-center p-2">
+              <div class="text-center p-2" style="cursor: pointer;" onclick="scrollToSection('vpnSection')" title="Click to view details">
                 <i class="fas fa-shield-alt text-primary" style="font-size: 1.5rem;"></i>
                 <div class="mt-1">
                   <strong id="vpnCount">0</strong>
@@ -699,7 +731,7 @@ limitations under the License.
             </div>
 
             <div class="col-2">
-              <div class="text-center p-2">
+              <div class="text-center p-2" style="cursor: pointer;" onclick="scrollToSection('k8sSection')" title="Click to view details">
                 <i class="fas fa-dharmachakra text-info" style="font-size: 1.5rem;"></i>
                 <div class="mt-1">
                   <strong id="k8sClusterCount">0</strong>
@@ -720,7 +752,7 @@ limitations under the License.
           <h5><i class="fas fa-database"></i> Storage & Data Resources</h5>
           <div class="row">
             <div class="col-3">
-              <div class="text-center p-2">
+              <div class="text-center p-2" style="cursor: pointer;" onclick="scrollToSection('customImageSection')" title="Click to view details">
                 <i class="fas fa-compact-disc text-info" style="font-size: 1.5rem;"></i>
                 <div class="mt-1">
                   <strong id="customImageCount">0</strong>
@@ -729,7 +761,7 @@ limitations under the License.
               </div>
             </div>
             <div class="col-3">
-              <div class="text-center p-2">
+              <div class="text-center p-2" style="cursor: pointer;" onclick="scrollToSection('dataDiskSection')" title="Click to view details">
                 <i class="fas fa-hdd text-primary" style="font-size: 1.5rem;"></i>
                 <div class="mt-1">
                   <strong id="dataDiskCount">0</strong>
@@ -738,23 +770,288 @@ limitations under the License.
               </div>
             </div>
             <div class="col-3">
-              <div class="text-center p-2">
-                <i class="fas fa-cube text-success" style="font-size: 1.5rem;"></i>
+              <div class="text-center p-2" style="opacity: 0.5;" title="API not yet available">
+                <i class="fas fa-cube text-muted" style="font-size: 1.5rem;"></i>
                 <div class="mt-1">
                   <strong id="objectStorageCount">0</strong>
-                  <div class="text-muted small">Object Storage</div>
+                  <div class="text-muted small">Object Storage (Coming Soon)</div>
                 </div>
               </div>
             </div>
             <div class="col-3">
-              <div class="text-center p-2">
-                <i class="fas fa-database text-warning" style="font-size: 1.5rem;"></i>
+              <div class="text-center p-2" style="opacity: 0.5;" title="API not yet available">
+                <i class="fas fa-database text-muted" style="font-size: 1.5rem;"></i>
                 <div class="mt-1">
                   <strong id="sqlDbCount">0</strong>
-                  <div class="text-muted small">SQL Databases</div>
+                  <div class="text-muted small">SQL Databases (Coming Soon)</div>
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Useful Information Section -->
+    <div class="row">
+      <div class="col-12">
+        <div class="content-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5><i class="fas fa-info-circle"></i> Useful Information</h5>
+          </div>
+          
+          <!-- Information Tabs -->
+          <ul class="nav nav-tabs" id="infoTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <a class="nav-link active" id="github-tab" data-toggle="tab" href="#github-info" role="tab">
+                <i class="fab fa-github"></i> GitHub
+              </a>
+            </li>
+            <li class="nav-item" role="presentation">
+              <a class="nav-link" id="spec-tab" data-toggle="tab" href="#spec-info" role="tab">
+                <i class="fas fa-microchip"></i> Spec Info
+              </a>
+            </li>
+            <li class="nav-item" role="presentation">
+              <a class="nav-link" id="image-tab" data-toggle="tab" href="#image-info" role="tab">
+                <i class="fas fa-compact-disc"></i> Image Info
+              </a>
+            </li>
+            <li class="nav-item" role="presentation">
+              <a class="nav-link" id="latency-tab" data-toggle="tab" href="#latency-info" role="tab">
+                <i class="fas fa-globe"></i> Inter-Region Latency
+              </a>
+            </li>
+          </ul>
+          
+          <!-- Tab Content -->
+          <div class="tab-content" id="infoTabContent">
+            <!-- GitHub Tab -->
+            <div class="tab-pane fade show active" id="github-info" role="tabpanel">
+              <div class="table-responsive table-container">
+                <table class="table table-hover">
+                  <thead>
+                    <tr>
+                      <th>Resource</th>
+                      <th>Description</th>
+                      <th>Link</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><i class="fab fa-github"></i> CB-Tumblebug</td>
+                      <td>Cloud-Barista Multi-Cloud Infrastructure Management Framework</td>
+                      <td>
+                        <button class="btn btn-primary btn-sm" onclick="openLink('https://github.com/cloud-barista/cb-tumblebug')">
+                          <i class="fas fa-external-link-alt"></i> Open
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Spec Info Tab -->
+            <div class="tab-pane fade" id="spec-info" role="tabpanel">
+              <div class="table-responsive table-container">
+                <table class="table table-hover">
+                  <thead>
+                    <tr>
+                      <th>Spec Category</th>
+                      <th>Description</th>
+                      <th>Link</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><i class="fas fa-chart-bar"></i> Spec Info</td>
+                      <td>General specification information dashboard</td>
+                      <td>
+                        <button class="btn btn-primary btn-sm" onclick="openInfoLink('table/9')">
+                          <i class="fas fa-external-link-alt"></i> Open
+                        </button>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><i class="fas fa-cloud"></i> Spec by Provider</td>
+                      <td>Virtual machine specifications grouped by cloud provider</td>
+                      <td>
+                        <button class="btn btn-primary btn-sm" onclick="openInfoLink('field/130')">
+                          <i class="fas fa-external-link-alt"></i> Open
+                        </button>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><i class="fas fa-microchip"></i> Spec by CPU</td>
+                      <td>Virtual machine specifications grouped by CPU configuration</td>
+                      <td>
+                        <button class="btn btn-primary btn-sm" onclick="openInfoLink('field/154')">
+                          <i class="fas fa-external-link-alt"></i> Open
+                        </button>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><i class="fas fa-dollar-sign"></i> Spec by Cost</td>
+                      <td>Virtual machine specifications grouped by pricing</td>
+                      <td>
+                        <button class="btn btn-primary btn-sm" onclick="openInfoLink('field/157')">
+                          <i class="fas fa-external-link-alt"></i> Open
+                        </button>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><i class="fas fa-building"></i> Spec by Architecture</td>
+                      <td>Virtual machine specifications grouped by system architecture</td>
+                      <td>
+                        <button class="btn btn-primary btn-sm" onclick="openInfoLink('field/123')">
+                          <i class="fas fa-external-link-alt"></i> Open
+                        </button>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><i class="fas fa-calculator"></i> Spec by Accelerator</td>
+                      <td>Virtual machine specifications with GPU/accelerator support</td>
+                      <td>
+                        <button class="btn btn-primary btn-sm" onclick="openInfoLink('field/133')">
+                          <i class="fas fa-external-link-alt"></i> Open
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Image Info Tab -->
+            <div class="tab-pane fade" id="image-info" role="tabpanel">
+              <div class="table-responsive table-container">
+                <table class="table table-hover">
+                  <thead>
+                    <tr>
+                      <th>Image Category</th>
+                      <th>Description</th>
+                      <th>Link</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><i class="fas fa-chart-bar"></i> Image Info</td>
+                      <td>General image information dashboard</td>
+                      <td>
+                        <button class="btn btn-primary btn-sm" onclick="openInfoLink('table/11')">
+                          <i class="fas fa-external-link-alt"></i> Open
+                        </button>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><i class="fas fa-cloud"></i> Image by Provider</td>
+                      <td>Virtual machine images grouped by cloud provider</td>
+                      <td>
+                        <button class="btn btn-primary btn-sm" onclick="openInfoLink('field/161')">
+                          <i class="fas fa-external-link-alt"></i> Open
+                        </button>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><i class="fas fa-desktop"></i> Image by OS</td>
+                      <td>Virtual machine images grouped by operating system</td>
+                      <td>
+                        <button class="btn btn-primary btn-sm" onclick="openInfoLink('field/160')">
+                          <i class="fas fa-external-link-alt"></i> Open
+                        </button>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><i class="fas fa-building"></i> Image by Architecture</td>
+                      <td>Virtual machine images grouped by system architecture</td>
+                      <td>
+                        <button class="btn btn-primary btn-sm" onclick="openInfoLink('field/159')">
+                          <i class="fas fa-external-link-alt"></i> Open
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Inter-Region Latency Tab -->
+            <div class="tab-pane fade" id="latency-info" role="tabpanel">
+              <div class="table-responsive table-container">
+                <table class="table table-hover">
+                  <thead>
+                    <tr>
+                      <th>Latency Information</th>
+                      <th>Description</th>
+                      <th>Link</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><i class="fas fa-globe"></i> Inter-Region Latency</td>
+                      <td>Network latency measurements between cloud regions</td>
+                      <td>
+                        <button class="btn btn-primary btn-sm" onclick="openInfoLink('table/11')">
+                          <i class="fas fa-external-link-alt"></i> Open
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cloud Connections Section -->
+    <div class="row">
+      <div class="col-12">
+        <div class="content-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5><i class="fas fa-project-diagram"></i> Cloud Connections</h5>
+            <div>
+              <button class="btn btn-primary btn-sm" onclick="refreshResourceList('connection')">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+            </div>
+          </div>
+          
+          <!-- CSP Tabs -->
+          <ul class="nav nav-tabs" id="connectionTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <a class="nav-link active" id="all-connections-tab" data-toggle="tab" href="#all-connections" role="tab">
+                <i class="fas fa-globe"></i> All
+              </a>
+            </li>
+            <!-- Dynamic CSP tabs will be added here -->
+          </ul>
+          
+          <!-- Tab Content -->
+          <div class="tab-content" id="connectionTabContent">
+            <!-- All Connections Tab -->
+            <div class="tab-pane fade show active" id="all-connections" role="tabpanel">
+              <div class="table-responsive table-container">
+                <table class="table table-hover" id="connectionTable">
+                  <thead>
+                    <tr>
+                      <th>Connection ID</th>
+                      <th>Provider</th>
+                      <th>Region</th>
+                      <th>Zone</th>
+                      <th>Created</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="connectionTableBody">
+                    <!-- Data will be populated by JavaScript -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <!-- Dynamic CSP tabs content will be added here -->
           </div>
         </div>
       </div>
@@ -983,59 +1280,6 @@ limitations under the License.
       </div>
     </div>
 
-    <!-- Connections Table with CSP Tabs -->
-    <div class="row">
-      <div class="col-12">
-        <div class="content-card">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5><i class="fas fa-project-diagram"></i> Cloud Connections</h5>
-            <div>
-              <button class="btn btn-primary btn-sm" onclick="refreshResourceList('connection')">
-                <i class="fas fa-sync-alt"></i> Refresh
-              </button>
-            </div>
-          </div>
-          
-          <!-- CSP Tabs -->
-          <ul class="nav nav-tabs" id="connectionTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-              <a class="nav-link active" id="all-connections-tab" data-toggle="tab" href="#all-connections" role="tab">
-                <i class="fas fa-globe"></i> All
-              </a>
-            </li>
-            <!-- Dynamic CSP tabs will be added here -->
-          </ul>
-          
-          <!-- Tab Content -->
-          <div class="tab-content" id="connectionTabContent">
-            <!-- All Connections Tab -->
-            <div class="tab-pane fade show active" id="all-connections" role="tabpanel">
-              <div class="table-responsive table-container">
-                <table class="table table-hover" id="connectionTable">
-                  <thead>
-                    <tr>
-                      <th>Connection ID</th>
-                      <th>Provider</th>
-                      <th>Region</th>
-                      <th>Zone</th>
-                      <th>Verified</th>
-                      <th>Representative</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody id="connectionTableBody">
-                    <!-- Data will be populated by JavaScript -->
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            
-            <!-- Dynamic CSP-specific tabs will be added here by JavaScript -->
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Custom Images Table -->
     <div class="row">
       <div class="col-12">
@@ -1106,7 +1350,8 @@ limitations under the License.
       </div>
     </div>
 
-      </div>
+
+  </div>
 
   <!-- Loading Overlay -->
   <div class="loading-overlay hidden" id="globalLoader">
@@ -1167,6 +1412,11 @@ limitations under the License.
       </div>
     </div>
   </div>
+
+  <!-- Scroll to Top Button -->
+  <button class="scroll-to-top" id="scrollToTopBtn" onclick="scrollToTop()" title="맨 위로 이동">
+    <i class="fas fa-chevron-up"></i>
+  </button>
 
   <!-- Include the dashboard JavaScript -->
   <script src="./dashboard.js"></script>

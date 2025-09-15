@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', function() {
       // Update last updated timestamp
       const lastUpdatedElement = document.getElementById('lastUpdated');
       if (lastUpdatedElement && centralData.lastUpdated) {
-        lastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleString('en-US');
+        lastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleTimeString('en-US');
       } else {
         lastUpdatedElement.textContent = 'No data';
       }
@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', function() {
       // Update last updated timestamp
       const lastUpdatedElement = document.getElementById('lastUpdated');
       if (lastUpdatedElement && centralData.lastUpdated) {
-        lastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleString('en-US');
+        lastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleTimeString('en-US');
       } else {
         lastUpdatedElement.textContent = 'No data';
       }
@@ -172,7 +172,7 @@ function initializeCharts() {
   charts.combinedStatus = new Chart(combinedStatusCtx, {
     type: 'bar',
     data: {
-      labels: ['Running', 'Creating', 'Preparing', 'Suspended', 'Failed', 'Terminating', 'Terminated', 'Other'],
+      labels: ['Preparing', 'Creating', 'Running', 'Suspended', 'Terminating', 'Terminated', 'Failed', 'Other'],
       datasets: [
         {
           label: 'MCI Count',
@@ -334,7 +334,7 @@ async function refreshDashboard() {
       // Update last refresh time from central data
       const lastUpdatedElement = document.getElementById('lastUpdated');
       if (lastUpdatedElement && centralData.lastUpdated) {
-        lastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleString('en-US');
+        lastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleTimeString('en-US');
       } else {
         lastUpdatedElement.textContent = 'No data';
       }
@@ -672,13 +672,13 @@ function updateResourceCounts() {
     const dataDiskElement = document.getElementById('dataDiskCount');
     if (dataDiskElement) dataDiskElement.textContent = dataDiskCount;
 
-    // Update Object Storage count
-    const objectStorageCount = centralData.objectStorage ? centralData.objectStorage.length : 0;
+    // Update Object Storage count (API not yet available)
+    const objectStorageCount = 0; // TODO: API not yet implemented in CB-Tumblebug
     const objectStorageElement = document.getElementById('objectStorageCount');
     if (objectStorageElement) objectStorageElement.textContent = objectStorageCount;
 
-    // Update SQL Database count
-    const sqlDbCount = centralData.sqlDb ? centralData.sqlDb.length : 0;
+    // Update SQL Database count (API not yet available)
+    const sqlDbCount = 0; // TODO: API not yet implemented in CB-Tumblebug
     const sqlDbElement = document.getElementById('sqlDbCount');
     if (sqlDbElement) sqlDbElement.textContent = sqlDbCount;
 
@@ -833,7 +833,7 @@ function updateCharts() {
   });
   
   // Prepare data for combined chart
-  const statusLabels = ['Running', 'Creating', 'Preparing', 'Suspended', 'Failed', 'Terminating', 'Terminated', 'Other'];
+  const statusLabels = ['Preparing', 'Creating', 'Running', 'Suspended', 'Terminating', 'Terminated', 'Failed', 'Other'];
   const mciDataArray = statusLabels.map(label => mciStatusCounts[label] || 0);
   const vmDataArray = statusLabels.map(label => vmStatusCounts[label] || 0);
   
@@ -951,11 +951,28 @@ function updateMciTable() {
     };
     
     // Normalize status for CSS class
-    let statusClass = mci.status.toLowerCase();
-    if (statusClass.startsWith('creating')) {
-      statusClass = 'creating';
-    } else if (statusClass === 'partial-failed') {
-      statusClass = 'failed';
+    let statusClass = 'unknown';
+    if (mci.status) {
+      const status = mci.status.toLowerCase();
+      if (status.includes('running') || status === 'running') {
+        statusClass = 'running';
+      } else if (status.includes('creating') || status === 'creating') {
+        statusClass = 'creating';
+      } else if (status.includes('preparing') || status === 'preparing') {
+        statusClass = 'preparing';
+      } else if (status.includes('suspended') || status === 'suspended') {
+        statusClass = 'suspended';
+      } else if (status.includes('failed') || status === 'failed') {
+        statusClass = 'failed';
+      } else if (status.includes('terminating') || status === 'terminating') {
+        statusClass = 'terminating';
+      } else if (status.includes('terminated') || status === 'terminated') {
+        statusClass = 'terminated';
+      } else if (status.includes('partial-failed') || status === 'partial-failed') {
+        statusClass = 'partial-failed';
+      } else {
+        statusClass = status.replace(/[^a-z0-9-]/g, '');
+      }
     }
     
     // Determine button states based on actual status
@@ -1155,7 +1172,29 @@ function updateVmTable() {
     };
     
     // Normalize status for CSS class
-    let statusClass = vm.status ? vm.status.toLowerCase() : 'unknown';
+    let statusClass = 'unknown';
+    if (vm.status) {
+      const status = vm.status.toLowerCase();
+      if (status.includes('running') || status === 'running') {
+        statusClass = 'running';
+      } else if (status.includes('creating') || status === 'creating') {
+        statusClass = 'creating';
+      } else if (status.includes('preparing') || status === 'preparing') {
+        statusClass = 'preparing';
+      } else if (status.includes('suspended') || status === 'suspended') {
+        statusClass = 'suspended';
+      } else if (status.includes('failed') || status === 'failed') {
+        statusClass = 'failed';
+      } else if (status.includes('terminating') || status === 'terminating') {
+        statusClass = 'terminating';
+      } else if (status.includes('terminated') || status === 'terminated') {
+        statusClass = 'terminated';
+      } else if (status.includes('partial-failed') || status === 'partial-failed') {
+        statusClass = 'partial-failed';
+      } else {
+        statusClass = status.replace(/[^a-z0-9-]/g, '');
+      }
+    }
     
     // Determine button states
     const isRunning = vm.status === 'Running';
@@ -2328,8 +2367,120 @@ function resizeDisk(diskId) {
   });
 }
 
+// TB (Tumblebug) Functions
+function showGitHub() {
+  // Simply open GitHub in new tab
+  window.open('https://github.com/cloud-barista/cb-tumblebug', '_blank');
+}
+
+// New functions for Useful Information section
+function openLink(url) {
+  window.open(url, '_blank');
+}
+
+function openInfoLink(path) {
+  var currentHost = window.location.hostname;
+  var url = `http://${currentHost}:3000/auto/dashboard/${path}`;
+  
+  // Try to open the specific dashboard
+  var newWindow = window.open(url, '_blank');
+  
+  // Fallback: if the page doesn't load, redirect to Info Home after a short delay
+  setTimeout(() => {
+    try {
+      if (newWindow.document.readyState === 'complete' && newWindow.document.title.includes('Not found')) {
+        newWindow.location.href = `http://${currentHost}:3000`;
+      }
+    } catch (e) {
+      // Cross-origin restrictions may prevent access, so we'll use a simpler fallback approach
+      console.log('Opening Info dashboard:', url);
+    }
+  }, 2000);
+}
+
+// Scroll to specific section smoothly
+function scrollToSection(sectionId) {
+  // Map section IDs to actual HTML element IDs
+  const sectionMap = {
+    'connectionSection': 'connectionTable',
+    'vNetSection': 'vNetTable', 
+    'securityGroupSection': 'securityGroupTable',
+    'sshKeySection': 'sshKeyTable',
+    'vpnSection': 'vpnTable',
+    'k8sSection': 'k8sClusterTable',
+    'customImageSection': 'customImageTable',
+    'dataDiskSection': 'dataDiskTable',
+    'mciTable': 'mciTable',
+    'vmTable': 'vmTable'
+  };
+  
+  const actualId = sectionMap[sectionId] || sectionId;
+  const element = document.getElementById(actualId);
+  
+  if (element) {
+    // Find the parent row or section container
+    let targetElement = element;
+    let container = element.closest('.row');
+    if (container) {
+      targetElement = container;
+    }
+    
+    // Smooth scroll to the element
+    targetElement.scrollIntoView({ 
+      behavior: 'smooth', 
+      block: 'start',
+      inline: 'nearest'
+    });
+    
+    // Add a highlight effect
+    const parentCard = element.closest('.content-card');
+    if (parentCard) {
+      parentCard.style.boxShadow = '0 0 20px rgba(0, 123, 255, 0.3)';
+      parentCard.style.border = '2px solid #007bff';
+      
+      // Remove highlight after 3 seconds
+      setTimeout(() => {
+        parentCard.style.boxShadow = '';
+        parentCard.style.border = '';
+      }, 3000);
+    }
+  } else {
+    console.warn(`Section with ID '${actualId}' not found`);
+  }
+}
+
 // Export additional functions
 window.viewKeyMaterial = viewKeyMaterial;
 window.controlK8sCluster = controlK8sCluster;
 window.testConnection = testConnection;
 window.resizeDisk = resizeDisk;
+window.showGitHub = showGitHub;
+window.openLink = openLink;
+window.openInfoLink = openInfoLink;
+window.scrollToSection = scrollToSection;
+
+// Scroll to top functionality
+function scrollToTop() {
+  window.scrollTo({
+    top: 0,
+    behavior: 'smooth'
+  });
+}
+
+// Show/hide scroll to top button based on scroll position
+function toggleScrollToTopButton() {
+  const scrollToTopBtn = document.getElementById('scrollToTopBtn');
+  if (window.pageYOffset > 300) {
+    scrollToTopBtn.classList.add('show');
+  } else {
+    scrollToTopBtn.classList.remove('show');
+  }
+}
+
+// Add scroll event listener when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+  window.addEventListener('scroll', toggleScrollToTopButton);
+});
+
+// Export scroll functions
+window.scrollToTop = scrollToTop;

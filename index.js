@@ -135,10 +135,22 @@ var cspListDisplayEnabled = document.getElementById("displayOn");
 var recommendPolicy = document.getElementById("recommendPolicy");
 var selectApp = document.getElementById("selectApp");
 
-var hostnameElement = document.getElementById("hostname");
-var portElement = document.getElementById("port");
-var usernameElement = document.getElementById("username");
-var passwordElement = document.getElementById("password");
+// Configuration variables (previously from removed form elements)
+var configHostname = "localhost";
+var configPort = "1323";
+var configUsername = "default";
+var configPassword = "default";
+
+// Helper function to get current configuration
+function getConfig() {
+  return {
+    hostname: configHostname,
+    port: configPort,
+    username: configUsername,
+    password: configPassword
+  };
+}
+
 var namespaceElement = document.getElementById("namespace");
 var mciidElement = document.getElementById("mciid");
 
@@ -177,6 +189,143 @@ function notifyDataSubscribers() {
     }
   });
 }
+
+// Initialize map's Last Updated display
+function initializeMapLastUpdated() {
+  const mapLastUpdatedElement = document.getElementById('mapLastUpdatedTime');
+  if (!mapLastUpdatedElement) return;
+  
+  // Subscribe to central data updates
+  window.subscribeToDataUpdates(function(centralData) {
+    if (centralData.lastUpdated) {
+      mapLastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleTimeString('en-US');
+    } else {
+      mapLastUpdatedElement.textContent = 'Never';
+    }
+  });
+  
+  // Initial display
+  if (window.cloudBaristaCentralData.lastUpdated) {
+    mapLastUpdatedElement.textContent = new Date(window.cloudBaristaCentralData.lastUpdated).toLocaleTimeString('en-US');
+  } else {
+    mapLastUpdatedElement.textContent = 'Never';
+  }
+}
+
+// Update map connection status
+function updateMapConnectionStatus(status) {
+  const statusElement = document.getElementById('mapConnectionStatus');
+  if (!statusElement) return;
+  
+  // Set consistent styling for all states with wider fixed width
+  statusElement.style.fontSize = '10px';
+  statusElement.style.minWidth = '95px';
+  statusElement.style.width = '95px';
+  statusElement.style.textAlign = 'center';
+  statusElement.style.display = 'inline-block';
+  statusElement.style.whiteSpace = 'nowrap';
+  statusElement.style.overflow = 'hidden';
+  statusElement.style.textOverflow = 'ellipsis';
+  
+  switch (status) {
+    case 'connected':
+      statusElement.className = 'badge badge-success';
+      statusElement.innerHTML = '<i class="fas fa-check-circle" style="margin-right: 3px;"></i>Connected';
+      break;
+    case 'connecting':
+      statusElement.className = 'badge badge-warning';
+      statusElement.innerHTML = '<i class="fas fa-sync fa-spin" style="margin-right: 3px;"></i>Updating';
+      break;
+    case 'disconnected':
+      statusElement.className = 'badge badge-danger';
+      statusElement.innerHTML = '<i class="fas fa-times-circle" style="margin-right: 3px;"></i>No Data';
+      break;
+    default:
+      statusElement.className = 'badge badge-secondary';
+      statusElement.innerHTML = '<i class="fas fa-question-circle" style="margin-right: 3px;"></i>Unknown';
+  }
+}
+
+// Show/hide map refresh indicator
+function showMapRefreshIndicator(show) {
+  const indicator = document.getElementById('mapRefreshIndicator');
+  if (indicator) {
+    indicator.style.visibility = show ? 'visible' : 'hidden';
+  }
+}
+
+// Show map settings (simple version)
+function showMapSettings() {
+  // Get current refresh interval from global variable
+  const currentRefreshInterval = refreshInterval.toString();
+  
+  // Define available refresh intervals
+  const intervals = [1, 5, 10, 20, 30, 40, 50, 100];
+  
+  // Generate radio button options
+  const radioOptions = intervals.map(interval => {
+    const checked = currentRefreshInterval == interval ? 'checked' : '';
+    return `
+      <div style="margin: 8px 0; text-align: left;">
+        <input type="radio" id="refresh-${interval}" name="refreshInterval" value="${interval}" ${checked}>
+        <label for="refresh-${interval}" style="margin-left: 8px; font-weight: normal;">${interval} seconds</label>
+      </div>
+    `;
+  }).join('');
+  
+  Swal.fire({
+    title: 'Map Settings',
+    html: `
+    <style>
+      .swal2-radio-container {
+        text-align: left;
+        margin: 10px 0;
+      }
+      .swal2-label {
+        margin-bottom: 10px;
+        font-weight: bold;
+        display: block;
+      }
+    </style>
+    <p>⏱️ Configure Data Refresh Interval</p>
+    <div class="swal2-radio-container">
+      <label class="swal2-label">⏱️ Select Refresh Interval:</label>
+      ${radioOptions}
+    </div>
+  `,
+    showCancelButton: true,
+    confirmButtonText: 'Apply Settings',
+    preConfirm: () => {
+      const selectedInterval = document.querySelector('input[name="refreshInterval"]:checked');
+      if (!selectedInterval) {
+        Swal.showValidationMessage('Please select a refresh interval');
+        return false;
+      }
+      return { refreshInterval: selectedInterval.value };
+    }
+  }).then((result) => {
+    if (result.isConfirmed) {
+      const newRefreshInterval = parseInt(result.value.refreshInterval);
+      
+      // Update global refresh interval variable
+      refreshInterval = newRefreshInterval;
+      
+      // Show success message
+      Swal.fire({
+        icon: 'success',
+        title: 'Settings Applied',
+        text: `Refresh interval set to ${newRefreshInterval} seconds`,
+        timer: 2000,
+        showConfirmButton: false
+      });
+    }
+  });
+}
+
+// Export functions for global access
+window.updateMapConnectionStatus = updateMapConnectionStatus;
+window.showMapSettings = showMapSettings;
+window.showMapRefreshIndicator = showMapRefreshIndicator;
 
 const typeStringConnection = "connection";
 const typeStringProvider = "provider";
@@ -564,12 +713,11 @@ window.displayCSPListOn = displayCSPListOn;
 
 function endpointChanged() {
   //getMci();
-  var hostname = document.getElementById('hostname').value;
   var iframe = document.getElementById('iframe');
   var iframe2 = document.getElementById('iframe2');
 
-  iframe.src = "http://" + hostname + ":1324/swagger.html";
-  iframe2.src = "http://" + hostname + ":1024/spider/adminweb";
+  iframe.src = "http://" + configHostname + ":1324/swagger.html";
+  iframe2.src = "http://" + configHostname + ":1024/spider/adminweb";
 }
 window.endpointChanged = endpointChanged;
 
@@ -1464,17 +1612,20 @@ function handleMciWithoutVms(mciItem, cnt) {
 }
 
 function getMci() {
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var hostname = configHostname;
+  var port = configPort;
+  var username = configUsername;
+  var password = configPassword;
   var namespace = namespaceElement.value;
 
-  refreshInterval = document.getElementById("refreshInterval").value;
-  var filteredRefreshInterval = isNormalInteger(refreshInterval)
+  // Use global refreshInterval variable instead of DOM element
+  var filteredRefreshInterval = isNormalInteger(refreshInterval.toString())
     ? refreshInterval
     : 5;
   setTimeout(() => getMci(), filteredRefreshInterval * 1000);
+
+  // Show refresh indicator
+  showMapRefreshIndicator(true);
 
   var zoomLevel = map.getView().getZoom() * 2.0;
   var radius = 4.0;
@@ -1516,6 +1667,12 @@ function getMci() {
           
           // Notify Dashboard subscribers
           notifyDataSubscribers();
+          
+          // Update map connection status to connected
+          updateMapConnectionStatus('connected');
+          
+          // Hide refresh indicator
+          showMapRefreshIndicator(false);
         }
 
         cnt = cntInit;
@@ -1716,6 +1873,12 @@ function getMci() {
       .catch(function (error) {
         console.log("MCI API error:", error);
         // Don't update geometries on API error to preserve current state
+        
+        // Update map connection status to disconnected
+        updateMapConnectionStatus('disconnected');
+        
+        // Hide refresh indicator
+        showMapRefreshIndicator(false);
       });
 
     // get vnet list and put them on the map
@@ -1891,10 +2054,10 @@ function getMci() {
       });
 
     // get VPN list and put them on the map
-    var url = `http://${hostname}:${port}/tumblebug/resources/vpn?labelSelector=togetall%20!exists`;
+    var vpnUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/vpn`;
     axios({
       method: "get",
-      url: url,
+      url: vpnUrl,
       auth: {
         username: `${username}`,
         password: `${password}`,
@@ -1902,41 +2065,60 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
-      if (obj != null && obj.results != null && obj.results.length > 0) {
-        var resourceLocation = [];
-        var hasValidVpnSites = false;
-        
-        // Store VPN data in central store
-        window.cloudBaristaCentralData.vpn = obj.results;
-        
-        for (let result of obj.results) {
-          if (result.vpnSites != null && result.vpnSites.length > 0) {
-            hasValidVpnSites = true;
-            for (let item of result.vpnSites) {
+      console.log('VPN API response:', obj);
+      
+      let vpnData = [];
+      let resourceLocation = [];
+      let hasValidVpnSites = false;
+      
+      // Handle different possible response structures
+      if (obj && obj.vpn && Array.isArray(obj.vpn)) {
+        vpnData = obj.vpn;
+      } else if (obj && obj.results && Array.isArray(obj.results)) {
+        vpnData = obj.results;
+      } else if (obj && Array.isArray(obj)) {
+        vpnData = obj;
+      }
+      
+      // Store VPN data in central store
+      window.cloudBaristaCentralData.vpn = vpnData;
+      console.log('VPN data stored:', vpnData.length, 'items');
+      
+      for (let vpnItem of vpnData) {
+        if (vpnItem.vpnSites && vpnItem.vpnSites.length > 0) {
+          hasValidVpnSites = true;
+          for (let site of vpnItem.vpnSites) {
+            if (site.connectionConfig && site.connectionConfig.regionDetail && site.connectionConfig.regionDetail.location) {
               resourceLocation.push([
-                item.connectionConfig.regionDetail.location.longitude * 1,
-                item.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
+                site.connectionConfig.regionDetail.location.longitude * 1,
+                site.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
               ]);
             }
           }
+        } else if (vpnItem.connectionConfig && vpnItem.connectionConfig.regionDetail && vpnItem.connectionConfig.regionDetail.location) {
+          // Handle direct VPN resource without vpnSites structure
+          hasValidVpnSites = true;
+          resourceLocation.push([
+            vpnItem.connectionConfig.regionDetail.location.longitude * 1,
+            vpnItem.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
+          ]);
         }
-        
-        if (hasValidVpnSites && resourceLocation.length > 0) {
-          geoResourceLocation.vpn[0] = new MultiPoint([resourceLocation]);
-          console.log("geoResourceLocation.vpn[0]");
-          console.log(geoResourceLocation.vpn[0]);
-        } else {
-          // Clear VPN icons when no valid vpnSites exist
-          geoResourceLocation.vpn = [];
-        }
+      }
+      
+      if (hasValidVpnSites && resourceLocation.length > 0) {
+        geoResourceLocation.vpn[0] = new MultiPoint([resourceLocation]);
+        console.log("geoResourceLocation.vpn[0]");
+        console.log(geoResourceLocation.vpn[0]);
       } else {
-        // Clear VPN icons when list is empty
+        // Clear VPN icons when no valid vpnSites exist
         geoResourceLocation.vpn = [];
       }
     })
       .catch(function (error) {
         console.log("VPN API error:", error);
-        // Don't update icons on API error to preserve current state
+        // Set empty array on error and clear icons
+        window.cloudBaristaCentralData.vpn = [];
+        geoResourceLocation.vpn = [];
       });
 
     // Get custom images
@@ -1951,11 +2133,22 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
-      if (obj && obj.customImages) {
-        window.cloudBaristaCentralData.customImage = obj.customImages;
+      console.log('Custom Image API response:', obj);
+      
+      // Handle different possible response structures
+      let customImages = [];
+      if (obj && obj.customImage && Array.isArray(obj.customImage)) {
+        customImages = obj.customImage;
+      } else if (obj && Array.isArray(obj)) {
+        customImages = obj;
       }
+      
+      window.cloudBaristaCentralData.customImage = customImages;
+      console.log('Custom Image data stored:', customImages.length, 'items');
     }).catch(function (error) {
       console.log("Custom Image API error:", error);
+      // Set empty array on error to prevent undefined issues
+      window.cloudBaristaCentralData.customImage = [];
     });
 
     // Get data disks
@@ -1970,50 +2163,65 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
-      if (obj && obj.dataDiskInfo) {
-        window.cloudBaristaCentralData.dataDisk = obj.dataDiskInfo;
+      console.log('Data Disk API response:', obj);
+      
+      // Handle different possible response structures
+      let dataDisks = [];
+      if (obj && obj.dataDisk && Array.isArray(obj.dataDisk)) {
+        dataDisks = obj.dataDisk;
+      } else if (obj && obj.dataDiskInfo && Array.isArray(obj.dataDiskInfo)) {
+        dataDisks = obj.dataDiskInfo;
+      } else if (obj && Array.isArray(obj)) {
+        dataDisks = obj;
       }
+      
+      window.cloudBaristaCentralData.dataDisk = dataDisks;
+      console.log('Data Disk data stored:', dataDisks.length, 'items');
     }).catch(function (error) {
       console.log("Data Disk API error:", error);
+      // Set empty array on error to prevent undefined issues
+      window.cloudBaristaCentralData.dataDisk = [];
     });
 
-    // Get object storage
-    var objectStorageUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/objectStorage`;
-    axios({
-      method: "get",
-      url: objectStorageUrl,
-      auth: {
-        username: `${username}`,
-        password: `${password}`,
-      },
-      timeout: 10000,
-    }).then((res) => {
-      var obj = res.data;
-      if (obj && obj.objectStorages) {
-        window.cloudBaristaCentralData.objectStorage = obj.objectStorages;
-      }
-    }).catch(function (error) {
-      console.log("Object Storage API error:", error);
-    });
+    // TODO: Object Storage API not yet available in CB-Tumblebug
+    // Get object storage - DISABLED until API is implemented
+    // var objectStorageUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/objectStorage`;
+    // axios({
+    //   method: "get",
+    //   url: objectStorageUrl,
+    //   auth: {
+    //     username: `${username}`,
+    //     password: `${password}`,
+    //   },
+    //   timeout: 10000,
+    // }).then((res) => {
+    //   var obj = res.data;
+    //   if (obj && obj.objectStorages) {
+    //     window.cloudBaristaCentralData.objectStorage = obj.objectStorages;
+    //   }
+    // }).catch(function (error) {
+    //   console.log("Object Storage API error:", error);
+    // });
 
-    // Get SQL databases
-    var sqlDbUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/sqlDb`;
-    axios({
-      method: "get",
-      url: sqlDbUrl,
-      auth: {
-        username: `${username}`,
-        password: `${password}`,
-      },
-      timeout: 10000,
-    }).then((res) => {
-      var obj = res.data;
-      if (obj && obj.sqlDbs) {
-        window.cloudBaristaCentralData.sqlDb = obj.sqlDbs;
-      }
-    }).catch(function (error) {
-      console.log("SQL DB API error:", error);
-    });
+    // TODO: SQL Database API not yet available in CB-Tumblebug
+    // Get SQL databases - DISABLED until API is implemented
+    // var sqlDbUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/sqlDb`;
+    // axios({
+    //   method: "get",
+    //   url: sqlDbUrl,
+    //   auth: {
+    //     username: `${username}`,
+    //     password: `${password}`,
+    //   },
+    //   timeout: 10000,
+    // }).then((res) => {
+    //   var obj = res.data;
+    //   if (obj && obj.sqlDbs) {
+    //     window.cloudBaristaCentralData.sqlDb = obj.sqlDbs;
+    //   }
+    // }).catch(function (error) {
+    //   console.log("SQL DB API error:", error);
+    // });
   }
 }
 
@@ -2057,13 +2265,13 @@ function getConnection() {
   separatorOption.disabled = true; // Disable the separator option
   providerSelect.appendChild(separatorOption);
 
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var hostname = configHostname;
+  var port = configPort;
+  var username = configUsername;
+  var password = configPassword;
 
-  refreshInterval = document.getElementById("refreshInterval").value;
-  var filteredRefreshInterval = isNormalInteger(refreshInterval)
+  // Use global refreshInterval variable instead of DOM element
+  var filteredRefreshInterval = isNormalInteger(refreshInterval.toString())
     ? refreshInterval
     : 5;
   //setTimeout(() => console.log(getConnection()), filteredRefreshInterval*1000);
@@ -2172,19 +2380,19 @@ function getConnection() {
         <p>- Update the API endpoint if needed</p>
         <div class="swal2-input-container">
           <label for="hostname-input" class="swal2-label">Hostname:</label>
-          <input id="hostname-input" class="swal2-input" placeholder="Enter the hostname" value="${hostnameElement.value}">
+          <input id="hostname-input" class="swal2-input" placeholder="Enter the hostname" value="${configHostname}">
         </div>
         <div class="swal2-input-container">
           <label for="port-input" class="swal2-label">Port:</label>
-          <input id="port-input" class="swal2-input" placeholder="Enter the port number" value="${portElement.value}">
+          <input id="port-input" class="swal2-input" placeholder="Enter the port number" value="${configPort}">
         </div>
         <div class="swal2-input-container">
           <label for="username-input" class="swal2-label">Username:</label>
-          <input id="username-input" class="swal2-input" placeholder="Enter the username" value="${usernameElement.value}">
+          <input id="username-input" class="swal2-input" placeholder="Enter the username" value="${configUsername}">
         </div>
         <div class="swal2-input-container">
           <label for="password-input" class="swal2-label">Password:</label>
-          <input id="password-input" class="swal2-input" type="password" placeholder="Enter the password" value="${passwordElement.value}">
+          <input id="password-input" class="swal2-input" type="password" placeholder="Enter the password" value="${configPassword}">
         </div>
       `,
         showCancelButton: true,
@@ -2199,10 +2407,10 @@ function getConnection() {
       }).then((result) => {
         if (result.isConfirmed) {
           const { hostname, port, username, password } = result.value;
-          hostnameElement.value = hostname;
-          portElement.value = port;
-          usernameElement.value = username;
-          passwordElement.value = password;
+          configHostname = hostname;
+          configPort = port;
+          configUsername = username;
+          configPassword = password;
           getConnection();
           updateNsList();
           getMci();
@@ -3755,10 +3963,10 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
 // Function to review MCI with selected SubGroups only
 function reviewWithSelectedSubgroups(selectedSubgroups) {
   // Get current MCI request data
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var hostname = configHostname;
+  var port = configPort;
+  var username = configUsername;
+  var password = configPassword;
   var namespace = namespaceElement.value;
   
   // Get current createMciReq from global vmReqeustFromSpecList
@@ -3843,10 +4051,10 @@ function reviewWithSelectedSubgroups(selectedSubgroups) {
 
 function createMci() {
   if (vmReqeustFromSpecList.length != 0) {
-    var hostname = hostnameElement.value;
-    var port = portElement.value;
-    var username = usernameElement.value;
-    var password = passwordElement.value;
+    var hostname = configHostname;
+    var port = configPort;
+    var username = configUsername;
+    var password = configPassword;
     var namespace = namespaceElement.value;
 
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mciDynamic`;
@@ -3944,10 +4152,10 @@ function createMci() {
 window.createMci = createMci;
 
 function getRecommendedSpec(idx, latitude, longitude) {
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var hostname = configHostname;
+  var port = configPort;
+  var username = configUsername;
+  var password = configPassword;
 
   var minVCPU = document.getElementById("minVCPU").value;
   var maxVCPU = document.getElementById("maxVCPU").value;
@@ -5348,10 +5556,10 @@ window.range_change = range_change;
 })();
 
 function addRegionMarker(spec) {
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var hostname = configHostname;
+  var port = configPort;
+  var username = configUsername;
+  var password = configPassword;
 
   var url = `http://${hostname}:${port}/tumblebug/ns/system/resources/spec/${spec}`;
 
@@ -5415,10 +5623,11 @@ function controlMCI(action) {
   }
   //console.log("[MCI " +action +"]");
 
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig();
+  var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
 
@@ -5481,10 +5690,11 @@ function controlMCI(action) {
 window.controlMCI = controlMCI;
 
 function hideMCI() {
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig();
+  var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
@@ -5606,10 +5816,11 @@ window.hideMCI = hideMCI;
 function statusMCI() {
   console.log("[Get MCI status]");
 
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig();
+  var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
 
@@ -5648,10 +5859,11 @@ window.statusMCI = statusMCI;
 function deleteMCI() {
   console.log("Deleting MCI");
 
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig();
+  var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
 
@@ -5691,10 +5903,11 @@ function releaseResources() {
   var spinnerId = addSpinnerTask("Removing associated default resources");
   infoAlert("Removing all associated default resources");
 
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig();
+  var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/sharedResources`;
@@ -5724,10 +5937,11 @@ function resourceOverview() {
   var spinnerId = addSpinnerTask("Inspect all resources and overview");
   infoAlert("Inspect all resources and overview");
 
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig();
+  var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
 
   var url = `http://${hostname}:${port}/tumblebug/inspectResourcesOverview`;
 
@@ -5754,10 +5968,10 @@ function registerCspResource() {
   var spinnerId = addSpinnerTask("Registering all CSP's resources");
   infoAlert("Registering all CSP's resources");
 
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
 
   var url = `http://${hostname}:${port}/tumblebug/registerCspResourcesAll?mciFlag=n`;
@@ -5810,10 +6024,10 @@ function updateNsList() {
     }
   });
 
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
 
   if (hostname && hostname != "" && port && port != "") {
     var url = `http://${hostname}:${port}/tumblebug/ns?option=id`;
@@ -5888,10 +6102,10 @@ function updateMciList() {
     selectElement.remove(i);
   }
 
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
 
   if (namespace && namespace != "") {
@@ -5993,10 +6207,10 @@ function updateVmAndIpListsFromMci() {
     ipSelectElement.remove(0);
   }
 
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
 
@@ -6074,10 +6288,10 @@ function updateResourceList(resourceType) {
     selectElement.remove(i);
   }
 
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
 
   if (namespace && namespace != "" && resourceType && resourceType != "") {
@@ -6113,6 +6327,12 @@ function updateResourceList(resourceType) {
 
 // Initialize DOM event handlers when document is ready
 document.addEventListener('DOMContentLoaded', function() {
+  // Initialize map's Last Updated display
+  initializeMapLastUpdated();
+  
+  // Initialize map's Connection Status
+  updateMapConnectionStatus('unknown');
+  
   // Namespace event handlers
   const namespaceElement = document.getElementById("namespace");
   if (namespaceElement) {
@@ -6175,10 +6395,10 @@ function updateConnectionList() {
     selectElement.remove(i);
   }
 
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
 
   var url = `http://${hostname}:${port}/tumblebug/connConfig?filterVerified=true&filterRegionRepresentative=true`;
 
@@ -6226,10 +6446,10 @@ function AddMcNLB() {
     return;
   }
 
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
 
   if (!namespace) {
@@ -6320,10 +6540,10 @@ function AddMcNLB() {
 window.AddMcNLB = AddMcNLB;
 
 function AddNLB() {
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
 
@@ -6479,10 +6699,10 @@ function createRegionalNLB(mciid, subgroupid, nlbport, namespace, hostname, port
 window.AddNLB = AddNLB;
 
 function DelNLB() {
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
 
@@ -6775,10 +6995,10 @@ function stopApp() {
   if (mciid) {
     console.log(" Stopping " + selectApp.value);
 
-    var hostname = hostnameElement.value;
-    var port = portElement.value;
-    var username = usernameElement.value;
-    var password = passwordElement.value;
+    var config = getConfig(); var hostname = config.hostname;
+    var port = config.port;
+    var username = config.username;
+    var password = config.password;
     var namespace = namespaceElement.value;
 
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}`;
@@ -6845,10 +7065,10 @@ window.stopApp = stopApp;
 
 // function for statusApp by statusApp button item
 function statusApp() {
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
 
@@ -6946,10 +7166,10 @@ window.loadPredefinedScript = function () {
 
 
 function executeRemoteCmd() {
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
   var subgroupid = getSubGroupIdFromVmSelection();
@@ -7190,10 +7410,10 @@ window.executeRemoteCmd = executeRemoteCmd;
 
 // Function for transferFileToMci by remoteCmd button item
 function transferFileToMci() {
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
   var subgroupid = getSubGroupIdFromVmSelection();
@@ -7332,10 +7552,10 @@ window.transferFileToMci = transferFileToMci;
 
 // function for getAccessInfo of MCI
 function getAccessInfo() {
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
 
@@ -7369,10 +7589,10 @@ const saveBtn = document.querySelector(".save-file");
 saveBtn.addEventListener("click", function () {
   console.log(" [Retrieve MCI Access Information ...]\n");
 
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
   var groupid = getSubGroupIdFromVmSelection();
@@ -7462,10 +7682,10 @@ function handleRequestIdSelection() {
   // actions based on the selected X-Request-Id
 
   if (selectedRequestId) {
-    var hostname = hostnameElement.value;
-    var port = portElement.value;
-    var username = usernameElement.value;
-    var password = passwordElement.value;
+    var config = getConfig(); var hostname = config.hostname;
+    var port = config.port;
+    var username = config.username;
+    var password = config.password;
 
     var url = `http://${hostname}:${port}/tumblebug/request/${selectedRequestId}`;
 
@@ -7487,16 +7707,32 @@ function handleRequestIdSelection() {
 window.handleRequestIdSelection = handleRequestIdSelection;
 
 window.onload = function () {
-  // Get host address and update text field
+  // Get host address and update configuration
   var tbServerAp = window.location.host;
   var strArray = tbServerAp.split(":");
   console.log("Host address: " + strArray[0]);
-  document.getElementById("hostname").value = strArray[0];
+  configHostname = strArray[0];
   setTimeout(getConnection, 1000);
 
   updateNsList();
 
   getMci();
+
+  // Add event listener for Provision tab to show map when clicked
+  const provisionTab = document.getElementById('provision-tab');
+  if (provisionTab) {
+    provisionTab.addEventListener('click', function(e) {
+      console.log('Provision tab clicked, switching to map view');
+      // Small delay to allow tab to activate first
+      setTimeout(function() {
+        if (typeof showMap === 'function') {
+          showMap();
+        } else {
+          console.log('showMap function not found');
+        }
+      }, 100);
+    });
+  }
 };
 
 let drawCounter = 0;
@@ -7589,10 +7825,10 @@ function jsonToTable(jsonText) {
 
 
 function updateFirewallRules() {
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var nsId = namespaceElement.value;
   var mciId = mciidElement.value;
   var subgroupid = getSubGroupIdFromVmSelection();
@@ -8344,10 +8580,10 @@ function deleteFirewallRule(sgId, sgName, ruleData) {
           }
         });
 
-        var hostname = hostnameElement.value;
-        var port = portElement.value;
-        var username = usernameElement.value;
-        var password = passwordElement.value;
+        var config = getConfig(); var hostname = config.hostname;
+        var port = config.port;
+        var username = config.username;
+        var password = config.password;
         var nsId = namespaceElement.value;
 
         // Prepare request data for deletion
@@ -8597,10 +8833,10 @@ function addNewRuleToSg(sgId, sgName) {
         }
       });
 
-      var hostname = hostnameElement.value;
+      var config = getConfig(); var hostname = config.hostname;
       var portVal = portElement.value;
-      var username = usernameElement.value;
-      var password = passwordElement.value;
+      var username = config.username;
+      var password = config.password;
       var nsId = namespaceElement.value;
 
       // Prepare request data for addition
@@ -8686,10 +8922,10 @@ function scaleOutSubGroup() {
     return;
   }
 
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
 
   // Show dialog to get number of VMs to add
@@ -8760,10 +8996,10 @@ window.scaleOutSubGroup = scaleOutSubGroup;
 
 // Improved Scale Out SubGroup function with MCI and SubGroup selection
 function scaleOutSubGroupWithSelection() {
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
 
   if (!namespace) {
@@ -8784,10 +9020,10 @@ window.scaleOutSubGroupWithSelection = scaleOutSubGroupWithSelection;
 
 // Scale Out function for context menu - bypasses MCI selection
 function scaleOutMciFromContext(mciId) {
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
 
   if (!namespace) {
@@ -9226,10 +9462,10 @@ window.executeAction = executeAction;
 // Common function for ScaleOut operations - MCI selection dialog
 function showMciSelectionForScaleOut(title, description, successCallback) {
   // Get MCI list specifically for ScaleOut operations
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
 
   if (!namespace || namespace === "") {
@@ -9313,10 +9549,10 @@ function showMciSelectionForScaleOut(title, description, successCallback) {
 
 // ScaleOut MCI function with current map configuration
 function scaleOutMciWithConfiguration() {
-  var hostname = hostnameElement.value;
-  var port = portElement.value;
-  var username = usernameElement.value;
-  var password = passwordElement.value;
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
   var namespace = namespaceElement.value;
 
   if (!namespace) {
