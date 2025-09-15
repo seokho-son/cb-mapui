@@ -11,6 +11,300 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Common delete function for all resources
+async function deleteResourceAsync(resourceType, resourceId, additionalParams = {}) {
+  try {
+    // Get config and namespace from parent window (index.js)
+    const parentConfig = window.parent?.getConfig?.() || { 
+      hostname: 'localhost', 
+      port: '1323',
+      username: 'default', 
+      password: 'default' 
+    };
+    
+    // Get current namespace from parent window's namespace element
+    const namespaceElement = window.parent?.document?.getElementById('namespace') || 
+                            window.parent?.document?.getElementById('namespace-control');
+    const currentNamespace = namespaceElement?.value || additionalParams.nsId || 'default';
+    
+    let endpoint = '';
+    let confirmMessage = '';
+    let successMessage = '';
+    let successTitle = 'Request Accepted!'; // Default title
+    
+    switch (resourceType) {
+      case 'mci':
+        endpoint = `/ns/${currentNamespace}/mci/${resourceId}?option=terminate`;
+        confirmMessage = `Are you sure you want to delete MCI "${resourceId}" and terminate all its VMs?`;
+        successMessage = `Delete request for MCI "${resourceId}" has been accepted.`;
+        break;
+        
+      case 'vm':
+        endpoint = `/ns/${currentNamespace}/mci/${additionalParams.mciId}/vm/${resourceId}`;
+        confirmMessage = `Are you sure you want to delete VM "${resourceId}" from MCI "${additionalParams.mciId}"?`;
+        successMessage = `Delete request for VM "${resourceId}" has been accepted.`;
+        break;
+        
+      case 'k8sCluster':
+        endpoint = `/ns/${currentNamespace}/k8sCluster/${resourceId}`;
+        confirmMessage = `Are you sure you want to delete K8s Cluster "${resourceId}"? This will also delete all associated node groups.`;
+        successMessage = `Delete request for K8s Cluster "${resourceId}" has been accepted. The deletion process is running asynchronously.`;
+        break;
+        
+      case 'k8sNodeGroup':
+        endpoint = `/ns/${currentNamespace}/k8sCluster/${additionalParams.clusterId}/k8sNodeGroup/${resourceId}`;
+        confirmMessage = `Are you sure you want to delete Node Group "${resourceId}" from cluster "${additionalParams.clusterId}"?`;
+        successMessage = `Delete request for Node Group "${resourceId}" has been accepted. The deletion process is running asynchronously.`;
+        break;
+        
+      case 'vNet':
+        endpoint = `/ns/${currentNamespace}/resources/vNet/${resourceId}?action=withsubnets`;
+        confirmMessage = `Are you sure you want to delete vNet "${resourceId}" and all its subnets?`;
+        successMessage = `vNet "${resourceId}" has been deleted successfully.`;
+        successTitle = 'Deleted!';
+        break;
+        
+      case 'securityGroup':
+        endpoint = `/ns/${currentNamespace}/resources/securityGroup/${resourceId}`;
+        confirmMessage = `Are you sure you want to delete Security Group "${resourceId}"?`;
+        successMessage = `Security Group "${resourceId}" has been deleted successfully.`;
+        successTitle = 'Deleted!';
+        break;
+        
+      case 'sshKey':
+        endpoint = `/ns/${currentNamespace}/resources/sshKey/${resourceId}`;
+        confirmMessage = `Are you sure you want to delete SSH Key "${resourceId}"?`;
+        successMessage = `SSH Key "${resourceId}" has been deleted successfully.`;
+        successTitle = 'Deleted!';
+        break;
+        
+      case 'customImage':
+        endpoint = `/ns/${currentNamespace}/resources/customImage/${resourceId}`;
+        confirmMessage = `Are you sure you want to delete Custom Image "${resourceId}"?`;
+        successMessage = `Custom Image "${resourceId}" has been deleted successfully.`;
+        successTitle = 'Deleted!';
+        break;
+        
+      case 'dataDisk':
+        endpoint = `/ns/${currentNamespace}/resources/dataDisk/${resourceId}`;
+        confirmMessage = `Are you sure you want to delete Data Disk "${resourceId}"?`;
+        successMessage = `Data Disk "${resourceId}" has been deleted successfully.`;
+        successTitle = 'Deleted!';
+        break;
+        
+      default:
+        throw new Error(`Unsupported resource type: ${resourceType}`);
+    }
+
+    // Show confirmation dialog
+    const result = await Swal.fire({
+      title: 'Delete Confirmation',
+      text: confirmMessage,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel'
+    });
+
+    if (!result.isConfirmed) {
+      return;
+    }
+
+    // Show loading indicator
+    Swal.fire({
+      title: 'Deleting...',
+      text: 'Please wait while the resource is being deleted.',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    // Make DELETE request using axios with auth (same as index.js)
+    const fullUrl = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug${endpoint}`;
+    
+    const response = await axios({
+      method: 'DELETE',
+      url: fullUrl,
+      auth: {
+        username: parentConfig.username,
+        password: parentConfig.password
+      },
+      timeout: 60000
+    });
+
+    // Show success message
+    await Swal.fire({
+      title: successTitle,
+      text: successMessage,
+      icon: 'success',
+      timer: 3000,
+      showConfirmButton: false
+    });
+
+    // Refresh the appropriate data
+    refreshResourceData(resourceType, additionalParams);
+    
+    return true;
+
+  } catch (error) {
+    console.error(`Error deleting ${resourceType}:`, error);
+    
+    // Extract detailed error message from server response
+    let errorMessage = `Failed to delete ${resourceType}`;
+    let errorTitle = 'Delete Failed';
+    
+    if (error.response && error.response.data) {
+      // If server returns structured error with message
+      if (error.response.data.message) {
+        errorMessage = error.response.data.message;
+        
+        // Parse specific error types for better user experience
+        if (errorMessage.includes('Deleting the last nodegroup is not supported')) {
+          errorTitle = 'Cannot Delete Last Node Group';
+          errorMessage = 'Cannot delete the last node group in a K8s cluster. You must have at least one node group remaining.\n\nTo delete this cluster completely, delete the entire K8s cluster instead.';
+        } else if (errorMessage.includes('Bad request')) {
+          errorTitle = 'Invalid Request';
+        } else if (errorMessage.includes('not found') || errorMessage.includes('Not Found')) {
+          errorTitle = 'Resource Not Found';
+          errorMessage = `The ${resourceType} "${resourceId}" was not found. It may have already been deleted.`;
+        }
+      } 
+      // If server returns plain text error
+      else if (typeof error.response.data === 'string') {
+        errorMessage = error.response.data;
+      }
+      
+      // Add status code information for technical details
+      if (!errorMessage.includes(error.response.status)) {
+        errorMessage += `\n\nStatus: ${error.response.status} ${error.response.statusText}`;
+      }
+    } else {
+      // Network or other errors
+      errorMessage = `${errorMessage}: ${error.message}`;
+    }
+    
+    await Swal.fire({
+      title: errorTitle,
+      text: errorMessage,
+      icon: 'error',
+      confirmButtonText: 'OK',
+      customClass: {
+        popup: 'swal-wide'
+      }
+    });
+    
+    return false;
+  }
+}
+
+// Refresh data after deletion
+function refreshResourceData(resourceType, additionalParams) {
+  try {
+    switch (resourceType) {
+      case 'mci':
+        if (typeof loadMciData === 'function') {
+          loadMciData();
+        }
+        break;
+        
+      case 'vm':
+        if (typeof loadVmData === 'function') {
+          loadVmData();
+        }
+        break;
+        
+      case 'k8sCluster':
+        if (typeof loadK8sClusterData === 'function') {
+          loadK8sClusterData();
+        }
+        break;
+        
+      case 'k8sNodeGroup':
+        if (typeof updateK8sNodeGroupTable === 'function') {
+          updateK8sNodeGroupTable();
+        }
+        break;
+        
+      case 'vNet':
+        if (typeof loadvNetData === 'function') {
+          loadvNetData();
+        }
+        break;
+        
+      case 'securityGroup':
+        if (typeof loadSecurityGroupData === 'function') {
+          loadSecurityGroupData();
+        }
+        break;
+        
+      case 'sshKey':
+        if (typeof loadSshKeyData === 'function') {
+          loadSshKeyData();
+        }
+        break;
+        
+      case 'customImage':
+        if (typeof loadCustomImageData === 'function') {
+          loadCustomImageData();
+        }
+        break;
+        
+      case 'dataDisk':
+        if (typeof loadDataDiskData === 'function') {
+          loadDataDiskData();
+        }
+        break;
+        
+      default:
+        console.log(`No refresh function defined for ${resourceType}`);
+    }
+  } catch (error) {
+    console.error(`Error refreshing ${resourceType} data:`, error);
+  }
+}
+
+// Resource-specific delete functions
+async function deleteMci(mciId, nsId = null) {
+  return await deleteResourceAsync('mci', mciId, { nsId });
+}
+
+async function deleteVm(vmId, mciId, nsId = null) {
+  return await deleteResourceAsync('vm', vmId, { mciId, nsId });
+}
+
+async function deleteK8sCluster(clusterId, nsId = null) {
+  return await deleteResourceAsync('k8sCluster', clusterId, { nsId });
+}
+
+async function deleteK8sNodeGroup(nodeGroupName, clusterId, nsId = null) {
+  return await deleteResourceAsync('k8sNodeGroup', nodeGroupName, { clusterId, nsId });
+}
+
+async function deleteVNet(vNetId, nsId = null) {
+  return await deleteResourceAsync('vNet', vNetId, { nsId });
+}
+
+async function deleteSecurityGroup(securityGroupId, nsId = null) {
+  return await deleteResourceAsync('securityGroup', securityGroupId, { nsId });
+}
+
+async function deleteSshKey(sshKeyId, nsId = null) {
+  return await deleteResourceAsync('sshKey', sshKeyId, { nsId });
+}
+
+async function deleteCustomImage(customImageId, nsId = null) {
+  return await deleteResourceAsync('customImage', customImageId, { nsId });
+}
+
+async function deleteDataDisk(dataDiskId, nsId = null) {
+  return await deleteResourceAsync('dataDisk', dataDiskId, { nsId });
+}
+
 // Dashboard Configuration
 const dashboardConfig = {
   hostname: 'localhost',
@@ -25,9 +319,11 @@ const dashboardConfig = {
 let mciData = [];
 let vmData = [];
 let resourceData = {};
+let centralData = {}; // Global centralData variable
 let refreshTimer = null;
 let charts = {};
 let selectedMciId = null; // Track selected MCI for VM filtering
+let selectedK8sClusterId = null; // Track selected K8s cluster for node group filtering
 
 // Initialize dashboard when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -42,8 +338,12 @@ document.addEventListener('DOMContentLoaded', function() {
   // Subscribe to central data updates from parent/main window
   if (window.parent && window.parent.subscribeToDataUpdates) {
     console.log('Subscribing to central data updates...');
-    window.parent.subscribeToDataUpdates(function(centralData) {
-      console.log('Received data update from central store:', centralData);
+    window.parent.subscribeToDataUpdates(function(receivedData) {
+      console.log('Received data update from central store:', receivedData);
+      
+      // Store centralData globally
+      centralData = receivedData;
+      
       // Update local data
       mciData = centralData.mciData || [];
       vmData = centralData.vmData || [];
@@ -178,15 +478,11 @@ function initializeCharts() {
           label: 'MCI Count',
           data: [0, 0, 0, 0, 0, 0, 0, 0],
           backgroundColor: 'rgba(40, 167, 69, 0.8)',   // Green with transparency
-          borderColor: '#28a745',
-          borderWidth: 1
         },
         {
           label: 'VM Count',
           data: [0, 0, 0, 0, 0, 0, 0, 0],
           backgroundColor: 'rgba(23, 162, 184, 0.8)',  // Blue with transparency
-          borderColor: '#17a2b8',
-          borderWidth: 1
         }
       ]
     },
@@ -288,6 +584,45 @@ function initializeCharts() {
       }
     }
   });
+
+  // K8s Cluster Status Chart
+  const k8sClusterStatusCtx = document.getElementById('k8sClusterStatusChart').getContext('2d');
+  charts.k8sClusterStatus = new Chart(k8sClusterStatusCtx, {
+    type: 'doughnut',
+    data: {
+      labels: ['No Clusters'],
+      datasets: [{
+        data: [1],
+        backgroundColor: ['#e9ecef'],
+        borderWidth: 1,
+        borderColor: '#e9ecef'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            boxWidth: 12,
+            fontSize: 10
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const label = context.label || '';
+              const value = context.parsed || 0;
+              const total = context.dataset.data.reduce((a, b) => a + b, 0);
+              const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+              return `${label}: ${value} (${percentage}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
 }
 
 // Main refresh function - now uses shared data from index.js
@@ -324,9 +659,16 @@ async function refreshDashboard() {
       // Update all displays
       updateStatistics();
       updateCharts();
+      updateK8sCharts();
       updateMciTable();
       updateVmTable();
       updateAllResourceTables();
+      if (selectedK8sClusterId) {
+        updateK8sNodeGroupTable();
+      } else {
+        // Show all node groups by default
+        showAllNodeGroups();
+      }
       
       // Update UI controls
       updateShowAllButton();
@@ -570,7 +912,6 @@ function updateStatistics() {
   
   // Handle complex status counting with improved parsing
   let runningMci = 0;
-  let suspendedMci = 0;
   let failedMci = 0;
   let creatingMci = 0;
   let preparingMci = 0;
@@ -587,9 +928,6 @@ function updateStatistics() {
         break;
       case 'Preparing':
         preparingMci++;
-        break;
-      case 'Suspended':
-        suspendedMci++;
         break;
       case 'Failed':
         failedMci++;
@@ -609,7 +947,6 @@ function updateStatistics() {
   
   document.getElementById('totalMciCount').textContent = totalMci;
   document.getElementById('runningMciCount').textContent = runningMci;
-  document.getElementById('suspendedMciCount').textContent = suspendedMci;
   document.getElementById('failedMciCount').textContent = failedMci;
   document.getElementById('totalVmCount').textContent = totalVm;
   document.getElementById('totalProviderCount').textContent = providers.size;
@@ -651,6 +988,9 @@ function updateResourceCounts() {
     const k8sClusterCount = centralData.k8sCluster ? centralData.k8sCluster.length : 0;
     const k8sClusterElement = document.getElementById('k8sClusterCount');
     if (k8sClusterElement) k8sClusterElement.textContent = k8sClusterCount;
+    
+    const totalK8sClusterElement = document.getElementById('totalK8sClusterCount');
+    if (totalK8sClusterElement) totalK8sClusterElement.textContent = k8sClusterCount;
 
     // Update Connection count
     const connectionCount = centralData.connection ? centralData.connection.length : 0;
@@ -837,19 +1177,50 @@ function updateCharts() {
   const mciDataArray = statusLabels.map(label => mciStatusCounts[label] || 0);
   const vmDataArray = statusLabels.map(label => vmStatusCounts[label] || 0);
   
-  // Update combined chart
-  charts.combinedStatus.data.labels = statusLabels;
-  charts.combinedStatus.data.datasets[0].data = mciDataArray;  // MCI Count
-  charts.combinedStatus.data.datasets[1].data = vmDataArray;   // VM Count
+  // Check if there's any data to display
+  const hasMciData = mciDataArray.some(count => count > 0);
+  const hasVmData = vmDataArray.some(count => count > 0);
+  
+  // Update combined chart - show "No Data" if no data
+  if (!hasMciData && !hasVmData) {
+    charts.combinedStatus.data.labels = ['No Data'];
+    charts.combinedStatus.data.datasets[0].data = [1];
+    charts.combinedStatus.data.datasets[0].label = 'No MCIs';
+    charts.combinedStatus.data.datasets[0].backgroundColor = ['#e9ecef'];
+    charts.combinedStatus.data.datasets[1].data = [1];
+    charts.combinedStatus.data.datasets[1].label = 'No VMs';
+    charts.combinedStatus.data.datasets[1].backgroundColor = ['#f8f9fa'];
+  } else {
+    charts.combinedStatus.data.labels = statusLabels;
+    charts.combinedStatus.data.datasets[0].data = mciDataArray;  // MCI Count
+    charts.combinedStatus.data.datasets[0].label = 'MCI Count';
+    // Reset to original colors when there's data
+    charts.combinedStatus.data.datasets[0].backgroundColor = 'rgba(40, 167, 69, 0.8)';  // Green
+    charts.combinedStatus.data.datasets[1].data = vmDataArray;   // VM Count
+    charts.combinedStatus.data.datasets[1].label = 'VM Count';
+    charts.combinedStatus.data.datasets[1].backgroundColor = 'rgba(23, 162, 184, 0.8)';  // Blue
+  }
   charts.combinedStatus.update('none'); // Disable animation for this update
   
   // Update Provider & Region Combined Chart
   const providerRegionData = {};
   
+  // If no VM data at all, show "No Data"
+  if (!vmData || vmData.length === 0) {
+    charts.providerRegion.data.labels = ['No Data'];
+    charts.providerRegion.data.datasets = [{
+      label: 'No VMs',
+      data: [1],
+      backgroundColor: ['#e9ecef']
+    }];
+    charts.providerRegion.update('none');
+    return;
+  }
+  
   // Collect data by provider and region
   vmData.forEach(vm => {
-    let provider = 'Unknown';
-    let region = 'Unknown';
+    let provider = null;
+    let region = null;
     
     // Extract provider information
     if (vm.connectionConfig && vm.connectionConfig.providerName) {
@@ -858,11 +1229,26 @@ function updateCharts() {
       provider = vm.location.cloudType;
     }
     
-    // Extract region information
+    // Extract region information - try multiple sources
     if (vm.region && vm.region.Region) {
       region = vm.region.Region;
     } else if (vm.location && vm.location.region) {
       region = vm.location.region;
+    } else if (vm.connectionConfig && vm.connectionConfig.regionZoneInfo && vm.connectionConfig.regionZoneInfo.region) {
+      region = vm.connectionConfig.regionZoneInfo.region;
+    } else if (vm.regionZoneInfoList && vm.regionZoneInfoList.length > 0 && vm.regionZoneInfoList[0].regionName) {
+      region = vm.regionZoneInfoList[0].regionName;
+    }
+    
+    // Skip VMs without proper provider/region info (likely still creating)
+    if (!provider || !region) {
+      console.log('Skipping VM with incomplete provider/region info:', {
+        id: vm.id || vm.name,
+        provider: provider,
+        region: region,
+        status: vm.status
+      });
+      return;
     }
     
     // Initialize provider if not exists
@@ -913,6 +1299,132 @@ function updateCharts() {
   }
   
   charts.providerRegion.update('none'); // Disable animation for this update
+}
+
+// Update K8s Charts
+function updateK8sCharts() {
+  console.log('=== K8s Chart Update Started ===');
+  
+  try {
+    // Check if chart exists
+    if (!charts.k8sClusterStatus) {
+      console.error('K8s Chart: Chart object not found during update');
+      return;
+    }
+
+    // Get K8s data from central store
+    let k8sData = [];
+    if (window.parent && window.parent.cloudBaristaCentralData) {
+      k8sData = window.parent.cloudBaristaCentralData.k8sCluster || [];
+      console.log('K8s Chart: Central data available, k8sCluster data:', k8sData);
+    } else {
+      console.log('K8s Chart: No central data available');
+    }
+
+    console.log('K8s Chart Update - Data length:', k8sData.length);
+
+    // If no K8s data at all, show "No Clusters"
+    if (!k8sData || k8sData.length === 0) {
+      console.log('K8s Chart: No data, showing "No Clusters"');
+      charts.k8sClusterStatus.data.labels = ['No Clusters'];
+      charts.k8sClusterStatus.data.datasets[0].data = [1];
+      charts.k8sClusterStatus.data.datasets[0].backgroundColor = ['#e9ecef'];
+      charts.k8sClusterStatus.data.datasets[0].borderColor = ['#e9ecef'];
+      charts.k8sClusterStatus.update('none');
+      console.log('K8s Chart: Updated with "No Clusters"');
+      return;
+    }
+
+    // Update K8s Cluster Status Chart
+    const k8sStatusCounts = {
+      'Running': 0,
+      'Creating': 0,
+      'Preparing': 0,
+      'Suspended': 0,
+      'Failed': 0,
+      'Other': 0
+    };
+
+    k8sData.forEach(cluster => {
+      const status = cluster.status || 'Unknown';
+      let normalizedStatus = 'Other';
+      
+      if (status.includes('Running') || status === 'Running') {
+        normalizedStatus = 'Running';
+      } else if (status.includes('Creating') || status === 'Creating') {
+        normalizedStatus = 'Creating';
+      } else if (status.includes('Preparing') || status === 'Preparing') {
+        normalizedStatus = 'Preparing';
+      } else if (status.includes('Suspended') || status === 'Suspended') {
+        normalizedStatus = 'Suspended';
+      } else if (status.includes('Failed') || status === 'Failed') {
+        normalizedStatus = 'Failed';
+      }
+      
+      k8sStatusCounts[normalizedStatus]++;
+    });
+
+    // Filter out zero counts for cleaner chart
+    const k8sStatusLabels = [];
+    const k8sStatusData = [];
+    const k8sStatusColors = [];
+    
+    const statusColorMap = {
+      'Running': '#28a745',     // green
+      'Creating': '#17a2b8',    // blue
+      'Preparing': '#6c757d',   // gray
+      'Suspended': '#ffc107',   // yellow
+      'Failed': '#dc3545',      // red
+      'Other': '#fd7e14'        // orange
+    };
+
+    Object.entries(k8sStatusCounts).forEach(([status, count]) => {
+      if (count > 0) {
+        k8sStatusLabels.push(status);
+        k8sStatusData.push(count);
+        k8sStatusColors.push(statusColorMap[status]);
+      }
+    });
+
+    // Handle empty data for K8s status chart
+    if (k8sStatusLabels.length === 0) {
+      console.log('K8s Chart: No valid status data, showing "No Clusters"');
+      charts.k8sClusterStatus.data.labels = ['No Clusters'];
+      charts.k8sClusterStatus.data.datasets[0].data = [1];
+      charts.k8sClusterStatus.data.datasets[0].backgroundColor = ['#e9ecef'];
+      charts.k8sClusterStatus.data.datasets[0].borderColor = ['#e9ecef'];
+      charts.k8sClusterStatus.data.datasets[0].borderWidth = 1;
+    } else {
+      console.log('K8s Chart: Valid data found, labels:', k8sStatusLabels, 'data:', k8sStatusData);
+      charts.k8sClusterStatus.data.labels = k8sStatusLabels;
+      charts.k8sClusterStatus.data.datasets[0].data = k8sStatusData;
+      charts.k8sClusterStatus.data.datasets[0].backgroundColor = k8sStatusColors;
+      // Reset border properties for normal data
+      charts.k8sClusterStatus.data.datasets[0].borderColor = k8sStatusColors;
+      charts.k8sClusterStatus.data.datasets[0].borderWidth = 1;
+    }
+
+    // Update K8s cluster status chart
+    if (charts.k8sClusterStatus) {
+      charts.k8sClusterStatus.update('none');
+      console.log('K8s Chart: Updated successfully');
+    } else {
+      console.error('K8s Chart: Chart object not found');
+    }
+
+    console.log('=== K8s Chart Update Completed ===');
+
+  } catch (error) {
+    console.error('Error updating K8s charts:', error);
+    // Fallback: ensure chart shows "No Clusters" on error
+    if (charts.k8sClusterStatus) {
+      charts.k8sClusterStatus.data.labels = ['No Clusters'];
+      charts.k8sClusterStatus.data.datasets[0].data = [1];
+      charts.k8sClusterStatus.data.datasets[0].backgroundColor = ['#e9ecef'];
+      charts.k8sClusterStatus.update('none');
+      console.log('K8s Chart: Fallback "No Clusters" applied');
+    }
+  }
 }
 
 // Update MCI table
@@ -1224,6 +1736,9 @@ function updateVmTable() {
         <button class="btn btn-sm btn-outline-info" onclick="controlVm('${vm.mciId}', '${vm.id}', 'restart')" title="Restart" ${!canRestart ? 'disabled' : ''}>
           <i class="fas fa-sync-alt"></i>
         </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteVm('${vm.id}', '${vm.mciId}')" title="Delete VM">
+          <i class="fas fa-trash"></i>
+        </button>
       </td>
     `;
     
@@ -1386,49 +1901,6 @@ async function controlVm(mciId, vmId, action) {
   } catch (error) {
     console.error(`Error controlling VM ${vmId}:`, error);
     showErrorMessage(`Failed to ${action} VM: ${error.response?.data?.message || error.message}`);
-  } finally {
-    showRefreshIndicator(false);
-  }
-}
-
-// Delete MCI
-async function deleteMci(mciId) {
-  const result = await Swal.fire({
-    title: 'Delete MCI',
-    text: `Are you sure you want to delete MCI: ${mciId}? This action cannot be undone.`,
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonColor: '#dc3545',
-    cancelButtonColor: '#6c757d',
-    confirmButtonText: 'Yes, delete it!',
-    cancelButtonText: 'Cancel'
-  });
-  
-  if (!result.isConfirmed) {
-    return;
-  }
-  
-  const url = `http://${dashboardConfig.hostname}:${dashboardConfig.port}/tumblebug/ns/${dashboardConfig.namespace}/mci/${mciId}`;
-  
-  try {
-    showRefreshIndicator(true);
-    
-    const response = await axios.delete(url, {
-      auth: {
-        username: dashboardConfig.username,
-        password: dashboardConfig.password
-      },
-      timeout: 60000
-    });
-    
-    showSuccessMessage(`MCI ${mciId} deleted successfully!`);
-    
-    // Refresh data
-    refreshDashboard();
-    
-  } catch (error) {
-    console.error(`Error deleting MCI ${mciId}:`, error);
-    showErrorMessage(`Failed to delete MCI: ${error.response?.data?.message || error.message}`);
   } finally {
     showRefreshIndicator(false);
   }
@@ -1640,6 +2112,7 @@ function updateAllResourceTables() {
   updateSecurityGroupTable();
   updateSshKeyTable();
   updateK8sClusterTable();
+  updateK8sNodeGroupTable();
   updateConnectionTable();
   updateCustomImageTable();
   updateDataDiskTable();
@@ -1677,7 +2150,7 @@ function updateVNetTable() {
         <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('vNet', '${vnet.id}')" title="View Details">
           <i class="fas fa-eye"></i>
         </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteResource('vNet', '${vnet.id}')" title="Delete">
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteVNet('${vnet.id}')" title="Delete">
           <i class="fas fa-trash"></i>
         </button>
       </td>
@@ -1718,7 +2191,7 @@ function updateSecurityGroupTable() {
         <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('securityGroup', '${sg.id}')" title="View Details">
           <i class="fas fa-eye"></i>
         </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteResource('securityGroup', '${sg.id}')" title="Delete">
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteSecurityGroup('${sg.id}')" title="Delete">
           <i class="fas fa-trash"></i>
         </button>
       </td>
@@ -1762,7 +2235,7 @@ function updateSshKeyTable() {
         <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('sshKey', '${key.id}')" title="View Details">
           <i class="fas fa-eye"></i>
         </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteResource('sshKey', '${key.id}')" title="Delete">
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteSshKey('${key.id}')" title="Delete">
           <i class="fas fa-trash"></i>
         </button>
       </td>
@@ -1791,26 +2264,271 @@ function updateK8sClusterTable() {
   
   k8sData.forEach(cluster => {
     const row = document.createElement('tr');
+    row.setAttribute('data-cluster-id', cluster.id);
+    row.style.cursor = 'pointer';
+    
+    // Normalize status for CSS class
+    let statusClass = 'unknown';
+    if (cluster.status) {
+      const status = cluster.status.toLowerCase();
+      if (status === 'active' || status === 'running') {
+        statusClass = 'active';
+      } else if (status === 'creating') {
+        statusClass = 'creating';
+      } else if (status === 'updating') {
+        statusClass = 'updating';
+      } else if (status === 'deleting') {
+        statusClass = 'deleting';
+      } else {
+        statusClass = status.replace(/[^a-z0-9-]/g, '');
+      }
+    }
+    
+    // Get endpoint from accessInfo
+    let endpoint = 'N/A';
+    if (cluster.accessInfo && cluster.accessInfo.endpoint) {
+      endpoint = cluster.accessInfo.endpoint;
+    }
+    
+    // Count total nodes in all node groups
+    let totalNodes = 0;
+    let nodeGroupsInfo = '';
+    if (cluster.k8sNodeGroupList && cluster.k8sNodeGroupList.length > 0) {
+      totalNodes = cluster.k8sNodeGroupList.reduce((sum, ng) => {
+        return sum + (ng.desiredNodeSize || ng.spiderViewK8sNodeGroupDetail?.DesiredNodeSize || 0);
+      }, 0);
+      nodeGroupsInfo = `${cluster.k8sNodeGroupList.length} groups (${totalNodes} nodes)`;
+    } else {
+      nodeGroupsInfo = '0 groups';
+    }
+    
     row.innerHTML = `
-      <td title="${cluster.id}">${smartTruncate(cluster.id, 'id')}</td>
+      <td title="${cluster.id}"><strong>${smartTruncate(cluster.id, 'id')}</strong></td>
       <td title="${cluster.name || 'N/A'}">${smartTruncate(cluster.name || 'N/A', 'name')}</td>
-      <td><span class="status-badge status-${(cluster.status || 'unknown').toLowerCase()}">${cluster.status || 'Unknown'}</span></td>
+      <td><span class="status-badge status-${statusClass}">${cluster.status || 'Unknown'}</span></td>
       <td title="${cluster.connectionConfig?.providerName || 'N/A'}">${smartTruncate(cluster.connectionConfig?.providerName || 'N/A', 'provider')}</td>
       <td title="${cluster.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(cluster.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
       <td title="${cluster.version || 'N/A'}">${smartTruncate(cluster.version || 'N/A', 'default')}</td>
-      <td>${cluster.nodeGroupList ? cluster.nodeGroupList.length : 0}</td>
+      <td title="${endpoint}">
+        ${endpoint !== 'N/A' ? `<a href="${endpoint}" target="_blank" class="btn btn-sm btn-outline-info"><i class="fas fa-external-link-alt"></i></a>` : 'N/A'}
+      </td>
+      <td style="cursor: pointer;" onclick="selectK8sCluster('${cluster.id}')" title="Click to view node groups">
+        <span class="badge badge-info">${nodeGroupsInfo}</span>
+      </td>
       <td class="action-buttons">
-        <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('k8sCluster', '${cluster.id}')" title="View Details">
+        <button class="btn btn-sm btn-outline-primary" onclick="viewK8sClusterDetails('${cluster.id}')" title="View Details">
           <i class="fas fa-eye"></i>
         </button>
+        ${cluster.accessInfo && cluster.accessInfo.kubeconfig ? 
+          `<button class="btn btn-sm btn-outline-success" onclick="downloadKubeconfig('${cluster.id}')" title="Download Kubeconfig">
+            <i class="fas fa-download"></i>
+          </button>` : ''
+        }
         <button class="btn btn-sm btn-outline-warning" onclick="controlK8sCluster('${cluster.id}', 'upgrade')" title="Upgrade">
           <i class="fas fa-arrow-up"></i>
         </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteResource('k8sCluster', '${cluster.id}')" title="Delete">
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteK8sCluster('${cluster.id}')" title="Delete">
           <i class="fas fa-trash"></i>
         </button>
       </td>
     `;
+    
+    // Add click event to select cluster for node group filtering
+    row.addEventListener('click', function(event) {
+      // Don't trigger if clicking on buttons or links
+      if (event.target.closest('button') || event.target.closest('a')) {
+        return;
+      }
+      selectK8sCluster(cluster.id);
+    });
+    
+    // Highlight selected cluster
+    if (selectedK8sClusterId === cluster.id) {
+      row.classList.add('table-active');
+    }
+    
+    tableBody.appendChild(row);
+  });
+  
+  // Update node groups table
+  updateK8sNodeGroupTable();
+}
+
+// Select K8s cluster and update node group table
+function selectK8sCluster(clusterId) {
+  selectedK8sClusterId = clusterId;
+  console.log(`Selected K8s Cluster: ${clusterId}`);
+  
+  // Update K8s cluster table highlighting
+  updateK8sClusterTable();
+  
+  // Update node group section header
+  const ngTable = document.getElementById('k8sNodeGroupTable');
+  const ngContentCard = ngTable ? ngTable.closest('.content-card') : null;
+  const ngHeader = ngContentCard ? ngContentCard.querySelector('h5') : null;
+  
+  if (ngHeader) {
+    ngHeader.innerHTML = `<i class="fas fa-server"></i> Kubernetes Node Groups - ${clusterId} <span class="badge badge-secondary ml-2" id="k8sNodeGroupCountBadge">0</span>`;
+  }
+  
+  // Update node groups table to show only node groups from selected cluster
+  updateK8sNodeGroupTable();
+  
+  // Update show all button visibility
+  updateShowAllNodeGroupsButton();
+}
+
+// Show all node groups (clear cluster selection)
+function showAllNodeGroups() {
+  selectedK8sClusterId = null;
+  console.log('Showing all node groups, selectedK8sClusterId set to:', selectedK8sClusterId);
+  
+  // Update K8s cluster table highlighting
+  updateK8sClusterTable();
+  
+  // Update node group section header
+  const ngTable = document.getElementById('k8sNodeGroupTable');
+  const ngContentCard = ngTable ? ngTable.closest('.content-card') : null;
+  const ngHeader = ngContentCard ? ngContentCard.querySelector('h5') : null;
+  
+  if (ngHeader) {
+    ngHeader.innerHTML = `<i class="fas fa-server"></i> Kubernetes Node Groups <span class="badge badge-secondary ml-2" id="k8sNodeGroupCountBadge">0</span>`;
+  }
+  
+  // Update node groups table to show all node groups
+  updateK8sNodeGroupTable();
+  
+  // Update show all button visibility
+  updateShowAllNodeGroupsButton();
+}
+
+// Update show all node groups button visibility
+function updateShowAllNodeGroupsButton() {
+  const showAllBtn = document.getElementById('showAllNodeGroupsBtn');
+  if (showAllBtn) {
+    showAllBtn.style.display = selectedK8sClusterId ? 'inline-block' : 'none';
+  }
+}
+
+// Update K8s Node Groups table
+function updateK8sNodeGroupTable() {
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  const k8sData = centralData.k8sCluster || [];
+  const tableBody = document.getElementById('k8sNodeGroupTableBody');
+  if (!tableBody) return;
+  
+  tableBody.innerHTML = '';
+  
+  // Collect all node groups
+  let allNodeGroups = [];
+  k8sData.forEach(cluster => {
+    if (cluster.nodeGroupList && cluster.nodeGroupList.length > 0) {
+      cluster.nodeGroupList.forEach(nodeGroup => {
+        allNodeGroups.push({
+          ...nodeGroup,
+          clusterId: cluster.id,
+          clusterStatus: cluster.status
+        });
+      });
+    }
+  });
+  
+  // Filter node groups based on selected cluster
+  let filteredNodeGroups = allNodeGroups;
+  if (selectedK8sClusterId) {
+    filteredNodeGroups = allNodeGroups.filter(ng => ng.clusterId === selectedK8sClusterId);
+  }
+  
+  // Update node group count display
+  const ngCountElement = document.getElementById('k8sNodeGroupCountBadge');
+  if (ngCountElement) {
+    ngCountElement.textContent = filteredNodeGroups.length;
+  }
+  
+  if (filteredNodeGroups.length === 0 && selectedK8sClusterId) {
+    // Show message when no node groups found for selected cluster
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td colspan="9" class="text-center text-muted py-4">
+        <i class="fas fa-info-circle me-2"></i>
+        No node groups found for selected cluster: ${selectedK8sClusterId}
+      </td>
+    `;
+    tableBody.appendChild(row);
+    return;
+  }
+  
+  filteredNodeGroups.forEach(nodeGroup => {
+    const row = document.createElement('tr');
+    
+    // Normalize status for CSS class
+    let statusClass = 'unknown';
+    if (nodeGroup.status) {
+      const status = nodeGroup.status.toLowerCase();
+      if (status === 'active' || status === 'running') {
+        statusClass = 'active';
+      } else if (status === 'creating') {
+        statusClass = 'creating';
+      } else if (status === 'updating') {
+        statusClass = 'updating';
+      } else if (status === 'deleting') {
+        statusClass = 'deleting';
+      } else {
+        statusClass = status.replace(/[^a-z0-9-]/g, '');
+      }
+    }
+    
+    // Auto scaling info
+    const autoScalingInfo = nodeGroup.onAutoScaling ? 
+      `Enabled (${nodeGroup.minSize}-${nodeGroup.maxSize})` : 
+      'Disabled';
+    
+    // Min/Max size display
+    const sizeInfo = `${nodeGroup.minSize || 0} / ${nodeGroup.maxSize || 0}`;
+    
+    row.innerHTML = `
+      <td title="${nodeGroup.name}"><strong>${smartTruncate(nodeGroup.name, 'name')}</strong></td>
+      <td title="${nodeGroup.clusterId}">${smartTruncate(nodeGroup.clusterId, 'id')}</td>
+      <td><span class="status-badge status-${statusClass}">${nodeGroup.status || 'Unknown'}</span></td>
+      <td title="${nodeGroup.vmSpecName || 'N/A'}">${smartTruncate(nodeGroup.vmSpecName || 'N/A', 'spec')}</td>
+      <td><span class="badge badge-primary">${nodeGroup.desiredCapacity || nodeGroup.minSize || 0}</span></td>
+      <td>${sizeInfo}</td>
+      <td><span class="badge ${nodeGroup.onAutoScaling ? 'badge-success' : 'badge-secondary'}">${autoScalingInfo}</span></td>
+      <td title="${nodeGroup.imageId || 'N/A'}">${smartTruncate(nodeGroup.imageId || 'N/A', 'default')}</td>
+      <td class="action-buttons">
+        <button class="btn btn-sm btn-outline-primary" onclick="viewNodeGroupDetails('${nodeGroup.clusterId}', '${nodeGroup.name}')" title="View Details">
+          <i class="fas fa-eye"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-info" onclick="toggleAutoScaling('${nodeGroup.clusterId}', '${nodeGroup.name}', ${!nodeGroup.onAutoScaling})" title="${nodeGroup.onAutoScaling ? 'Disable' : 'Enable'} Auto Scaling">
+          <i class="fas fa-${nodeGroup.onAutoScaling ? 'pause' : 'play'}"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-warning" onclick="scaleNodeGroup('${nodeGroup.clusterId}', '${nodeGroup.name}')" title="Scale Node Group">
+          <i class="fas fa-expand-arrows-alt"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteNodeGroup('${nodeGroup.clusterId}', '${nodeGroup.name}')" title="Delete Node Group">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    `;
+    
+    // Add click event to select cluster when clicking on node group row
+    row.addEventListener('click', function(event) {
+      // Don't trigger if clicking on buttons
+      if (event.target.closest('button')) {
+        return;
+      }
+      // Select the cluster this node group belongs to
+      if (nodeGroup.clusterId && selectedK8sClusterId !== nodeGroup.clusterId) {
+        selectK8sCluster(nodeGroup.clusterId);
+      }
+    });
+    
+    row.style.cursor = 'pointer';
+    
     tableBody.appendChild(row);
   });
 }
@@ -1916,63 +2634,92 @@ function createCspTabs(connectionData) {
   
   if (!tabsContainer || !tabContentContainer) return;
 
-  // Remove existing CSP tabs (keep "All Connections" tab)
-  const existingCspTabs = tabsContainer.querySelectorAll('.csp-tab');
-  existingCspTabs.forEach(tab => tab.remove());
-  
-  // Remove existing CSP tab panes
-  const existingCspPanes = tabContentContainer.querySelectorAll('.csp-tab-pane');
-  existingCspPanes.forEach(pane => pane.remove());
+  // Save currently active tab BEFORE any changes
+  const activeTab = document.querySelector('#connectionTabs .nav-link.active');
+  const activeTabId = activeTab ? activeTab.getAttribute('href') : null;
+  const wasActiveTabCsp = activeTab && activeTab.closest('.csp-tab');
 
-  // Create CSP-specific tabs
+  // Only update CSP tabs if the provider list actually changed
+  const existingProviders = Array.from(tabsContainer.querySelectorAll('.csp-tab .nav-link')).map(tab => {
+    const href = tab.getAttribute('href');
+    return href ? href.replace('#', '').replace('-connections', '') : '';
+  });
+  const newProviders = Object.keys(cspGroups).sort().map(provider => 
+    provider.toLowerCase().replace(/[^a-z0-9]/g, '')
+  );
+  
+  const providersChanged = JSON.stringify(existingProviders) !== JSON.stringify(newProviders);
+  
+  if (providersChanged) {
+    // Remove existing CSP tabs (keep "All Connections" tab)
+    const existingCspTabs = tabsContainer.querySelectorAll('.csp-tab');
+    existingCspTabs.forEach(tab => tab.remove());
+    
+    // Remove existing CSP tab panes
+    const existingCspPanes = tabContentContainer.querySelectorAll('.csp-tab-pane');
+    existingCspPanes.forEach(pane => pane.remove());
+  }
+
+  // Create CSP-specific tabs (only if providers changed or tabs don't exist)
   Object.keys(cspGroups).sort().forEach(provider => {
     const connections = cspGroups[provider];
     const providerId = provider.toLowerCase().replace(/[^a-z0-9]/g, '');
     const providerIcon = providerIcons[providerId] || providerIcons[provider.toLowerCase()] || 'fas fa-cloud';
     
-    // Create tab
-    const tabItem = document.createElement('li');
-    tabItem.className = 'nav-item csp-tab';
-    tabItem.role = 'presentation';
+    let existingTab = document.getElementById(`${providerId}-tab`);
+    let existingPane = document.getElementById(`${providerId}-connections`);
     
-    const tabLink = document.createElement('a');
-    tabLink.className = 'nav-link';
-    tabLink.id = `${providerId}-tab`;
-    tabLink.setAttribute('data-toggle', 'tab');
-    tabLink.setAttribute('href', `#${providerId}-connections`);
-    tabLink.setAttribute('role', 'tab');
-    tabLink.innerHTML = `<i class="${providerIcon}"></i> ${provider} <span class="badge badge-secondary">${connections.length}</span>`;
-    
-    tabItem.appendChild(tabLink);
-    tabsContainer.appendChild(tabItem);
-    
-    // Create tab content
-    const tabPane = document.createElement('div');
-    tabPane.className = 'tab-pane fade csp-tab-pane';
-    tabPane.id = `${providerId}-connections`;
-    tabPane.setAttribute('role', 'tabpanel');
-    
-    tabPane.innerHTML = `
-      <div class="table-responsive table-container">
-        <table class="table table-hover">
-          <thead>
-            <tr>
-              <th>Connection ID</th>
-              <th>Provider</th>
-              <th>Region</th>
-              <th>Zone</th>
-              <th>Verified</th>
-              <th>Representative</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="${providerId}-connectionTableBody">
-          </tbody>
-        </table>
-      </div>
-    `;
-    
-    tabContentContainer.appendChild(tabPane);
+    if (providersChanged || !existingTab) {
+      // Create tab
+      const tabItem = document.createElement('li');
+      tabItem.className = 'nav-item csp-tab';
+      tabItem.role = 'presentation';
+      
+      const tabLink = document.createElement('a');
+      tabLink.className = 'nav-link';
+      tabLink.id = `${providerId}-tab`;
+      tabLink.setAttribute('data-toggle', 'tab');
+      tabLink.setAttribute('href', `#${providerId}-connections`);
+      tabLink.setAttribute('role', 'tab');
+      tabLink.innerHTML = `<i class="${providerIcon}"></i> ${provider} <span class="badge badge-secondary">${connections.length}</span>`;
+      
+      tabItem.appendChild(tabLink);
+      tabsContainer.appendChild(tabItem);
+      
+      // Create tab content
+      const tabPane = document.createElement('div');
+      tabPane.className = 'tab-pane fade csp-tab-pane';
+      tabPane.id = `${providerId}-connections`;
+      tabPane.setAttribute('role', 'tabpanel');
+      
+      tabPane.innerHTML = `
+        <div class="table-responsive table-container" style="max-height: 25vh; overflow-y: auto;">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th>Connection ID</th>
+                <th>Provider</th>
+                <th>Region</th>
+                <th>Zone</th>
+                <th>Verified</th>
+                <th>Representative</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="${providerId}-connectionTableBody">
+            </tbody>
+          </table>
+        </div>
+      `;
+      
+      tabContentContainer.appendChild(tabPane);
+    } else {
+      // Just update the badge count for existing tab
+      const badge = existingTab.querySelector('.badge');
+      if (badge) {
+        badge.textContent = connections.length;
+      }
+    }
     
     // Populate CSP-specific table
     const cspTableBody = document.getElementById(`${providerId}-connectionTableBody`);
@@ -2006,6 +2753,42 @@ function createCspTabs(connectionData) {
       });
     }
   });
+
+  // Restore active tab immediately without setTimeout to reduce flicker
+  if (activeTabId) {
+    // Restore previously active tab if it exists
+    const targetTab = document.querySelector(`#connectionTabs .nav-link[href="${activeTabId}"]`);
+    const targetPane = document.querySelector(activeTabId);
+    
+    if (targetTab && targetPane) {
+      // Remove active state from all tabs first
+      document.querySelectorAll('#connectionTabs .nav-link').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      document.querySelectorAll('#connectionTabContent .tab-pane').forEach(pane => {
+        pane.classList.remove('show', 'active');
+      });
+      
+      // Then activate the target tab
+      targetTab.classList.add('active');
+      targetPane.classList.add('show', 'active');
+    }
+  }
+}
+
+// Clear Connection Tab Selection Function
+function clearConnectionTabSelection() {
+  // Remove active state from all connection tabs
+  document.querySelectorAll('#connectionTabs .nav-link').forEach(tab => {
+    tab.classList.remove('active');
+  });
+  
+  // Remove active state from all connection tab panes
+  document.querySelectorAll('#connectionTabContent .tab-pane').forEach(pane => {
+    pane.classList.remove('show', 'active');
+  });
+  
+  console.log('Connection tab selection cleared');
 }
 
 function updateCustomImageTable() {
@@ -2040,7 +2823,7 @@ function updateCustomImageTable() {
         <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('customImage', '${image.id}')" title="View Details">
           <i class="fas fa-eye"></i>
         </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteResource('customImage', '${image.id}')" title="Delete">
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteCustomImage('${image.id}')" title="Delete">
           <i class="fas fa-trash"></i>
         </button>
       </td>
@@ -2084,7 +2867,7 @@ function updateDataDiskTable() {
         <button class="btn btn-sm btn-outline-warning" onclick="resizeDisk('${disk.id}')" title="Resize">
           <i class="fas fa-expand"></i>
         </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteResource('dataDisk', '${disk.id}')" title="Delete">
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteDataDisk('${disk.id}')" title="Delete">
           <i class="fas fa-trash"></i>
         </button>
       </td>
@@ -2148,22 +2931,28 @@ function viewResourceDetails(resourceType, resourceId) {
   }
 }
 
-function deleteResource(resourceType, resourceId) {
-  Swal.fire({
-    title: `Delete ${resourceType}?`,
-    text: `Are you sure you want to delete ${resourceId}?`,
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonColor: '#d33',
-    cancelButtonColor: '#3085d6',
-    confirmButtonText: 'Yes, delete it!'
-  }).then((result) => {
-    if (result.isConfirmed) {
-      console.log(`Deleting ${resourceType}: ${resourceId}`);
-      // TODO: Implement actual deletion API call
-      Swal.fire('Deleted!', `${resourceType} has been deleted.`, 'success');
-    }
-  });
+function deleteResource(resourceType, resourceId, parameters = {}) {
+  // Instead of duplicating logic, use the existing async deleteResource function
+  const resourceTypeMap = {
+    'MCI': 'mci',
+    'VM': 'vm', 
+    'K8s Cluster': 'k8sCluster',
+    'K8s Node Group': 'k8sNodeGroup',
+    'vNet': 'vNet',
+    'Security Group': 'securityGroup',
+    'SSH Key': 'sshKey',
+    'Custom Image': 'customImage',
+    'Data Disk': 'dataDisk'
+  };
+  
+  const apiResourceType = resourceTypeMap[resourceType] || resourceType.toLowerCase();
+  
+  // Call the async deleteResourceAsync function with proper parameters
+  deleteResourceAsync(apiResourceType, resourceId, parameters)
+    .catch(error => {
+      console.error('Deletion failed:', error);
+      // Error handling is already done in the async function
+    });
 }
 
 // Helper function for text truncation
@@ -2367,6 +3156,206 @@ function resizeDisk(diskId) {
   });
 }
 
+// K8s Cluster Functions
+function viewK8sClusterDetails(clusterId) {
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  const k8sData = centralData.k8sCluster || [];
+  const cluster = k8sData.find(c => c.id === clusterId);
+  
+  if (!cluster) {
+    showErrorMessage('K8s Cluster not found');
+    return;
+  }
+  
+  Swal.fire({
+    title: `K8s Cluster Details: ${clusterId}`,
+    html: `<div id="jsonContainer" style="text-align: left; max-height: 400px; overflow-y: auto;"></div>`,
+    width: '80%',
+    showCloseButton: true,
+    showConfirmButton: false,
+    didOpen: () => {
+      const formatter = new JSONFormatter(cluster, 2);
+      const container = document.getElementById('jsonContainer');
+      container.appendChild(formatter.render());
+    }
+  });
+}
+
+function downloadKubeconfig(clusterId) {
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  const k8sData = centralData.k8sCluster || [];
+  const cluster = k8sData.find(c => c.id === clusterId);
+  
+  if (!cluster || !cluster.accessInfo || !cluster.accessInfo.kubeconfig) {
+    showErrorMessage('Kubeconfig not available for this cluster');
+    return;
+  }
+  
+  // Create and download kubeconfig file
+  const kubeconfigContent = cluster.accessInfo.kubeconfig;
+  const blob = new Blob([kubeconfigContent], { type: 'text/yaml' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `kubeconfig-${clusterId}.yaml`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+  
+  showSuccessMessage(`Kubeconfig downloaded for cluster: ${clusterId}`);
+}
+
+function viewNodeGroupDetails(clusterId, nodeGroupName) {
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  const k8sData = centralData.k8sCluster || [];
+  const cluster = k8sData.find(c => c.id === clusterId);
+  
+  if (!cluster || !cluster.nodeGroupList) {
+    showErrorMessage('Cluster or node group not found');
+    return;
+  }
+  
+  const nodeGroup = cluster.nodeGroupList.find(ng => ng.name === nodeGroupName);
+  if (!nodeGroup) {
+    showErrorMessage('Node group not found');
+    return;
+  }
+  
+  const formatter = new JSONFormatter(nodeGroup, 2);
+  
+  Swal.fire({
+    title: `Node Group Details: ${nodeGroupName}`,
+    html: `<div style="text-align: left; max-height: 400px; overflow-y: auto;">${formatter.render().outerHTML}</div>`,
+    width: '80%',
+    showCloseButton: true,
+    showConfirmButton: false
+  });
+}
+
+function toggleAutoScaling(clusterId, nodeGroupName, enable) {
+  const action = enable ? 'enable' : 'disable';
+  
+  Swal.fire({
+    title: `${enable ? 'Enable' : 'Disable'} Auto Scaling`,
+    text: `Are you sure you want to ${action} auto scaling for node group: ${nodeGroupName}?`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: `Yes, ${action}`,
+    cancelButtonText: 'Cancel'
+  }).then((result) => {
+    if (result.isConfirmed) {
+      console.log(`${action} auto scaling for ${nodeGroupName} in cluster ${clusterId}`);
+      // TODO: Implement actual API call
+      showSuccessMessage(`Auto scaling ${action}d for node group: ${nodeGroupName}`);
+    }
+  });
+}
+
+function scaleNodeGroup(clusterId, nodeGroupName) {
+  Swal.fire({
+    title: 'Scale Node Group',
+    html: `
+      <div class="form-group">
+        <label for="desiredCapacity">Desired Capacity:</label>
+        <input type="number" id="desiredCapacity" class="form-control" min="0" max="100" value="1">
+      </div>
+      <div class="form-group">
+        <label for="minSize">Min Size:</label>
+        <input type="number" id="minSize" class="form-control" min="0" max="100" value="0">
+      </div>
+      <div class="form-group">
+        <label for="maxSize">Max Size:</label>
+        <input type="number" id="maxSize" class="form-control" min="1" max="100" value="10">
+      </div>
+    `,
+    showCancelButton: true,
+    confirmButtonText: 'Scale',
+    cancelButtonText: 'Cancel',
+    preConfirm: () => {
+      const desiredCapacity = document.getElementById('desiredCapacity').value;
+      const minSize = document.getElementById('minSize').value;
+      const maxSize = document.getElementById('maxSize').value;
+      
+      if (!desiredCapacity || !minSize || !maxSize) {
+        Swal.showValidationMessage('Please fill all fields');
+        return false;
+      }
+      
+      if (parseInt(minSize) > parseInt(maxSize)) {
+        Swal.showValidationMessage('Min size cannot be greater than max size');
+        return false;
+      }
+      
+      if (parseInt(desiredCapacity) < parseInt(minSize) || parseInt(desiredCapacity) > parseInt(maxSize)) {
+        Swal.showValidationMessage('Desired capacity must be between min and max size');
+        return false;
+      }
+      
+      return {
+        desiredCapacity: parseInt(desiredCapacity),
+        minSize: parseInt(minSize),
+        maxSize: parseInt(maxSize)
+      };
+    }
+  }).then((result) => {
+    if (result.isConfirmed) {
+      console.log(`Scaling node group ${nodeGroupName} in cluster ${clusterId}:`, result.value);
+      // TODO: Implement actual API call
+      showSuccessMessage(`Node group ${nodeGroupName} scaling initiated`);
+    }
+  });
+}
+
+function deleteNodeGroup(nodeGroupId, clusterId = null) {
+  // If clusterId is not provided, try to find it from the node group data
+  if (!clusterId) {
+    const k8sData = centralData.k8sCluster || [];
+    for (const cluster of k8sData) {
+      if (cluster.k8sNodeGroupList) {
+        const foundNodeGroup = cluster.k8sNodeGroupList.find(ng => ng.id === nodeGroupId);
+        if (foundNodeGroup) {
+          clusterId = cluster.id;
+          break;
+        }
+      }
+    }
+  }
+  
+  if (!clusterId) {
+    Swal.fire({
+      title: 'Error',
+      text: 'Could not find cluster for this node group.',
+      icon: 'error'
+    });
+    return;
+  }
+  
+  // Use the common delete function
+  deleteK8sNodeGroup(nodeGroupId, clusterId);
+}
+
+function refreshNodeGroupList() {
+  console.log('Refreshing node group list...');
+  // Node groups are part of cluster data, so refresh clusters
+  if (window.parent && typeof window.parent.getMci === 'function') {
+    window.parent.getMci();
+  }
+  showSuccessMessage('Node group list refreshed!', 1500);
+}
+
 // TB (Tumblebug) Functions
 function showGitHub() {
   // Simply open GitHub in new tab
@@ -2484,3 +3473,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Export scroll functions
 window.scrollToTop = scrollToTop;
+
+// Export connection tab functions
+window.clearConnectionTabSelection = clearConnectionTabSelection;
+
+// Export delete functions to global scope
+window.deleteResource = deleteResource;
+window.deleteMci = deleteMci;
+window.deleteVm = deleteVm;
+window.deleteK8sCluster = deleteK8sCluster;
+window.deleteK8sNodeGroup = deleteK8sNodeGroup;
+window.deleteVNet = deleteVNet;
+window.deleteSecurityGroup = deleteSecurityGroup;
+window.deleteSshKey = deleteSshKey;
+window.deleteCustomImage = deleteCustomImage;
+window.deleteDataDisk = deleteDataDisk;
+window.deleteNodeGroup = deleteNodeGroup;
