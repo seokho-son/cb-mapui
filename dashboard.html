@@ -147,6 +147,9 @@ limitations under the License.
     .status-partial-failed { background-color: #ffeaa7; color: #d63031; }
     .status-terminating { background-color: #f5c6cb; color: #721c24; }
     .status-terminated { background-color: #6c757d; color: #ffffff; }
+    .status-active { background-color: #d4edda; color: #155724; }
+    .status-updating { background-color: #fff3cd; color: #856404; }
+    .status-deleting { background-color: #f5c6cb; color: #721c24; }
     .status-unknown { background-color: #f8f9fa; color: #6c757d; }
 
     .provider-icon {
@@ -274,6 +277,8 @@ limitations under the License.
     #sshKeyTable td:last-child,
     #k8sClusterTable th:last-child, 
     #k8sClusterTable td:last-child,
+    #k8sNodeGroupTable th:last-child, 
+    #k8sNodeGroupTable td:last-child,
     #customImageTable th:last-child, 
     #customImageTable td:last-child,
     #dataDiskTable th:last-child, 
@@ -299,6 +304,7 @@ limitations under the License.
     #securityGroupTable thead th:last-child,
     #sshKeyTable thead th:last-child,
     #k8sClusterTable thead th:last-child,
+    #k8sNodeGroupTable thead th:last-child,
     #customImageTable thead th:last-child,
     #dataDiskTable thead th:last-child,
     #connectionTable thead th:last-child,
@@ -313,6 +319,7 @@ limitations under the License.
     #securityGroupTable td[title],
     #sshKeyTable td[title],
     #k8sClusterTable td[title],
+    #k8sNodeGroupTable td[title],
     #customImageTable td[title],
     #dataDiskTable td[title],
     #connectionTable td[title],
@@ -337,7 +344,7 @@ limitations under the License.
 
     .chart-container {
       position: relative;
-      height: 300px;
+      height: 280px;
       margin: 1rem 0;
     }
 
@@ -551,6 +558,27 @@ limitations under the License.
     .scroll-to-top.show {
       display: flex;
     }
+
+    /* SweetAlert custom styles for better error message display */
+    .swal-wide {
+      width: 600px !important;
+      max-width: 90vw !important;
+    }
+
+    .swal-wide .swal2-html-container {
+      text-align: left !important;
+      font-family: 'Courier New', monospace !important;
+      font-size: 13px !important;
+      line-height: 1.5 !important;
+      word-break: break-word !important;
+      white-space: pre-wrap !important;
+      max-height: 300px !important;
+      overflow-y: auto !important;
+      padding: 15px !important;
+      background-color: #f8f9fa !important;
+      border-radius: 4px !important;
+      border: 1px solid #dee2e6 !important;
+    }
   </style>
 </head>
 
@@ -597,7 +625,7 @@ limitations under the License.
           <div class="text-center">
             <i class="fas fa-cloud stat-icon text-primary"></i>
             <h3 class="stat-number" id="totalProviderCount">0</h3>
-            <p class="stat-label">Providers</p>
+            <p class="stat-label">Providers in Use</p>
           </div>
         </div>
       </div>
@@ -617,25 +645,17 @@ limitations under the License.
           <div class="text-center">
             <i class="fas fa-play-circle stat-icon text-success"></i>
             <h3 class="stat-number" id="runningMciCount">0</h3>
-            <p class="stat-label">Running</p>
+            <p class="stat-label">Running MCIs</p>
           </div>
         </div>
       </div>
-      <div class="col-md-2 col-sm-6">
-        <div class="stat-card warning" style="cursor: pointer;" onclick="scrollToSection('mciTable')" title="Click to view MCI details">
-          <div class="text-center">
-            <i class="fas fa-pause-circle stat-icon text-warning"></i>
-            <h3 class="stat-number" id="suspendedMciCount">0</h3>
-            <p class="stat-label">Suspended</p>
-          </div>
-        </div>
-      </div>
+
       <div class="col-md-2 col-sm-6">
         <div class="stat-card danger" style="cursor: pointer;" onclick="scrollToSection('mciTable')" title="Click to view MCI details">
           <div class="text-center">
             <i class="fas fa-exclamation-triangle stat-icon text-danger"></i>
             <h3 class="stat-number" id="failedMciCount">0</h3>
-            <p class="stat-label">Failed</p>
+            <p class="stat-label">Failed MCIs</p>
           </div>
         </div>
       </div>
@@ -650,12 +670,22 @@ limitations under the License.
         </div>
       </div>
 
+      <div class="col-md-2 col-sm-6">
+        <div class="stat-card primary" style="cursor: pointer;" onclick="scrollToSection('k8sClusterTable')" title="Click to view K8s Cluster details">
+          <div class="text-center">
+            <i class="fas fa-dharmachakra stat-icon text-primary"></i>
+            <h3 class="stat-number" id="totalK8sClusterCount">0</h3>
+            <p class="stat-label">K8s Clusters</p>
+          </div>
+        </div>
+      </div>
+
 
     </div>
 
     <!-- Charts Row -->
     <div class="row">
-      <div class="col-md-6">
+      <div class="col-md-4">
         <div class="content-card">
           <h5><i class="fas fa-chart-bar"></i> MCI & VM Status Distribution</h5>
           <div class="chart-container">
@@ -663,11 +693,19 @@ limitations under the License.
           </div>
         </div>
       </div>
-      <div class="col-md-6">
+      <div class="col-md-4">
         <div class="content-card">
           <h5><i class="fas fa-chart-bar"></i> Provider & Regional Distribution</h5>
           <div class="chart-container">
             <canvas id="providerRegionChart"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="content-card">
+          <h5><i class="fas fa-dharmachakra"></i> K8s Cluster Status Distribution</h5>
+          <div class="chart-container">
+            <canvas id="k8sClusterStatusChart"></canvas>
           </div>
         </div>
       </div>
@@ -1013,6 +1051,9 @@ limitations under the License.
           <div class="d-flex justify-content-between align-items-center mb-3">
             <h5><i class="fas fa-project-diagram"></i> Cloud Connections</h5>
             <div>
+              <button class="btn btn-outline-secondary btn-sm mr-2" onclick="clearConnectionTabSelection()" title="Clear tab selection">
+                <i class="fas fa-times"></i> Clear
+              </button>
               <button class="btn btn-primary btn-sm" onclick="refreshResourceList('connection')">
                 <i class="fas fa-sync-alt"></i> Refresh
               </button>
@@ -1022,7 +1063,7 @@ limitations under the License.
           <!-- CSP Tabs -->
           <ul class="nav nav-tabs" id="connectionTabs" role="tablist">
             <li class="nav-item" role="presentation">
-              <a class="nav-link active" id="all-connections-tab" data-toggle="tab" href="#all-connections" role="tab">
+              <a class="nav-link" id="all-connections-tab" data-toggle="tab" href="#all-connections" role="tab">
                 <i class="fas fa-globe"></i> All
               </a>
             </li>
@@ -1032,8 +1073,8 @@ limitations under the License.
           <!-- Tab Content -->
           <div class="tab-content" id="connectionTabContent">
             <!-- All Connections Tab -->
-            <div class="tab-pane fade show active" id="all-connections" role="tabpanel">
-              <div class="table-responsive table-container">
+            <div class="tab-pane fade" id="all-connections" role="tabpanel">
+              <div class="table-responsive table-container" style="max-height: 25vh; overflow-y: auto;">
                 <table class="table table-hover" id="connectionTable">
                   <thead>
                     <tr>
@@ -1139,8 +1180,82 @@ limitations under the License.
       </div>
     </div>
 
-    <!-- Resource Details Tables -->
-    
+
+    <!-- K8s Clusters Table -->
+    <div class="row">
+      <div class="col-12">
+        <div class="content-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5><i class="fas fa-dharmachakra"></i> Kubernetes Clusters <span class="badge badge-secondary ml-2" id="k8sClusterCountBadge">0</span></h5>
+            <div>
+              <button class="btn btn-primary btn-sm" onclick="refreshResourceList('k8sCluster')">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive table-container">
+            <table class="table table-hover" id="k8sClusterTable">
+              <thead>
+                <tr>
+                  <th>Cluster ID</th>
+                  <th>Name</th>
+                  <th>Status</th>
+                  <th>Provider</th>
+                  <th>Region</th>
+                  <th>Version</th>
+                  <th>Endpoint</th>
+                  <th>Node Groups</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="k8sClusterTableBody">
+                <!-- Data will be populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- K8s Node Groups Table -->
+    <div class="row">
+      <div class="col-12">
+        <div class="content-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5><i class="fas fa-server"></i> Kubernetes Node Groups <span class="badge badge-secondary ml-2" id="k8sNodeGroupCountBadge">0</span></h5>
+            <div>
+              <button class="btn btn-outline-secondary btn-sm mr-2" onclick="showAllNodeGroups()" id="showAllNodeGroupsBtn" style="display: none;">
+                <i class="fas fa-list"></i> Show All Node Groups
+              </button>
+              <button class="btn btn-primary btn-sm" onclick="refreshNodeGroupList()">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive table-container">
+            <table class="table table-hover" id="k8sNodeGroupTable">
+              <thead>
+                <tr>
+                  <th>Cluster ID</th>
+                  <th>NodeGroup ID</th>
+                  <th>Status</th>
+                  <th>Spec ID</th>
+                  <th>Image ID</th>
+                  <th>Desired Capacity</th>
+                  <th>Min/Max Size</th>
+                  <th>Auto Scaling</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="k8sNodeGroupTableBody">
+                <!-- Data will be populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Network Resources Table -->
     <div class="row">
       <div class="col-12">
@@ -1245,33 +1360,34 @@ limitations under the License.
       </div>
     </div>
 
-    <!-- K8s Clusters Table -->
+
+    <!-- Data Disks Table -->
     <div class="row">
       <div class="col-12">
         <div class="content-card">
           <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5><i class="fas fa-dharmachakra"></i> Kubernetes Clusters <span class="badge badge-secondary ml-2" id="k8sClusterCountBadge">0</span></h5>
+            <h5><i class="fas fa-hdd"></i> Data Disks <span class="badge badge-secondary ml-2" id="dataDiskCountBadge">0</span></h5>
             <div>
-              <button class="btn btn-primary btn-sm" onclick="refreshResourceList('k8sCluster')">
+              <button class="btn btn-primary btn-sm" onclick="refreshResourceList('dataDisk')">
                 <i class="fas fa-sync-alt"></i> Refresh
               </button>
             </div>
           </div>
           <div class="table-responsive table-container">
-            <table class="table table-hover" id="k8sClusterTable">
+            <table class="table table-hover" id="dataDiskTable">
               <thead>
                 <tr>
-                  <th>Cluster ID</th>
+                  <th>Disk ID</th>
                   <th>Name</th>
                   <th>Status</th>
                   <th>Provider</th>
                   <th>Region</th>
-                  <th>Version</th>
-                  <th>Node Groups</th>
+                  <th>Size (GB)</th>
+                  <th>Disk Type</th>
                   <th>Actions</th>
                 </tr>
               </thead>
-              <tbody id="k8sClusterTableBody">
+              <tbody id="dataDiskTableBody">
                 <!-- Data will be populated by JavaScript -->
               </tbody>
             </table>
@@ -1313,43 +1429,7 @@ limitations under the License.
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- Data Disks Table -->
-    <div class="row">
-      <div class="col-12">
-        <div class="content-card">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5><i class="fas fa-hdd"></i> Data Disks <span class="badge badge-secondary ml-2" id="dataDiskCountBadge">0</span></h5>
-            <div>
-              <button class="btn btn-primary btn-sm" onclick="refreshResourceList('dataDisk')">
-                <i class="fas fa-sync-alt"></i> Refresh
-              </button>
-            </div>
-          </div>
-          <div class="table-responsive table-container">
-            <table class="table table-hover" id="dataDiskTable">
-              <thead>
-                <tr>
-                  <th>Disk ID</th>
-                  <th>Name</th>
-                  <th>Status</th>
-                  <th>Provider</th>
-                  <th>Region</th>
-                  <th>Size (GB)</th>
-                  <th>Disk Type</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="dataDiskTableBody">
-                <!-- Data will be populated by JavaScript -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-
+    </div>    
 
   </div>
 
