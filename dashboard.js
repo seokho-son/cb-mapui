@@ -112,17 +112,33 @@ async function deleteResourceAsync(resourceType, resourceId, additionalParams = 
       return;
     }
 
-    // Show loading indicator
-    Swal.fire({
+    // Show loading indicator (non-blocking) - option 1: Modal dialog
+    const loadingAlert = Swal.fire({
       title: 'Deleting...',
-      text: 'Please wait while the resource is being deleted.',
-      allowOutsideClick: false,
-      allowEscapeKey: false,
-      showConfirmButton: false,
+      text: 'Please wait while the resource is being deleted. You can continue using the interface.',
+      allowOutsideClick: true,
+      allowEscapeKey: true,
+      showConfirmButton: true,
+      confirmButtonText: 'Hide',
+      showCancelButton: false,
       didOpen: () => {
         Swal.showLoading();
       }
     });
+
+    // Alternative option: Simple toast notification (uncomment to use instead)
+    /*
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'info',
+      title: 'Deleting resource...',
+      text: `Deleting ${resourceType}: ${resourceId}`,
+      showConfirmButton: false,
+      timer: 0, // Keep showing until manually closed
+      timerProgressBar: false
+    });
+    */
 
     // Make DELETE request using axios with auth (same as index.js)
     const fullUrl = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug${endpoint}`;
@@ -324,6 +340,78 @@ let refreshTimer = null;
 let charts = {};
 let selectedMciId = null; // Track selected MCI for VM filtering
 let selectedK8sClusterId = null; // Track selected K8s cluster for node group filtering
+let eventListenersAttached = false; // Track if event listeners are already attached
+let performanceCleanupTimer = null; // Timer for periodic cleanup
+
+// Performance monitoring variables
+let performanceMetrics = {
+  chartUpdateCount: 0,
+  domUpdateCount: 0,
+  lastCleanupTime: Date.now(),
+  memoryWarningThreshold: 50 // MB
+};
+
+// Cleanup function to prevent memory leaks
+function destroyAllCharts() {
+  Object.keys(charts).forEach(chartKey => {
+    if (charts[chartKey] && typeof charts[chartKey].destroy === 'function') {
+      console.log(`Destroying chart: ${chartKey}`);
+      charts[chartKey].destroy();
+      charts[chartKey] = null;
+    }
+  });
+  charts = {};
+}
+
+// Performance cleanup function
+function performPerformanceCleanup() {
+  const now = Date.now();
+  const timeSinceLastCleanup = now - performanceMetrics.lastCleanupTime;
+  
+  // Run cleanup every 5 minutes
+  if (timeSinceLastCleanup > 300000) {
+    console.log('[Performance] Running periodic cleanup...');
+    
+    // Clear any dangling timers
+    clearDanglingTimers();
+    
+    // Force garbage collection if available (for testing)
+    if (window.gc && typeof window.gc === 'function') {
+      window.gc();
+    }
+    
+    // Reset performance metrics
+    performanceMetrics.chartUpdateCount = 0;
+    performanceMetrics.domUpdateCount = 0;
+    performanceMetrics.lastCleanupTime = now;
+    
+    console.log('[Performance] Cleanup completed');
+  }
+}
+
+// Clear any dangling timers
+function clearDanglingTimers() {
+  // Clear the main refresh timer
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+  
+  // Clear performance cleanup timer
+  if (performanceCleanupTimer) {
+    clearInterval(performanceCleanupTimer);
+    performanceCleanupTimer = null;
+  }
+}
+
+// Start performance monitoring
+function startPerformanceMonitoring() {
+  // Set up periodic cleanup
+  if (!performanceCleanupTimer) {
+    performanceCleanupTimer = setInterval(performPerformanceCleanup, 60000); // Check every minute
+    console.log('[Performance] Monitoring started');
+  }
+}
 
 // Initialize dashboard when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -331,6 +419,9 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Load settings from localStorage
   loadSettings();
+  
+  // Start performance monitoring
+  startPerformanceMonitoring();
   
   // Initialize charts
   initializeCharts();
@@ -416,8 +507,11 @@ document.addEventListener('DOMContentLoaded', function() {
     startAutoRefresh();
   }
   
-  // Setup event listeners
-  setupEventListeners();
+  // Setup event listeners (only once)
+  if (!eventListenersAttached) {
+    setupEventListeners();
+    eventListenersAttached = true;
+  }
 });
 
 // Load settings from localStorage
@@ -465,8 +559,11 @@ function showSettings() {
   $('#settingsModal').modal('show');
 }
 
-// Initialize Chart.js charts
+// Initialize Chart.js charts with proper cleanup
 function initializeCharts() {
+  // Destroy existing charts before creating new ones to prevent memory leaks
+  destroyAllCharts();
+  
   // Combined MCI & VM Status Chart
   const combinedStatusCtx = document.getElementById('combinedStatusChart').getContext('2d');
   charts.combinedStatus = new Chart(combinedStatusCtx, {
@@ -1040,60 +1137,34 @@ function updateResourceCounts() {
 }
 
 // Update charts
+// Update charts with performance optimization
 function updateCharts() {
-  // Update MCI Status Chart with improved status parsing
-  const statusCounts = {
-    'Running': 0,
-    'Creating': 0,
-    'Preparing': 0,
-    'Suspended': 0,
-    'Failed': 0,
-    'Partial': 0,
-    'Terminating': 0,
-    'Other': 0
-  };
+  performanceMetrics.chartUpdateCount++;
   
-  console.log('Processing MCI statuses for chart:');
-  mciData.forEach(mci => {
-    const originalStatus = mci.status;
-    const normalizedStatus = normalizeMciStatus(originalStatus);
+  try {
+    console.log(`Updating charts with current data... (update #${performanceMetrics.chartUpdateCount})`);
     
-    console.log(`Original: "${originalStatus}" → Normalized: "${normalizedStatus}"`);
+    // Ensure charts exist before updating
+    if (!charts.combinedStatus || !charts.providerRegion) {
+      console.warn('Charts not initialized, skipping update');
+      return;
+    }
     
-    if (statusCounts.hasOwnProperty(normalizedStatus)) {
-      statusCounts[normalizedStatus]++;
-    } else {
-      statusCounts['Other']++;
-    }
-  });
-  
-  console.log('Final status counts:', statusCounts);
-  
-  // Filter out zero counts for cleaner chart
-  const activeStatuses = [];
-  const activeCounts = [];
-  const activeColors = [];
-  
-  const statusColors = {
-    'Running': '#28a745',     // green
-    'Creating': '#17a2b8',    // blue
-    'Preparing': '#6c757d',   // gray
-    'Suspended': '#ffc107',   // yellow
-    'Failed': '#dc3545',      // red
-    'Partial': '#fd7e14',     // orange
-    'Terminating': '#e83e8c', // pink
-    'Other': '#6c757d'        // gray
-  };
-  
-  Object.entries(statusCounts).forEach(([status, count]) => {
-    if (count > 0) {
-      activeStatuses.push(status);
-      activeCounts.push(count);
-      activeColors.push(statusColors[status]);
-    }
-  });
-  
-  // Update Combined MCI & VM Status Chart
+    // Update MCI & VM Status Chart with efficient data processing
+    updateCombinedStatusChart();
+    
+    // Update Provider & Regional Distribution Chart  
+    updateProviderRegionChart();
+    
+    console.log('Charts updated successfully');
+    
+  } catch (error) {
+    console.error('Error updating charts:', error);
+  }
+}
+
+// Separate function for combined status chart update
+function updateCombinedStatusChart() {
   const mciStatusCounts = {
     'Running': 0,
     'Creating': 0,
@@ -1118,25 +1189,7 @@ function updateCharts() {
   
   // Count MCI statuses
   mciData.forEach(mci => {
-    const status = mci.status || 'Unknown';
-    let normalizedStatus = 'Other';
-    
-    if (status.includes('Running') || status === 'Running') {
-      normalizedStatus = 'Running';
-    } else if (status.includes('Creating') || status === 'Creating') {
-      normalizedStatus = 'Creating';
-    } else if (status.includes('Preparing') || status === 'Preparing') {
-      normalizedStatus = 'Preparing';
-    } else if (status.includes('Suspended') || status === 'Suspended') {
-      normalizedStatus = 'Suspended';
-    } else if (status.includes('Failed') || status === 'Failed' || status.includes('Partial-Failed')) {
-      normalizedStatus = 'Failed';
-    } else if (status.includes('Terminating') || status === 'Terminating') {
-      normalizedStatus = 'Terminating';
-    } else if (status.includes('Terminated') || status === 'Terminated') {
-      normalizedStatus = 'Terminated';
-    }
-    
+    const normalizedStatus = categorizeStatus(mci.status);
     if (mciStatusCounts.hasOwnProperty(normalizedStatus)) {
       mciStatusCounts[normalizedStatus]++;
     } else {
@@ -1146,27 +1199,9 @@ function updateCharts() {
   
   // Count VM statuses
   vmData.forEach(vm => {
-    const vmStatus = vm.status || 'Unknown';
-    let normalizedVmStatus = 'Other';
-    
-    if (vmStatus.includes('Running') || vmStatus === 'Running') {
-      normalizedVmStatus = 'Running';
-    } else if (vmStatus.includes('Creating') || vmStatus === 'Creating') {
-      normalizedVmStatus = 'Creating';
-    } else if (vmStatus.includes('Preparing') || vmStatus === 'Preparing') {
-      normalizedVmStatus = 'Preparing';
-    } else if (vmStatus.includes('Suspended') || vmStatus === 'Suspended') {
-      normalizedVmStatus = 'Suspended';
-    } else if (vmStatus.includes('Failed') || vmStatus === 'Failed') {
-      normalizedVmStatus = 'Failed';
-    } else if (vmStatus.includes('Terminating') || vmStatus === 'Terminating') {
-      normalizedVmStatus = 'Terminating';
-    } else if (vmStatus.includes('Terminated') || vmStatus === 'Terminated') {
-      normalizedVmStatus = 'Terminated';
-    }
-    
-    if (vmStatusCounts.hasOwnProperty(normalizedVmStatus)) {
-      vmStatusCounts[normalizedVmStatus]++;
+    const normalizedStatus = categorizeStatus(vm.status);
+    if (vmStatusCounts.hasOwnProperty(normalizedStatus)) {
+      vmStatusCounts[normalizedStatus]++;
     } else {
       vmStatusCounts['Other']++;
     }
@@ -1181,6 +1216,16 @@ function updateCharts() {
   const hasMciData = mciDataArray.some(count => count > 0);
   const hasVmData = vmDataArray.some(count => count > 0);
   
+  // Only update if data has changed (performance optimization)
+  const currentMciData = JSON.stringify(charts.combinedStatus.data.datasets[0].data);
+  const currentVmData = JSON.stringify(charts.combinedStatus.data.datasets[1].data);
+  const newMciData = JSON.stringify(mciDataArray);
+  const newVmData = JSON.stringify(vmDataArray);
+  
+  if (currentMciData === newMciData && currentVmData === newVmData) {
+    return; // No data change, skip update
+  }
+  
   // Update combined chart - show "No Data" if no data
   if (!hasMciData && !hasVmData) {
     charts.combinedStatus.data.labels = ['No Data'];
@@ -1192,32 +1237,36 @@ function updateCharts() {
     charts.combinedStatus.data.datasets[1].backgroundColor = ['#f8f9fa'];
   } else {
     charts.combinedStatus.data.labels = statusLabels;
-    charts.combinedStatus.data.datasets[0].data = mciDataArray;  // MCI Count
+    charts.combinedStatus.data.datasets[0].data = mciDataArray;
     charts.combinedStatus.data.datasets[0].label = 'MCI Count';
-    // Reset to original colors when there's data
-    charts.combinedStatus.data.datasets[0].backgroundColor = 'rgba(40, 167, 69, 0.8)';  // Green
-    charts.combinedStatus.data.datasets[1].data = vmDataArray;   // VM Count
+    charts.combinedStatus.data.datasets[0].backgroundColor = 'rgba(40, 167, 69, 0.8)';
+    charts.combinedStatus.data.datasets[1].data = vmDataArray;
     charts.combinedStatus.data.datasets[1].label = 'VM Count';
-    charts.combinedStatus.data.datasets[1].backgroundColor = 'rgba(23, 162, 184, 0.8)';  // Blue
+    charts.combinedStatus.data.datasets[1].backgroundColor = 'rgba(23, 162, 184, 0.8)';
   }
-  charts.combinedStatus.update('none'); // Disable animation for this update
-  
-  // Update Provider & Region Combined Chart
+  charts.combinedStatus.update('none'); // Disable animation for better performance
+}
+
+// Separate function for provider region chart update  
+function updateProviderRegionChart() {
   const providerRegionData = {};
   
   // If no VM data at all, show "No Data"
   if (!vmData || vmData.length === 0) {
-    charts.providerRegion.data.labels = ['No Data'];
-    charts.providerRegion.data.datasets = [{
-      label: 'No VMs',
-      data: [1],
-      backgroundColor: ['#e9ecef']
-    }];
-    charts.providerRegion.update('none');
+    // Only update if different from current state
+    if (charts.providerRegion.data.labels[0] !== 'No Data') {
+      charts.providerRegion.data.labels = ['No Data'];
+      charts.providerRegion.data.datasets = [{
+        label: 'No VMs',
+        data: [1],
+        backgroundColor: ['#e9ecef']
+      }];
+      charts.providerRegion.update('none');
+    }
     return;
   }
   
-  // Collect data by provider and region
+  // Collect data by provider and region efficiently
   vmData.forEach(vm => {
     let provider = null;
     let region = null;
@@ -1240,14 +1289,8 @@ function updateCharts() {
       region = vm.regionZoneInfoList[0].regionName;
     }
     
-    // Skip VMs without proper provider/region info (likely still creating)
+    // Skip VMs without proper provider/region info
     if (!provider || !region) {
-      console.log('Skipping VM with incomplete provider/region info:', {
-        id: vm.id || vm.name,
-        provider: provider,
-        region: region,
-        status: vm.status
-      });
       return;
     }
     
@@ -1285,6 +1328,16 @@ function updateCharts() {
     borderWidth: 1
   }));
   
+  // Check if data has changed before updating (performance optimization)
+  const currentLabels = JSON.stringify(charts.providerRegion.data.labels);
+  const newLabels = JSON.stringify(providers);
+  const currentDatasets = JSON.stringify(charts.providerRegion.data.datasets.map(d => ({ label: d.label, data: d.data })));
+  const newDatasets = JSON.stringify(datasets.map(d => ({ label: d.label, data: d.data })));
+  
+  if (currentLabels === newLabels && currentDatasets === newDatasets) {
+    return; // No data change, skip update
+  }
+  
   // Handle empty data
   if (providers.length === 0) {
     charts.providerRegion.data.labels = ['No Data'];
@@ -1298,7 +1351,24 @@ function updateCharts() {
     charts.providerRegion.data.datasets = datasets;
   }
   
-  charts.providerRegion.update('none'); // Disable animation for this update
+  charts.providerRegion.update('none'); // Disable animation for better performance
+}
+
+// Helper function to categorize status consistently
+function categorizeStatus(status) {
+  if (!status) return 'Other';
+  
+  const statusStr = status.toString().toLowerCase();
+  
+  if (statusStr.includes('running')) return 'Running';
+  if (statusStr.includes('creating')) return 'Creating';
+  if (statusStr.includes('preparing')) return 'Preparing';
+  if (statusStr.includes('suspended')) return 'Suspended';
+  if (statusStr.includes('failed') || statusStr.includes('partial-failed')) return 'Failed';
+  if (statusStr.includes('terminating')) return 'Terminating';
+  if (statusStr.includes('terminated')) return 'Terminated';
+  
+  return 'Other';
 }
 
 // Update K8s Charts
@@ -2533,6 +2603,14 @@ function updateK8sNodeGroupTable() {
   });
 }
 
+// Optimized Connection Table Management with caching
+let connectionTabCache = {
+  lastUpdateTime: 0,
+  lastDataHash: '',
+  tabsInitialized: false,
+  providerTabs: new Map()
+};
+
 function updateConnectionTable() {
   let centralData = {};
   if (window.parent && window.parent.cloudBaristaCentralData) {
@@ -2541,43 +2619,69 @@ function updateConnectionTable() {
   
   const connectionData = centralData.connection || [];
   
-  // Update main connection table (All Connections tab)
-  updateAllConnectionsTable(connectionData);
+  // Performance optimization: Create data hash to detect actual changes
+  const dataHash = JSON.stringify(connectionData.map(c => ({ 
+    id: c.configName, 
+    provider: c.providerName, 
+    verified: c.verified 
+  })));
   
-  // Create CSP-specific tabs
+  const now = Date.now();
+  
+  // Skip update if data hasn't changed and recent update
+  if (connectionTabCache.lastDataHash === dataHash && 
+      (now - connectionTabCache.lastUpdateTime) < 2000) {
+    console.log('[Performance] Connection table: Skipping update - no changes detected');
+    return;
+  }
+  
+  connectionTabCache.lastUpdateTime = now;
+  connectionTabCache.lastDataHash = dataHash;
+  
+  // Update main connection table efficiently
+  updateAllConnectionsTableOptimized(connectionData);
+  
+  // Create/update CSP-specific tabs efficiently  
   createCspTabs(connectionData);
 }
 
-function updateAllConnectionsTable(connectionData) {
+function updateAllConnectionsTableOptimized(connectionData) {
   const tableBody = document.getElementById('connectionTableBody');
   if (!tableBody) return;
-  
+
+  // Update count badge first
+  const countBadge = document.getElementById('connectionCountBadge');
+  if (countBadge) {
+    countBadge.textContent = connectionData.length;
+  }
+
+  // Clear and update in one operation
   tableBody.innerHTML = '';
   
-  // Get CSP provider icons
-  const providerIcons = {
-    'aws': 'fab fa-aws',
-    'azure': 'fab fa-microsoft',
-    'gcp': 'fab fa-google',
-    'alibaba': 'fas fa-cloud',
-    'tencent': 'fas fa-cloud',
-    'ncp': 'fas fa-cloud',
-    'nhncloud': 'fas fa-cloud',
-    'nhn': 'fas fa-cloud',
-    'cloudit': 'fas fa-cloud',
-    'openstack': 'fas fa-cloud',
-    'ibm': 'fas fa-cloud',
-    'oracle': 'fas fa-cloud',
-    'unknown': 'fas fa-cloud'
-  };
-  
+  // Update connections efficiently using DocumentFragment
+  const tableFragment = document.createDocumentFragment();
   connectionData.forEach(conn => {
     const providerId = (conn.providerName || 'unknown').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const providerIcons = {
+      'aws': 'fab fa-aws',
+      'azure': 'fab fa-microsoft',
+      'gcp': 'fab fa-google',
+      'alibaba': 'fas fa-cloud',
+      'tencent': 'fas fa-cloud',
+      'ncp': 'fas fa-cloud',
+      'nhncloud': 'fas fa-cloud',
+      'nhn': 'fas fa-cloud',
+      'cloudit': 'fas fa-cloud',
+      'openstack': 'fas fa-cloud',
+      'ibm': 'fas fa-cloud',
+      'oracle': 'fas fa-cloud',
+      'unknown': 'fas fa-cloud'
+    };
     const providerIcon = providerIcons[providerId] || providerIcons[(conn.providerName || 'unknown').toLowerCase()] || 'fas fa-cloud';
     
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td title="${conn.configName}">${smartTruncate(conn.configName, 'id')}</td>
+      <td title="${conn.configName}" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">${smartTruncate(conn.configName, 'id')}</td>
       <td>
         <span class="provider-badge provider-${getProviderClass(conn.providerName)}">
           <i class="${providerIcon}"></i> ${conn.providerName || 'N/A'}
@@ -2596,12 +2700,22 @@ function updateAllConnectionsTable(connectionData) {
         </button>
       </td>
     `;
-    tableBody.appendChild(row);
+    tableFragment.appendChild(row);
   });
+  
+  tableBody.appendChild(tableFragment);
 }
 
+// Optimized CSP tabs creation function with intelligent caching
 function createCspTabs(connectionData) {
-  // Group connections by provider
+  const start = performance.now();
+  
+  if (!connectionData || !Array.isArray(connectionData)) {
+    console.warn('Invalid connection data provided to createCspTabs');
+    return;
+  }
+
+  // Group connections by CSP
   const cspGroups = {};
   connectionData.forEach(conn => {
     const provider = conn.providerName || 'unknown';
@@ -2697,13 +2811,13 @@ function createCspTabs(connectionData) {
           <table class="table table-hover">
             <thead>
               <tr>
-                <th>Connection ID</th>
-                <th>Provider</th>
-                <th>Region</th>
-                <th>Zone</th>
-                <th>Verified</th>
-                <th>Representative</th>
-                <th>Actions</th>
+                <th style="width: 25%; min-width: 200px;">Connection ID</th>
+                <th style="width: 12%;">Provider</th>
+                <th style="width: 15%;">Region</th>
+                <th style="width: 12%;">Zone</th>
+                <th style="width: 10%;">Verified</th>
+                <th style="width: 12%;">Representative</th>
+                <th style="width: 14%;">Actions</th>
               </tr>
             </thead>
             <tbody id="${providerId}-connectionTableBody">
@@ -2724,13 +2838,15 @@ function createCspTabs(connectionData) {
     // Populate CSP-specific table
     const cspTableBody = document.getElementById(`${providerId}-connectionTableBody`);
     if (cspTableBody) {
+      cspTableBody.innerHTML = ''; // Clear existing content
+      
       connections.forEach(conn => {
         const connProviderId = (conn.providerName || 'unknown').toLowerCase().replace(/[^a-z0-9]/g, '');
         const connProviderIcon = providerIcons[connProviderId] || providerIcons[(conn.providerName || 'unknown').toLowerCase()] || 'fas fa-cloud';
         
         const row = document.createElement('tr');
         row.innerHTML = `
-          <td title="${conn.configName}">${smartTruncate(conn.configName, 'id')}</td>
+          <td title="${conn.configName}" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">${smartTruncate(conn.configName, 'id')}</td>
           <td>
             <span class="provider-badge provider-${getProviderClass(conn.providerName)}">
               <i class="${connProviderIcon}"></i> ${conn.providerName || 'N/A'}
@@ -2774,6 +2890,9 @@ function createCspTabs(connectionData) {
       targetPane.classList.add('show', 'active');
     }
   }
+  
+  const end = performance.now();
+  console.log(`createCspTabs completed in ${(end - start).toFixed(2)}ms`);
 }
 
 // Clear Connection Tab Selection Function
@@ -3471,8 +3590,34 @@ document.addEventListener('DOMContentLoaded', function() {
   window.addEventListener('scroll', toggleScrollToTopButton);
 });
 
-// Export scroll functions
-window.scrollToTop = scrollToTop;
+// Cleanup function to run when page is being unloaded
+function performCleanup() {
+  console.log('[Performance] Performing final cleanup...');
+  
+  // Clear all timers
+  clearDanglingTimers();
+  
+  // Destroy all charts
+  destroyAllCharts();
+  
+  // Clear event listeners flag
+  eventListenersAttached = false;
+  
+  // Clear central data reference
+  centralData = {};
+  mciData = [];
+  vmData = [];
+  resourceData = {};
+  
+  console.log('[Performance] Final cleanup completed');
+}
+
+// Add cleanup on page unload
+window.addEventListener('beforeunload', performCleanup);
+window.addEventListener('unload', performCleanup);
+
+// Also cleanup when navigating away (for iframe usage)
+window.addEventListener('pagehide', performCleanup);
 
 // Export connection tab functions
 window.clearConnectionTabSelection = clearConnectionTabSelection;
