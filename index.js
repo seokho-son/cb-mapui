@@ -322,10 +322,76 @@ function showMapSettings() {
   });
 }
 
+// Performance monitoring and memory management
+let mapPerformanceMetrics = {
+  layerCount: 0,
+  featureCount: 0,
+  lastCleanupTime: Date.now(),
+  renderCount: 0
+};
+
+// Map performance cleanup function
+function performMapCleanup() {
+  const now = Date.now();
+  const timeSinceLastCleanup = now - mapPerformanceMetrics.lastCleanupTime;
+  
+  // Run cleanup every 10 minutes or when layer count is high
+  if (timeSinceLastCleanup > 600000 || mapPerformanceMetrics.layerCount > 50) {
+    console.log('[Map Performance] Running map cleanup...');
+    
+    // Count current layers
+    let currentLayerCount = 0;
+    map.getLayers().forEach(() => currentLayerCount++);
+    
+    // If too many layers, clear and refresh
+    if (currentLayerCount > 50) {
+      console.log(`[Map Performance] Too many layers (${currentLayerCount}), clearing map...`);
+      clearMap();
+    }
+    
+    mapPerformanceMetrics.lastCleanupTime = now;
+    mapPerformanceMetrics.layerCount = currentLayerCount;
+    
+    console.log(`[Map Performance] Cleanup completed. Current layers: ${currentLayerCount}`);
+  }
+}
+
+// Map cleanup on page unload
+function performMapFinalCleanup() {
+  console.log('[Map Performance] Performing final map cleanup...');
+  
+  // Clear all timers
+  if (window.mapRenderTimeout) {
+    clearTimeout(window.mapRenderTimeout);
+  }
+  
+  // Clear map properly
+  clearMap();
+  
+  // Reset performance metrics
+  mapPerformanceMetrics = {
+    layerCount: 0,
+    featureCount: 0,
+    lastCleanupTime: Date.now(),
+    renderCount: 0
+  };
+  
+  console.log('[Map Performance] Final cleanup completed');
+}
+
+// Add cleanup events
+window.addEventListener('beforeunload', performMapFinalCleanup);
+window.addEventListener('unload', performMapFinalCleanup);
+window.addEventListener('pagehide', performMapFinalCleanup);
+
+// Periodic map performance monitoring
+setInterval(performMapCleanup, 300000); // Check every 5 minutes
+
 // Export functions for global access
 window.updateMapConnectionStatus = updateMapConnectionStatus;
 window.showMapSettings = showMapSettings;
 window.showMapRefreshIndicator = showMapRefreshIndicator;
+window.performMapCleanup = performMapCleanup;
 
 const typeStringConnection = "connection";
 const typeStringProvider = "provider";
@@ -354,18 +420,52 @@ var map = new Map({
   //projection: 'EPSG:4326'
 });
 
-// fucntion for clear map.
+// Optimized clearMap function to prevent memory leaks
 function clearMap() {
-  console.log("[Map Cleared]");
+  console.log("[Map Cleared - Optimized]");
+  
+  // Clear geometry arrays
   geometries = [];
-  mciTargetAction = []; // Clear targetAction array as well
+  mciTargetAction = [];
   geoResourceLocation.k8s = [];
   geoResourceLocation.sg = [];
   geoResourceLocation.sshKey = [];
   geoResourceLocation.vnet = [];
   geoResourceLocation.vpn = [];
 
+  // Remove all layers except the base tile layer to prevent memory leaks
+  const layersToRemove = [];
+  map.getLayers().forEach(function(layer) {
+    if (layer !== tileLayer) { // Keep only the base tile layer
+      layersToRemove.push(layer);
+    }
+  });
+  
+  // Remove the layers
+  layersToRemove.forEach(function(layer) {
+    map.removeLayer(layer);
+    
+    // Dispose of vector sources to free up memory
+    if (layer.getSource && typeof layer.getSource === 'function') {
+      const source = layer.getSource();
+      if (source && source.clear && typeof source.clear === 'function') {
+        source.clear();
+      }
+      // Dispose features in vector sources
+      if (source && source.getFeatures && typeof source.getFeatures === 'function') {
+        const features = source.getFeatures();
+        features.forEach(feature => {
+          if (feature.dispose && typeof feature.dispose === 'function') {
+            feature.dispose();
+          }
+        });
+      }
+    }
+  });
 
+  console.log(`[Map Performance] Removed ${layersToRemove.length} layers`);
+  
+  // Force garbage collection of map rendering
   map.render();
 }
 window.clearMap = clearMap;
@@ -901,6 +1001,7 @@ function createIconStyle(imageSrc) {
 Object.keys(cspIconImg).forEach((csp) => {
   cspIconStyles[csp] = createIconStyle(cspIconImg[csp]);
 });
+// Optimized addIconToMap function to prevent layer accumulation
 function addIconToMap(imageSrc, point, index) {
   var vectorSource = new VectorSource({ projection: "EPSG:4326" });
   var iconFeature = new Feature(point);
@@ -913,8 +1014,25 @@ function addIconToMap(imageSrc, point, index) {
     },
     source: vectorSource,
   });
+  
+  // Set a unique identifier for this layer for potential cleanup
+  iconLayer.set('layerType', 'iconLayer');
+  iconLayer.set('layerIndex', index);
+  
   map.addLayer(iconLayer);
-  map.render();
+  
+  // Update performance metrics
+  mapPerformanceMetrics.layerCount++;
+  mapPerformanceMetrics.featureCount++;
+  
+  // Use debounced render to improve performance
+  if (window.mapRenderTimeout) {
+    clearTimeout(window.mapRenderTimeout);
+  }
+  window.mapRenderTimeout = setTimeout(() => {
+    map.render();
+    mapPerformanceMetrics.renderCount++;
+  }, 10);
 }
 Object.keys(cspIconImg).forEach((csp, index) => {
   const iconIndex = index.toString().padStart(3, "0");
