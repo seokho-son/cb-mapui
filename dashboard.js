@@ -2599,7 +2599,7 @@ function updateK8sNodeGroupTable() {
     // Spec ID - 실제 필드명 사용  
     const specId = nodeGroup.specId || nodeGroup.vmSpecName || 'N/A';
     
-    // Image ID - 실제 필드명 사용
+    // Image ID - use actual field name
     const imageId = nodeGroup.imageId || 'N/A';
     
     row.innerHTML = `
