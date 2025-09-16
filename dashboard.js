@@ -733,8 +733,14 @@ async function refreshDashboard() {
       console.log('Requesting data update from Map...');
       window.parent.getMci();
       
+      // Also trigger K8s data load
+      if (typeof window.parent.loadK8sClusterData === 'function') {
+        console.log('Requesting K8s data update from Map...');
+        window.parent.loadK8sClusterData();
+      }
+      
       // Wait a moment for data to be updated
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 1500));
     }
     
     // Check if parent window has central data
@@ -1392,6 +1398,7 @@ function updateK8sCharts() {
     }
 
     console.log('K8s Chart Update - Data length:', k8sData.length);
+    console.log('K8s Chart Update - Full data:', k8sData);
 
     // If no K8s data at all, show "No Clusters"
     if (!k8sData || k8sData.length === 0) {
@@ -1407,31 +1414,26 @@ function updateK8sCharts() {
 
     // Update K8s Cluster Status Chart
     const k8sStatusCounts = {
-      'Running': 0,
       'Creating': 0,
-      'Preparing': 0,
-      'Suspended': 0,
+      'Active': 0,
+      'Deleting': 0,
+      'Updating': 0,
       'Failed': 0,
-      'Other': 0
+      'Unknown': 0
     };
 
     k8sData.forEach(cluster => {
       const status = cluster.status || 'Unknown';
-      let normalizedStatus = 'Other';
+      console.log('K8s Chart: Processing cluster', cluster.id, 'with status:', status);
       
-      if (status.includes('Running') || status === 'Running') {
-        normalizedStatus = 'Running';
-      } else if (status.includes('Creating') || status === 'Creating') {
-        normalizedStatus = 'Creating';
-      } else if (status.includes('Preparing') || status === 'Preparing') {
-        normalizedStatus = 'Preparing';
-      } else if (status.includes('Suspended') || status === 'Suspended') {
-        normalizedStatus = 'Suspended';
-      } else if (status.includes('Failed') || status === 'Failed') {
-        normalizedStatus = 'Failed';
+      // Use actual K8s status values directly
+      if (k8sStatusCounts.hasOwnProperty(status)) {
+        k8sStatusCounts[status]++;
+      } else {
+        k8sStatusCounts['Unknown']++;
       }
       
-      k8sStatusCounts[normalizedStatus]++;
+      console.log('K8s Chart: Cluster', cluster.id, 'status:', status);
     });
 
     // Filter out zero counts for cleaner chart
@@ -1440,12 +1442,12 @@ function updateK8sCharts() {
     const k8sStatusColors = [];
     
     const statusColorMap = {
-      'Running': '#28a745',     // green
       'Creating': '#17a2b8',    // blue
-      'Preparing': '#6c757d',   // gray
-      'Suspended': '#ffc107',   // yellow
+      'Active': '#28a745',      // green
+      'Deleting': '#dc3545',    // red
+      'Updating': '#ffc107',    // yellow
       'Failed': '#dc3545',      // red
-      'Other': '#fd7e14'        // orange
+      'Unknown': '#6c757d'      // gray
     };
 
     Object.entries(k8sStatusCounts).forEach(([status, count]) => {
@@ -2321,6 +2323,9 @@ function updateK8sClusterTable() {
   }
   
   const k8sData = centralData.k8sCluster || [];
+  console.log('updateK8sClusterTable - K8s data:', k8sData);
+  console.log('updateK8sClusterTable - Central data structure:', centralData);
+  
   const tableBody = document.getElementById('k8sClusterTableBody');
   if (!tableBody) return;
   
@@ -2488,6 +2493,7 @@ function updateK8sNodeGroupTable() {
   }
   
   const k8sData = centralData.k8sCluster || [];
+  console.log('updateK8sNodeGroupTable - K8s data:', k8sData);
   const tableBody = document.getElementById('k8sNodeGroupTableBody');
   if (!tableBody) return;
   
@@ -2496,8 +2502,19 @@ function updateK8sNodeGroupTable() {
   // Collect all node groups
   let allNodeGroups = [];
   k8sData.forEach(cluster => {
-    if (cluster.nodeGroupList && cluster.nodeGroupList.length > 0) {
-      cluster.nodeGroupList.forEach(nodeGroup => {
+    console.log('Processing cluster:', cluster.id, 'Full cluster object:', cluster);
+    
+    // Handle different possible node group field names - comprehensive check
+    let nodeGroups = cluster.k8sNodeGroupList || cluster.nodeGroupList || cluster.nodeGroups || cluster.NodeGroupList || cluster.K8sNodeGroupList || [];
+    console.log('Found node groups:', nodeGroups, 'Field used:', 
+      cluster.k8sNodeGroupList ? 'k8sNodeGroupList' :
+      cluster.nodeGroupList ? 'nodeGroupList' :
+      cluster.nodeGroups ? 'nodeGroups' :
+      cluster.NodeGroupList ? 'NodeGroupList' :
+      cluster.K8sNodeGroupList ? 'K8sNodeGroupList' : 'none');
+    
+    if (nodeGroups && nodeGroups.length > 0) {
+      nodeGroups.forEach(nodeGroup => {
         allNodeGroups.push({
           ...nodeGroup,
           clusterId: cluster.id,
@@ -2507,10 +2524,13 @@ function updateK8sNodeGroupTable() {
     }
   });
   
+  console.log('All node groups collected:', allNodeGroups);
+  
   // Filter node groups based on selected cluster
   let filteredNodeGroups = allNodeGroups;
   if (selectedK8sClusterId) {
     filteredNodeGroups = allNodeGroups.filter(ng => ng.clusterId === selectedK8sClusterId);
+    console.log(`Filtered node groups for cluster ${selectedK8sClusterId}:`, filteredNodeGroups);
   }
   
   // Update node group count display
@@ -2519,15 +2539,24 @@ function updateK8sNodeGroupTable() {
     ngCountElement.textContent = filteredNodeGroups.length;
   }
   
-  if (filteredNodeGroups.length === 0 && selectedK8sClusterId) {
-    // Show message when no node groups found for selected cluster
+  if (filteredNodeGroups.length === 0) {
+    // Show appropriate message based on context
     const row = document.createElement('tr');
-    row.innerHTML = `
-      <td colspan="9" class="text-center text-muted py-4">
-        <i class="fas fa-info-circle me-2"></i>
-        No node groups found for selected cluster: ${selectedK8sClusterId}
-      </td>
-    `;
+    if (selectedK8sClusterId) {
+      row.innerHTML = `
+        <td colspan="9" class="text-center text-muted py-4">
+          <i class="fas fa-info-circle me-2"></i>
+          No node groups found for selected cluster: ${selectedK8sClusterId}
+        </td>
+      `;
+    } else {
+      row.innerHTML = `
+        <td colspan="9" class="text-center text-muted py-4">
+          <i class="fas fa-info-circle me-2"></i>
+          No node groups found
+        </td>
+      `;
+    }
     tableBody.appendChild(row);
     return;
   }
@@ -2552,34 +2581,47 @@ function updateK8sNodeGroupTable() {
       }
     }
     
-    // Auto scaling info
+    // Auto scaling info - 실제 API 응답에 맞게 수정
     const autoScalingInfo = nodeGroup.onAutoScaling ? 
-      `Enabled (${nodeGroup.minSize}-${nodeGroup.maxSize})` : 
+      `Enabled (${nodeGroup.minNodeSize || nodeGroup.minSize || 0}-${nodeGroup.maxNodeSize || nodeGroup.maxSize || 0})` : 
       'Disabled';
     
-    // Min/Max size display
-    const sizeInfo = `${nodeGroup.minSize || 0} / ${nodeGroup.maxSize || 0}`;
+    // Min/Max size display - 실제 필드명 사용
+    const minSize = nodeGroup.minNodeSize || nodeGroup.minSize || 0;
+    const maxSize = nodeGroup.maxNodeSize || nodeGroup.maxSize || 0;
+    const sizeInfo = `${minSize} / ${maxSize}`;
+    
+    // Nodes info - 실제 노드 수 / 원하는 노드 수
+    const actualNodes = nodeGroup.k8sNodes ? nodeGroup.k8sNodes.length : 0;
+    const desiredNodes = nodeGroup.desiredNodeSize || nodeGroup.desiredCapacity || 0;
+    const nodesInfo = `${actualNodes}/${desiredNodes}`;
+    
+    // Spec ID - 실제 필드명 사용  
+    const specId = nodeGroup.specId || nodeGroup.vmSpecName || 'N/A';
+    
+    // Image ID - 실제 필드명 사용
+    const imageId = nodeGroup.imageId || 'N/A';
     
     row.innerHTML = `
-      <td title="${nodeGroup.name}"><strong>${smartTruncate(nodeGroup.name, 'name')}</strong></td>
       <td title="${nodeGroup.clusterId}">${smartTruncate(nodeGroup.clusterId, 'id')}</td>
+      <td title="${nodeGroup.name || nodeGroup.id}"><strong>${smartTruncate(nodeGroup.name || nodeGroup.id, 'name')}</strong></td>
       <td><span class="status-badge status-${statusClass}">${nodeGroup.status || 'Unknown'}</span></td>
-      <td title="${nodeGroup.vmSpecName || 'N/A'}">${smartTruncate(nodeGroup.vmSpecName || 'N/A', 'spec')}</td>
-      <td><span class="badge badge-primary">${nodeGroup.desiredCapacity || nodeGroup.minSize || 0}</span></td>
+      <td title="${specId}">${smartTruncate(specId, 'spec')}</td>
+      <td title="${imageId}">${smartTruncate(imageId, 'default')}</td>
+      <td><span class="badge badge-primary">${nodesInfo}</span></td>
       <td>${sizeInfo}</td>
       <td><span class="badge ${nodeGroup.onAutoScaling ? 'badge-success' : 'badge-secondary'}">${autoScalingInfo}</span></td>
-      <td title="${nodeGroup.imageId || 'N/A'}">${smartTruncate(nodeGroup.imageId || 'N/A', 'default')}</td>
       <td class="action-buttons">
-        <button class="btn btn-sm btn-outline-primary" onclick="viewNodeGroupDetails('${nodeGroup.clusterId}', '${nodeGroup.name}')" title="View Details">
+        <button class="btn btn-sm btn-outline-primary" onclick="viewNodeGroupDetails('${nodeGroup.clusterId}', '${nodeGroup.name || nodeGroup.id}')" title="View Details">
           <i class="fas fa-eye"></i>
         </button>
-        <button class="btn btn-sm btn-outline-info" onclick="toggleAutoScaling('${nodeGroup.clusterId}', '${nodeGroup.name}', ${!nodeGroup.onAutoScaling})" title="${nodeGroup.onAutoScaling ? 'Disable' : 'Enable'} Auto Scaling">
+        <button class="btn btn-sm btn-outline-info" onclick="toggleAutoScaling('${nodeGroup.clusterId}', '${nodeGroup.name || nodeGroup.id}', ${!nodeGroup.onAutoScaling})" title="${nodeGroup.onAutoScaling ? 'Disable' : 'Enable'} Auto Scaling">
           <i class="fas fa-${nodeGroup.onAutoScaling ? 'pause' : 'play'}"></i>
         </button>
-        <button class="btn btn-sm btn-outline-warning" onclick="scaleNodeGroup('${nodeGroup.clusterId}', '${nodeGroup.name}')" title="Scale Node Group">
+        <button class="btn btn-sm btn-outline-warning" onclick="scaleNodeGroup('${nodeGroup.clusterId}', '${nodeGroup.name || nodeGroup.id}')" title="Scale Node Group">
           <i class="fas fa-expand-arrows-alt"></i>
         </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteNodeGroup('${nodeGroup.clusterId}', '${nodeGroup.name}')" title="Delete Node Group">
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteNodeGroup('${nodeGroup.name || nodeGroup.id}', '${nodeGroup.clusterId}')" title="Delete Node Group">
           <i class="fas fa-trash"></i>
         </button>
       </td>
@@ -2681,17 +2723,16 @@ function updateAllConnectionsTableOptimized(connectionData) {
     
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td title="${conn.configName}" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">${smartTruncate(conn.configName, 'id')}</td>
-      <td>
+      <td class="text-nowrap" title="${conn.configName}">${smartTruncate(conn.configName, 'id')}</td>
+      <td class="text-nowrap">
         <span class="provider-badge provider-${getProviderClass(conn.providerName)}">
           <i class="${providerIcon}"></i> ${conn.providerName || 'N/A'}
         </span>
       </td>
-      <td title="${conn.regionDetail?.regionName || 'N/A'}">${smartTruncate(conn.regionDetail?.regionName || 'N/A', 'region')}</td>
+      <td class="text-nowrap" title="${conn.regionDetail?.regionName || 'N/A'}">${smartTruncate(conn.regionDetail?.regionName || 'N/A', 'region')}</td>
       <td>${formatZonesWithHighlight(conn)}</td>
-      <td><span class="badge ${conn.verified ? 'badge-success' : 'badge-warning'}">${conn.verified ? 'Yes' : 'No'}</span></td>
-      <td><span class="badge ${conn.regionRepresentative ? 'badge-info' : 'badge-secondary'}">${conn.regionRepresentative ? 'Yes' : 'No'}</span></td>
-      <td class="action-buttons">
+      <td class="text-nowrap"><span class="badge ${conn.verified ? 'badge-success' : 'badge-warning'}">${conn.verified ? 'Yes' : 'No'}</span></td>
+      <td class="action-buttons text-nowrap">
         <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('connection', '${conn.configName}')" title="View Details">
           <i class="fas fa-eye"></i>
         </button>
@@ -2811,13 +2852,12 @@ function createCspTabs(connectionData) {
           <table class="table table-hover">
             <thead>
               <tr>
-                <th style="width: 25%; min-width: 200px;">Connection ID</th>
-                <th style="width: 12%;">Provider</th>
-                <th style="width: 15%;">Region</th>
-                <th style="width: 12%;">Zone</th>
-                <th style="width: 10%;">Verified</th>
-                <th style="width: 12%;">Representative</th>
-                <th style="width: 14%;">Actions</th>
+                <th class="text-nowrap">Connection ID</th>
+                <th class="text-nowrap">Provider</th>
+                <th class="text-nowrap">Region</th>
+                <th>Zone</th>
+                <th class="text-nowrap">Verified</th>
+                <th class="text-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody id="${providerId}-connectionTableBody">
@@ -2846,17 +2886,16 @@ function createCspTabs(connectionData) {
         
         const row = document.createElement('tr');
         row.innerHTML = `
-          <td title="${conn.configName}" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">${smartTruncate(conn.configName, 'id')}</td>
-          <td>
+          <td class="text-nowrap" title="${conn.configName}">${smartTruncate(conn.configName, 'id')}</td>
+          <td class="text-nowrap">
             <span class="provider-badge provider-${getProviderClass(conn.providerName)}">
               <i class="${connProviderIcon}"></i> ${conn.providerName || 'N/A'}
             </span>
           </td>
-          <td title="${conn.regionDetail?.regionName || 'N/A'}">${smartTruncate(conn.regionDetail?.regionName || 'N/A', 'region')}</td>
+          <td class="text-nowrap" title="${conn.regionDetail?.regionName || 'N/A'}">${smartTruncate(conn.regionDetail?.regionName || 'N/A', 'region')}</td>
           <td>${formatZonesWithHighlight(conn)}</td>
-          <td><span class="badge ${conn.verified ? 'badge-success' : 'badge-warning'}">${conn.verified ? 'Yes' : 'No'}</span></td>
-          <td><span class="badge ${conn.regionRepresentative ? 'badge-info' : 'badge-secondary'}">${conn.regionRepresentative ? 'Yes' : 'No'}</span></td>
-          <td class="action-buttons">
+          <td class="text-nowrap"><span class="badge ${conn.verified ? 'badge-success' : 'badge-warning'}">${conn.verified ? 'Yes' : 'No'}</span></td>
+          <td class="action-buttons text-nowrap">
             <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('connection', '${conn.configName}')" title="View Details">
               <i class="fas fa-eye"></i>
             </button>
@@ -3342,12 +3381,20 @@ function viewNodeGroupDetails(clusterId, nodeGroupName) {
   const k8sData = centralData.k8sCluster || [];
   const cluster = k8sData.find(c => c.id === clusterId);
   
-  if (!cluster || !cluster.nodeGroupList) {
-    showErrorMessage('Cluster or node group not found');
+  if (!cluster) {
+    showErrorMessage('Cluster not found');
     return;
   }
   
-  const nodeGroup = cluster.nodeGroupList.find(ng => ng.name === nodeGroupName);
+  // Check multiple possible field names for node group list
+  let nodeGroupList = cluster.k8sNodeGroupList || cluster.nodeGroupList || cluster.nodeGroups || cluster.NodeGroupList || cluster.K8sNodeGroupList || [];
+  
+  if (!nodeGroupList || nodeGroupList.length === 0) {
+    showErrorMessage('No node groups found for this cluster');
+    return;
+  }
+  
+  const nodeGroup = nodeGroupList.find(ng => ng.name === nodeGroupName || ng.id === nodeGroupName);
   if (!nodeGroup) {
     showErrorMessage('Node group not found');
     return;
@@ -3634,3 +3681,34 @@ window.deleteSshKey = deleteSshKey;
 window.deleteCustomImage = deleteCustomImage;
 window.deleteDataDisk = deleteDataDisk;
 window.deleteNodeGroup = deleteNodeGroup;
+
+// Debug functions for K8s troubleshooting
+window.debugK8sData = function() {
+  console.log('=== K8s Debug Information ===');
+  
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  console.log('Central Data K8s:', centralData.k8sCluster);
+  console.log('Resource Data K8s:', centralData.resourceData?.k8sCluster);
+  
+  if (centralData.k8sCluster && centralData.k8sCluster.length > 0) {
+    centralData.k8sCluster.forEach((cluster, index) => {
+      console.log(`Cluster ${index}:`, cluster);
+      console.log(`  - ID: ${cluster.id}`);
+      console.log(`  - Status: ${cluster.status}`);
+      console.log(`  - k8sNodeGroupList:`, cluster.k8sNodeGroupList);
+      console.log(`  - nodeGroupList:`, cluster.nodeGroupList);
+      console.log(`  - nodeGroups:`, cluster.nodeGroups);
+      console.log(`  - NodeGroupList:`, cluster.NodeGroupList);
+      console.log(`  - K8sNodeGroupList:`, cluster.K8sNodeGroupList);
+    });
+  } else {
+    console.log('No K8s cluster data found');
+  }
+  
+  console.log('Selected K8s Cluster ID:', selectedK8sClusterId);
+  console.log('=== End K8s Debug ===');
+};

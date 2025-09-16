@@ -1793,6 +1793,9 @@ function getMci() {
           showMapRefreshIndicator(false);
         }
 
+        // Also load K8s cluster data for dashboard
+        loadK8sClusterData();
+
         cnt = cntInit;
         
         if (obj.mci != null && obj.mci.length > 0) {
@@ -2131,45 +2134,8 @@ function getMci() {
         // Don't update icons on API error to preserve current state
       });
 
-    // get k8sCluster list and put them on the map
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster`;
-    axios({
-      method: "get",
-      url: url,
-      auth: {
-        username: `${username}`,
-        password: `${password}`,
-      },
-      timeout: 10000,
-    }).then((res) => {
-      var obj = res.data;
-      
-      // Update central data store
-      if (obj.K8sClusterInfo) {
-        window.cloudBaristaCentralData.k8sCluster = obj.K8sClusterInfo;
-        window.cloudBaristaCentralData.resourceData.k8sCluster = obj.K8sClusterInfo;
-      }
-      
-      if (obj.K8sClusterInfo != null && obj.K8sClusterInfo.length > 0) {
-        var resourceLocation = [];
-        console.log("resourceLocation k8s[0]");
-        for (let item of obj.K8sClusterInfo) {
-          resourceLocation.push([
-            item.connectionConfig.regionDetail.location.longitude * 1,
-            item.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
-          ]);
-        }
-        console.log(resourceLocation);
-        geoResourceLocation.k8s[0] = new MultiPoint([resourceLocation]);
-      } else {
-        // Clear k8s icons when list is empty
-        geoResourceLocation.k8s = [];
-      }
-    })
-      .catch(function (error) {
-        console.log("k8sCluster API error:", error);
-        // Don't update icons on API error to preserve current state
-      });
+    // Load K8s cluster data
+    loadK8sClusterData();
 
     // get VPN list and put them on the map
     var vpnUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/vpn`;
@@ -4269,6 +4235,548 @@ function createMci() {
 }
 window.createMci = createMci;
 
+// K8s Cluster creation function
+function createK8sCluster() {
+  if (vmReqeustFromSpecList.length !== 1) {
+    errorAlert("Please configure exactly one SubGroup to create K8s Cluster");
+    return;
+  }
+
+  const subGroup = vmReqeustFromSpecList[0];
+  const spec = recommendedSpecList[0];
+  
+  const hostname = configHostname;
+  const port = configPort;
+  const username = configUsername;
+  const password = configPassword;
+  const namespace = namespaceElement.value;
+
+  // First, get available K8s versions
+  const versionUrl = `http://${hostname}:${port}/tumblebug/availableK8sVersion?providerName=${spec.providerName}&regionName=${spec.regionName}`;
+  
+  const versionTaskId = addSpinnerTask("getK8sVersions");
+  
+  axios.get(versionUrl, {
+    auth: {
+      username: username,
+      password: password
+    }
+  }).then(function (versionResponse) {
+    removeSpinnerTask(versionTaskId);
+    
+    const availableVersions = versionResponse.data || [];
+    console.log("Available K8s versions:", availableVersions);
+    
+    // Create version options
+    let versionOptions = '<option value="">-- Select K8s Version --</option>';
+    if (availableVersions.length > 0) {
+      versionOptions += availableVersions.map(version => 
+        `<option value="${version.id}">${version.name} (${version.id})</option>`
+      ).join('');
+    }
+    versionOptions += '<option value="custom">-- Custom Version --</option>';
+
+    // Create confirmation dialog with version selection
+    Swal.fire({
+      title: "Create Kubernetes Cluster",
+      html: `
+        <div style="text-align: left; padding: 15px;">
+          <div style="margin-bottom: 15px;">
+            <label style="font-weight: bold;">Cluster Name:</label><br>
+            <input type="text" id="k8sClusterName" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" 
+                   value="k8s-cluster-${Date.now()}" placeholder="Enter cluster name">
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label style="font-weight: bold;">Node Group Name:</label><br>
+            <input type="text" id="k8sNodeGroupName" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" 
+                   value="nodegroup-01" placeholder="Enter node group name">
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label style="font-weight: bold;">Kubernetes Version:</label><br>
+            <select id="k8sVersionSelect" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 8px;">
+              ${versionOptions}
+            </select>
+            <input type="text" id="k8sCustomVersion" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; display: none;" 
+                   placeholder="Enter custom K8s version (e.g., 1.30.12-gke.1086000)">
+            <div style="font-size: 0.8em; color: #666; margin-top: 5px;">
+              ${availableVersions.length > 0 ? 'Select from available versions or choose custom to enter manually' : 'No versions available, please enter custom version'}
+            </div>
+          </div>
+          <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+            <strong>Configuration:</strong><br>
+            <small>Provider: ${spec.providerName}</small><br>
+            <small>Region: ${spec.regionName}</small><br>
+            <small>Spec: ${spec.cspSpecName}</small><br>
+            <small>Image: ${subGroup.imageId}</small>
+          </div>
+          <div style="font-size: 0.9em; color: #666;">
+            Note: This will create a new Kubernetes cluster using the configured SubGroup settings.
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: "Create K8s Cluster",
+      cancelButtonText: "Cancel",
+      didOpen: () => {
+        // Handle version selection change
+        const versionSelect = document.getElementById('k8sVersionSelect');
+        const customVersionInput = document.getElementById('k8sCustomVersion');
+        
+        versionSelect.addEventListener('change', function() {
+          if (this.value === 'custom') {
+            customVersionInput.style.display = 'block';
+            customVersionInput.focus();
+          } else {
+            customVersionInput.style.display = 'none';
+            customVersionInput.value = '';
+          }
+        });
+      },
+      preConfirm: () => {
+        const clusterName = document.getElementById('k8sClusterName').value.trim();
+        const nodeGroupName = document.getElementById('k8sNodeGroupName').value.trim();
+        const selectedVersion = document.getElementById('k8sVersionSelect').value;
+        const customVersion = document.getElementById('k8sCustomVersion').value.trim();
+        
+        if (!clusterName) {
+          Swal.showValidationMessage('Please enter cluster name');
+          return false;
+        }
+        if (!nodeGroupName) {
+          Swal.showValidationMessage('Please enter node group name');
+          return false;
+        }
+        
+        let k8sVersion = '';
+        if (selectedVersion === 'custom') {
+          if (!customVersion) {
+            Swal.showValidationMessage('Please enter custom K8s version');
+            return false;
+          }
+          k8sVersion = customVersion;
+        } else if (selectedVersion) {
+          k8sVersion = selectedVersion;
+        }
+        // If no version selected, k8sVersion will be empty (default behavior)
+        
+        return { clusterName, nodeGroupName, k8sVersion };
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        const { clusterName, nodeGroupName, k8sVersion } = result.value;
+        
+        // Create K8s cluster request body
+        const k8sClusterReq = {
+          imageId: subGroup.imageId || "default",
+          specId: subGroup.specId,
+          name: clusterName,
+          nodeGroupName: nodeGroupName
+        };
+        
+        // Add version if specified
+        if (k8sVersion) {
+          k8sClusterReq.version = k8sVersion;
+        }
+
+        const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sClusterDynamic`;
+        
+        console.log("Creating K8s Cluster:", k8sClusterReq);
+        
+        const taskId = addSpinnerTask("createK8sCluster");
+        
+        axios.post(url, k8sClusterReq, {
+          auth: {
+            username: username,
+            password: password
+          },
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }).then(function (response) {
+          removeSpinnerTask(taskId);
+          console.log("K8s Cluster creation response:", response.data);
+          
+          Swal.fire({
+            title: "K8s Cluster Created Successfully!",
+            html: `
+              <div style="text-align: left;">
+                <p><strong>Cluster ID:</strong> ${response.data?.id || 'Unknown'}</p>
+                <p><strong>Status:</strong> ${response.data?.status || 'Unknown'}</p>
+                <p><strong>Provider:</strong> ${response.data?.connectionName || 'Unknown'}</p>
+                ${k8sVersion ? `<p><strong>Version:</strong> ${k8sVersion}</p>` : ''}
+              </div>
+            `,
+            icon: "success",
+            confirmButtonText: "OK"
+          });
+          
+          // K8s cluster created successfully, no additional refresh needed
+          
+        }).catch(function (error) {
+          removeSpinnerTask(taskId);
+          console.error("K8s Cluster creation failed:", error);
+          
+          let errorMessage = "Failed to create K8s Cluster";
+          if (error.response && error.response.data) {
+            errorMessage += `\n${error.response.data.message || error.response.data.error || ''}`;
+          }
+          
+          errorAlert(errorMessage);
+        });
+      }
+    }).catch(function (error) {
+      // Handle any unexpected errors in the Swal dialog
+      console.error("K8s Cluster creation dialog error:", error);
+      // Make sure spinner is cleaned up in case of unexpected errors
+      if (typeof taskId !== 'undefined') {
+        removeSpinnerTask(taskId);
+      }
+    });
+    
+  }).catch(function (error) {
+    removeSpinnerTask(versionTaskId);
+    console.error("Failed to get K8s versions:", error);
+    
+    // If version fetch fails, show dialog without version options
+    console.log("Version fetch failed, showing dialog with custom version input only");
+    
+    Swal.fire({
+      title: "Create Kubernetes Cluster",
+      html: `
+        <div style="text-align: left; padding: 15px;">
+          <div style="margin-bottom: 15px;">
+            <label style="font-weight: bold;">Cluster Name:</label><br>
+            <input type="text" id="k8sClusterName" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" 
+                   value="k8s-cluster-${Date.now()}" placeholder="Enter cluster name">
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label style="font-weight: bold;">Node Group Name:</label><br>
+            <input type="text" id="k8sNodeGroupName" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" 
+                   value="nodegroup-01" placeholder="Enter node group name">
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label style="font-weight: bold;">Kubernetes Version (Optional):</label><br>
+            <input type="text" id="k8sCustomVersion" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" 
+                   placeholder="Enter K8s version (e.g., 1.30.12-gke.1086000) or leave empty for default">
+            <div style="font-size: 0.8em; color: #666; margin-top: 5px;">
+              Failed to fetch available versions. Enter manually or leave empty for default.
+            </div>
+          </div>
+          <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+            <strong>Configuration:</strong><br>
+            <small>Provider: ${spec.providerName}</small><br>
+            <small>Region: ${spec.regionName}</small><br>
+            <small>Spec: ${spec.cspSpecName}</small><br>
+            <small>Image: ${subGroup.imageId}</small>
+          </div>
+          <div style="font-size: 0.9em; color: #666;">
+            Note: This will create a new Kubernetes cluster using the configured SubGroup settings.
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: "Create K8s Cluster",
+      cancelButtonText: "Cancel",
+      preConfirm: () => {
+        const clusterName = document.getElementById('k8sClusterName').value.trim();
+        const nodeGroupName = document.getElementById('k8sNodeGroupName').value.trim();
+        const k8sVersion = document.getElementById('k8sCustomVersion').value.trim();
+        
+        if (!clusterName) {
+          Swal.showValidationMessage('Please enter cluster name');
+          return false;
+        }
+        if (!nodeGroupName) {
+          Swal.showValidationMessage('Please enter node group name');
+          return false;
+        }
+        
+        return { clusterName, nodeGroupName, k8sVersion };
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        const { clusterName, nodeGroupName, k8sVersion } = result.value;
+        
+        // Create K8s cluster request body
+        const k8sClusterReq = {
+          imageId: subGroup.imageId || "default",
+          specId: subGroup.specId,
+          name: clusterName,
+          nodeGroupName: nodeGroupName
+        };
+        
+        // Add version if specified
+        if (k8sVersion) {
+          k8sClusterReq.version = k8sVersion;
+        }
+
+        const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sClusterDynamic`;
+        
+        console.log("Creating K8s Cluster (fallback):", k8sClusterReq);
+        
+        const taskId = addSpinnerTask("createK8sCluster");
+        
+        axios.post(url, k8sClusterReq, {
+          auth: {
+            username: username,
+            password: password
+          },
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }).then(function (response) {
+          removeSpinnerTask(taskId);
+          console.log("K8s Cluster creation response (fallback):", response.data);
+          
+          // Safely extract response data with fallbacks
+          const clusterId = response.data?.id || 'Unknown';
+          const clusterStatus = response.data?.status || 'Unknown';
+          const connectionName = response.data?.connectionName || 'Unknown';
+          
+          Swal.fire({
+            title: "K8s Cluster Created Successfully!",
+            html: `
+              <div style="text-align: left;">
+                <p><strong>Cluster ID:</strong> ${clusterId}</p>
+                <p><strong>Status:</strong> ${clusterStatus}</p>
+                <p><strong>Provider:</strong> ${connectionName}</p>
+                ${k8sVersion ? `<p><strong>Version:</strong> ${k8sVersion}</p>` : ''}
+              </div>
+            `,
+            icon: "success",
+            confirmButtonText: "OK"
+          });
+          
+          // K8s cluster created successfully (fallback), no additional refresh needed
+          
+        }).catch(function (error) {
+          removeSpinnerTask(taskId);
+          console.error("K8s Cluster creation failed (fallback):", error);
+          
+          let errorMessage = "Failed to create K8s Cluster";
+          if (error.response && error.response.data) {
+            errorMessage += `\n${error.response.data.message || error.response.data.error || ''}`;
+          }
+          
+          errorAlert(errorMessage);
+        });
+      }
+    }).catch(function (error) {
+      // Handle any unexpected errors in the Swal dialog (fallback)
+      console.error("K8s Cluster creation dialog error (fallback):", error);
+      // Make sure spinner is cleaned up in case of unexpected errors
+      if (typeof taskId !== 'undefined') {
+        removeSpinnerTask(taskId);
+      }
+    });
+  });
+}
+window.createK8sCluster = createK8sCluster;
+
+// Add NodeGroup to existing K8s Cluster function
+function addNodeGroupToK8sCluster() {
+  if (vmReqeustFromSpecList.length !== 1) {
+    errorAlert("Please configure exactly one SubGroup to add NodeGroup to K8s Cluster");
+    return;
+  }
+
+  const subGroup = vmReqeustFromSpecList[0];
+  const spec = recommendedSpecList[0];
+  
+  const hostname = configHostname;
+  const port = configPort;
+  const username = configUsername;
+  const password = configPassword;
+  const namespace = namespaceElement.value;
+
+  // First, get list of existing K8s clusters
+  const listUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster`;
+  
+  const listTaskId = addSpinnerTask("listK8sClusters");
+  
+  axios.get(listUrl, {
+    auth: {
+      username: username,
+      password: password
+    }
+  }).then(function (response) {
+    removeSpinnerTask(listTaskId);
+    
+    // API response can have different structures:
+    // 1. Latest API: { cluster: [...] } (according to swagger)
+    // 2. Current API: { K8sClusterInfo: [...] } (according to actual response)
+    // Handle both cases for compatibility
+    const clusters = response.data?.cluster || response.data?.K8sClusterInfo || [];
+    
+    if (clusters.length === 0) {
+      errorAlert("No K8s clusters found. Please create a K8s cluster first.");
+      return;
+    }
+    
+    // Create cluster selection dialog - show all clusters but disable non-Active ones
+    const clusterOptions = clusters.map(cluster => {
+      // Use cluster-level status for determining availability
+      const clusterStatus = cluster?.status || 'Unknown';
+      const isActive = clusterStatus === 'Active';
+      
+      const disabled = !isActive ? 'disabled' : '';
+      const statusColor = isActive ? '#28a745' : '#6c757d';
+      const clusterId = cluster?.id || '';
+      const clusterName = cluster?.name || 'Unknown';
+      const connectionName = cluster?.connectionName || 'Unknown';
+      
+      return `<option value="${clusterId}" ${disabled} style="color: ${statusColor};">
+        ${clusterName} (${connectionName}) - ${clusterStatus}
+      </option>`;
+    }).join('');
+    
+    Swal.fire({
+      title: "Add NodeGroup to K8s Cluster",
+      html: `
+        <div style="text-align: left; padding: 15px;">
+          <div style="margin-bottom: 15px;">
+            <label style="font-weight: bold;">Select K8s Cluster:</label><br>
+            <select id="k8sClusterSelect" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+              <option value="">-- Select a cluster --</option>
+              ${clusterOptions}
+            </select>
+            <div style="font-size: 0.8em; color: #666; margin-top: 5px;">
+              Note: Only Active clusters can be selected for NodeGroup addition
+            </div>
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label style="font-weight: bold;">Node Group Name:</label><br>
+            <input type="text" id="newNodeGroupName" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" 
+                   value="nodegroup-${Date.now()}" placeholder="Enter node group name">
+          </div>
+          <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+            <strong>NodeGroup Configuration:</strong><br>
+            <small>Provider: ${spec.providerName}</small><br>
+            <small>Region: ${spec.regionName}</small><br>
+            <small>Spec: ${spec.cspSpecName}</small><br>
+            <small>Image: ${subGroup.imageId}</small>
+          </div>
+          <div style="font-size: 0.9em; color: #666;">
+            Note: This will add a new NodeGroup to the selected active K8s cluster.
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: "Add NodeGroup",
+      cancelButtonText: "Cancel",
+      preConfirm: () => {
+        const clusterId = document.getElementById('k8sClusterSelect').value;
+        const nodeGroupName = document.getElementById('newNodeGroupName').value.trim();
+        
+        if (!clusterId) {
+          Swal.showValidationMessage('Please select a K8s cluster');
+          return false;
+        }
+        
+        // Find selected cluster and check if it's Active
+        const selectedCluster = clusters.find(cluster => cluster?.id === clusterId);
+        if (!selectedCluster) {
+          Swal.showValidationMessage('Selected cluster not found');
+          return false;
+        }
+        
+        // Check cluster status - only Active clusters can have NodeGroups added
+        const clusterStatus = selectedCluster?.status || 'Unknown';
+        if (clusterStatus !== 'Active') {
+          Swal.showValidationMessage(`Cluster is not Active (current status: ${clusterStatus}). Please wait for cluster to become Active.`);
+          return false;
+        }
+        
+        if (!nodeGroupName) {
+          Swal.showValidationMessage('Please enter node group name');
+          return false;
+        }
+        
+        return { clusterId, nodeGroupName };
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        const { clusterId, nodeGroupName } = result.value;
+        
+        // Create NodeGroup request body
+        const nodeGroupReq = {
+          imageId: subGroup.imageId || "default",
+          specId: subGroup.specId,
+          name: nodeGroupName
+        };
+
+        const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster/${clusterId}/k8sNodeGroupDynamic`;
+        
+        console.log("Adding NodeGroup to K8s Cluster:", nodeGroupReq);
+        
+        const taskId = addSpinnerTask("addNodeGroup");
+        
+        axios.post(url, nodeGroupReq, {
+          auth: {
+            username: username,
+            password: password
+          },
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }).then(function (response) {
+          removeSpinnerTask(taskId);
+          console.log("NodeGroup addition response:", response.data);
+          
+          // Safely extract response data with fallbacks
+          const clusterId = response.data?.id || 'Unknown';
+          const clusterStatus = response.data?.status || 'Unknown';
+          
+          Swal.fire({
+            title: "NodeGroup Added Successfully!",
+            html: `
+              <div style="text-align: left;">
+                <p><strong>Cluster ID:</strong> ${clusterId}</p>
+                <p><strong>NodeGroup:</strong> ${nodeGroupName}</p>
+                <p><strong>Status:</strong> ${clusterStatus}</p>
+              </div>
+            `,
+            icon: "success",
+            confirmButtonText: "OK"
+          });
+          
+          // NodeGroup added successfully, no additional refresh needed
+          
+        }).catch(function (error) {
+          removeSpinnerTask(taskId);
+          console.error("NodeGroup addition failed:", error);
+          
+          let errorMessage = "Failed to add NodeGroup to K8s Cluster";
+          if (error.response && error.response.data) {
+            errorMessage += `\n${error.response.data.message || error.response.data.error || ''}`;
+          }
+          
+          errorAlert(errorMessage);
+        });
+      }
+    }).catch(function (error) {
+      // Handle any unexpected errors in the NodeGroup dialog
+      console.error("NodeGroup addition dialog error:", error);
+      // Make sure spinner is cleaned up in case of unexpected errors
+      if (typeof taskId !== 'undefined') {
+        removeSpinnerTask(taskId);
+      }
+    });
+    
+  }).catch(function (error) {
+    removeSpinnerTask(listTaskId);
+    console.error("Failed to get K8s cluster list:", error);
+    
+    let errorMessage = "Failed to get K8s cluster list";
+    if (error.response && error.response.data) {
+      errorMessage += `\n${error.response.data.message || error.response.data.error || ''}`;
+    }
+    
+    errorAlert(errorMessage);
+  });
+}
+window.addNodeGroupToK8sCluster = addNodeGroupToK8sCluster;
+
 function getRecommendedSpec(idx, latitude, longitude) {
   var hostname = configHostname;
   var port = configPort;
@@ -5405,6 +5913,17 @@ function updateSubGroupReview() {
         <button type="button" onClick="clearCircle('clearText');" class="btn btn-outline-secondary btn-sm" 
                 style="font-size: 0.7rem; padding: 6px 8px; min-width: 60px;">
           🗑️
+        </button>
+      </div>
+      <div class="border-top pt-2 mt-2">
+        <small class="text-muted d-block mb-2">Kubernetes Cluster</small>
+        <button type="button" onClick="createK8sCluster();" class="btn btn-primary btn-sm ${!hasOneSubGroup ? 'disabled' : ''}" 
+                style="font-size: 0.85rem; padding: 8px 12px; width: 100%;" ${!hasOneSubGroup ? 'disabled' : ''}>
+          ☸️ Create K8s Cluster
+        </button>
+        <button type="button" onClick="addNodeGroupToK8sCluster();" class="btn btn-outline-primary btn-sm ${!hasOneSubGroup ? 'disabled' : ''}" 
+                style="font-size: 0.75rem; padding: 6px 8px; width: 100%; margin-top: 4px;" ${!hasOneSubGroup ? 'disabled' : ''}>
+          ➕ Add NodeGroup to K8s Cluster
         </button>
       </div>
     </div>
@@ -10445,6 +10964,84 @@ function syncMciSelectionFromDashboard(mciId) {
   } else {
     console.log(`[SYNC] Failed - mciidElement:`, !!mciidElement, `mciId:`, mciId);
   }
+}
+
+// Load K8s cluster data for dashboard and map
+function loadK8sClusterData() {
+  var hostname = configHostname;
+  var port = configPort;
+  var username = configUsername;
+  var password = configPassword;
+  var namespace = namespaceElement.value;
+
+  if (!namespace || namespace === "") {
+    console.log("No namespace specified for K8s cluster data load");
+    return;
+  }
+
+  // get k8sCluster list and put them on the map
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster`;
+  axios({
+    method: "get",
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`,
+    },
+    timeout: 10000,
+  }).then((res) => {
+    var obj = res.data;
+    console.log('K8s cluster API response:', obj);
+    console.log('K8s cluster API response structure:', JSON.stringify(obj, null, 2));
+    
+    // Update central data store - handle both response formats
+    let k8sClusterData = [];
+    if (obj.K8sClusterInfo) {
+      k8sClusterData = obj.K8sClusterInfo;
+      console.log('Using K8sClusterInfo field');
+    } else if (obj.cluster) {
+      k8sClusterData = obj.cluster;
+      console.log('Using cluster field');
+    }
+    
+    console.log('Final k8sClusterData:', k8sClusterData);
+    
+    window.cloudBaristaCentralData.k8sCluster = k8sClusterData;
+    window.cloudBaristaCentralData.resourceData.k8sCluster = k8sClusterData;
+    
+    // Notify dashboard subscribers
+    notifyDataSubscribers();
+    
+    // Update map icons
+    if (k8sClusterData != null && k8sClusterData.length > 0) {
+      var resourceLocation = [];
+      console.log("resourceLocation k8s[0]");
+      for (let item of k8sClusterData) {
+        if (item.connectionConfig && item.connectionConfig.regionDetail && item.connectionConfig.regionDetail.location) {
+          resourceLocation.push([
+            item.connectionConfig.regionDetail.location.longitude * 1,
+            item.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
+          ]);
+        }
+      }
+      console.log(resourceLocation);
+      if (resourceLocation.length > 0) {
+        geoResourceLocation.k8s[0] = new MultiPoint([resourceLocation]);
+      }
+    } else {
+      // Clear k8s icons when list is empty
+      geoResourceLocation.k8s = [];
+    }
+    
+    console.log('K8s cluster data loaded successfully:', k8sClusterData.length, 'clusters');
+  })
+    .catch(function (error) {
+      console.log("k8sCluster API error:", error);
+      // Clear data on error
+      window.cloudBaristaCentralData.k8sCluster = [];
+      window.cloudBaristaCentralData.resourceData.k8sCluster = [];
+      geoResourceLocation.k8s = [];
+    });
 }
 
 // Make function available globally for Dashboard to call

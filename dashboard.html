@@ -1064,7 +1064,7 @@ limitations under the License.
           <ul class="nav nav-tabs" id="connectionTabs" role="tablist">
             <li class="nav-item" role="presentation">
               <a class="nav-link" id="all-connections-tab" data-toggle="tab" href="#all-connections" role="tab">
-                <i class="fas fa-globe"></i> All
+                <i class="fas fa-globe"></i> All <span class="badge badge-secondary" id="connectionCountBadge">0</span>
               </a>
             </li>
             <!-- Dynamic CSP tabs will be added here -->
@@ -1078,12 +1078,12 @@ limitations under the License.
                 <table class="table table-hover" id="connectionTable">
                   <thead>
                     <tr>
-                      <th>Connection ID</th>
-                      <th>Provider</th>
-                      <th>Region</th>
+                      <th class="text-nowrap">Connection ID</th>
+                      <th class="text-nowrap">Provider</th>
+                      <th class="text-nowrap">Region</th>
                       <th>Zone</th>
-                      <th>Created</th>
-                      <th>Actions</th>
+                      <th class="text-nowrap">Verified</th>
+                      <th class="text-nowrap">Actions</th>
                     </tr>
                   </thead>
                   <tbody id="connectionTableBody">
@@ -1241,7 +1241,7 @@ limitations under the License.
                   <th>Status</th>
                   <th>Spec ID</th>
                   <th>Image ID</th>
-                  <th>Desired Capacity</th>
+                  <th>Nodes</th>
                   <th>Min/Max Size</th>
                   <th>Auto Scaling</th>
                   <th>Actions</th>
