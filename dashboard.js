@@ -2581,7 +2581,7 @@ function updateK8sNodeGroupTable() {
       }
     }
     
-    // Auto scaling info - 실제 API 응답에 맞게 수정
+    // Auto scaling info - modify according to actual API response
     const autoScalingInfo = nodeGroup.onAutoScaling ? 
       `Enabled (${nodeGroup.minNodeSize || nodeGroup.minSize || 0}-${nodeGroup.maxNodeSize || nodeGroup.maxSize || 0})` : 
       'Disabled';
