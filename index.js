@@ -2504,19 +2504,26 @@ function getConnection() {
   //   }
   // });
 
-  // Initialize provider select element with "ALL"
-  var providerSelect = document.getElementById(typeStringProvider);
-  providerSelect.innerHTML = ''; // Clear existing options
-  var allOption = document.createElement("option");
-  allOption.value = "";
-  allOption.text = "ALL";
-  providerSelect.appendChild(allOption);
+  // Initialize provider checkboxes with "ALL" option
+  var providerCheckboxContainer = document.getElementById("provider-checkboxes");
+  if (providerCheckboxContainer) {
+    providerCheckboxContainer.innerHTML = ''; // Clear existing checkboxes
+  }
 
-  var separatorOption = document.createElement("option");
-  separatorOption.value = "";
-  separatorOption.text = "-----";
-  separatorOption.disabled = true; // Disable the separator option
-  providerSelect.appendChild(separatorOption);
+  // Handle "ALL" checkbox behavior
+  var allCheckbox = document.getElementById("provider-all");
+  if (allCheckbox) {
+    allCheckbox.addEventListener('change', function() {
+      var providerCheckboxes = document.querySelectorAll('#provider-checkboxes input[type="checkbox"]');
+      if (this.checked) {
+        // Uncheck all individual providers when ALL is selected
+        providerCheckboxes.forEach(cb => cb.checked = false);
+      }
+      // Update map display and dropdown text
+      updateMapBasedOnProviders();
+      updateProviderDropdownText();
+    });
+  }
 
   var hostname = configHostname;
   var port = configPort;
@@ -2582,14 +2589,44 @@ function getConnection() {
 
           cspPoints[providerName].push([longitude, latitude]);
 
-          // Add the provider to the provider select dropdown if it doesn't already exist
-          var providerSelect = document.getElementById(typeStringProvider);
-          var isDuplicate = Array.from(providerSelect.options).some(option => option.value === providerName);
-          if (!isDuplicate) {
-            var option = document.createElement("option");
-            option.value = providerName;
-            option.text = providerName.toUpperCase();
-            providerSelect.appendChild(option);
+          // Add the provider to the provider checkboxes if it doesn't already exist
+          var providerCheckboxContainer = document.getElementById("provider-checkboxes");
+          if (providerCheckboxContainer) {
+            var existingCheckbox = document.getElementById(`provider-${providerName}`);
+            if (!existingCheckbox) {
+              var checkboxDiv = document.createElement("div");
+              checkboxDiv.className = "dropdown-item-text";
+              
+              var formCheckDiv = document.createElement("div");
+              formCheckDiv.className = "form-check";
+              
+              var checkbox = document.createElement("input");
+              checkbox.className = "form-check-input";
+              checkbox.type = "checkbox";
+              checkbox.id = `provider-${providerName}`;
+              checkbox.value = providerName;
+              
+              var label = document.createElement("label");
+              label.className = "form-check-label";
+              label.setAttribute("for", `provider-${providerName}`);
+              label.textContent = providerName.toUpperCase();
+              
+              formCheckDiv.appendChild(checkbox);
+              formCheckDiv.appendChild(label);
+              checkboxDiv.appendChild(formCheckDiv);
+              providerCheckboxContainer.appendChild(checkboxDiv);
+              
+              // Add event listener to uncheck "ALL" when individual provider is selected
+              checkbox.addEventListener('change', function() {
+                var allCheckbox = document.getElementById("provider-all");
+                if (this.checked && allCheckbox) {
+                  allCheckbox.checked = false;
+                }
+                // Update map display and dropdown text
+                updateMapBasedOnProviders();
+                updateProviderDropdownText();
+              });
+            }
           }
 
           if (!geoCspPoints[providerName]) {
@@ -2673,6 +2710,87 @@ function getConnection() {
     });
 }
 window.getConnection = getConnection;
+
+// Helper function to get selected providers
+function getSelectedProviders() {
+  var allCheckbox = document.getElementById("provider-all");
+  if (allCheckbox && allCheckbox.checked) {
+    return []; // Empty array means all providers
+  }
+  
+  var selectedProviders = [];
+  var providerCheckboxes = document.querySelectorAll('#provider-checkboxes input[type="checkbox"]:checked');
+  providerCheckboxes.forEach(cb => {
+    selectedProviders.push(cb.value);
+  });
+  
+  return selectedProviders;
+}
+window.getSelectedProviders = getSelectedProviders;
+
+// Function to update provider dropdown button text
+function updateProviderDropdownText() {
+  var allCheckbox = document.getElementById("provider-all");
+  var dropdownText = document.getElementById("provider-selection-text");
+  
+  if (!dropdownText) return;
+  
+  if (allCheckbox && allCheckbox.checked) {
+    dropdownText.textContent = "ALL";
+    return;
+  }
+  
+  var selectedProviders = [];
+  var providerCheckboxes = document.querySelectorAll('#provider-checkboxes input[type="checkbox"]:checked');
+  providerCheckboxes.forEach(cb => {
+    selectedProviders.push(cb.value.toUpperCase());
+  });
+  
+  if (selectedProviders.length === 0) {
+    dropdownText.textContent = "None selected";
+  } else if (selectedProviders.length === 1) {
+    dropdownText.textContent = selectedProviders[0];
+  } else if (selectedProviders.length <= 3) {
+    dropdownText.textContent = selectedProviders.join(", ");
+  } else {
+    dropdownText.textContent = `${selectedProviders.slice(0, 2).join(", ")} + ${selectedProviders.length - 2} more`;
+  }
+}
+window.updateProviderDropdownText = updateProviderDropdownText;
+
+// Function to update map display based on selected providers
+function updateMapBasedOnProviders() {
+  var selectedProviders = getSelectedProviders();
+  var allCheckbox = document.getElementById("provider-all");
+  var showAll = allCheckbox && allCheckbox.checked;
+  
+  // If showing all or no specific providers selected, show all CSP points
+  if (showAll || selectedProviders.length === 0) {
+    Object.keys(geoCspPoints).forEach((csp) => {
+      if (geoCspPoints[csp] && geoCspPoints[csp][0]) {
+        // Show all CSP points
+        var layer = map.getLayers().getArray().find(l => l.get('cspType') === csp);
+        if (layer) {
+          layer.setVisible(true);
+        }
+      }
+    });
+  } else {
+    // Show only selected providers
+    Object.keys(geoCspPoints).forEach((csp) => {
+      if (geoCspPoints[csp] && geoCspPoints[csp][0]) {
+        var shouldShow = selectedProviders.includes(csp);
+        var layer = map.getLayers().getArray().find(l => l.get('cspType') === csp);
+        if (layer) {
+          layer.setVisible(shouldShow);
+        }
+      }
+    });
+  }
+  
+  map.render();
+}
+window.updateMapBasedOnProviders = updateMapBasedOnProviders;
 
 function isNormalInteger(str) {
   var n = Math.floor(Number(str));
@@ -4933,6 +5051,19 @@ function setKubernetesConfig() {
   document.getElementById("minRAM").value = "16";
   document.getElementById("diskSize").value = "100";
   
+  // Get selected providers for display
+  var selectedProviders = getSelectedProviders();
+  var allCheckbox = document.getElementById("provider-all");
+  var providerInfo = "";
+  
+  if (allCheckbox && allCheckbox.checked) {
+    providerInfo = "All Providers";
+  } else if (selectedProviders.length > 0) {
+    providerInfo = selectedProviders.map(p => p.toUpperCase()).join(", ");
+  } else {
+    providerInfo = "No Providers Selected";
+  }
+  
   // Show comprehensive Kubernetes information
   Swal.fire({
     title: "⚙️ Kubernetes Configuration Guide",
@@ -4943,12 +5074,10 @@ function setKubernetesConfig() {
         </div>
         
         <div style="background: #d1ecf1; padding: 8px; border-radius: 4px; margin-bottom: 12px; border-left: 4px solid #17a2b8;">
-          <strong>✅ Configuration Set:</strong> Min vCPU: 4, Min Memory: 16GB, Disk: 100GB
+          <strong>✅ Configuration Set:</strong> Min vCPU: 4, Min Memory: 16GB, Disk: 100GB<br>
+          <strong>🏢 Selected Providers:</strong> ${providerInfo}
         </div>
         
-        <div style="margin-bottom: 10px;">
-          <strong>📋 Node Group Creation by Provider:</strong>
-        </div>
         
         <div style="margin-bottom: 12px;">
           <strong style="color: #28a745;">Node Group created with cluster:</strong><br>
@@ -5016,6 +5145,342 @@ function setKubernetesConfig() {
 }
 window.setKubernetesConfig = setKubernetesConfig;
 
+// Workload type management - store previous configurations
+let workloadConfigurations = {
+  vmInfra: {
+    minVCPU: "1",
+    minRAM: "0.5",
+    diskSize: "",
+    isActive: true
+  },
+  k8sInfra: {
+    minVCPU: "4",
+    minRAM: "16",
+    diskSize: "100",
+    isActive: false
+  }
+};
+
+// Store K8s cluster information
+let k8sClusterInfo = null;
+
+// Global variable to track current workload type
+let currentWorkloadType = 'vm'; // default to VM
+
+// Helper function to check current workload type
+function getCurrentWorkloadType() {
+  // First try to get from radio buttons
+  const vmModeInput = document.getElementById("vmMode");
+  const k8sModeInput = document.getElementById("k8sMode");
+  
+  console.log('getCurrentWorkloadType() called');
+  console.log('vmModeInput:', vmModeInput);
+  console.log('k8sModeInput:', k8sModeInput);
+  console.log('vmModeInput.checked:', vmModeInput?.checked);
+  console.log('k8sModeInput.checked:', k8sModeInput?.checked);
+  
+  if (k8sModeInput && k8sModeInput.checked) {
+    console.log('Returning k8s from radio button');
+    currentWorkloadType = 'k8s';
+    return 'k8s';
+  } else if (vmModeInput && vmModeInput.checked) {
+    console.log('Returning vm from radio button');
+    currentWorkloadType = 'vm';
+    return 'vm';
+  }
+  
+  // Fallback to global variable
+  console.log('Returning from global variable:', currentWorkloadType);
+  return currentWorkloadType;
+}
+
+// Function to fetch K8s cluster information
+async function fetchK8sClusterInfo() {
+  const hostname = configHostname;
+  const port = configPort;
+  const username = configUsername;
+  const password = configPassword;
+  
+  const url = `http://${hostname}:${port}/tumblebug/k8sClusterInfo`;
+  const auth = btoa(`${username}:${password}`);
+  
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Basic ${auth}`
+      }
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      k8sClusterInfo = data;
+      return data;
+    } else {
+      console.error('Failed to fetch K8s cluster info:', response.status);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error fetching K8s cluster info:', error);
+    return null;
+  }
+}
+
+// Function to update provider selection based on K8s availability
+function updateProvidersForK8s(k8sInfo) {
+  if (!k8sInfo || !k8sInfo.k8s_cluster) {
+    return;
+  }
+  
+  // Get available K8s providers
+  const availableProviders = Object.keys(k8sInfo.k8s_cluster);
+  
+  // Uncheck ALL first
+  const allCheckbox = document.getElementById("provider-all");
+  if (allCheckbox) {
+    allCheckbox.checked = false;
+  }
+  
+  // Uncheck all individual providers first
+  const allProviderCheckboxes = document.querySelectorAll('#provider-checkboxes input[type="checkbox"]');
+  allProviderCheckboxes.forEach(cb => cb.checked = false);
+  
+  // Check only available K8s providers
+  availableProviders.forEach(provider => {
+    const checkbox = document.getElementById(`provider-${provider}`);
+    if (checkbox) {
+      checkbox.checked = true;
+    }
+  });
+  
+  // Update dropdown text
+  updateProviderDropdownText();
+}
+
+// Function to toggle between MC-Infra (VM) and K8s-Infra
+async function toggleWorkloadType() {
+  const vmModeInput = document.getElementById("vmMode");
+  const k8sModeInput = document.getElementById("k8sMode");
+  const isK8sMode = k8sModeInput && k8sModeInput.checked;
+  
+  // Update global workload type
+  currentWorkloadType = isK8sMode ? 'k8s' : 'vm';
+  console.log('toggleWorkloadType: currentWorkloadType set to', currentWorkloadType);
+  
+  // Save current configuration before switching
+  if (isK8sMode) {
+    // Switching from VM to K8s - save VM config
+    workloadConfigurations.vmInfra.minVCPU = document.getElementById("minVCPU").value || "1";
+    workloadConfigurations.vmInfra.minRAM = document.getElementById("minRAM").value || "0.5";
+    workloadConfigurations.vmInfra.diskSize = document.getElementById("diskSize").value || "";
+    
+    // Store current VM provider selection
+    workloadConfigurations.vmInfra.selectedProviders = getSelectedProviders();
+    workloadConfigurations.vmInfra.allSelected = document.getElementById("provider-all")?.checked || false;
+    
+    // Apply K8s configuration
+    document.getElementById("minVCPU").value = workloadConfigurations.k8sInfra.minVCPU;
+    document.getElementById("minRAM").value = workloadConfigurations.k8sInfra.minRAM;
+    document.getElementById("diskSize").value = workloadConfigurations.k8sInfra.diskSize;
+    
+    // Fetch K8s cluster info and update providers
+    const k8sInfo = await fetchK8sClusterInfo();
+    if (k8sInfo) {
+      updateProvidersForK8s(k8sInfo);
+    }
+    
+    // Show K8s configuration info with dynamic data
+    showK8sConfigurationInfo(k8sInfo);
+    
+    // Update active state
+    workloadConfigurations.vmInfra.isActive = false;
+    workloadConfigurations.k8sInfra.isActive = true;
+    
+  } else {
+    // Switching from K8s to VM - save K8s config
+    workloadConfigurations.k8sInfra.minVCPU = document.getElementById("minVCPU").value || "4";
+    workloadConfigurations.k8sInfra.minRAM = document.getElementById("minRAM").value || "16";
+    workloadConfigurations.k8sInfra.diskSize = document.getElementById("diskSize").value || "100";
+    
+    // Apply VM configuration (restore previous or defaults)
+    document.getElementById("minVCPU").value = workloadConfigurations.vmInfra.minVCPU;
+    document.getElementById("minRAM").value = workloadConfigurations.vmInfra.minRAM;
+    document.getElementById("diskSize").value = workloadConfigurations.vmInfra.diskSize;
+    
+    // Restore VM provider selection
+    if (workloadConfigurations.vmInfra.allSelected) {
+      const allCheckbox = document.getElementById("provider-all");
+      if (allCheckbox) {
+        allCheckbox.checked = true;
+        // Uncheck individual providers
+        const providerCheckboxes = document.querySelectorAll('#provider-checkboxes input[type="checkbox"]');
+        providerCheckboxes.forEach(cb => cb.checked = false);
+      }
+    } else {
+      // Uncheck ALL first
+      const allCheckbox = document.getElementById("provider-all");
+      if (allCheckbox) {
+        allCheckbox.checked = false;
+      }
+      
+      // Restore individual provider selections
+      const allProviderCheckboxes = document.querySelectorAll('#provider-checkboxes input[type="checkbox"]');
+      allProviderCheckboxes.forEach(cb => cb.checked = false);
+      
+      if (workloadConfigurations.vmInfra.selectedProviders) {
+        workloadConfigurations.vmInfra.selectedProviders.forEach(provider => {
+          const checkbox = document.getElementById(`provider-${provider}`);
+          if (checkbox) {
+            checkbox.checked = true;
+          }
+        });
+      }
+    }
+    
+    // Update dropdown text
+    updateProviderDropdownText();
+    
+    // Update active state
+    workloadConfigurations.vmInfra.isActive = true;
+    workloadConfigurations.k8sInfra.isActive = false;
+    
+    // No alert needed for VM mode as requested
+  }
+  
+  console.log('Workload Type Changed:', isK8sMode ? 'K8s-Infra' : 'MC-Infra (VM)');
+  console.log('Current Configuration:', workloadConfigurations);
+}
+window.toggleWorkloadType = toggleWorkloadType;
+
+// Function to show K8s configuration information with dynamic data
+function showK8sConfigurationInfo(k8sInfo = null) {
+  // Get selected providers for display
+  var selectedProviders = getSelectedProviders();
+  var allCheckbox = document.getElementById("provider-all");
+  var providerInfo = "";
+  
+  if (allCheckbox && allCheckbox.checked) {
+    providerInfo = "All Providers";
+  } else if (selectedProviders.length > 0) {
+    providerInfo = selectedProviders.map(p => p.toUpperCase()).join(", ");
+  } else {
+    providerInfo = "No Providers Selected";
+  }
+  
+  // Generate dynamic provider-specific information
+  let providerDetailsHtml = "";
+  let nodeGroupCreationInfo = "";
+  let nodeGroupSeparateInfo = "";
+  
+  if (k8sInfo && k8sInfo.k8s_cluster) {
+    const providers = k8sInfo.k8s_cluster;
+    
+    // Separate providers by nodegroups_on_creation
+    const withNodeGroups = [];
+    const withoutNodeGroups = [];
+    
+    Object.keys(providers).forEach(provider => {
+      const info = providers[provider];
+      if (info.nodegroups_on_creation) {
+        withNodeGroups.push(provider.toUpperCase());
+      } else {
+        withoutNodeGroups.push(provider.toUpperCase());
+      }
+    });
+    
+    nodeGroupCreationInfo = withNodeGroups.length > 0 ? 
+      `🟢 ${withNodeGroups.join(", ")}` : "None";
+    nodeGroupSeparateInfo = withoutNodeGroups.length > 0 ? 
+      `🔴 ${withoutNodeGroups.join(", ")}` : "None";
+    
+    // Generate provider details
+    Object.keys(providers).forEach(provider => {
+      const info = providers[provider];
+      const providerUpper = provider.toUpperCase();
+      
+      providerDetailsHtml += `
+        <div style="margin-bottom: 12px;">
+          <strong>${providerUpper}</strong><br>
+          • NodeGroups on Creation: ${info.nodegroups_on_creation ? '✅ Yes' : '❌ No'}<br>
+          • Node Image Designation: ${info.node_image_designation ? '✅ Required' : '❌ Not Required'}<br>
+          • Required Subnet Count: ${info.required_subnet_count}<br>
+          ${info.nodegroup_naming_rule ? `• NodeGroup Naming Rule: <code>${info.nodegroup_naming_rule}</code><br>` : ''}
+        </div>
+      `;
+    });
+  } else {
+    nodeGroupCreationInfo = "Unable to fetch current data";
+    nodeGroupSeparateInfo = "Unable to fetch current data";
+    providerDetailsHtml = "<div>Unable to fetch provider-specific information</div>";
+  }
+  
+  // Show comprehensive Kubernetes information
+  Swal.fire({
+    title: "⚙️ K8s-Infra Mode Activated",
+    html: `
+      <div style="text-align: left; font-size: 13px; line-height: 1.4;">
+        <div style="background: #fff3cd; padding: 8px; border-radius: 4px; margin-bottom: 12px; border-left: 4px solid #ffc107;">
+          <strong>⚠️ Notice:</strong> Managed Kubernetes Provisioning is under development and may have stability issues.
+        </div>
+        
+        <div style="background: #d1ecf1; padding: 8px; border-radius: 4px; margin-bottom: 12px; border-left: 4px solid #17a2b8;">
+          <strong>✅ Configuration Applied:</strong> Min vCPU: 4, Min Memory: 16GB, Disk: 100GB<br>
+          <strong>🏢 Available K8s Providers:</strong> ${providerInfo}
+        </div>
+        
+        <div style="margin-bottom: 12px;">
+          <strong style="color: #28a745;">Node Group created with cluster:</strong><br>
+          ${nodeGroupCreationInfo}
+        </div>
+        
+        <div style="margin-bottom: 15px;">
+          <strong style="color: #dc3545;">Node Group added separately after cluster creation:</strong><br>
+          ${nodeGroupSeparateInfo}
+        </div>
+
+        <details style="margin-bottom: 10px;">
+          <summary style="cursor: pointer; font-weight: bold; color: #495057; margin-bottom: 8px;">
+            📖 Provider-specific Details
+          </summary>
+          <div style="margin-left: 15px; margin-top: 8px; font-size: 12px;">
+            ${providerDetailsHtml}
+          </div>
+        </details>
+
+        <details style="margin-bottom: 10px;">
+          <summary style="cursor: pointer; font-weight: bold; color: #495057; margin-bottom: 8px;">
+            📄 Raw K8s Cluster Info (JSON)
+          </summary>
+          <div style="margin-left: 15px; margin-top: 8px;">
+            <pre style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 10px; max-height: 300px; overflow-y: auto; text-align: left;">${k8sInfo ? JSON.stringify(k8sInfo, null, 2) : 'Unable to fetch data'}</pre>
+          </div>
+        </details>
+      </div>
+    `,
+    icon: "info",
+    confirmButtonText: "OK",
+    confirmButtonColor: "#007bff",
+    width: "700px"
+  });
+}
+
+// Function to get current workload type
+function getCurrentWorkloadType() {
+  const k8sModeInput = document.getElementById("k8sMode");
+  return k8sModeInput && k8sModeInput.checked ? 'k8s-infra' : 'mc-infra';
+}
+window.getCurrentWorkloadType = getCurrentWorkloadType;
+
+// Function to get workload configuration
+function getWorkloadConfiguration() {
+  return {
+    currentType: getCurrentWorkloadType(),
+    configurations: workloadConfigurations
+  };
+}
+window.getWorkloadConfiguration = getWorkloadConfiguration;
+
 function getRecommendedSpec(idx, latitude, longitude) {
   var hostname = configHostname;
   var port = configPort;
@@ -5028,7 +5493,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
   var maxRAM = document.getElementById("maxRAM").value;
   var specName = document.getElementById("specName").value;
   var architecture = document.getElementById("architecture").value;
-  var providerName = document.getElementById("provider").value;
+  var selectedProviders = getSelectedProviders();
   var acceleratorModel = document.getElementById("acceleratorModel").value;
   var minAcceleratorCount = document.getElementById("minAcceleratorCount").value;
   var maxAcceleratorCount = document.getElementById("maxAcceleratorCount").value;
@@ -5060,12 +5525,29 @@ function getRecommendedSpec(idx, latitude, longitude) {
     gpuPolicies.push(createPolicyConditions("AcceleratorModel", { value: acceleratorModel }, "single"));
   }
 
+  // Handle provider conditions - support multiple providers with comma-separated values
+  var providerPolicies = [];
+  if (selectedProviders && selectedProviders.length > 0) {
+    // Check if ALL is selected or if no specific providers are selected
+    var isAllSelected = selectedProviders.includes("ALL") || selectedProviders.length === 0;
+    
+    if (!isAllSelected) {
+      // Create a single condition with comma-separated provider names
+      var providerString = selectedProviders.join(",");
+      providerPolicies.push(createPolicyConditions("ProviderName", { value: providerString }, "single"));
+      console.log("Provider filter applied:", providerString);
+    } else {
+      console.log("No provider filter applied (ALL selected or none specified)");
+    }
+  }
+  // If no providers selected or ALL is selected, don't add provider conditions (means all providers)
+
   var policies = [
     createPolicyConditions("vCPU", { min: minVCPU, max: maxVCPU }, "range"),
     createPolicyConditions("MemoryGiB", { min: minRAM, max: maxRAM }, "range"),
     createPolicyConditions("CspSpecName", { value: specName }, "single"),
-    createPolicyConditions("ProviderName", { value: providerName }, "single"),
-    createPolicyConditions("Architecture", { value: architecture }, "single"),
+    ...providerPolicies, // Spread the provider policies array (now supports comma-separated values)
+    createPolicyConditions("Architecture", { value: architecture }, "single"), // Architecture can also support comma-separated values
     ...gpuPolicies,
     createPolicyConditions("AcceleratorMemoryGB", { min: minAMEM, max: maxAMEM }, "range"),
     createPolicyConditions("AcceleratorCount", { min: minAcceleratorCount, max: maxAcceleratorCount }, "range"),
@@ -6139,8 +6621,21 @@ function updateSubGroupReview() {
   // Check if only one SubGroup exists to enable Append SubGroup button
   const hasOneSubGroup = vmSubGroupReqeustFromSpecList.length === 1;
   
-  actionButtonsContainer.innerHTML = `
-    <div class="d-flex flex-column" style="gap: 8px;">
+  // Get current workload type
+  const workloadType = getCurrentWorkloadType();
+  console.log('Current workload type:', workloadType);
+  console.log('VM radio:', document.getElementById('vmMode'));
+  console.log('K8s radio:', document.getElementById('k8sMode'));
+  console.log('VM checked:', document.getElementById('vmMode')?.checked);
+  console.log('K8s checked:', document.getElementById('k8sMode')?.checked);
+  
+  // Generate buttons based on workload type
+  let buttonsHtml = '<div class="d-flex flex-column" style="gap: 8px;">';
+  
+  if (workloadType === 'vm') {
+    console.log('Generating VM buttons...');
+    // VM workload buttons
+    buttonsHtml += `
       <button type="button" onClick="createMci();" class="btn btn-success btn-sm" style="font-size: 0.85rem; padding: 8px 12px;">
         🚀 Create MCI
       </button>
@@ -6154,19 +6649,57 @@ function updateSubGroupReview() {
           🗑️
         </button>
       </div>
-      <div class="border-top pt-2 mt-2">
+    `;
+  } else if (workloadType === 'k8s') {
+    console.log('Generating K8s buttons...');
+    // K8s workload buttons
+    buttonsHtml += `
+      <div class="border-top pt-2">
         <small class="text-muted d-block mb-2">Kubernetes Cluster</small>
-        <button type="button" onClick="createK8sCluster();" class="btn btn-primary btn-sm ${!hasOneSubGroup ? 'disabled' : ''}" 
-                style="font-size: 0.85rem; padding: 8px 12px; width: 100%;" ${!hasOneSubGroup ? 'disabled' : ''}>
-          ☸️ Create K8s Cluster
+        <div class="d-flex" style="gap: 4px; margin-bottom: 4px;">
+          <button type="button" onClick="createK8sCluster();" class="btn btn-primary btn-sm ${!hasOneSubGroup ? 'disabled' : ''}" 
+                  style="font-size: 0.85rem; padding: 8px 12px; flex: 1;" ${!hasOneSubGroup ? 'disabled' : ''}>
+            ☸️ Create K8s Cluster
+          </button>
+          <button type="button" onClick="clearCircle('clearText');" class="btn btn-outline-secondary btn-sm" 
+                  style="font-size: 0.7rem; padding: 6px 8px; min-width: 60px;">
+            🗑️
+          </button>
+        </div>
+        <div class="d-flex" style="gap: 4px;">
+          <button type="button" onClick="addNodeGroupToK8sCluster();" class="btn btn-outline-primary btn-sm ${!hasOneSubGroup ? 'disabled' : ''}" 
+                  style="font-size: 0.75rem; padding: 6px 8px; flex: 1;" ${!hasOneSubGroup ? 'disabled' : ''}>
+            ➕ Add NodeGroup to K8s Cluster
+          </button>
+          <button type="button" onClick="clearCircle('clearText');" class="btn btn-outline-secondary btn-sm" 
+                  style="font-size: 0.7rem; padding: 6px 8px; min-width: 60px;">
+            🗑️
+          </button>
+        </div>
+      </div>
+    `;
+  } else {
+    console.log('Generating default VM buttons (fallback)...');
+    // Default fallback to VM buttons
+    buttonsHtml += `
+      <button type="button" onClick="createMci();" class="btn btn-success btn-sm" style="font-size: 0.85rem; padding: 8px 12px;">
+        🚀 Create MCI
+      </button>
+      <div class="d-flex" style="gap: 4px;">
+        <button type="button" onClick="scaleOutMciWithConfiguration();" class="btn btn-info btn-sm ${!hasOneSubGroup ? 'disabled' : ''}" 
+                style="font-size: 0.75rem; padding: 6px 8px; flex: 1;" ${!hasOneSubGroup ? 'disabled' : ''}>
+          ➕ ScaleOut existing MCI
         </button>
-        <button type="button" onClick="addNodeGroupToK8sCluster();" class="btn btn-outline-primary btn-sm ${!hasOneSubGroup ? 'disabled' : ''}" 
-                style="font-size: 0.75rem; padding: 6px 8px; width: 100%; margin-top: 4px;" ${!hasOneSubGroup ? 'disabled' : ''}>
-          ➕ Add NodeGroup to K8s Cluster
+        <button type="button" onClick="clearCircle('clearText');" class="btn btn-outline-secondary btn-sm" 
+                style="font-size: 0.7rem; padding: 6px 8px; min-width: 60px;">
+          🗑️
         </button>
       </div>
-    </div>
-  `;
+    `;
+  }
+  
+  buttonsHtml += '</div>';
+  actionButtonsContainer.innerHTML = buttonsHtml;
   subgroupList.appendChild(actionButtonsContainer);
   
   // Auto-scroll to bottom when new items are added (with safety checks)
@@ -7208,6 +7741,9 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Initialize map's Connection Status
   updateMapConnectionStatus('unknown');
+  
+  // Initialize provider dropdown text
+  updateProviderDropdownText();
   
   // Namespace event handlers
   const namespaceElement = document.getElementById("namespace");
@@ -10952,12 +11488,13 @@ function drawObjects(event) {
     shuffleKeys();
   }
 
-  // Get the selected provider from the dropdown
-  var selectedProvider = document.getElementById(typeStringProvider).value;
+  // Get the selected providers from checkboxes
+  var selectedProviders = getSelectedProviders();
+  var isAllSelected = selectedProviders.includes("ALL") || selectedProviders.length === 0;
 
   // Draw CSP location first with the stored random order
   shuffledKeys.forEach((key) => {
-    if (selectedProvider === "" || selectedProvider === key) {
+    if (isAllSelected || selectedProviders.includes(key)) {
       if (Array.isArray(geoCspPoints[key]) && geoCspPoints[key].length) {
         vectorContext.setStyle(cspIconStyles[key]);
         vectorContext.drawGeometry(geoCspPoints[key][0]);
