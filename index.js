@@ -131,6 +131,10 @@ var mciStatus = new Array();
 var mciTargetAction = new Array(); // Store targetAction information for each MCI
 var mciGeo = new Array();
 
+var k8sName = new Array();
+var k8sStatus = new Array();
+var k8sCoords = new Array(); // Store individual coordinates for text rendering
+
 var cspListDisplayEnabled = document.getElementById("displayOn");
 var recommendPolicy = document.getElementById("recommendPolicy");
 var selectApp = document.getElementById("selectApp");
@@ -476,7 +480,7 @@ function clearCircle(option) {
     console.log("[Circle Configuration Cleared]");
   }
   latLonInputPairIdx = 0;
-  vmReqeustFromSpecList = [];
+  vmSubGroupReqeustFromSpecList = [];
   recommendedSpecList = [];
   cspPointsCircle = [];
   geoCspPointsCircle = [];
@@ -502,7 +506,7 @@ function writeLatLonInputPair(idx, lat, lon) {
 }
 
 var latLonInputPairIdx = 0;
-var vmReqeustFromSpecList = new Array();
+var vmSubGroupReqeustFromSpecList = new Array();
 var recommendedSpecList = new Array();
 
 map.on("singleclick", function (event) {
@@ -1132,6 +1136,100 @@ function changeColorStatus(status) {
   return typeof colorObj === 'object' ? colorObj.fill : colorObj;
 }
 
+// K8s Cluster Status Color Mapping
+function getK8sStatusColor(status) {
+  const statusStr = status?.toString().toLowerCase() || '';
+  
+  let fillColor;
+  
+  // Active/Running states - Green (healthy)
+  if (status === "Active" || statusStr.includes("active") || 
+      status === "Running" || statusStr.includes("running")) {
+    fillColor = "#10b981"; // emerald-500
+  }
+  // Creating/Provisioning states - Blue (in progress)
+  else if (status === "Creating" || statusStr.includes("creating") ||
+           status === "Provisioning" || statusStr.includes("provisioning")) {
+    fillColor = "#3b82f6"; // blue-500
+  }
+  // Updating/Upgrading states - Orange (maintenance)
+  else if (status === "Updating" || statusStr.includes("updating") ||
+           status === "Upgrading" || statusStr.includes("upgrading")) {
+    fillColor = "#f97316"; // orange-500
+  }
+  // Error/Failed states - Red (critical)
+  else if (status === "Error" || statusStr.includes("error") ||
+           status === "Failed" || statusStr.includes("failed")) {
+    fillColor = "#ef4444"; // red-500
+  }
+  // Deleting/Terminating states - Dark red (destructive)
+  else if (status === "Deleting" || statusStr.includes("deleting") ||
+           status === "Terminating" || statusStr.includes("terminating")) {
+    fillColor = "#dc2626"; // red-600
+  }
+  // Suspended/Stopped states - Yellow (paused)
+  else if (status === "Suspended" || statusStr.includes("suspended") ||
+           status === "Stopped" || statusStr.includes("stopped")) {
+    fillColor = "#f59e0b"; // amber-500
+  }
+  // Unknown/Default states - Gray
+  else {
+    fillColor = "#6b7280"; // gray-500
+  }
+  
+  return {
+    fill: fillColor,
+    stroke: getContrastColor(fillColor)
+  };
+}
+
+// K8s Cluster Status Color Mapping
+function getK8sStatusColor(status) {
+  const statusStr = status?.toString().toLowerCase() || '';
+  
+  let fillColor;
+  
+  // Active/Running states - Green
+  if (status === "Active" || statusStr.includes("active") || 
+      status === "Running" || statusStr.includes("running")) {
+    fillColor = "#10b981"; // emerald-500 - bright green for active
+  }
+  // Creating states - Blue
+  else if (status === "Creating" || statusStr.includes("creating") ||
+           status === "Provisioning" || statusStr.includes("provisioning")) {
+    fillColor = "#3b82f6"; // blue-500 - bright blue for creation
+  }
+  // Updating states - Orange
+  else if (status === "Updating" || statusStr.includes("updating") ||
+           status === "Upgrading" || statusStr.includes("upgrading")) {
+    fillColor = "#f97316"; // orange-500 - orange for updating
+  }
+  // Error/Failed states - Red
+  else if (status === "Error" || statusStr.includes("error") ||
+           status === "Failed" || statusStr.includes("failed")) {
+    fillColor = "#dc2626"; // red-600 - red for errors
+  }
+  // Deleting states - Dark red
+  else if (status === "Deleting" || statusStr.includes("deleting") ||
+           status === "Terminating" || statusStr.includes("terminating")) {
+    fillColor = "#b91c1c"; // red-700 - dark red for deletion
+  }
+  // Suspended/Stopped states - Yellow
+  else if (status === "Suspended" || statusStr.includes("suspended") ||
+           status === "Stopped" || statusStr.includes("stopped")) {
+    fillColor = "#f59e0b"; // amber-500 - amber for suspended
+  }
+  // Unknown/Default states - Gray
+  else {
+    fillColor = "#6b7280"; // gray-500 - gray for unknown
+  }
+  
+  return {
+    fill: fillColor,
+    stroke: getContrastColor(fillColor)
+  };
+}
+
 // Helper function to truncate MCI name with ellipsis
 function truncateMciName(name, maxLength = 25) {
   if (!name) return '';
@@ -1205,6 +1303,77 @@ function splitMciNameToLines(name, maxLineLength = 12) {
   }
   
   return lines.slice(0, 3); // Limit to 3 lines maximum
+}
+
+// Generate random string for resource naming
+function generateRandomString() {
+  return Math.random().toString(36).substr(2, 5);
+}
+
+// Helper function to split K8s cluster name into multiple lines for better display
+function splitK8sNameToLines(name, maxLineLength = 10) {
+  if (!name) return [''];
+  
+  // If the name is short enough, return as single line
+  if (name.length <= maxLineLength) {
+    return [name];
+  }
+  
+  // Split by common separators first
+  const separators = ['-', '_', '.', ' '];
+  let parts = [name];
+  
+  for (const sep of separators) {
+    if (name.includes(sep)) {
+      parts = name.split(sep);
+      break;
+    }
+  }
+  
+  // If no separators found or parts are still too long, split by length
+  if (parts.length === 1 || parts.some(part => part.length > maxLineLength)) {
+    const lines = [];
+    let currentLine = '';
+    
+    for (let i = 0; i < name.length; i++) {
+      if (currentLine.length >= maxLineLength && (name[i] === '-' || name[i] === '_' || name[i] === '.' || name[i] === ' ')) {
+        lines.push(currentLine);
+        currentLine = '';
+      } else if (currentLine.length >= maxLineLength * 1.5) {
+        lines.push(currentLine);
+        currentLine = '';
+      }
+      currentLine += name[i];
+    }
+    
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+    
+    return lines.slice(0, 2); // Limit to 2 lines maximum for K8s (less than MCI's 3)
+  }
+  
+  // Combine parts intelligently to create 1-2 lines
+  const lines = [];
+  let currentLine = '';
+  
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    const testLine = currentLine ? currentLine + '-' + part : part;
+    
+    if (testLine.length <= maxLineLength || currentLine === '') {
+      currentLine = testLine;
+    } else {
+      lines.push(currentLine);
+      currentLine = part;
+    }
+  }
+  
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+  
+  return lines.slice(0, 2); // Limit to 2 lines maximum for K8s
 }
 
 function changeSizeStatus(status) {
@@ -4053,8 +4222,8 @@ function reviewWithSelectedSubgroups(selectedSubgroups) {
   var password = configPassword;
   var namespace = namespaceElement.value;
   
-  // Get current createMciReq from global vmReqeustFromSpecList
-  if (vmReqeustFromSpecList.length === 0) {
+  // Get current createMciReq from global vmSubGroupReqeustFromSpecList
+  if (vmSubGroupReqeustFromSpecList.length === 0) {
     Swal.fire({
       icon: "error",
       title: "No Configuration Found",
@@ -4064,7 +4233,7 @@ function reviewWithSelectedSubgroups(selectedSubgroups) {
   }
   
   // Filter VM requests to include only selected SubGroups
-  var filteredVmRequests = vmReqeustFromSpecList.filter(vmReq => {
+  var filteredVmRequests = vmSubGroupReqeustFromSpecList.filter(vmReq => {
     return selectedSubgroups.includes(vmReq.name);
   });
   
@@ -4079,7 +4248,7 @@ function reviewWithSelectedSubgroups(selectedSubgroups) {
   
   // Create modified MCI request with filtered VMs
   var modifiedCreateMciReq = JSON.parse(JSON.stringify(createMciReqTmplt));
-  var randomString = Math.random().toString(36).substr(2, 5);
+  var randomString = generateRandomString();
   modifiedCreateMciReq.name = "mc-" + randomString;
   modifiedCreateMciReq.subGroups = filteredVmRequests;
   
@@ -4134,7 +4303,7 @@ function reviewWithSelectedSubgroups(selectedSubgroups) {
 }
 
 function createMci() {
-  if (vmReqeustFromSpecList.length != 0) {
+  if (vmSubGroupReqeustFromSpecList.length != 0) {
     var hostname = configHostname;
     var port = configPort;
     var username = configUsername;
@@ -4143,11 +4312,11 @@ function createMci() {
 
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mciDynamic`;
 
-    var randomString = Math.random().toString(36).substr(2, 5);
+    var randomString = generateRandomString();
 
     var createMciReq = createMciReqTmplt;
     createMciReq.name = "mc-" + `${randomString}`;
-    createMciReq.subGroups = vmReqeustFromSpecList;
+    createMciReq.subGroups = vmSubGroupReqeustFromSpecList;
     let totalCost = 0;
     let totalNodeScale = 0;
 
@@ -4237,13 +4406,17 @@ window.createMci = createMci;
 
 // K8s Cluster creation function
 function createK8sCluster() {
-  if (vmReqeustFromSpecList.length !== 1) {
+  if (vmSubGroupReqeustFromSpecList.length !== 1) {
     errorAlert("Please configure exactly one SubGroup to create K8s Cluster");
     return;
   }
 
-  const subGroup = vmReqeustFromSpecList[0];
+  const subGroup = vmSubGroupReqeustFromSpecList[0];
   const spec = recommendedSpecList[0];
+  
+  // Generate random names for K8s resources
+  const k8sClusterRandomName = "k8s-" + generateRandomString();
+  const k8sNodeGroupRandomName = "ng-" + generateRandomString();
   
   const hostname = configHostname;
   const port = configPort;
@@ -4284,12 +4457,12 @@ function createK8sCluster() {
           <div style="margin-bottom: 15px;">
             <label style="font-weight: bold;">Cluster Name:</label><br>
             <input type="text" id="k8sClusterName" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" 
-                   value="k8s-cluster-${Date.now()}" placeholder="Enter cluster name">
+                   value="${k8sClusterRandomName}" placeholder="Enter cluster name">
           </div>
           <div style="margin-bottom: 15px;">
             <label style="font-weight: bold;">Node Group Name:</label><br>
             <input type="text" id="k8sNodeGroupName" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" 
-                   value="nodegroup-01" placeholder="Enter node group name">
+                   value="${k8sNodeGroupRandomName}" placeholder="Enter node group name">
           </div>
           <div style="margin-bottom: 15px;">
             <label style="font-weight: bold;">Kubernetes Version:</label><br>
@@ -4362,6 +4535,8 @@ function createK8sCluster() {
         return { clusterName, nodeGroupName, k8sVersion };
       }
     }).then((result) => {
+      let taskId; // Declare taskId in higher scope for error handling
+      
       if (result.isConfirmed) {
         const { clusterName, nodeGroupName, k8sVersion } = result.value;
         
@@ -4382,7 +4557,7 @@ function createK8sCluster() {
         
         console.log("Creating K8s Cluster:", k8sClusterReq);
         
-        const taskId = addSpinnerTask("createK8sCluster");
+        taskId = addSpinnerTask("Create K8s "+k8sClusterReq.name);
         
         axios.post(url, k8sClusterReq, {
           auth: {
@@ -4427,8 +4602,8 @@ function createK8sCluster() {
     }).catch(function (error) {
       // Handle any unexpected errors in the Swal dialog
       console.error("K8s Cluster creation dialog error:", error);
-      // Make sure spinner is cleaned up in case of unexpected errors
-      if (typeof taskId !== 'undefined') {
+      // Clean up spinner if it was started
+      if (taskId) {
         removeSpinnerTask(taskId);
       }
     });
@@ -4447,12 +4622,12 @@ function createK8sCluster() {
           <div style="margin-bottom: 15px;">
             <label style="font-weight: bold;">Cluster Name:</label><br>
             <input type="text" id="k8sClusterName" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" 
-                   value="k8s-cluster-${Date.now()}" placeholder="Enter cluster name">
+                   value="${k8sClusterRandomName}" placeholder="Enter cluster name">
           </div>
           <div style="margin-bottom: 15px;">
             <label style="font-weight: bold;">Node Group Name:</label><br>
             <input type="text" id="k8sNodeGroupName" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" 
-                   value="nodegroup-01" placeholder="Enter node group name">
+                   value="${k8sNodeGroupRandomName}" placeholder="Enter node group name">
           </div>
           <div style="margin-bottom: 15px;">
             <label style="font-weight: bold;">Kubernetes Version (Optional):</label><br>
@@ -4494,6 +4669,8 @@ function createK8sCluster() {
         return { clusterName, nodeGroupName, k8sVersion };
       }
     }).then((result) => {
+      let taskId; // Declare taskId in higher scope for error handling
+      
       if (result.isConfirmed) {
         const { clusterName, nodeGroupName, k8sVersion } = result.value;
         
@@ -4514,7 +4691,7 @@ function createK8sCluster() {
         
         console.log("Creating K8s Cluster (fallback):", k8sClusterReq);
         
-        const taskId = addSpinnerTask("createK8sCluster");
+        taskId = addSpinnerTask("Create K8s "+k8sClusterReq.name);
         
         axios.post(url, k8sClusterReq, {
           auth: {
@@ -4564,8 +4741,8 @@ function createK8sCluster() {
     }).catch(function (error) {
       // Handle any unexpected errors in the Swal dialog (fallback)
       console.error("K8s Cluster creation dialog error (fallback):", error);
-      // Make sure spinner is cleaned up in case of unexpected errors
-      if (typeof taskId !== 'undefined') {
+      // Clean up spinner if it was started
+      if (taskId) {
         removeSpinnerTask(taskId);
       }
     });
@@ -4575,13 +4752,16 @@ window.createK8sCluster = createK8sCluster;
 
 // Add NodeGroup to existing K8s Cluster function
 function addNodeGroupToK8sCluster() {
-  if (vmReqeustFromSpecList.length !== 1) {
+  if (vmSubGroupReqeustFromSpecList.length !== 1) {
     errorAlert("Please configure exactly one SubGroup to add NodeGroup to K8s Cluster");
     return;
   }
 
-  const subGroup = vmReqeustFromSpecList[0];
+  const subGroup = vmSubGroupReqeustFromSpecList[0];
   const spec = recommendedSpecList[0];
+  
+  // Generate random name for NodeGroup
+  const k8sNodeGroupRandomName = "ng-" + generateRandomString();
   
   const hostname = configHostname;
   const port = configPort;
@@ -4613,22 +4793,60 @@ function addNodeGroupToK8sCluster() {
       return;
     }
     
-    // Create cluster selection dialog - show all clusters but disable non-Active ones
+    // Create cluster selection dialog - show all clusters but enable only Active ones with matching provider/region
+    const subGroupProvider = spec.providerName; // e.g., "gcp"
+    const subGroupRegion = spec.regionName; // e.g., "asia-northeast3"
+    
     const clusterOptions = clusters.map(cluster => {
       // Use cluster-level status for determining availability
       const clusterStatus = cluster?.status || 'Unknown';
       const isActive = clusterStatus === 'Active';
       
-      const disabled = !isActive ? 'disabled' : '';
-      const statusColor = isActive ? '#28a745' : '#6c757d';
+      // Check if provider and region match
+      const clusterProvider = cluster?.connectionConfig?.providerName || '';
+      const clusterRegion = cluster?.connectionConfig?.regionDetail?.regionId || '';
+      
+      const providerRegionMatch = (clusterProvider === subGroupProvider && clusterRegion === subGroupRegion);
+      
+      // Enable only if cluster is Active AND provider/region matches
+      const isSelectable = isActive && providerRegionMatch;
+      const disabled = !isSelectable ? 'disabled' : '';
+      
+      // Set colors based on status and compatibility
+      let statusColor = '#6c757d'; // Default gray for disabled
+      let statusText = clusterStatus;
+      
+      if (isActive && providerRegionMatch) {
+        statusColor = '#28a745'; // Green for selectable
+        statusText = `${clusterStatus} ✓`;
+      } else if (isActive && !providerRegionMatch) {
+        statusColor = '#ffc107'; // Yellow for active but incompatible
+        statusText = `${clusterStatus} (Provider/Region mismatch)`;
+      }
+      
       const clusterId = cluster?.id || '';
       const clusterName = cluster?.name || 'Unknown';
       const connectionName = cluster?.connectionName || 'Unknown';
       
       return `<option value="${clusterId}" ${disabled} style="color: ${statusColor};">
-        ${clusterName} (${connectionName}) - ${clusterStatus}
+        ${clusterName} (${connectionName}) - ${statusText}
       </option>`;
     }).join('');
+    
+    // Check if there are any selectable clusters
+    const selectableClusters = clusters.filter(cluster => {
+      const clusterStatus = cluster?.status || 'Unknown';
+      const isActive = clusterStatus === 'Active';
+      const clusterProvider = cluster?.connectionConfig?.providerName || '';
+      const clusterRegion = cluster?.connectionConfig?.regionDetail?.regionId || '';
+      const providerRegionMatch = (clusterProvider === subGroupProvider && clusterRegion === subGroupRegion);
+      return isActive && providerRegionMatch;
+    });
+    
+    if (selectableClusters.length === 0) {
+      errorAlert(`No compatible K8s clusters found.\n\nRequired:\n- Status: Active\n- Provider: ${subGroupProvider}\n- Region: ${subGroupRegion}\n\nPlease create a compatible K8s cluster first or check existing cluster configurations.`);
+      return;
+    }
     
     Swal.fire({
       title: "Add NodeGroup to K8s Cluster",
@@ -4641,13 +4859,13 @@ function addNodeGroupToK8sCluster() {
               ${clusterOptions}
             </select>
             <div style="font-size: 0.8em; color: #666; margin-top: 5px;">
-              Note: Only Active clusters can be selected for NodeGroup addition
+              Note: Only Active clusters with matching Provider (${subGroupProvider}) and Region (${subGroupRegion}) can be selected
             </div>
           </div>
           <div style="margin-bottom: 15px;">
             <label style="font-weight: bold;">Node Group Name:</label><br>
             <input type="text" id="newNodeGroupName" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" 
-                   value="nodegroup-${Date.now()}" placeholder="Enter node group name">
+                   value="${k8sNodeGroupRandomName}" placeholder="Enter node group name">
           </div>
           <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
             <strong>NodeGroup Configuration:</strong><br>
@@ -4695,6 +4913,8 @@ function addNodeGroupToK8sCluster() {
         return { clusterId, nodeGroupName };
       }
     }).then((result) => {
+      let taskId; // Declare taskId in higher scope for error handling
+      
       if (result.isConfirmed) {
         const { clusterId, nodeGroupName } = result.value;
         
@@ -4708,9 +4928,9 @@ function addNodeGroupToK8sCluster() {
         const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster/${clusterId}/k8sNodeGroupDynamic`;
         
         console.log("Adding NodeGroup to K8s Cluster:", nodeGroupReq);
-        
-        const taskId = addSpinnerTask("addNodeGroup");
-        
+
+        taskId = addSpinnerTask("Add NodeGroup " + nodeGroupReq.name);
+
         axios.post(url, nodeGroupReq, {
           auth: {
             username: username,
@@ -4757,8 +4977,8 @@ function addNodeGroupToK8sCluster() {
     }).catch(function (error) {
       // Handle any unexpected errors in the NodeGroup dialog
       console.error("NodeGroup addition dialog error:", error);
-      // Make sure spinner is cleaned up in case of unexpected errors
-      if (typeof taskId !== 'undefined') {
+      // Clean up spinner if it was started
+      if (taskId) {
         removeSpinnerTask(taskId);
       }
     });
@@ -5529,7 +5749,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
               var createMciReqVm = $.extend({}, createMciReqVmTmplt);
               var recommendedSpec = selectedSpec;
 
-              createMciReqVm.name = "g" + (vmReqeustFromSpecList.length + 1).toString();
+              createMciReqVm.name = "g" + (vmSubGroupReqeustFromSpecList.length + 1).toString();
 
               var osImage = document.getElementById("osImage");
               var diskSize = document.getElementById("diskSize");
@@ -5778,7 +5998,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 `${createMciReqVm.specId}` +
                 `\t(${createMciReqVm.subGroupSize})`
               );
-              vmReqeustFromSpecList.push(createMciReqVm);
+              vmSubGroupReqeustFromSpecList.push(createMciReqVm);
               recommendedSpecList.push(recommendedSpec);
               
               // Update SubGroup review panel
@@ -5877,7 +6097,7 @@ function updateSubGroupReview() {
   // Clear existing items
   subgroupList.innerHTML = '';
   
-  if (vmReqeustFromSpecList.length === 0) {
+  if (vmSubGroupReqeustFromSpecList.length === 0) {
     reviewCard.style.display = 'none';
     return;
   }
@@ -5887,7 +6107,7 @@ function updateSubGroupReview() {
   noSubgroups.style.display = 'none';
   
   // Add each SubGroup item
-  vmReqeustFromSpecList.forEach((vm, index) => {
+  vmSubGroupReqeustFromSpecList.forEach((vm, index) => {
     const spec = recommendedSpecList[index];
     const subgroupItem = createSubGroupItem(vm, spec, index);
     subgroupList.appendChild(subgroupItem);
@@ -5898,7 +6118,7 @@ function updateSubGroupReview() {
   actionButtonsContainer.className = 'mt-3 pt-3 border-top';
   
   // Check if only one SubGroup exists to enable Append SubGroup button
-  const hasOneSubGroup = vmReqeustFromSpecList.length === 1;
+  const hasOneSubGroup = vmSubGroupReqeustFromSpecList.length === 1;
   
   actionButtonsContainer.innerHTML = `
     <div class="d-flex flex-column" style="gap: 8px;">
@@ -6031,7 +6251,7 @@ function generateProviderColor(provider) {
 }
 
 function editSubGroup(index) {
-  const vm = vmReqeustFromSpecList[index];
+  const vm = vmSubGroupReqeustFromSpecList[index];
   const spec = recommendedSpecList[index];
   
   Swal.fire({
@@ -6086,13 +6306,13 @@ function editSubGroup(index) {
   }).then((result) => {
     if (result.isConfirmed) {
       // Update the VM configuration
-      vmReqeustFromSpecList[index].name = result.value.name;
-      vmReqeustFromSpecList[index].subGroupSize = result.value.count.toString();
-      vmReqeustFromSpecList[index].rootDiskSize = result.value.disk;
+      vmSubGroupReqeustFromSpecList[index].name = result.value.name;
+      vmSubGroupReqeustFromSpecList[index].subGroupSize = result.value.count.toString();
+      vmSubGroupReqeustFromSpecList[index].rootDiskSize = result.value.disk;
       if (Object.keys(result.value.labels).length > 0) {
-        vmReqeustFromSpecList[index].label = result.value.labels;
+        vmSubGroupReqeustFromSpecList[index].label = result.value.labels;
       } else {
-        delete vmReqeustFromSpecList[index].label;
+        delete vmSubGroupReqeustFromSpecList[index].label;
       }
       
       updateSubGroupReview();
@@ -6102,7 +6322,7 @@ function editSubGroup(index) {
 }
 
 function removeSubGroup(index) {
-  const vm = vmReqeustFromSpecList[index];
+  const vm = vmSubGroupReqeustFromSpecList[index];
   
   Swal.fire({
     title: 'Remove SubGroup?',
@@ -6115,7 +6335,7 @@ function removeSubGroup(index) {
   }).then((result) => {
     if (result.isConfirmed) {
       // Remove from arrays
-      vmReqeustFromSpecList.splice(index, 1);
+      vmSubGroupReqeustFromSpecList.splice(index, 1);
       recommendedSpecList.splice(index, 1);
       
       // Remove corresponding coordinate point
@@ -10140,8 +10360,8 @@ function showMciSelectionForScaleOut(title, description, successCallback) {
             html:
               "<div style='text-align: left; margin: 20px;'>" +
               "<p><b>Step 1:</b> " + description + "</p>" +
-              (vmReqeustFromSpecList && vmReqeustFromSpecList.length > 0 ? 
-                "<p><b>Available VM Configurations:</b> " + vmReqeustFromSpecList.length + " location(s)</p>" : "") +
+              (vmSubGroupReqeustFromSpecList && vmSubGroupReqeustFromSpecList.length > 0 ? 
+                "<p><b>Available VM Configurations:</b> " + vmSubGroupReqeustFromSpecList.length + " location(s)</p>" : "") +
               "<hr>" +
               "<div class='form-group'>" +
               "<label for='mci-select'><b>Available MCIs:</b></label>" +
@@ -10198,7 +10418,7 @@ function scaleOutMciWithConfiguration() {
   }
 
   // Check if we have any VM configuration from the map
-  if (!vmReqeustFromSpecList || vmReqeustFromSpecList.length === 0) {
+  if (!vmSubGroupReqeustFromSpecList || vmSubGroupReqeustFromSpecList.length === 0) {
     errorAlert("Please configure VM specifications first by clicking on the map or using the configuration form");
     return;
   }
@@ -10220,8 +10440,8 @@ function showMciScaleOutConfiguration(selectedMciId, namespace, hostname, port, 
   var vmConfigSummary = "";
   var totalVMs = 0;
   
-  if (vmReqeustFromSpecList && vmReqeustFromSpecList.length > 0) {
-    vmReqeustFromSpecList.forEach((vmConfig, index) => {
+  if (vmSubGroupReqeustFromSpecList && vmSubGroupReqeustFromSpecList.length > 0) {
+    vmSubGroupReqeustFromSpecList.forEach((vmConfig, index) => {
       var vmCount = 1; // Default VM count per location
       totalVMs += vmCount;
       vmConfigSummary += 
@@ -10268,7 +10488,7 @@ function showMciScaleOutConfiguration(selectedMciId, namespace, hostname, port, 
       // Update total VM count when VM count per location changes
       document.getElementById('vm-count').addEventListener('input', function() {
         var vmPerLocation = parseInt(this.value) || 1;
-        var totalLocations = vmReqeustFromSpecList.length;
+        var totalLocations = vmSubGroupReqeustFromSpecList.length;
         var newTotal = vmPerLocation * totalLocations;
         document.getElementById('total-vms').textContent = newTotal;
       });
@@ -10304,12 +10524,12 @@ function showMciScaleOutConfiguration(selectedMciId, namespace, hostname, port, 
 // Step 2.5: Show MCI scale out review
 function showMciScaleOutReview(selectedMciId, subGroupName, vmCountPerLocation, namespace, hostname, port, username, password) {
   // Use the first VM configuration from the map as the template for review
-  if (!vmReqeustFromSpecList || vmReqeustFromSpecList.length === 0) {
+  if (!vmSubGroupReqeustFromSpecList || vmSubGroupReqeustFromSpecList.length === 0) {
     errorAlert("No VM configuration available for review");
     return;
   }
 
-  var vmTemplate = vmReqeustFromSpecList[0];
+  var vmTemplate = vmSubGroupReqeustFromSpecList[0];
   
   // Build the review request using the template
   var reviewReq = {
@@ -10449,7 +10669,7 @@ function showMciScaleOutReviewResults(selectedMciId, subGroupName, vmCountPerLoc
     infoHtml += '</ul></div>';
   }
   
-  var totalVMs = vmCountPerLocation * vmReqeustFromSpecList.length;
+  var totalVMs = vmCountPerLocation * vmSubGroupReqeustFromSpecList.length;
   
   Swal.fire({
     title: "SubGroup Configuration Review",
@@ -10463,7 +10683,7 @@ function showMciScaleOutReviewResults(selectedMciId, subGroupName, vmCountPerLoc
       "<p><b>Target MCI:</b> " + selectedMciId + "</p>" +
       "<p><b>SubGroup Name:</b> " + subGroupName + "</p>" +
       "<p><b>VMs per location:</b> " + vmCountPerLocation + "</p>" +
-      "<p><b>Total locations:</b> " + vmReqeustFromSpecList.length + "</p>" +
+      "<p><b>Total locations:</b> " + vmSubGroupReqeustFromSpecList.length + "</p>" +
       "<p><b>Total VMs to add:</b> " + totalVMs + "</p>" +
       "<p><b>Estimated Cost:</b> " + estimatedCost + "</p>" +
       "</div>" +
@@ -10501,7 +10721,7 @@ function showMciScaleOutReviewResults(selectedMciId, subGroupName, vmCountPerLoc
 
 // Step 3: Show final confirmation and execute MCI scale out
 function showMciScaleOutConfirmation(mciId, subGroupName, vmCountPerLocation, namespace, hostname, port, username, password) {
-  var totalVMs = vmCountPerLocation * vmReqeustFromSpecList.length;
+  var totalVMs = vmCountPerLocation * vmSubGroupReqeustFromSpecList.length;
   
   Swal.fire({
     title: "Confirm MCI Scale Out",
@@ -10512,7 +10732,7 @@ function showMciScaleOutConfirmation(mciId, subGroupName, vmCountPerLocation, na
       "<li>MCI: <b>" + mciId + "</b></li>" +
       "<li>New SubGroup: <b>" + subGroupName + "</b></li>" +
       "<li>VMs per location: <b>" + vmCountPerLocation + "</b></li>" +
-      "<li>Total locations: <b>" + vmReqeustFromSpecList.length + "</b></li>" +
+      "<li>Total locations: <b>" + vmSubGroupReqeustFromSpecList.length + "</b></li>" +
       "</ul>" +
       "<p style='color: #dc3545; margin-top: 15px;'><b>⚠️ Warning:</b> This will incur additional costs.</p>" +
       "</div>",
@@ -10547,8 +10767,8 @@ function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, 
 
   // Use the first VM configuration from the map as the template
   // In a real scenario, you might want to let users select which configuration to use
-  if (vmReqeustFromSpecList && vmReqeustFromSpecList.length > 0) {
-    var templateVm = vmReqeustFromSpecList[0];
+  if (vmSubGroupReqeustFromSpecList && vmSubGroupReqeustFromSpecList.length > 0) {
+    var templateVm = vmSubGroupReqeustFromSpecList[0];
     
     if (templateVm.specId) {
       subGroupDynamicReq.specId = templateVm.specId;
@@ -10570,8 +10790,8 @@ function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, 
   var jsonBody = JSON.stringify(subGroupDynamicReq, undefined, 4);
   
   console.log(`Adding VMs to MCI ${mciId} with subgroup ${subGroupName}...`);
-  var spinnerId = addSpinnerTask(`Scale Out MCI: ${mciId} (+${vmCountPerLocation * vmReqeustFromSpecList.length} VMs)`);
-  infoAlert(`Starting MCI Scale Out: Adding ${vmCountPerLocation * vmReqeustFromSpecList.length} VM(s) to ${mciId}`);
+  var spinnerId = addSpinnerTask(`Scale Out MCI: ${mciId} (+${vmCountPerLocation * vmSubGroupReqeustFromSpecList.length} VMs)`);
+  infoAlert(`Starting MCI Scale Out: Adding ${vmCountPerLocation * vmSubGroupReqeustFromSpecList.length} VM(s) to ${mciId}`);
 
   var requestId = generateRandomRequestId("mci-scaleout-" + mciId + "-" + subGroupName + "-", 10);
   addRequestIdToSelect(requestId);
@@ -10630,7 +10850,7 @@ function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, 
         title: "MCI Scale Out Successful!",
         html: 
           "<div style='text-align: left;'>" +
-          "<p><b>" + (vmCountPerLocation * vmReqeustFromSpecList.length) + " VM(s)</b> have been successfully added to:</p>" +
+          "<p><b>" + (vmCountPerLocation * vmSubGroupReqeustFromSpecList.length) + " VM(s)</b> have been successfully added to:</p>" +
           "<ul>" +
           "<li>MCI: <b>" + mciId + "</b></li>" +
           "<li>SubGroup: <b>" + subGroupName + "</b></li>" +
@@ -10854,36 +11074,62 @@ function drawObjects(event) {
     }
   }
 
-  // Draw MCI status text
-  for (i = geometries.length - 1; i >= 0; --i) {
-    const statusColors = getVmStatusColor(mciStatus[i]);
-    
-    // Calculate dynamic offset for status text based on MCI name lines
-    const nameLines = splitMciNameToLines(mciName[i]);
-    const baseScale = changeSizeByName(mciName[i] + mciStatus[i]) + 0.1;
-    const lineHeight = 12 * baseScale;
-    const nameHeight = nameLines.length * lineHeight;
-    const statusOffsetY = 32 * changeSizeByName(mciName[i] + mciStatus[i]) + nameHeight + 8; // 8px gap between name and status
-    
-    // MCI status style
-    var polyStatusTextStyle = new Style({
-      // MCI status text style
-      text: new Text({
-        text: mciStatus[i],
-        font: "bold 10px sans-serif",
-        scale: changeSizeStatus(mciName[i] + mciStatus[i]),
-        offsetY: statusOffsetY,
-        stroke: new Stroke({
-          color: statusColors.stroke,
-          width: 2, // Slightly thicker stroke for better readability
+  // Draw K8s cluster text (name and status)
+  for (i = 0; i < k8sName.length; i++) {
+    if (k8sCoords[i] && k8sName[i]) {
+      // Create Point geometry from stored coordinates
+      const k8sPoint = new Point(k8sCoords[i]);
+      
+      // Split K8s cluster name into lines for better display
+      const nameLines = splitK8sNameToLines(k8sName[i]);
+      const lineHeight = 28; // Spacing between lines (slightly larger than MCI due to bigger font)
+      const baseOffsetY = 30; // Position below the icon
+      
+      // Draw each line of the K8s cluster name
+      nameLines.forEach((line, lineIndex) => {
+        const k8sNameStyle = new Style({
+          text: new Text({
+            text: line,
+            font: "bold 24px sans-serif", // Increased from 20px to 24px (20% larger)
+            scale: 1.0, // Fixed scale for K8s clusters
+            offsetY: baseOffsetY + (lineIndex * lineHeight), // Offset each line down
+            stroke: new Stroke({
+              color: [255, 255, 255, 1], // white stroke
+              width: 2, // Adjusted stroke width proportionally
+            }),
+            fill: new Fill({
+              color: [0, 0, 0, 1], // black text
+            }),
+          }),
+        });
+        
+        vectorContext.setStyle(k8sNameStyle);
+        vectorContext.drawGeometry(k8sPoint);
+      });
+
+      // K8s cluster status text with appropriate color
+      const statusOffsetY = baseOffsetY + (nameLines.length * lineHeight) + 8; // Position below the name lines with gap
+      const statusColors = getK8sStatusColor(k8sStatus[i]);
+      const k8sStatusStyle = new Style({
+        text: new Text({
+          text: k8sStatus[i],
+          font: "bold 22px sans-serif", // Increased from 18px to 22px (20% larger)
+          scale: 0.9, // Slightly smaller for status
+          offsetY: statusOffsetY, // Use calculated offset based on name lines
+          stroke: new Stroke({
+            color: statusColors.stroke,
+            width: 2, // Adjusted stroke width proportionally
+          }),
+          fill: new Fill({
+            color: statusColors.fill,
+          }),
         }),
-        fill: new Fill({
-          color: statusColors.fill,
-        }),
-      }),
-    });
-    vectorContext.setStyle(polyStatusTextStyle);
-    vectorContext.drawGeometry(geometries[i]);
+      });
+
+      // Draw status text
+      vectorContext.setStyle(k8sStatusStyle);
+      vectorContext.drawGeometry(k8sPoint);
+    }
   }
 
   for (i = geometries.length - 1; i >= 0; --i) {
@@ -10930,6 +11176,39 @@ function drawObjects(event) {
     });
   }
 
+  // Draw MCI status text
+  for (i = geometries.length - 1; i >= 0; --i) {
+    const statusColors = getVmStatusColor(mciStatus[i]);
+    
+    // Calculate dynamic offset for status text based on MCI name lines
+    const nameLines = splitMciNameToLines(mciName[i]);
+    const baseScale = changeSizeByName(mciName[i] + mciStatus[i]) + 0.1;
+    const lineHeight = 12 * baseScale;
+    const nameHeight = nameLines.length * lineHeight;
+    const statusOffsetY = 32 * changeSizeByName(mciName[i] + mciStatus[i]) + nameHeight + 8; // 8px gap between name and status
+    
+    // MCI status style
+    var polyStatusTextStyle = new Style({
+      // MCI status text style
+      text: new Text({
+        text: mciStatus[i],
+        font: "bold 10px sans-serif",
+        scale: changeSizeStatus(mciName[i] + mciStatus[i]),
+        offsetY: statusOffsetY,
+        stroke: new Stroke({
+          color: statusColors.stroke,
+          width: 2, // Slightly thicker stroke for better readability
+        }),
+        fill: new Fill({
+          color: statusColors.fill,
+        }),
+      }),
+    });
+    vectorContext.setStyle(polyStatusTextStyle);
+    vectorContext.drawGeometry(geometries[i]);
+  }
+
+  
   map.render();
 }
 
@@ -11012,16 +11291,29 @@ function loadK8sClusterData() {
     // Notify dashboard subscribers
     notifyDataSubscribers();
     
-    // Update map icons
+    // Update map icons and store name/status data
     if (k8sClusterData != null && k8sClusterData.length > 0) {
       var resourceLocation = [];
+      
+      // Clear previous K8s data
+      k8sName = [];
+      k8sStatus = [];
+      k8sCoords = [];
+      
       console.log("resourceLocation k8s[0]");
-      for (let item of k8sClusterData) {
+      for (let i = 0; i < k8sClusterData.length; i++) {
+        const item = k8sClusterData[i];
         if (item.connectionConfig && item.connectionConfig.regionDetail && item.connectionConfig.regionDetail.location) {
-          resourceLocation.push([
+          const coords = [
             item.connectionConfig.regionDetail.location.longitude * 1,
             item.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
-          ]);
+          ];
+          resourceLocation.push(coords);
+          
+          // Store K8s cluster name, status, and coordinates
+          k8sName.push(item.name || item.id);
+          k8sStatus.push(item.status || 'Unknown');
+          k8sCoords.push(coords);
         }
       }
       console.log(resourceLocation);
@@ -11031,6 +11323,9 @@ function loadK8sClusterData() {
     } else {
       // Clear k8s icons when list is empty
       geoResourceLocation.k8s = [];
+      k8sName = [];
+      k8sStatus = [];
+      k8sCoords = [];
     }
     
     console.log('K8s cluster data loaded successfully:', k8sClusterData.length, 'clusters');
@@ -11041,6 +11336,9 @@ function loadK8sClusterData() {
       window.cloudBaristaCentralData.k8sCluster = [];
       window.cloudBaristaCentralData.resourceData.k8sCluster = [];
       geoResourceLocation.k8s = [];
+      k8sName = [];
+      k8sStatus = [];
+      k8sCoords = [];
     });
 }
 

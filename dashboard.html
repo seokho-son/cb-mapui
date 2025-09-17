@@ -687,28 +687,31 @@ limitations under the License.
     <div class="row">
       <div class="col-md-4">
         <div class="content-card">
-          <h5><i class="fas fa-chart-bar"></i> MCI & VM Status Distribution</h5>
+          <h5><i class="fas fa-chart-bar"></i> MCI & VM Status</h5>
           <div class="chart-container">
             <canvas id="combinedStatusChart"></canvas>
           </div>
         </div>
       </div>
+
       <div class="col-md-4">
         <div class="content-card">
-          <h5><i class="fas fa-chart-bar"></i> Provider & Regional Distribution</h5>
-          <div class="chart-container">
-            <canvas id="providerRegionChart"></canvas>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="content-card">
-          <h5><i class="fas fa-dharmachakra"></i> K8s Cluster Status Distribution</h5>
+          <h5><i class="fas fa-dharmachakra"></i> K8s Cluster & Node Status</h5>
           <div class="chart-container">
             <canvas id="k8sClusterStatusChart"></canvas>
           </div>
         </div>
       </div>
+
+      <div class="col-md-4">
+        <div class="content-card">
+          <h5><i class="fas fa-chart-bar"></i> Regions in Use (VM & Node)</h5>
+          <div class="chart-container">
+            <canvas id="providerRegionChart"></canvas>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- Resource Overview -->
@@ -1198,7 +1201,6 @@ limitations under the License.
               <thead>
                 <tr>
                   <th>Cluster ID</th>
-                  <th>Name</th>
                   <th>Status</th>
                   <th>Provider</th>
                   <th>Region</th>
@@ -1494,7 +1496,7 @@ limitations under the License.
   </div>
 
   <!-- Scroll to Top Button -->
-  <button class="scroll-to-top" id="scrollToTopBtn" onclick="scrollToTop()" title="맨 위로 이동">
+  <button class="scroll-to-top" id="scrollToTopBtn" onclick="scrollToTop()" title="Scroll to top">
     <i class="fas fa-chevron-up"></i>
   </button>
 

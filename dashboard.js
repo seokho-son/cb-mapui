@@ -321,7 +321,8 @@ async function deleteDataDisk(dataDiskId, nsId = null) {
   return await deleteResourceAsync('dataDisk', dataDiskId, { nsId });
 }
 
-// Dashboard Configuration
+// Dashboard Configuration - DEPRECATED: Only used for settings modal UI
+// All actual API calls should use parentConfig from index.js via window.parent.getConfig()
 const dashboardConfig = {
   hostname: 'localhost',
   port: '1323',
@@ -644,13 +645,21 @@ function initializeCharts() {
       },
       scales: {
         x: {
-          stacked: true
+          stacked: true,
+          title: {
+            display: true,
+            text: 'Cloud Provider'
+          }
         },
         y: {
           stacked: true,
           beginAtZero: true,
           ticks: {
             stepSize: 1
+          },
+          title: {
+            display: true,
+            text: 'Resource Count (VMs + Nodes)'
           }
         }
       },
@@ -670,7 +679,7 @@ function initializeCharts() {
               return 'Provider: ' + tooltipItems[0].label;
             },
             label: function(context) {
-              return context.dataset.label + ': ' + context.parsed.y + ' VMs';
+              return context.dataset.label + ': ' + context.parsed.y + ' Resources (VMs + Nodes)';
             }
           }
         }
@@ -685,36 +694,66 @@ function initializeCharts() {
   // K8s Cluster Status Chart
   const k8sClusterStatusCtx = document.getElementById('k8sClusterStatusChart').getContext('2d');
   charts.k8sClusterStatus = new Chart(k8sClusterStatusCtx, {
-    type: 'doughnut',
+    type: 'bar',
     data: {
-      labels: ['No Clusters'],
-      datasets: [{
-        data: [1],
-        backgroundColor: ['#e9ecef'],
-        borderWidth: 1,
-        borderColor: '#e9ecef'
-      }]
+      labels: ['Creating', 'Active', 'Inactive', 'Updating', 'Deleting', 'Failed', 'Unknown'],
+      datasets: [
+        {
+          label: 'Cluster Count',
+          data: [0, 0, 0, 0, 0, 0, 0],
+          backgroundColor: 'rgba(40, 167, 69, 0.8)', // Green with transparency
+        },
+        {
+          label: 'NodeGroup Count',
+          data: [0, 0, 0, 0, 0, 0, 0],
+          backgroundColor: 'rgba(23, 162, 184, 0.8)', // Blue with transparency
+        },
+        {
+          label: 'Node Count',
+          data: [0, 0, 0, 0, 0, 0, 0],
+          backgroundColor: 'rgba(255, 193, 7, 0.8)', // Yellow with transparency
+        }
+      ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: {
+        duration: 0 // Disable animations for frequent updates
+      },
       plugins: {
         legend: {
-          position: 'bottom',
+          position: 'top',
           labels: {
             boxWidth: 12,
-            fontSize: 10
+            fontSize: 12
           }
         },
         tooltip: {
           callbacks: {
             label: function(context) {
-              const label = context.label || '';
-              const value = context.parsed || 0;
-              const total = context.dataset.data.reduce((a, b) => a + b, 0);
-              const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
-              return `${label}: ${value} (${percentage}%)`;
+              const label = context.dataset.label || '';
+              const value = context.parsed.y || 0;
+              return `${label}: ${value}`;
             }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            stepSize: 1
+          },
+          title: {
+            display: true,
+            text: 'Count'
+          }
+        },
+        x: {
+          title: {
+            display: true,
+            text: 'Status'
           }
         }
       }
@@ -801,13 +840,21 @@ async function refreshDashboard() {
 
 // Test connection to CB-Tumblebug
 async function testConnection() {
-  const url = `http://${dashboardConfig.hostname}:${dashboardConfig.port}/tumblebug/readyz`;
+  // Get config from parent window (index.js) - same as delete functions
+  const parentConfig = window.parent?.getConfig?.() || { 
+    hostname: 'localhost', 
+    port: '1323',
+    username: 'default', 
+    password: 'default' 
+  };
+  
+  const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/readyz`;
   
   try {
     const response = await axios.get(url, {
       auth: {
-        username: dashboardConfig.username,
-        password: dashboardConfig.password
+        username: parentConfig.username,
+        password: parentConfig.password
       },
       timeout: 10000
     });
@@ -843,13 +890,21 @@ function updateConnectionStatus(status) {
 
 // Load namespace list
 async function loadNamespaces() {
-  const url = `http://${dashboardConfig.hostname}:${dashboardConfig.port}/tumblebug/ns`;
+  // Get config from parent window (index.js) - same as delete functions
+  const parentConfig = window.parent?.getConfig?.() || { 
+    hostname: 'localhost', 
+    port: '1323',
+    username: 'default', 
+    password: 'default' 
+  };
+  
+  const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns`;
   
   try {
     const response = await axios.get(url, {
       auth: {
-        username: dashboardConfig.username,
-        password: dashboardConfig.password
+        username: parentConfig.username,
+        password: parentConfig.password
       },
       timeout: 30000
     });
@@ -888,13 +943,21 @@ async function loadMciData() {
     throw new Error('No namespace selected');
   }
   
-  const url = `http://${dashboardConfig.hostname}:${dashboardConfig.port}/tumblebug/ns/${dashboardConfig.namespace}/mci`;
+  // Get config from parent window (index.js) - same as delete functions
+  const parentConfig = window.parent?.getConfig?.() || { 
+    hostname: 'localhost', 
+    port: '1323',
+    username: 'default', 
+    password: 'default' 
+  };
+  
+  const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${dashboardConfig.namespace}/mci`;
   
   try {
     const response = await axios.get(url, {
       auth: {
-        username: dashboardConfig.username,
-        password: dashboardConfig.password
+        username: parentConfig.username,
+        password: parentConfig.password
       },
       timeout: 30000
     });
@@ -926,16 +989,24 @@ async function loadMciData() {
 async function loadResourceOverview() {
   if (!dashboardConfig.namespace) return;
   
+  // Get config from parent window (index.js) - same as delete functions
+  const parentConfig = window.parent?.getConfig?.() || { 
+    hostname: 'localhost', 
+    port: '1323',
+    username: 'default', 
+    password: 'default' 
+  };
+  
   const resources = ['vNet', 'securityGroup', 'sshKey'];
   
   for (const resourceType of resources) {
     try {
-      const url = `http://${dashboardConfig.hostname}:${dashboardConfig.port}/tumblebug/ns/${dashboardConfig.namespace}/resources/${resourceType}`;
+      const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${dashboardConfig.namespace}/resources/${resourceType}`;
       
       const response = await axios.get(url, {
         auth: {
-          username: dashboardConfig.username,
-          password: dashboardConfig.password
+          username: parentConfig.username,
+          password: parentConfig.password
         },
         timeout: 30000
       });
@@ -1040,11 +1111,25 @@ function updateStatistics() {
   
   const totalVm = vmData.length;
   
-  // Get unique providers
+  // Get unique providers from both VMs and K8s clusters
   const providers = new Set();
+  
+  // Add providers from VMs
   vmData.forEach(vm => {
     if (vm.connectionConfig && vm.connectionConfig.providerName) {
       providers.add(vm.connectionConfig.providerName);
+    }
+  });
+  
+  // Add providers from K8s clusters
+  let k8sData = [];
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    k8sData = window.parent.cloudBaristaCentralData.k8sCluster || [];
+  }
+  
+  k8sData.forEach(cluster => {
+    if (cluster.connectionConfig && cluster.connectionConfig.providerName) {
+      providers.add(cluster.connectionConfig.providerName);
     }
   });
   
@@ -1151,7 +1236,7 @@ function updateCharts() {
     console.log(`Updating charts with current data... (update #${performanceMetrics.chartUpdateCount})`);
     
     // Ensure charts exist before updating
-    if (!charts.combinedStatus || !charts.providerRegion) {
+    if (!charts.combinedStatus || !charts.providerRegion || !charts.k8sClusterStatus) {
       console.warn('Charts not initialized, skipping update');
       return;
     }
@@ -1159,8 +1244,11 @@ function updateCharts() {
     // Update MCI & VM Status Chart with efficient data processing
     updateCombinedStatusChart();
     
-    // Update Provider & Regional Distribution Chart  
+    // Update Provider & Regional Distribution Chart (VMs + Nodes)
     updateProviderRegionChart();
+    
+    // Update K8s Charts
+    updateK8sCharts();
     
     console.log('Charts updated successfully');
     
@@ -1257,13 +1345,22 @@ function updateCombinedStatusChart() {
 function updateProviderRegionChart() {
   const providerRegionData = {};
   
-  // If no VM data at all, show "No Data"
-  if (!vmData || vmData.length === 0) {
+  // Get K8s data from central store for node information
+  let k8sData = [];
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    k8sData = window.parent.cloudBaristaCentralData.k8sCluster || [];
+  }
+  
+  // Check if we have any data at all (VM or K8s)
+  const hasVmData = vmData && vmData.length > 0;
+  const hasK8sData = k8sData && k8sData.length > 0;
+  
+  if (!hasVmData && !hasK8sData) {
     // Only update if different from current state
     if (charts.providerRegion.data.labels[0] !== 'No Data') {
       charts.providerRegion.data.labels = ['No Data'];
       charts.providerRegion.data.datasets = [{
-        label: 'No VMs',
+        label: 'No Resources',
         data: [1],
         backgroundColor: ['#e9ecef']
       }];
@@ -1272,42 +1369,125 @@ function updateProviderRegionChart() {
     return;
   }
   
-  // Collect data by provider and region efficiently
-  vmData.forEach(vm => {
-    let provider = null;
-    let region = null;
-    
-    // Extract provider information
-    if (vm.connectionConfig && vm.connectionConfig.providerName) {
-      provider = vm.connectionConfig.providerName;
-    } else if (vm.location && vm.location.cloudType) {
-      provider = vm.location.cloudType;
-    }
-    
-    // Extract region information - try multiple sources
-    if (vm.region && vm.region.Region) {
-      region = vm.region.Region;
-    } else if (vm.location && vm.location.region) {
-      region = vm.location.region;
-    } else if (vm.connectionConfig && vm.connectionConfig.regionZoneInfo && vm.connectionConfig.regionZoneInfo.region) {
-      region = vm.connectionConfig.regionZoneInfo.region;
-    } else if (vm.regionZoneInfoList && vm.regionZoneInfoList.length > 0 && vm.regionZoneInfoList[0].regionName) {
-      region = vm.regionZoneInfoList[0].regionName;
-    }
-    
-    // Skip VMs without proper provider/region info
-    if (!provider || !region) {
-      return;
-    }
-    
-    // Initialize provider if not exists
-    if (!providerRegionData[provider]) {
-      providerRegionData[provider] = {};
-    }
-    
-    // Count VMs by provider and region
-    providerRegionData[provider][region] = (providerRegionData[provider][region] || 0) + 1;
-  });
+  // Collect VM data by provider and region
+  if (hasVmData) {
+    vmData.forEach(vm => {
+      let provider = null;
+      let region = null;
+      
+      // Extract provider information
+      if (vm.connectionConfig && vm.connectionConfig.providerName) {
+        provider = vm.connectionConfig.providerName;
+      } else if (vm.location && vm.location.cloudType) {
+        provider = vm.location.cloudType;
+      }
+      
+      // Extract region information - try multiple sources
+      if (vm.region && vm.region.Region) {
+        region = vm.region.Region;
+      } else if (vm.location && vm.location.region) {
+        region = vm.location.region;
+      } else if (vm.connectionConfig && vm.connectionConfig.regionZoneInfo && vm.connectionConfig.regionZoneInfo.region) {
+        region = vm.connectionConfig.regionZoneInfo.region;
+      } else if (vm.regionZoneInfoList && vm.regionZoneInfoList.length > 0 && vm.regionZoneInfoList[0].regionName) {
+        region = vm.regionZoneInfoList[0].regionName;
+      }
+      
+      // Skip VMs without proper provider/region info
+      if (!provider || !region) {
+        return;
+      }
+      
+      // Initialize provider if not exists
+      if (!providerRegionData[provider]) {
+        providerRegionData[provider] = {};
+      }
+      
+      // Count VMs by provider and region
+      providerRegionData[provider][region] = (providerRegionData[provider][region] || 0) + 1;
+    });
+  }
+  
+  // Collect K8s Node data by provider and region
+  if (hasK8sData) {
+    console.log('Processing K8s data for Provider & Region chart:', k8sData);
+    k8sData.forEach(cluster => {
+      let provider = null;
+      let region = null;
+      
+      console.log('Processing K8s cluster:', cluster.id, 'Connection:', cluster.connectionName);
+      console.log('Full cluster object:', cluster);
+      
+      // Extract provider information from cluster
+      if (cluster.connectionConfig && cluster.connectionConfig.providerName) {
+        provider = cluster.connectionConfig.providerName.toLowerCase(); // Normalize to lowercase
+        console.log('Provider from connectionConfig.providerName:', provider);
+      } else if (cluster.location && cluster.location.cloudType) {
+        provider = cluster.location.cloudType.toLowerCase(); // Normalize to lowercase
+        console.log('Provider from location.cloudType:', provider);
+      } else if (cluster.k8sNodeGroupList && cluster.k8sNodeGroupList.length > 0 && cluster.k8sNodeGroupList[0].connectionConfig && cluster.k8sNodeGroupList[0].connectionConfig.providerName) {
+        provider = cluster.k8sNodeGroupList[0].connectionConfig.providerName.toLowerCase(); // Normalize to lowercase
+        console.log('Provider from k8sNodeGroupList[0].connectionConfig.providerName:', provider);
+      }
+      
+      // Extract region information from cluster
+      if (cluster.connectionConfig && cluster.connectionConfig.regionDetail && cluster.connectionConfig.regionDetail.regionId) {
+        region = cluster.connectionConfig.regionDetail.regionId;
+        console.log('Region from connectionConfig.regionDetail.regionId:', region);
+      } else if (cluster.region && cluster.region.Region) {
+        region = cluster.region.Region;
+        console.log('Region from cluster.region.Region:', region);
+      } else if (cluster.location && cluster.location.region) {
+        region = cluster.location.region;
+        console.log('Region from cluster.location.region:', region);
+      }
+      
+      console.log('Final extracted - Provider:', provider, 'Region:', region);
+      
+      // Skip clusters without proper provider/region info
+      if (!provider || !region) {
+        console.log('Skipping cluster due to missing provider or region info');
+        return;
+      }
+      
+      // Initialize provider if not exists
+      if (!providerRegionData[provider]) {
+        providerRegionData[provider] = {};
+      }
+      
+      // Count nodes from all node groups in this cluster
+      if (cluster.k8sNodeGroupList && cluster.k8sNodeGroupList.length > 0) {
+        console.log('Processing node groups:', cluster.k8sNodeGroupList);
+        cluster.k8sNodeGroupList.forEach(nodeGroup => {
+          console.log('Processing NodeGroup:', nodeGroup.name || nodeGroup.id);
+          console.log('NodeGroup data:', nodeGroup);
+          
+          let nodeCount = 0;
+          
+          // Use only actual k8sNodes array length (real existing nodes)
+          if (nodeGroup.k8sNodes && Array.isArray(nodeGroup.k8sNodes)) {
+            nodeCount = nodeGroup.k8sNodes.length;
+            console.log('NodeCount from k8sNodes.length (actual nodes):', nodeCount);
+          } else {
+            console.log('No k8sNodes array found, nodeCount = 0');
+          }
+          
+          console.log('Final NodeCount for', nodeGroup.name || nodeGroup.id, ':', nodeCount);
+          
+          if (nodeCount > 0) {
+            // Add nodes to provider/region count
+            providerRegionData[provider][region] = (providerRegionData[provider][region] || 0) + nodeCount;
+            console.log(`Added ${nodeCount} nodes to ${provider}/${region}. Total now:`, providerRegionData[provider][region]);
+          } else {
+            console.log('NodeCount is 0, not adding to chart data');
+          }
+        });
+      } else {
+        console.log('No node groups found in cluster');
+      }
+    });
+    console.log('Final providerRegionData after K8s processing:', providerRegionData);
+  }
   
   // Process data for stacked bar chart
   const providers = Object.keys(providerRegionData);
@@ -1348,7 +1528,7 @@ function updateProviderRegionChart() {
   if (providers.length === 0) {
     charts.providerRegion.data.labels = ['No Data'];
     charts.providerRegion.data.datasets = [{
-      label: 'No VMs',
+      label: 'No Resources',
       data: [1],
       backgroundColor: ['#e9ecef']
     }];
@@ -1398,103 +1578,149 @@ function updateK8sCharts() {
     }
 
     console.log('K8s Chart Update - Data length:', k8sData.length);
-    console.log('K8s Chart Update - Full data:', k8sData);
 
-    // If no K8s data at all, show "No Clusters"
-    if (!k8sData || k8sData.length === 0) {
-      console.log('K8s Chart: No data, showing "No Clusters"');
-      charts.k8sClusterStatus.data.labels = ['No Clusters'];
-      charts.k8sClusterStatus.data.datasets[0].data = [1];
-      charts.k8sClusterStatus.data.datasets[0].backgroundColor = ['#e9ecef'];
-      charts.k8sClusterStatus.data.datasets[0].borderColor = ['#e9ecef'];
-      charts.k8sClusterStatus.update('none');
-      console.log('K8s Chart: Updated with "No Clusters"');
-      return;
-    }
-
-    // Update K8s Cluster Status Chart
-    const k8sStatusCounts = {
+    // Initialize status counts
+    const clusterStatusCounts = {
       'Creating': 0,
       'Active': 0,
-      'Deleting': 0,
+      'Inactive': 0,
       'Updating': 0,
+      'Deleting': 0,
+      'Failed': 0,
+      'Unknown': 0
+    };
+    
+    const nodeGroupStatusCounts = {
+      'Creating': 0,
+      'Active': 0,
+      'Inactive': 0,
+      'Updating': 0,
+      'Deleting': 0,
+      'Failed': 0,
+      'Unknown': 0
+    };
+    
+    const nodeStatusCounts = {
+      'Creating': 0,
+      'Active': 0,
+      'Inactive': 0,
+      'Updating': 0,
+      'Deleting': 0,
       'Failed': 0,
       'Unknown': 0
     };
 
+    // Process K8s cluster data
     k8sData.forEach(cluster => {
-      const status = cluster.status || 'Unknown';
-      console.log('K8s Chart: Processing cluster', cluster.id, 'with status:', status);
+      console.log('Processing cluster:', cluster.id, 'status:', cluster.status);
       
-      // Use actual K8s status values directly
-      if (k8sStatusCounts.hasOwnProperty(status)) {
-        k8sStatusCounts[status]++;
+      // Count clusters by status - normalize to match our chart labels
+      let clusterStatus = cluster.status || 'Unknown';
+      // Normalize status: convert first letter to uppercase, rest to lowercase
+      if (clusterStatus !== 'Unknown') {
+        clusterStatus = clusterStatus.charAt(0).toUpperCase() + clusterStatus.slice(1).toLowerCase();
+      }
+      
+      console.log('Normalized cluster status:', clusterStatus);
+      
+      if (clusterStatusCounts.hasOwnProperty(clusterStatus)) {
+        clusterStatusCounts[clusterStatus]++;
       } else {
-        k8sStatusCounts['Unknown']++;
+        clusterStatusCounts['Unknown']++;
       }
       
-      console.log('K8s Chart: Cluster', cluster.id, 'status:', status);
-    });
-
-    // Filter out zero counts for cleaner chart
-    const k8sStatusLabels = [];
-    const k8sStatusData = [];
-    const k8sStatusColors = [];
-    
-    const statusColorMap = {
-      'Creating': '#17a2b8',    // blue
-      'Active': '#28a745',      // green
-      'Deleting': '#dc3545',    // red
-      'Updating': '#ffc107',    // yellow
-      'Failed': '#dc3545',      // red
-      'Unknown': '#6c757d'      // gray
-    };
-
-    Object.entries(k8sStatusCounts).forEach(([status, count]) => {
-      if (count > 0) {
-        k8sStatusLabels.push(status);
-        k8sStatusData.push(count);
-        k8sStatusColors.push(statusColorMap[status]);
+      // Process node groups
+      if (cluster.k8sNodeGroupList && cluster.k8sNodeGroupList.length > 0) {
+        cluster.k8sNodeGroupList.forEach(nodeGroup => {
+          console.log('Processing nodeGroup:', nodeGroup.name || nodeGroup.id, 'status:', nodeGroup.status);
+          
+          // Count node groups by status (use cluster status if nodeGroup status not available)
+          let nodeGroupStatus = nodeGroup.status || cluster.status || 'Unknown';
+          // Normalize status: convert first letter to uppercase, rest to lowercase
+          if (nodeGroupStatus !== 'Unknown') {
+            nodeGroupStatus = nodeGroupStatus.charAt(0).toUpperCase() + nodeGroupStatus.slice(1).toLowerCase();
+          }
+          
+          console.log('Normalized nodeGroup status:', nodeGroupStatus);
+          
+          if (nodeGroupStatusCounts.hasOwnProperty(nodeGroupStatus)) {
+            nodeGroupStatusCounts[nodeGroupStatus]++;
+          } else {
+            nodeGroupStatusCounts['Unknown']++;
+          }
+          
+          // Count only actual existing nodes
+          let nodeCount = 0;
+          if (nodeGroup.k8sNodes && Array.isArray(nodeGroup.k8sNodes)) {
+            nodeCount = nodeGroup.k8sNodes.length;
+          }
+          
+          console.log('NodeGroup node count (actual nodes):', nodeCount);
+          
+          // Add nodes with same status as their node group
+          if (nodeStatusCounts.hasOwnProperty(nodeGroupStatus)) {
+            nodeStatusCounts[nodeGroupStatus] += nodeCount;
+          } else {
+            nodeStatusCounts['Unknown'] += nodeCount;
+          }
+        });
       }
     });
-
-    // Handle empty data for K8s status chart
-    if (k8sStatusLabels.length === 0) {
-      console.log('K8s Chart: No valid status data, showing "No Clusters"');
-      charts.k8sClusterStatus.data.labels = ['No Clusters'];
+    
+    // Prepare data for chart (same order as labels)
+    const statusLabels = ['Creating', 'Active', 'Inactive', 'Updating', 'Deleting', 'Failed', 'Unknown'];
+    const clusterDataArray = statusLabels.map(label => clusterStatusCounts[label] || 0);
+    const nodeGroupDataArray = statusLabels.map(label => nodeGroupStatusCounts[label] || 0);
+    const nodeDataArray = statusLabels.map(label => nodeStatusCounts[label] || 0);
+    
+    // Check if there's any data to display
+    const hasClusterData = clusterDataArray.some(count => count > 0);
+    const hasNodeGroupData = nodeGroupDataArray.some(count => count > 0);
+    const hasNodeData = nodeDataArray.some(count => count > 0);
+    
+    console.log('K8s Chart Data:', {
+      clusters: clusterDataArray,
+      nodeGroups: nodeGroupDataArray,
+      nodes: nodeDataArray,
+      hasData: hasClusterData || hasNodeGroupData || hasNodeData,
+      clusterStatusCounts: clusterStatusCounts,
+      nodeGroupStatusCounts: nodeGroupStatusCounts,
+      nodeStatusCounts: nodeStatusCounts
+    });
+    
+    // Update chart - show "No Data" if no data
+    if (!hasClusterData && !hasNodeGroupData && !hasNodeData) {
+      charts.k8sClusterStatus.data.labels = ['No Data'];
       charts.k8sClusterStatus.data.datasets[0].data = [1];
+      charts.k8sClusterStatus.data.datasets[1].data = [0];
+      charts.k8sClusterStatus.data.datasets[2].data = [0];
       charts.k8sClusterStatus.data.datasets[0].backgroundColor = ['#e9ecef'];
-      charts.k8sClusterStatus.data.datasets[0].borderColor = ['#e9ecef'];
-      charts.k8sClusterStatus.data.datasets[0].borderWidth = 1;
+      charts.k8sClusterStatus.data.datasets[1].backgroundColor = ['#e9ecef'];
+      charts.k8sClusterStatus.data.datasets[2].backgroundColor = ['#e9ecef'];
     } else {
-      console.log('K8s Chart: Valid data found, labels:', k8sStatusLabels, 'data:', k8sStatusData);
-      charts.k8sClusterStatus.data.labels = k8sStatusLabels;
-      charts.k8sClusterStatus.data.datasets[0].data = k8sStatusData;
-      charts.k8sClusterStatus.data.datasets[0].backgroundColor = k8sStatusColors;
-      // Reset border properties for normal data
-      charts.k8sClusterStatus.data.datasets[0].borderColor = k8sStatusColors;
-      charts.k8sClusterStatus.data.datasets[0].borderWidth = 1;
+      charts.k8sClusterStatus.data.labels = statusLabels;
+      charts.k8sClusterStatus.data.datasets[0].data = clusterDataArray;
+      charts.k8sClusterStatus.data.datasets[1].data = nodeGroupDataArray;
+      charts.k8sClusterStatus.data.datasets[2].data = nodeDataArray;
+      // Reset colors to original
+      charts.k8sClusterStatus.data.datasets[0].backgroundColor = 'rgba(40, 167, 69, 0.8)';
+      charts.k8sClusterStatus.data.datasets[1].backgroundColor = 'rgba(23, 162, 184, 0.8)';
+      charts.k8sClusterStatus.data.datasets[2].backgroundColor = 'rgba(255, 193, 7, 0.8)';
     }
-
-    // Update K8s cluster status chart
-    if (charts.k8sClusterStatus) {
-      charts.k8sClusterStatus.update('none');
-      console.log('K8s Chart: Updated successfully');
-    } else {
-      console.error('K8s Chart: Chart object not found');
-    }
-
-    console.log('=== K8s Chart Update Completed ===');
+    
+    charts.k8sClusterStatus.update('none'); // Disable animation for better performance
+    console.log('K8s Chart: Updated successfully');
 
   } catch (error) {
     console.error('Error updating K8s charts:', error);
-    // Fallback: ensure chart shows "No Clusters" on error
+    // Fallback: ensure chart shows "No Data" on error
     if (charts.k8sClusterStatus) {
-      charts.k8sClusterStatus.data.labels = ['No Clusters'];
+      charts.k8sClusterStatus.data.labels = ['No Data'];
       charts.k8sClusterStatus.data.datasets[0].data = [1];
-      charts.k8sClusterStatus.data.datasets[0].backgroundColor = ['#e9ecef'];
+      charts.k8sClusterStatus.data.datasets[1].data = [0];
+      charts.k8sClusterStatus.data.datasets[2].data = [0];
       charts.k8sClusterStatus.update('none');
-      console.log('K8s Chart: Fallback "No Clusters" applied');
+      console.log('K8s Chart: Fallback "No Data" applied');
     }
   }
 }
@@ -1916,15 +2142,28 @@ async function controlMci(mciId, action) {
     return;
   }
   
-  const url = `http://${dashboardConfig.hostname}:${dashboardConfig.port}/tumblebug/ns/${dashboardConfig.namespace}/control/mci/${mciId}?action=${action}`;
+  // Get config and namespace from parent window (index.js) - same as delete functions
+  const parentConfig = window.parent?.getConfig?.() || { 
+    hostname: 'localhost', 
+    port: '1323',
+    username: 'default', 
+    password: 'default' 
+  };
+  
+  // Get current namespace from parent window's namespace element
+  const namespaceElement = window.parent?.document?.getElementById('namespace') || 
+                          window.parent?.document?.getElementById('namespace-control');
+  const currentNamespace = namespaceElement?.value || 'default';
+  
+  const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${currentNamespace}/control/mci/${mciId}?action=${action}`;
   
   try {
     showRefreshIndicator(true);
     
     const response = await axios.get(url, {
       auth: {
-        username: dashboardConfig.username,
-        password: dashboardConfig.password
+        username: parentConfig.username,
+        password: parentConfig.password
       },
       timeout: 60000
     });
@@ -1950,15 +2189,28 @@ async function controlVm(mciId, vmId, action) {
     return;
   }
   
-  const url = `http://${dashboardConfig.hostname}:${dashboardConfig.port}/tumblebug/ns/${dashboardConfig.namespace}/control/mci/${mciId}/vm/${vmId}?action=${action}`;
+  // Get config and namespace from parent window (index.js) - same as delete functions
+  const parentConfig = window.parent?.getConfig?.() || { 
+    hostname: 'localhost', 
+    port: '1323',
+    username: 'default', 
+    password: 'default' 
+  };
+  
+  // Get current namespace from parent window's namespace element
+  const namespaceElement = window.parent?.document?.getElementById('namespace') || 
+                          window.parent?.document?.getElementById('namespace-control');
+  const currentNamespace = namespaceElement?.value || 'default';
+  
+  const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${currentNamespace}/control/mci/${mciId}/vm/${vmId}?action=${action}`;
   
   try {
     showRefreshIndicator(true);
     
     const response = await axios.get(url, {
       auth: {
-        username: dashboardConfig.username,
-        password: dashboardConfig.password
+        username: parentConfig.username,
+        password: parentConfig.password
       },
       timeout: 60000
     });
@@ -2348,6 +2600,8 @@ function updateK8sClusterTable() {
       const status = cluster.status.toLowerCase();
       if (status === 'active' || status === 'running') {
         statusClass = 'active';
+      } else if (status === 'inactive') {
+        statusClass = 'inactive';
       } else if (status === 'creating') {
         statusClass = 'creating';
       } else if (status === 'updating') {
@@ -2379,7 +2633,6 @@ function updateK8sClusterTable() {
     
     row.innerHTML = `
       <td title="${cluster.id}"><strong>${smartTruncate(cluster.id, 'id')}</strong></td>
-      <td title="${cluster.name || 'N/A'}">${smartTruncate(cluster.name || 'N/A', 'name')}</td>
       <td><span class="status-badge status-${statusClass}">${cluster.status || 'Unknown'}</span></td>
       <td title="${cluster.connectionConfig?.providerName || 'N/A'}">${smartTruncate(cluster.connectionConfig?.providerName || 'N/A', 'provider')}</td>
       <td title="${cluster.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(cluster.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
@@ -2570,6 +2823,8 @@ function updateK8sNodeGroupTable() {
       const status = nodeGroup.status.toLowerCase();
       if (status === 'active' || status === 'running') {
         statusClass = 'active';
+      } else if (status === 'inactive') {
+        statusClass = 'inactive';
       } else if (status === 'creating') {
         statusClass = 'creating';
       } else if (status === 'updating') {
@@ -2586,17 +2841,17 @@ function updateK8sNodeGroupTable() {
       `Enabled (${nodeGroup.minNodeSize || nodeGroup.minSize || 0}-${nodeGroup.maxNodeSize || nodeGroup.maxSize || 0})` : 
       'Disabled';
     
-    // Min/Max size display - 실제 필드명 사용
+    // Min/Max size display - using actual field names
     const minSize = nodeGroup.minNodeSize || nodeGroup.minSize || 0;
     const maxSize = nodeGroup.maxNodeSize || nodeGroup.maxSize || 0;
     const sizeInfo = `${minSize} / ${maxSize}`;
     
-    // Nodes info - 실제 노드 수 / 원하는 노드 수
+    // Nodes info - actual node count / desired node count
     const actualNodes = nodeGroup.k8sNodes ? nodeGroup.k8sNodes.length : 0;
     const desiredNodes = nodeGroup.desiredNodeSize || nodeGroup.desiredCapacity || 0;
     const nodesInfo = `${actualNodes}/${desiredNodes}`;
     
-    // Spec ID - 실제 필드명 사용  
+    // Spec ID - using actual field name  
     const specId = nodeGroup.specId || nodeGroup.vmSpecName || 'N/A';
     
     // Image ID - use actual field name
@@ -3431,25 +3686,53 @@ function toggleAutoScaling(clusterId, nodeGroupName, enable) {
 }
 
 function scaleNodeGroup(clusterId, nodeGroupName) {
+  // Get current node group info to prefill values
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  const k8sData = centralData.k8sCluster || [];
+  const cluster = k8sData.find(c => c.id === clusterId);
+  let currentNodeGroup = null;
+  
+  if (cluster && cluster.k8sNodeGroupList) {
+    currentNodeGroup = cluster.k8sNodeGroupList.find(ng => ng.name === nodeGroupName || ng.id === nodeGroupName);
+  }
+  
+  // Set default values from current node group if available
+  const defaultDesired = currentNodeGroup?.desiredNodeSize || 1;
+  const defaultMin = currentNodeGroup?.minNodeSize || 0;
+  const defaultMax = currentNodeGroup?.maxNodeSize || 10;
+  
   Swal.fire({
     title: 'Scale Node Group',
     html: `
-      <div class="form-group">
-        <label for="desiredCapacity">Desired Capacity:</label>
-        <input type="number" id="desiredCapacity" class="form-control" min="0" max="100" value="1">
-      </div>
-      <div class="form-group">
-        <label for="minSize">Min Size:</label>
-        <input type="number" id="minSize" class="form-control" min="0" max="100" value="0">
-      </div>
-      <div class="form-group">
-        <label for="maxSize">Max Size:</label>
-        <input type="number" id="maxSize" class="form-control" min="1" max="100" value="10">
+      <div style="text-align: left;">
+        <p><strong>Cluster:</strong> ${clusterId}</p>
+        <p><strong>Node Group:</strong> ${nodeGroupName}</p>
+        <div class="form-group" style="margin-bottom: 15px;">
+          <label for="desiredCapacity" style="display: block; margin-bottom: 5px;">Desired Capacity:</label>
+          <input type="number" id="desiredCapacity" class="form-control" min="0" max="100" value="${defaultDesired}" style="width: 100%; padding: 8px;">
+        </div>
+        <div class="form-group" style="margin-bottom: 15px;">
+          <label for="minSize" style="display: block; margin-bottom: 5px;">Min Size:</label>
+          <input type="number" id="minSize" class="form-control" min="0" max="100" value="${defaultMin}" style="width: 100%; padding: 8px;">
+        </div>
+        <div class="form-group" style="margin-bottom: 15px;">
+          <label for="maxSize" style="display: block; margin-bottom: 5px;">Max Size:</label>
+          <input type="number" id="maxSize" class="form-control" min="1" max="100" value="${defaultMax}" style="width: 100%; padding: 8px;">
+        </div>
+        <div style="background-color: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 12px; color: #6c757d;">
+          <strong>Note:</strong> This will update the autoscale configuration for the node group. 
+          Changes may take a few minutes to take effect.
+        </div>
       </div>
     `,
     showCancelButton: true,
-    confirmButtonText: 'Scale',
+    confirmButtonText: 'Scale Node Group',
     cancelButtonText: 'Cancel',
+    width: '600px',
     preConfirm: () => {
       const desiredCapacity = document.getElementById('desiredCapacity').value;
       const minSize = document.getElementById('minSize').value;
@@ -3460,27 +3743,109 @@ function scaleNodeGroup(clusterId, nodeGroupName) {
         return false;
       }
       
-      if (parseInt(minSize) > parseInt(maxSize)) {
+      const desired = parseInt(desiredCapacity);
+      const min = parseInt(minSize);
+      const max = parseInt(maxSize);
+      
+      if (min > max) {
         Swal.showValidationMessage('Min size cannot be greater than max size');
         return false;
       }
       
-      if (parseInt(desiredCapacity) < parseInt(minSize) || parseInt(desiredCapacity) > parseInt(maxSize)) {
+      if (desired < min || desired > max) {
         Swal.showValidationMessage('Desired capacity must be between min and max size');
         return false;
       }
       
       return {
-        desiredCapacity: parseInt(desiredCapacity),
-        minSize: parseInt(minSize),
-        maxSize: parseInt(maxSize)
+        desiredNodeSize: desired.toString(),
+        minNodeSize: min.toString(),
+        maxNodeSize: max.toString()
       };
     }
-  }).then((result) => {
+  }).then(async (result) => {
     if (result.isConfirmed) {
       console.log(`Scaling node group ${nodeGroupName} in cluster ${clusterId}:`, result.value);
-      // TODO: Implement actual API call
-      showSuccessMessage(`Node group ${nodeGroupName} scaling initiated`);
+      
+      // Show loading indicator
+      Swal.fire({
+        title: 'Scaling Node Group...',
+        text: 'Please wait while the node group is being scaled.',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+      
+      try {
+        // Get config and namespace from parent window (index.js) - same as delete functions
+        const parentConfig = window.parent?.getConfig?.() || { 
+          hostname: 'localhost', 
+          port: '1323',
+          username: 'default', 
+          password: 'default' 
+        };
+        
+        // Get current namespace from parent window's namespace element
+        const namespaceElement = window.parent?.document?.getElementById('namespace') || 
+                                window.parent?.document?.getElementById('namespace-control');
+        const currentNamespace = namespaceElement?.value || 'default';
+        
+        // Call CB-Tumblebug API
+        const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${currentNamespace}/k8sCluster/${clusterId}/k8sNodeGroup/${nodeGroupName}/autoscaleSize`;
+        
+        const response = await fetch(url, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Basic ' + btoa(`${parentConfig.username}:${parentConfig.password}`)
+          },
+          body: JSON.stringify(result.value)
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+        
+        const responseData = await response.json();
+        console.log('Scale node group response:', responseData);
+        
+        // Close loading dialog and show success
+        Swal.fire({
+          title: 'Success!',
+          text: `Node group ${nodeGroupName} has been scaled successfully.`,
+          icon: 'success',
+          timer: 3000,
+          showConfirmButton: false
+        });
+        
+        // Refresh the node group table to show updated values
+        if (typeof updateK8sNodeGroupTable === 'function') {
+          // Wait a moment for backend to update
+          setTimeout(() => {
+            updateK8sNodeGroupTable();
+          }, 2000);
+        }
+        
+        // Also refresh K8s cluster data from parent window
+        if (window.parent && typeof window.parent.loadK8sClusterData === 'function') {
+          setTimeout(() => {
+            window.parent.loadK8sClusterData();
+          }, 3000);
+        }
+        
+      } catch (error) {
+        console.error('Error scaling node group:', error);
+        
+        Swal.fire({
+          title: 'Error',
+          text: `Failed to scale node group: ${error.message}`,
+          icon: 'error',
+          confirmButtonText: 'OK'
+        });
+      }
     }
   });
 }
@@ -3609,6 +3974,7 @@ window.viewKeyMaterial = viewKeyMaterial;
 window.controlK8sCluster = controlK8sCluster;
 window.testConnection = testConnection;
 window.resizeDisk = resizeDisk;
+window.scaleNodeGroup = scaleNodeGroup;
 window.showGitHub = showGitHub;
 window.openLink = openLink;
 window.openInfoLink = openInfoLink;
