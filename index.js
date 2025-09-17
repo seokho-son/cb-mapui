@@ -4404,6 +4404,30 @@ function createMci() {
 }
 window.createMci = createMci;
 
+// Function to check if K8s node image designation is needed
+async function checkK8sNodeImageDesignation(providerName, hostname, port, username, password) {
+  try {
+    const url = `http://${hostname}:${port}/tumblebug/checkK8sNodeImageDesignation?providerName=${providerName}`;
+    
+    const response = await axios.get(url, {
+      auth: {
+        username: username,
+        password: password
+      },
+      headers: {
+        'accept': 'application/json'
+      }
+    });
+    
+    // Return true if image designation is needed, false if should use "default"
+    return response.data?.result === "true";
+  } catch (error) {
+    console.warn("Failed to check K8s node image designation:", error);
+    // Default to true (use provided imageId) if check fails
+    return true;
+  }
+}
+
 // K8s Cluster creation function
 function createK8sCluster() {
   if (vmSubGroupReqeustFromSpecList.length !== 1) {
@@ -4540,26 +4564,34 @@ function createK8sCluster() {
       if (result.isConfirmed) {
         const { clusterName, nodeGroupName, k8sVersion } = result.value;
         
-        // Create K8s cluster request body
-        const k8sClusterReq = {
-          imageId: subGroup.imageId || "default",
-          specId: subGroup.specId,
-          name: clusterName,
-          nodeGroupName: nodeGroupName
-        };
+        // Check if image designation is needed
+        taskId = addSpinnerTask("Checking image requirements");
         
-        // Add version if specified
-        if (k8sVersion) {
-          k8sClusterReq.version = k8sVersion;
-        }
+        checkK8sNodeImageDesignation(spec.providerName, hostname, port, username, password)
+          .then(imageDesignationNeeded => {
+            removeSpinnerTask(taskId);
+            
+            // Create K8s cluster request body
+            const k8sClusterReq = {
+              imageId: imageDesignationNeeded ? (subGroup.imageId || "default") : "default",
+              specId: subGroup.specId,
+              name: clusterName,
+              nodeGroupName: nodeGroupName
+            };
+            
+            // Add version if specified
+            if (k8sVersion) {
+              k8sClusterReq.version = k8sVersion;
+            }
 
-        const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sClusterDynamic`;
-        
-        console.log("Creating K8s Cluster:", k8sClusterReq);
-        
-        taskId = addSpinnerTask("Create K8s "+k8sClusterReq.name);
-        
-        axios.post(url, k8sClusterReq, {
+            const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sClusterDynamic`;
+            
+            console.log("Creating K8s Cluster:", k8sClusterReq);
+            console.log("Image designation needed:", imageDesignationNeeded);
+            
+            taskId = addSpinnerTask("Create K8s "+k8sClusterReq.name);
+            
+            axios.post(url, k8sClusterReq, {
           auth: {
             username: username,
             password: password
@@ -4598,6 +4630,12 @@ function createK8sCluster() {
           
           errorAlert(errorMessage);
         });
+          })
+          .catch(function (error) {
+            removeSpinnerTask(taskId);
+            console.error("Failed to check image designation:", error);
+            errorAlert("Failed to check image requirements. Please try again.");
+          });
       }
     }).catch(function (error) {
       // Handle any unexpected errors in the Swal dialog
@@ -4612,140 +4650,17 @@ function createK8sCluster() {
     removeSpinnerTask(versionTaskId);
     console.error("Failed to get K8s versions:", error);
     
-    // If version fetch fails, show dialog without version options
-    console.log("Version fetch failed, showing dialog with custom version input only");
+    // Extract error message from server response
+    let errorMessage = 'Unknown error occurred';
+    if (error.response && error.response.data && error.response.data.message) {
+      errorMessage = error.response.data.message;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
     
-    Swal.fire({
-      title: "Create Kubernetes Cluster",
-      html: `
-        <div style="text-align: left; padding: 15px;">
-          <div style="margin-bottom: 15px;">
-            <label style="font-weight: bold;">Cluster Name:</label><br>
-            <input type="text" id="k8sClusterName" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" 
-                   value="${k8sClusterRandomName}" placeholder="Enter cluster name">
-          </div>
-          <div style="margin-bottom: 15px;">
-            <label style="font-weight: bold;">Node Group Name:</label><br>
-            <input type="text" id="k8sNodeGroupName" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" 
-                   value="${k8sNodeGroupRandomName}" placeholder="Enter node group name">
-          </div>
-          <div style="margin-bottom: 15px;">
-            <label style="font-weight: bold;">Kubernetes Version (Optional):</label><br>
-            <input type="text" id="k8sCustomVersion" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" 
-                   placeholder="Enter K8s version (e.g., 1.30.12-gke.1086000) or leave empty for default">
-            <div style="font-size: 0.8em; color: #666; margin-top: 5px;">
-              Failed to fetch available versions. Enter manually or leave empty for default.
-            </div>
-          </div>
-          <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
-            <strong>Configuration:</strong><br>
-            <small>Provider: ${spec.providerName}</small><br>
-            <small>Region: ${spec.regionName}</small><br>
-            <small>Spec: ${spec.cspSpecName}</small><br>
-            <small>Image: ${subGroup.imageId}</small>
-          </div>
-          <div style="font-size: 0.9em; color: #666;">
-            Note: This will create a new Kubernetes cluster using the configured SubGroup settings.
-          </div>
-        </div>
-      `,
-      showCancelButton: true,
-      confirmButtonText: "Create K8s Cluster",
-      cancelButtonText: "Cancel",
-      preConfirm: () => {
-        const clusterName = document.getElementById('k8sClusterName').value.trim();
-        const nodeGroupName = document.getElementById('k8sNodeGroupName').value.trim();
-        const k8sVersion = document.getElementById('k8sCustomVersion').value.trim();
-        
-        if (!clusterName) {
-          Swal.showValidationMessage('Please enter cluster name');
-          return false;
-        }
-        if (!nodeGroupName) {
-          Swal.showValidationMessage('Please enter node group name');
-          return false;
-        }
-        
-        return { clusterName, nodeGroupName, k8sVersion };
-      }
-    }).then((result) => {
-      let taskId; // Declare taskId in higher scope for error handling
-      
-      if (result.isConfirmed) {
-        const { clusterName, nodeGroupName, k8sVersion } = result.value;
-        
-        // Create K8s cluster request body
-        const k8sClusterReq = {
-          imageId: subGroup.imageId || "default",
-          specId: subGroup.specId,
-          name: clusterName,
-          nodeGroupName: nodeGroupName
-        };
-        
-        // Add version if specified
-        if (k8sVersion) {
-          k8sClusterReq.version = k8sVersion;
-        }
-
-        const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sClusterDynamic`;
-        
-        console.log("Creating K8s Cluster (fallback):", k8sClusterReq);
-        
-        taskId = addSpinnerTask("Create K8s "+k8sClusterReq.name);
-        
-        axios.post(url, k8sClusterReq, {
-          auth: {
-            username: username,
-            password: password
-          },
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }).then(function (response) {
-          removeSpinnerTask(taskId);
-          console.log("K8s Cluster creation response (fallback):", response.data);
-          
-          // Safely extract response data with fallbacks
-          const clusterId = response.data?.id || 'Unknown';
-          const clusterStatus = response.data?.status || 'Unknown';
-          const connectionName = response.data?.connectionName || 'Unknown';
-          
-          Swal.fire({
-            title: "K8s Cluster Created Successfully!",
-            html: `
-              <div style="text-align: left;">
-                <p><strong>Cluster ID:</strong> ${clusterId}</p>
-                <p><strong>Status:</strong> ${clusterStatus}</p>
-                <p><strong>Provider:</strong> ${connectionName}</p>
-                ${k8sVersion ? `<p><strong>Version:</strong> ${k8sVersion}</p>` : ''}
-              </div>
-            `,
-            icon: "success",
-            confirmButtonText: "OK"
-          });
-          
-          // K8s cluster created successfully (fallback), no additional refresh needed
-          
-        }).catch(function (error) {
-          removeSpinnerTask(taskId);
-          console.error("K8s Cluster creation failed (fallback):", error);
-          
-          let errorMessage = "Failed to create K8s Cluster";
-          if (error.response && error.response.data) {
-            errorMessage += `\n${error.response.data.message || error.response.data.error || ''}`;
-          }
-          
-          errorAlert(errorMessage);
-        });
-      }
-    }).catch(function (error) {
-      // Handle any unexpected errors in the Swal dialog (fallback)
-      console.error("K8s Cluster creation dialog error (fallback):", error);
-      // Clean up spinner if it was started
-      if (taskId) {
-        removeSpinnerTask(taskId);
-      }
-    });
+    // Show error message and stop execution
+    errorAlert(`Failed to get available Kubernetes versions.\n\nError: ${errorMessage}\n\nProvider: ${spec.providerName}\nRegion: ${spec.regionName}`);
+    return; // Stop execution
   });
 }
 window.createK8sCluster = createK8sCluster;
@@ -4918,20 +4833,28 @@ function addNodeGroupToK8sCluster() {
       if (result.isConfirmed) {
         const { clusterId, nodeGroupName } = result.value;
         
-        // Create NodeGroup request body
-        const nodeGroupReq = {
-          imageId: subGroup.imageId || "default",
-          specId: subGroup.specId,
-          name: nodeGroupName
-        };
-
-        const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster/${clusterId}/k8sNodeGroupDynamic`;
+        // Check if image designation is needed
+        taskId = addSpinnerTask("Checking image requirements");
         
-        console.log("Adding NodeGroup to K8s Cluster:", nodeGroupReq);
+        checkK8sNodeImageDesignation(spec.providerName, hostname, port, username, password)
+          .then(imageDesignationNeeded => {
+            removeSpinnerTask(taskId);
+            
+            // Create NodeGroup request body
+            const nodeGroupReq = {
+              imageId: imageDesignationNeeded ? (subGroup.imageId || "default") : "default",
+              specId: subGroup.specId,
+              name: nodeGroupName
+            };
 
-        taskId = addSpinnerTask("Add NodeGroup " + nodeGroupReq.name);
+            const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster/${clusterId}/k8sNodeGroupDynamic`;
+            
+            console.log("Adding NodeGroup to K8s Cluster:", nodeGroupReq);
+            console.log("Image designation needed:", imageDesignationNeeded);
 
-        axios.post(url, nodeGroupReq, {
+            taskId = addSpinnerTask("Add NodeGroup " + nodeGroupReq.name);
+
+            axios.post(url, nodeGroupReq, {
           auth: {
             username: username,
             password: password
@@ -4973,6 +4896,12 @@ function addNodeGroupToK8sCluster() {
           
           errorAlert(errorMessage);
         });
+          })
+          .catch(function (error) {
+            removeSpinnerTask(taskId);
+            console.error("Failed to check image designation:", error);
+            errorAlert("Failed to check image requirements. Please try again.");
+          });
       }
     }).catch(function (error) {
       // Handle any unexpected errors in the NodeGroup dialog
@@ -4996,6 +4925,96 @@ function addNodeGroupToK8sCluster() {
   });
 }
 window.addNodeGroupToK8sCluster = addNodeGroupToK8sCluster;
+
+// Function to set Kubernetes-appropriate configuration values
+function setKubernetesConfig() {
+  // Set recommended Kubernetes values
+  document.getElementById("minVCPU").value = "4";
+  document.getElementById("minRAM").value = "16";
+  document.getElementById("diskSize").value = "100";
+  
+  // Show comprehensive Kubernetes information
+  Swal.fire({
+    title: "⚙️ Kubernetes Configuration Guide",
+    html: `
+      <div style="text-align: left; font-size: 13px; line-height: 1.4;">
+        <div style="background: #fff3cd; padding: 8px; border-radius: 4px; margin-bottom: 12px; border-left: 4px solid #ffc107;">
+          <strong>⚠️ Notice:</strong> Managed Kubernetes Provisioning is under development and may have stability issues.
+        </div>
+        
+        <div style="background: #d1ecf1; padding: 8px; border-radius: 4px; margin-bottom: 12px; border-left: 4px solid #17a2b8;">
+          <strong>✅ Configuration Set:</strong> Min vCPU: 4, Min Memory: 16GB, Disk: 100GB
+        </div>
+        
+        <div style="margin-bottom: 10px;">
+          <strong>📋 Node Group Creation by Provider:</strong>
+        </div>
+        
+        <div style="margin-bottom: 12px;">
+          <strong style="color: #28a745;">Node Group created with cluster:</strong><br>
+          🟦 Azure, 🟩 GCP, 🟫 IBM, 🟧 NHN
+        </div>
+        
+        <div style="margin-bottom: 15px;">
+          <strong style="color: #dc3545;">Node Group added separately after cluster creation:</strong><br>
+          🟫 AWS, 🟨 Alibaba, 🟥 Tencent
+        </div>
+
+        <details style="margin-bottom: 10px;">
+          <summary style="cursor: pointer; font-weight: bold; color: #495057; margin-bottom: 8px;">
+            📖 CSP-specific Details & Examples
+          </summary>
+          <div style="margin-left: 15px; margin-top: 8px; font-size: 12px;">
+            
+            <div style="margin-bottom: 12px;">
+              <strong>🟫 AWS</strong><br>
+              • Prerequisites: awscli + <code>aws configure</code><br>
+              • Cluster creates without NodeGroup, add separately after status becomes <code>Active</code><br>
+              • Example: <code>{"imageId": "default", "specId": "aws+ap-northeast-2+t3a.xlarge"}</code>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+              <strong>🟨 Alibaba Cloud</strong><br>
+              • Use Kubernetes-optimized images<br>
+              • Example: <code>{"imageId": "aliyun_3_x64_20G_container_optimized_*.vhd", "specId": "alibaba+ap-northeast-2+ecs.g6e.xlarge"}</code>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+              <strong>🟦 Azure</strong><br>
+              • NodeGroup name must follow <code>^[a-z][a-z0-9]*$</code> regex<br>
+              • Example: <code>{"imageId": "default", "specId": "azure+koreacentral+standard_b4ms"}</code>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+              <strong>🟩 GCP</strong><br>
+              • Prerequisites: <code>gcloud</code> CLI + <code>google-cloud-sdk-gke-gcloud-auth-plugin</code><br>
+              • Run <code>gcloud auth login</code> first<br>
+              • Example: <code>{"imageId": "default", "specId": "gcp+asia-east1+e2-standard-4"}</code>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+              <strong>🟧 NHN Cloud</strong><br>
+              • Use Container-optimized images<br>
+              • Example: <code>{"imageId": "efe7f58f-*", "specId": "nhn+kr1+m2.c4m8"}</code>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+              <strong>🟥 Tencent Cloud</strong><br>
+              • ap-hongkong region has kubeconfig access limitations<br>
+              • NodeGroup creation enables kubeconfig usage<br>
+              • Example: <code>{"imageId": "img-22trbn9x", "specId": "tencent+ap-seoul+s5.medium4"}</code>
+            </div>
+          </div>
+        </details>
+      </div>
+    `,
+    icon: "info",
+    confirmButtonText: "OK",
+    confirmButtonColor: "#007bff",
+    width: "700px"
+  });
+}
+window.setKubernetesConfig = setKubernetesConfig;
 
 function getRecommendedSpec(idx, latitude, longitude) {
   var hostname = configHostname;
@@ -11208,7 +11227,7 @@ function drawObjects(event) {
     vectorContext.drawGeometry(geometries[i]);
   }
 
-  
+
   map.render();
 }
 
