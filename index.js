@@ -2753,7 +2753,7 @@ function updateProviderDropdownText() {
   } else if (selectedProviders.length <= 3) {
     dropdownText.textContent = selectedProviders.join(", ");
   } else {
-    dropdownText.textContent = `${selectedProviders.slice(0, 2).join(", ")} + ${selectedProviders.length - 2} more`;
+    dropdownText.textContent = `${selectedProviders.slice(0, 2).join(", ")} + ${selectedProviders.length - 2}`;
   }
 }
 window.updateProviderDropdownText = updateProviderDropdownText;
@@ -5193,6 +5193,7 @@ function getCurrentWorkloadType() {
   console.log('Returning from global variable:', currentWorkloadType);
   return currentWorkloadType;
 }
+window.getCurrentWorkloadType = getCurrentWorkloadType;
 
 // Function to fetch K8s cluster information
 async function fetchK8sClusterInfo() {
@@ -5466,12 +5467,6 @@ function showK8sConfigurationInfo(k8sInfo = null) {
 }
 
 // Function to get current workload type
-function getCurrentWorkloadType() {
-  const k8sModeInput = document.getElementById("k8sMode");
-  return k8sModeInput && k8sModeInput.checked ? 'k8s-infra' : 'mc-infra';
-}
-window.getCurrentWorkloadType = getCurrentWorkloadType;
-
 // Function to get workload configuration
 function getWorkloadConfiguration() {
   return {
@@ -6656,16 +6651,10 @@ function updateSubGroupReview() {
     buttonsHtml += `
       <div class="border-top pt-2">
         <small class="text-muted d-block mb-2">Kubernetes Cluster</small>
-        <div class="d-flex" style="gap: 4px; margin-bottom: 4px;">
-          <button type="button" onClick="createK8sCluster();" class="btn btn-primary btn-sm ${!hasOneSubGroup ? 'disabled' : ''}" 
-                  style="font-size: 0.85rem; padding: 8px 12px; flex: 1;" ${!hasOneSubGroup ? 'disabled' : ''}>
-            ☸️ Create K8s Cluster
-          </button>
-          <button type="button" onClick="clearCircle('clearText');" class="btn btn-outline-secondary btn-sm" 
-                  style="font-size: 0.7rem; padding: 6px 8px; min-width: 60px;">
-            🗑️
-          </button>
-        </div>
+        <button type="button" onClick="createK8sCluster();" class="btn btn-primary btn-sm ${!hasOneSubGroup ? 'disabled' : ''}" 
+                style="font-size: 0.85rem; padding: 8px 12px; width: 100%; margin-bottom: 4px;" ${!hasOneSubGroup ? 'disabled' : ''}>
+          ☸️ Create K8s Cluster
+        </button>
         <div class="d-flex" style="gap: 4px;">
           <button type="button" onClick="addNodeGroupToK8sCluster();" class="btn btn-outline-primary btn-sm ${!hasOneSubGroup ? 'disabled' : ''}" 
                   style="font-size: 0.75rem; padding: 6px 8px; flex: 1;" ${!hasOneSubGroup ? 'disabled' : ''}>
