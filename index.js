@@ -41,6 +41,24 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----
 */
 
+// Debug Configuration
+const DEBUG_CONFIG = {
+  ENABLE_PERFORMANCE_LOGS: false,  // Map performance related logs
+  ENABLE_API_RESPONSE_LOGS: false, // API response logs 
+  ENABLE_VM_DEBUG_LOGS: false,     // Detailed VM structure logs
+  ENABLE_RESOURCE_LOGS: false,     // Resource loading logs
+  ENABLE_MAP_OPERATION_LOGS: false // Map operation logs
+};
+
+// Debug helper functions
+const debugLog = {
+  performance: (...args) => DEBUG_CONFIG.ENABLE_PERFORMANCE_LOGS && console.log('[Performance]', ...args),
+  api: (...args) => DEBUG_CONFIG.ENABLE_API_RESPONSE_LOGS && console.log('[API]', ...args),
+  vm: (...args) => DEBUG_CONFIG.ENABLE_VM_DEBUG_LOGS && console.log('[VM Debug]', ...args),
+  resource: (...args) => DEBUG_CONFIG.ENABLE_RESOURCE_LOGS && console.log('[Resource]', ...args),
+  mapOp: (...args) => DEBUG_CONFIG.ENABLE_MAP_OPERATION_LOGS && console.log('[Map]', ...args)
+};
+
 // OpenLayers CSS
 import "ol/ol.css";
 
@@ -174,7 +192,13 @@ window.cloudBaristaCentralData = {
   objectStorage: [],
   sqlDb: [],
   lastUpdated: null,
-  subscribers: []
+  subscribers: [],
+  // API status tracking for better error handling
+  apiStatus: {
+    k8sCluster: 'unknown', // 'loading', 'success', 'error', 'unknown'
+    lastK8sClusterUpdate: null,
+    lastK8sClusterError: null
+  }
 };
 
 // Subscribe to data updates
@@ -341,7 +365,7 @@ function performMapCleanup() {
   
   // Run cleanup every 10 minutes or when layer count is high
   if (timeSinceLastCleanup > 600000 || mapPerformanceMetrics.layerCount > 50) {
-    console.log('[Map Performance] Running map cleanup...');
+    debugLog.performance('Running map cleanup...');
     
     // Count current layers
     let currentLayerCount = 0;
@@ -349,20 +373,20 @@ function performMapCleanup() {
     
     // If too many layers, clear and refresh
     if (currentLayerCount > 50) {
-      console.log(`[Map Performance] Too many layers (${currentLayerCount}), clearing map...`);
+      debugLog.performance(`Too many layers (${currentLayerCount}), clearing map...`);
       clearMap();
     }
     
     mapPerformanceMetrics.lastCleanupTime = now;
     mapPerformanceMetrics.layerCount = currentLayerCount;
     
-    console.log(`[Map Performance] Cleanup completed. Current layers: ${currentLayerCount}`);
+    debugLog.performance(`Cleanup completed. Current layers: ${currentLayerCount}`);
   }
 }
 
 // Map cleanup on page unload
 function performMapFinalCleanup() {
-  console.log('[Map Performance] Performing final map cleanup...');
+  debugLog.performance('Performing final map cleanup...');
   
   // Clear all timers
   if (window.mapRenderTimeout) {
@@ -380,7 +404,7 @@ function performMapFinalCleanup() {
     renderCount: 0
   };
   
-  console.log('[Map Performance] Final cleanup completed');
+  debugLog.performance('Final cleanup completed');
 }
 
 // Add cleanup events
@@ -426,7 +450,7 @@ var map = new Map({
 
 // Optimized clearMap function to prevent memory leaks
 function clearMap() {
-  console.log("[Map Cleared - Optimized]");
+  debugLog.mapOp("Map cleared - optimized");
   
   // Clear geometry arrays
   geometries = [];
@@ -467,7 +491,7 @@ function clearMap() {
     }
   });
 
-  console.log(`[Map Performance] Removed ${layersToRemove.length} layers`);
+  debugLog.performance(`Removed ${layersToRemove.length} layers`);
   
   // Force garbage collection of map rendering
   map.render();
@@ -477,7 +501,7 @@ window.clearMap = clearMap;
 function clearCircle(option) {
   //document.getElementById("latLonInputPairArea").innerHTML = '';
   if (option == "clearText") {
-    console.log("[Circle Configuration Cleared]");
+    debugLog.mapOp("Circle configuration cleared");
   }
   latLonInputPairIdx = 0;
   vmSubGroupReqeustFromSpecList = [];
@@ -500,9 +524,9 @@ function writeLatLonInputPair(idx, lat, lon) {
   //document.getElementById("latLonInputPairArea").innerHTML +=
   `VM ${idx + 1}: (${latf}, ${lonf}) / `;
   if (idx == 0) {
-    console.log("[Started MCI configuration]");
+    debugLog.mapOp("Started MCI configuration");
   }
-  console.log(`VM-${idx + 1} Location: ${latf}, ${lonf} | Best Spec: `);
+  debugLog.mapOp(`VM-${idx + 1} Location: ${latf}, ${lonf} | Best Spec: `);
 }
 
 var latLonInputPairIdx = 0;
@@ -776,9 +800,9 @@ function displayCSPListOn() {
         .pipe(csv())
         .on("data", (chunk) => cloudLocation.push(chunk))
         .on("end", () => {
-          console.log(cloudLocation);
+          debugLog.resource('Loaded cloud location data:', cloudLocation.length, 'regions');
 
-          console.log(
+          debugLog.mapOp(
             "[Complete] Display Known Cloud Regions: " +
             cloudLocation.length
           );
@@ -1654,8 +1678,9 @@ function changePoints(ipFrom, ipTo) {
   var lon1 = 360 * Math.random() - 180;
   var lat1 = 180 * Math.random() - 90;
 
-  console.log(ipFrom);
-  console.log(ipTo);
+  // Debug: uncomment if needed for troubleshooting
+  // console.log(ipFrom);
+  // console.log(ipTo);
 
   coordinates.push(ipFrom);
   coordinates.push(ipTo);
@@ -1895,7 +1920,8 @@ function handleMciWithoutVms(mciItem, cnt) {
   // Do not create VM points for preparing/prepared MCI (no actual VMs exist)
   geometriesPoints[cnt] = null;
   
-  console.log(`Added placeholder geometry for MCI ${mciItem.name} with status ${mciItem.status}`);
+  // Debug: uncomment if needed
+  // console.log(`Added placeholder geometry for MCI ${mciItem.name} with status ${mciItem.status}`);
 }
 
 function getMci() {
@@ -1952,6 +1978,9 @@ function getMci() {
           });
           window.cloudBaristaCentralData.vmData = allVms;
           
+          // Load VPN data from the MCIs we just fetched (reusing MCI data)
+          loadVpnDataFromMcis();
+          
           // Notify Dashboard subscribers
           notifyDataSubscribers();
           
@@ -1968,8 +1997,10 @@ function getMci() {
         cnt = cntInit;
         
         if (obj.mci != null && obj.mci.length > 0) {
+          debugLog.api(`Processing ${obj.mci.length} MCIs for map display`);
           for (let item of obj.mci) {
-            console.log(item);
+            // Debug: uncomment for detailed MCI inspection
+            // console.log(item);
 
             var hideFlag = false;
             for (let hideName of mciHideList) {
@@ -1984,7 +2015,8 @@ function getMci() {
 
             // Handle MCI without VMs (preparing, prepared states)
             if (item.vm == null || item.vm.length === 0) {
-              console.log("MCI without VMs:", item);
+              // Debug: uncomment if needed
+              // console.log("MCI without VMs:", item);
               if (item.status === "Preparing" || item.status === "Prepared" || item.status === "Failed") {
                 handleMciWithoutVms(item, cnt);
                 cnt++;
@@ -2044,8 +2076,6 @@ function getMci() {
               ]);
             }
             if (validateNum == item.vm.length) {
-              //console.log("Found all GEOs validateNum : " + validateNum);
-
               // Store VM-specific data for makePolyDot
               var vmStatuses = [];
               var vmProviders = [];
@@ -2057,7 +2087,7 @@ function getMci() {
                 
                 // Debug: Log only the first VM structure to avoid spam
                 if (vmIndex === 0) {
-                  console.log(`Debug VM ${vm.id || 'unknown'} structure:`, vm);
+                  debugLog.vm(`VM ${vm.id || 'unknown'} structure:`, vm);
                 }
                 
                 vmStatuses.push(vm.status || "Undefined");
@@ -2078,8 +2108,8 @@ function getMci() {
                 
                 // Debug: Log command status for first VM
                 if (vmIndex === 0 && vm.commandStatus) {
-                  console.log(`Debug VM ${vm.id || 'unknown'} commandStatus:`, vm.commandStatus);
-                  console.log(`VM ${vm.id} command status:`, commandStatus);
+                  debugLog.vm(`VM ${vm.id || 'unknown'} commandStatus:`, vm.commandStatus);
+                  debugLog.vm(`VM ${vm.id} command status:`, commandStatus);
                 }
                 
                 // Extract provider from connectionConfig (full API response)
@@ -2087,21 +2117,21 @@ function getMci() {
                 
                 // Debug: Log connection-related properties for first VM only
                 if (vmIndex === 0) {
-                  console.log(`VM ${vm.id}: connectionName =`, vm.connectionName);
-                  console.log(`VM ${vm.id}: connectionConfig =`, vm.connectionConfig);
+                  debugLog.vm(`VM ${vm.id}: connectionName =`, vm.connectionName);
+                  debugLog.vm(`VM ${vm.id}: connectionConfig =`, vm.connectionConfig);
                 }
                 
                 if (vm.connectionConfig && vm.connectionConfig.providerName) {
                   provider = vm.connectionConfig.providerName;
-                  if (vmIndex === 0) console.log(`VM ${vm.id}: found provider in connectionConfig = ${provider}`);
+                  if (vmIndex === 0) debugLog.vm(`VM ${vm.id}: found provider in connectionConfig = ${provider}`);
                 } else if (vm.connectionName) {
                   // Fallback: extract provider from connectionName (e.g., "aws-ap-northeast-2" -> "aws")
                   provider = vm.connectionName.split('-')[0];
-                  if (vmIndex === 0) console.log(`VM ${vm.id}: extracted provider from connectionName = ${provider}`);
+                  if (vmIndex === 0) debugLog.vm(`VM ${vm.id}: extracted provider from connectionName = ${provider}`);
                 } else {
                   if (vmIndex === 0) {
-                    console.log(`VM ${vm.id}: no provider info found, using unknown`);
-                    console.log(`VM ${vm.id}: available properties:`, Object.keys(vm));
+                    debugLog.vm(`VM ${vm.id}: no provider info found, using unknown`);
+                    debugLog.vm(`VM ${vm.id}: available properties:`, Object.keys(vm));
                   }
                 }
                 
@@ -2183,13 +2213,13 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
-      console.log('vNet API response:', obj);
+      debugLog.api('vNet API response:', obj);
       
       // Update central data store
       if (obj.vNet) {
         window.cloudBaristaCentralData.vNet = obj.vNet;
         window.cloudBaristaCentralData.resourceData.vNet = obj.vNet;
-        console.log('vNet data stored in central store:', obj.vNet.length, 'items');
+        debugLog.resource('vNet data stored in central store:', obj.vNet.length, 'items');
       }
       
       if (obj.vNet != null && obj.vNet.length > 0) {
@@ -2201,8 +2231,6 @@ function getMci() {
           ]);
         }
         geoResourceLocation.vnet[0] = new MultiPoint([resourceLocation]);
-        //console.log("geoResourceLocation.vnet[0]");
-        //console.log(geoResourceLocation.vnet[0]);
       } else {
         // Clear vnet icons when list is empty
         geoResourceLocation.vnet = [];
@@ -2228,13 +2256,13 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
-      console.log('Security Group API response:', obj);
+      debugLog.api('Security Group API response:', obj);
       
       // Update central data store
       if (obj.securityGroup) {
         window.cloudBaristaCentralData.securityGroup = obj.securityGroup;
         window.cloudBaristaCentralData.resourceData.securityGroup = obj.securityGroup;
-        console.log('Security Group data stored in central store:', obj.securityGroup.length, 'items');
+        debugLog.resource('Security Group data stored in central store:', obj.securityGroup.length, 'items');
       }
       
       if (obj.securityGroup != null && obj.securityGroup.length > 0) {
@@ -2272,13 +2300,13 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
-      console.log('SSH Key API response:', obj);
+      debugLog.api('SSH Key API response:', obj);
       
       // Update central data store
       if (obj.sshKey) {
         window.cloudBaristaCentralData.sshKey = obj.sshKey;
         window.cloudBaristaCentralData.resourceData.sshKey = obj.sshKey;
-        console.log('SSH Key data stored in central store:', obj.sshKey.length, 'items');
+        debugLog.resource('SSH Key data stored in central store:', obj.sshKey.length, 'items');
       }
       
       if (obj.sshKey != null && obj.sshKey.length > 0) {
@@ -2303,76 +2331,8 @@ function getMci() {
         // Don't update icons on API error to preserve current state
       });
 
-    // Load K8s cluster data
-    loadK8sClusterData();
-
-    // get VPN list and put them on the map
-    var vpnUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/vpn`;
-    axios({
-      method: "get",
-      url: vpnUrl,
-      auth: {
-        username: `${username}`,
-        password: `${password}`,
-      },
-      timeout: 10000,
-    }).then((res) => {
-      var obj = res.data;
-      console.log('VPN API response:', obj);
-      
-      let vpnData = [];
-      let resourceLocation = [];
-      let hasValidVpnSites = false;
-      
-      // Handle different possible response structures
-      if (obj && obj.vpn && Array.isArray(obj.vpn)) {
-        vpnData = obj.vpn;
-      } else if (obj && obj.results && Array.isArray(obj.results)) {
-        vpnData = obj.results;
-      } else if (obj && Array.isArray(obj)) {
-        vpnData = obj;
-      }
-      
-      // Store VPN data in central store
-      window.cloudBaristaCentralData.vpn = vpnData;
-      console.log('VPN data stored:', vpnData.length, 'items');
-      
-      for (let vpnItem of vpnData) {
-        if (vpnItem.vpnSites && vpnItem.vpnSites.length > 0) {
-          hasValidVpnSites = true;
-          for (let site of vpnItem.vpnSites) {
-            if (site.connectionConfig && site.connectionConfig.regionDetail && site.connectionConfig.regionDetail.location) {
-              resourceLocation.push([
-                site.connectionConfig.regionDetail.location.longitude * 1,
-                site.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
-              ]);
-            }
-          }
-        } else if (vpnItem.connectionConfig && vpnItem.connectionConfig.regionDetail && vpnItem.connectionConfig.regionDetail.location) {
-          // Handle direct VPN resource without vpnSites structure
-          hasValidVpnSites = true;
-          resourceLocation.push([
-            vpnItem.connectionConfig.regionDetail.location.longitude * 1,
-            vpnItem.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
-          ]);
-        }
-      }
-      
-      if (hasValidVpnSites && resourceLocation.length > 0) {
-        geoResourceLocation.vpn[0] = new MultiPoint([resourceLocation]);
-        console.log("geoResourceLocation.vpn[0]");
-        console.log(geoResourceLocation.vpn[0]);
-      } else {
-        // Clear VPN icons when no valid vpnSites exist
-        geoResourceLocation.vpn = [];
-      }
-    })
-      .catch(function (error) {
-        console.log("VPN API error:", error);
-        // Set empty array on error and clear icons
-        window.cloudBaristaCentralData.vpn = [];
-        geoResourceLocation.vpn = [];
-      });
+    // Load VPN data from all MCIs (reuses MCI data from central store)
+    loadVpnDataFromMcis();
 
     // Get custom images
     var customImageUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/customImage`;
@@ -2386,7 +2346,7 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
-      console.log('Custom Image API response:', obj);
+      debugLog.api('Custom Image API response:', obj);
       
       // Handle different possible response structures
       let customImages = [];
@@ -2397,7 +2357,7 @@ function getMci() {
       }
       
       window.cloudBaristaCentralData.customImage = customImages;
-      console.log('Custom Image data stored:', customImages.length, 'items');
+      debugLog.resource('Custom Image data stored:', customImages.length, 'items');
     }).catch(function (error) {
       console.log("Custom Image API error:", error);
       // Set empty array on error to prevent undefined issues
@@ -2416,7 +2376,7 @@ function getMci() {
       timeout: 10000,
     }).then((res) => {
       var obj = res.data;
-      console.log('Data Disk API response:', obj);
+      debugLog.api('Data Disk API response:', obj);
       
       // Handle different possible response structures
       let dataDisks = [];
@@ -2429,7 +2389,7 @@ function getMci() {
       }
       
       window.cloudBaristaCentralData.dataDisk = dataDisks;
-      console.log('Data Disk data stored:', dataDisks.length, 'items');
+      debugLog.resource('Data Disk data stored:', dataDisks.length, 'items');
     }).catch(function (error) {
       console.log("Data Disk API error:", error);
       // Set empty array on error to prevent undefined issues
@@ -2972,7 +2932,7 @@ function showFinalMciConfirmation(createMciReq, url, totalCost, totalNodeScale, 
 // MCI Creation execution
 function proceedWithMciCreation(createMciReq, url, username, password) {
   var jsonBody = JSON.stringify(createMciReq, undefined, 4);
-  console.log("Creating MCI ...");
+  // MCI creation now tracked by spinner instead of console log
   var spinnerId = addSpinnerTask("Creating MCI: " + createMciReq.name);
 
   var requestId = generateRandomRequestId("mci-" + createMciReq.name + "-", 10);
@@ -2989,7 +2949,8 @@ function proceedWithMciCreation(createMciReq, url, username, password) {
     },
   })
     .then((res) => {
-      console.log(res); // for debug
+      // Debug: uncomment if detailed response debugging needed
+      // console.log(res); // for debug
 
       // Activate control-tab after successful MCI creation
       try {
@@ -3193,7 +3154,8 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
     },
   })
   .then((res) => {
-    console.log("Review Response:", res); // for debug
+    // Debug: uncomment if detailed review response debugging needed
+    // console.log("Review Response:", res); // for debug
     
     var reviewData = res.data;
     var validationStatus = "success";
@@ -4704,8 +4666,9 @@ function createK8sCluster() {
 
             const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sClusterDynamic`;
             
-            console.log("Creating K8s Cluster:", k8sClusterReq);
-            console.log("Image designation needed:", imageDesignationNeeded);
+            // Debug: uncomment if K8s creation debugging needed
+            // console.log("Creating K8s Cluster:", k8sClusterReq);
+            // console.log("Image designation needed:", imageDesignationNeeded);
             
             taskId = addSpinnerTask("Create K8s "+k8sClusterReq.name);
             
@@ -4719,7 +4682,8 @@ function createK8sCluster() {
           }
         }).then(function (response) {
           removeSpinnerTask(taskId);
-          console.log("K8s Cluster creation response:", response.data);
+          // Debug: uncomment if K8s creation response debugging needed
+          // console.log("K8s Cluster creation response:", response.data);
           
           Swal.fire({
             title: "K8s Cluster Created Successfully!",
@@ -5173,11 +5137,12 @@ function getCurrentWorkloadType() {
   const vmModeInput = document.getElementById("vmMode");
   const k8sModeInput = document.getElementById("k8sMode");
   
-  console.log('getCurrentWorkloadType() called');
-  console.log('vmModeInput:', vmModeInput);
-  console.log('k8sModeInput:', k8sModeInput);
-  console.log('vmModeInput.checked:', vmModeInput?.checked);
-  console.log('k8sModeInput.checked:', k8sModeInput?.checked);
+  // Debug: uncomment if workload type debugging needed
+  // console.log('getCurrentWorkloadType() called');
+  // console.log('vmModeInput:', vmModeInput);
+  // console.log('k8sModeInput:', k8sModeInput);
+  // console.log('vmModeInput.checked:', vmModeInput?.checked);
+  // console.log('k8sModeInput.checked:', k8sModeInput?.checked);
   
   if (k8sModeInput && k8sModeInput.checked) {
     console.log('Returning k8s from radio button');
@@ -11803,6 +11768,9 @@ function loadK8sClusterData() {
     return;
   }
 
+  // Set loading status
+  window.cloudBaristaCentralData.apiStatus.k8sCluster = 'loading';
+
   // get k8sCluster list and put them on the map
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster`;
   axios({
@@ -11832,6 +11800,11 @@ function loadK8sClusterData() {
     
     window.cloudBaristaCentralData.k8sCluster = k8sClusterData;
     window.cloudBaristaCentralData.resourceData.k8sCluster = k8sClusterData;
+    
+    // Update API status to success
+    window.cloudBaristaCentralData.apiStatus.k8sCluster = 'success';
+    window.cloudBaristaCentralData.apiStatus.lastK8sClusterUpdate = new Date();
+    window.cloudBaristaCentralData.apiStatus.lastK8sClusterError = null;
     
     // Notify dashboard subscribers
     notifyDataSubscribers();
@@ -11877,14 +11850,127 @@ function loadK8sClusterData() {
   })
     .catch(function (error) {
       console.log("k8sCluster API error:", error);
-      // Clear data on error
-      window.cloudBaristaCentralData.k8sCluster = [];
-      window.cloudBaristaCentralData.resourceData.k8sCluster = [];
-      geoResourceLocation.k8s = [];
-      k8sName = [];
-      k8sStatus = [];
-      k8sCoords = [];
+      console.log("Keeping existing K8s cluster data to preserve user experience");
+      
+      // Update API status to error but don't clear existing data
+      window.cloudBaristaCentralData.apiStatus.k8sCluster = 'error';
+      window.cloudBaristaCentralData.apiStatus.lastK8sClusterError = {
+        timestamp: new Date(),
+        message: error.message || 'Unknown error',
+        code: error.code || 'UNKNOWN_ERROR'
+      };
+      
+      // Don't clear existing data on API error - keep current state
+      // This prevents UI from showing empty state when there are temporary API issues
+      
+      // Optional: Show user notification about the error while keeping data
+      if (typeof updateMapConnectionStatus === 'function') {
+        updateMapConnectionStatus('error');
+        // Reset to normal status after a short delay
+        setTimeout(() => {
+          updateMapConnectionStatus('connected');
+        }, 3000);
+      }
+      
+      // Notify subscribers even on error so dashboard knows about the failed update attempt
+      notifyDataSubscribers();
     });
+}
+
+// Load VPN data from all MCIs (reusing existing MCI data)
+async function loadVpnDataFromMcis() {
+  try {
+    const config = getConfig();
+    const { hostname, port, username, password } = config;
+    const namespace = namespaceElement?.value || config.username;
+    
+    // Use existing MCI data from central store - no fallback API call
+    let mciData = [];
+    if (window.cloudBaristaCentralData && window.cloudBaristaCentralData.mci) {
+      mciData = window.cloudBaristaCentralData.mci;
+      debugLog.resource('Using cached MCI data for VPN loading:', mciData.length, 'MCIs');
+    } else {
+      debugLog.resource('Central MCI data not available, skipping VPN loading');
+      // Clear VPN data and return early - no point in loading VPN without MCIs
+      window.cloudBaristaCentralData.vpn = [];
+      geoResourceLocation.vpn = [];
+      return;
+    }
+    
+    // If no MCIs exist, no point in trying to load VPN data
+    if (!mciData || mciData.length === 0) {
+      debugLog.resource('No MCIs available, skipping VPN loading');
+      window.cloudBaristaCentralData.vpn = [];
+      geoResourceLocation.vpn = [];
+      return;
+    }
+    
+    let allVpnData = [];
+    let resourceLocation = [];
+    
+    // Load VPN data from each MCI
+    for (const mci of mciData) {
+      try {
+        const vpnUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mci.id}/vpn`;
+        const vpnResponse = await axios({
+          method: "get",
+          url: vpnUrl,
+          auth: { username, password },
+          timeout: 5000
+        });
+        
+        const vpnData = vpnResponse.data?.vpn || [];
+        debugLog.api(`VPN data for MCI ${mci.id}:`, vpnData.length, 'VPNs');
+        
+        // Add MCI ID to each VPN for reference
+        vpnData.forEach(vpn => {
+          vpn.mciId = mci.id;
+          allVpnData.push(vpn);
+          
+          // Extract location data for map display
+          if (vpn.vpnSites && vpn.vpnSites.length > 0) {
+            for (let site of vpn.vpnSites) {
+              if (site.connectionConfig?.regionDetail?.location) {
+                resourceLocation.push([
+                  site.connectionConfig.regionDetail.location.longitude * 1,
+                  site.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
+                ]);
+              }
+            }
+          } else if (vpn.connectionConfig?.regionDetail?.location) {
+            resourceLocation.push([
+              vpn.connectionConfig.regionDetail.location.longitude * 1,
+              vpn.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
+            ]);
+          }
+        });
+        
+      } catch (vpnError) {
+        // Silently continue if VPN API fails for individual MCI
+        debugLog.api(`VPN API error for MCI ${mci.id}:`, vpnError.message);
+      }
+    }
+    
+    // Store VPN data in central store
+    window.cloudBaristaCentralData.vpn = allVpnData;
+    debugLog.resource('Total VPN data stored:', allVpnData.length, 'VPNs from', mciData.length, 'MCIs');
+    
+    // Notify Dashboard subscribers about VPN data update
+    notifyDataSubscribers();
+    
+    // Update map display
+    if (resourceLocation.length > 0) {
+      geoResourceLocation.vpn[0] = new MultiPoint([resourceLocation]);
+      debugLog.mapOp("geoResourceLocation.vpn[0] updated with", resourceLocation.length, "locations");
+    } else {
+      geoResourceLocation.vpn = [];
+    }
+    
+  } catch (error) {
+    debugLog.api("VPN data loading error:", error);
+    window.cloudBaristaCentralData.vpn = [];
+    geoResourceLocation.vpn = [];
+  }
 }
 
 // Make function available globally for Dashboard to call

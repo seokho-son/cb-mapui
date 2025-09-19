@@ -122,13 +122,85 @@ limitations under the License.
     .table-responsive {
       border-radius: 5px;
       overflow: hidden;
+      max-height: 70vh;
+      overflow-y: auto;
+      position: relative;
     }
 
     .table thead th {
       background-color: #f8f9fa;
       border: none;
       font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 100;
       color: #495057;
+      box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Remove the special styling for Actions column to allow it to behave like other columns */
+    /* This allows Actions column to be responsive like other columns */
+
+    /* DataTables search and pagination styling */
+    .dataTables_wrapper .dataTables_filter {
+      float: right;
+      margin-bottom: 1rem;
+    }
+
+    .dataTables_wrapper .dataTables_length {
+      float: left;
+      margin-bottom: 1rem;
+    }
+
+    .dataTables_wrapper .dataTables_info {
+      margin-top: 1rem;
+    }
+
+    .dataTables_wrapper .dataTables_paginate {
+      margin-top: 1rem;
+      float: right;
+    }
+
+    /* Sort indicators styling */
+    .table thead th.sorting,
+    .table thead th.sorting_asc,
+    .table thead th.sorting_desc {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .table thead th.sorting:after,
+    .table thead th.sorting_asc:after,
+    .table thead th.sorting_desc:after {
+      font-family: "Font Awesome 5 Free";
+      font-weight: 900;
+      float: right;
+      margin-left: 5px;
+      opacity: 0.5;
+    }
+
+    .table thead th.sorting:after {
+      content: "\f0dc"; /* fa-sort */
+    }
+
+    .table thead th.sorting_asc:after {
+      content: "\f0de"; /* fa-sort-up */
+      opacity: 1;
+    }
+
+    .table thead th.sorting_desc:after {
+      content: "\f0dd"; /* fa-sort-down */
+      opacity: 1;
+    }
+
+    /* Actions column specific styling - ensure proper width without breaking responsiveness */
+    .action-buttons {
+      min-width: 150px;
+      white-space: nowrap;
+    }
+
+    .action-buttons .btn {
+      margin: 1px;
     }
 
     .status-badge {
@@ -287,14 +359,16 @@ limitations under the License.
     #connectionTable td:last-child,
     [id$="-connectionTable"] th:last-child,
     [id$="-connectionTable"] td:last-child {
-      width: 200px;
-      min-width: 200px;
-      max-width: 200px;
-      position: sticky;
-      right: 0;
-      background-color: white;
-      border-left: 1px solid #dee2e6;
-      z-index: 10;
+      width: 200px !important;
+      min-width: 200px !important;
+      max-width: 200px !important;
+      position: sticky !important;
+      right: 0 !important;
+      background-color: white !important;
+      border-left: 1px solid #dee2e6 !important;
+      z-index: 999 !important;
+      display: table-cell !important;
+      visibility: visible !important;
     }
 
     /* Actions column header background */
@@ -309,7 +383,71 @@ limitations under the License.
     #dataDiskTable thead th:last-child,
     #connectionTable thead th:last-child,
     [id$="-connectionTable"] thead th:last-child {
-      background-color: #f8f9fa;
+      background-color: #f8f9fa !important;
+      position: sticky !important;
+      right: 0 !important;
+      z-index: 1000 !important;
+      display: table-cell !important;
+      visibility: visible !important;
+    }
+
+    /* DataTables UI Elements - Ensure they are visible and properly styled */
+    .dataTables_wrapper .dataTables_filter {
+      text-align: right !important;
+      margin-bottom: 10px !important;
+    }
+    
+    .dataTables_wrapper .dataTables_filter input[type="search"] {
+      display: inline-block !important;
+      width: auto !important;
+      margin-left: 5px !important;
+      padding: 4px 8px !important;
+      border: 1px solid #ddd !important;
+      border-radius: 4px !important;
+      font-size: 14px !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      z-index: 10 !important;
+    }
+    
+    .dataTables_wrapper .dataTables_length {
+      float: left !important;
+      margin-bottom: 10px !important;
+    }
+    
+    .dataTables_wrapper .dataTables_length select {
+      display: inline-block !important;
+      width: auto !important;
+      margin: 0 5px !important;
+      padding: 4px !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
+    
+    .dataTables_wrapper .dataTables_info {
+      clear: both !important;
+      float: left !important;
+      padding-top: 8px !important;
+    }
+    
+    .dataTables_wrapper .dataTables_paginate {
+      float: right !important;
+      text-align: right !important;
+      padding-top: 0px !important;
+    }
+    
+    .dataTables_wrapper .dataTables_paginate .paginate_button {
+      box-sizing: border-box !important;
+      display: inline-block !important;
+      min-width: 1.5em !important;
+      padding: 0.5em 1em !important;
+      margin-left: 2px !important;
+      text-align: center !important;
+      text-decoration: none !important;
+      cursor: pointer !important;
+      border: 1px solid transparent !important;
+      border-radius: 2px !important;
+      visibility: visible !important;
     }
 
     /* Add tooltip for truncated text */
@@ -1425,6 +1563,41 @@ limitations under the License.
                 </tr>
               </thead>
               <tbody id="customImageTableBody">
+                <!-- Data will be populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VPN Table -->
+    <div class="row" id="vpnSection">
+      <div class="col-12">
+        <div class="content-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5><i class="fas fa-network-wired"></i> Site-to-Site VPNs <span class="badge badge-secondary ml-2" id="vpnCountBadge">0</span></h5>
+            <div>
+              <button class="btn btn-primary btn-sm" onclick="refreshResourceList('vpn')">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-striped table-hover" id="vpnTable">
+              <thead>
+                <tr>
+                  <th>VPN ID</th>
+                  <th>MCI ID</th>
+                  <th>Status</th>
+                  <th>VPN Sites</th>
+                  <th>Provider</th>
+                  <th>Region</th>
+                  <th>Description</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="vpnTableBody">
                 <!-- Data will be populated by JavaScript -->
               </tbody>
             </table>

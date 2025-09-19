@@ -321,6 +321,153 @@ async function deleteDataDisk(dataDiskId, nsId = null) {
   return await deleteResourceAsync('dataDisk', dataDiskId, { nsId });
 }
 
+// VPN management functions
+async function refreshVpnList() {
+  try {
+    if (window.parent && window.parent.loadVpnDataFromMcis) {
+      await window.parent.loadVpnDataFromMcis();
+      updateVpnTable();
+    }
+  } catch (error) {
+    console.error('Error refreshing VPN list:', error);
+    showErrorMessage('Failed to refresh VPN list: ' + error.message);
+  }
+}
+
+async function deleteVpn(mciId, vpnId) {
+  if (!confirm(`Are you sure you want to delete VPN "${vpnId}" from MCI "${mciId}"?`)) {
+    return;
+  }
+
+  try {
+    const config = window.parent?.getConfig() || {};
+    const nsId = config.namespace || 'default';
+    
+    const response = await fetch(`${getApiUrl()}/tumblebug/ns/${nsId}/mci/${mciId}/vpn/${vpnId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    console.log(`VPN ${vpnId} deleted successfully from MCI ${mciId}`);
+    showSuccessMessage(`VPN ${vpnId} deleted successfully`);
+    
+    // Refresh VPN data
+    await refreshVpnList();
+  } catch (error) {
+    console.error('Error deleting VPN:', error);
+    showErrorMessage('Failed to delete VPN: ' + error.message);
+  }
+}
+
+async function viewVpnDetails(mciId, vpnId) {
+  try {
+    const config = window.parent?.getConfig() || {};
+    const nsId = config.namespace || 'default';
+    
+    const response = await fetch(`${getApiUrl()}/tumblebug/ns/${nsId}/mci/${mciId}/vpn/${vpnId}`, {
+      method: 'GET',
+      headers: getAuthHeaders()
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const vpnData = await response.json();
+    showVpnDetailsModal(vpnData);
+  } catch (error) {
+    console.error('Error fetching VPN details:', error);
+    showErrorMessage('Failed to load VPN details: ' + error.message);
+  }
+}
+
+function showVpnDetailsModal(vpnData) {
+  const modalContent = `
+    <div class="modal fade" id="vpnDetailsModal" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">VPN Details: ${vpnData.id}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row">
+              <div class="col-md-6">
+                <h6>Basic Information</h6>
+                <table class="table table-sm">
+                  <tr><td><strong>ID:</strong></td><td>${vpnData.id || 'N/A'}</td></tr>
+                  <tr><td><strong>Name:</strong></td><td>${vpnData.name || 'N/A'}</td></tr>
+                  <tr><td><strong>Status:</strong></td><td><span class="status-badge status-${(vpnData.status || 'unknown').toLowerCase()}">${vpnData.status || 'Unknown'}</span></td></tr>
+                  <tr><td><strong>MCI ID:</strong></td><td>${vpnData.mciId || 'N/A'}</td></tr>
+                </table>
+              </div>
+              <div class="col-md-6">
+                <h6>Connection Configuration</h6>
+                <table class="table table-sm">
+                  <tr><td><strong>Provider:</strong></td><td>${vpnData.connectionConfig?.providerName || 'N/A'}</td></tr>
+                  <tr><td><strong>Region:</strong></td><td>${vpnData.connectionConfig?.regionDetail?.regionName || 'N/A'}</td></tr>
+                </table>
+              </div>
+            </div>
+            ${vpnData.vpnSites && vpnData.vpnSites.length > 0 ? `
+            <div class="mt-3">
+              <h6>VPN Sites (${vpnData.vpnSites.length})</h6>
+              <div class="table-responsive">
+                <table class="table table-sm">
+                  <thead>
+                    <tr>
+                      <th>Site ID</th>
+                      <th>Status</th>
+                      <th>Gateway</th>
+                      <th>CIDR</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${vpnData.vpnSites.map(site => `
+                      <tr>
+                        <td>${site.id || 'N/A'}</td>
+                        <td><span class="status-badge status-${(site.status || 'unknown').toLowerCase()}">${site.status || 'Unknown'}</span></td>
+                        <td>${site.gateway || 'N/A'}</td>
+                        <td>${site.cidr || 'N/A'}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            ` : '<div class="mt-3"><p class="text-muted">No VPN sites configured</p></div>'}
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Remove existing modal if any
+  const existingModal = document.getElementById('vpnDetailsModal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+
+  // Add modal to body
+  document.body.insertAdjacentHTML('beforeend', modalContent);
+
+  // Show modal
+  const modal = new bootstrap.Modal(document.getElementById('vpnDetailsModal'));
+  modal.show();
+
+  // Clean up modal after it's hidden
+  document.getElementById('vpnDetailsModal').addEventListener('hidden.bs.modal', function() {
+    this.remove();
+  });
+}
+
 // Dashboard Configuration - DEPRECATED: Only used for settings modal UI
 // All actual API calls should use parentConfig from index.js via window.parent.getConfig()
 const dashboardConfig = {
@@ -565,22 +712,54 @@ function initializeCharts() {
   // Destroy existing charts before creating new ones to prevent memory leaks
   destroyAllCharts();
   
-  // Combined MCI & VM Status Chart
+  // Combined MCI & VM Status Chart with dynamic colors based on status
   const combinedStatusCtx = document.getElementById('combinedStatusChart').getContext('2d');
+  
+  // Helper function to get chart colors from index.js functions
+  function getChartColors(status, type = 'vm') {
+    if (window.parent && window.parent.getVmStatusColor) {
+      const colors = window.parent.getVmStatusColor(status);
+      if (type === 'mci') {
+        return colors.fill + 'CC'; // 80% opacity for MCI
+      } else {
+        return colors.fill + '99'; // 60% opacity for VM
+      }
+    }
+    // Fallback colors if parent function not available
+    const fallbackColors = {
+      'Preparing': type === 'mci' ? 'rgba(247, 147, 26, 0.8)' : 'rgba(247, 147, 26, 0.6)',
+      'Creating': type === 'mci' ? 'rgba(59, 130, 246, 0.8)' : 'rgba(59, 130, 246, 0.6)',
+      'Running': type === 'mci' ? 'rgba(16, 185, 129, 0.8)' : 'rgba(16, 185, 129, 0.6)',
+      'Suspended': type === 'mci' ? 'rgba(245, 158, 11, 0.8)' : 'rgba(245, 158, 11, 0.6)',
+      'Terminating': type === 'mci' ? 'rgba(239, 68, 68, 0.8)' : 'rgba(239, 68, 68, 0.6)',
+      'Terminated': type === 'mci' ? 'rgba(220, 38, 38, 0.8)' : 'rgba(220, 38, 38, 0.6)',
+      'Failed': type === 'mci' ? 'rgba(185, 28, 28, 0.8)' : 'rgba(185, 28, 28, 0.6)',
+      'Other': type === 'mci' ? 'rgba(156, 163, 175, 0.8)' : 'rgba(156, 163, 175, 0.6)'
+    };
+    return fallbackColors[status] || fallbackColors['Other'];
+  }
+  
+  const statusLabels = ['Preparing', 'Creating', 'Running', 'Suspended', 'Terminating', 'Terminated', 'Failed', 'Other'];
+  
   charts.combinedStatus = new Chart(combinedStatusCtx, {
     type: 'bar',
     data: {
-      labels: ['Preparing', 'Creating', 'Running', 'Suspended', 'Terminating', 'Terminated', 'Failed', 'Other'],
+      labels: statusLabels,
       datasets: [
         {
           label: 'MCI Count',
           data: [0, 0, 0, 0, 0, 0, 0, 0],
-          backgroundColor: 'rgba(40, 167, 69, 0.8)',   // Green with transparency
+          backgroundColor: statusLabels.map(status => getChartColors(status, 'mci')),
+          borderColor: 'rgba(52, 58, 64, 1)',        // Dark gray for legend
+          legendColor: 'rgba(52, 58, 64, 0.8)',      // Dark gray for legend icon
         },
         {
           label: 'VM Count',
           data: [0, 0, 0, 0, 0, 0, 0, 0],
-          backgroundColor: 'rgba(23, 162, 184, 0.8)',  // Blue with transparency
+          backgroundColor: statusLabels.map(status => getChartColors(status, 'vm')),
+          // Use fixed color for legend (will be overridden during updates)
+          borderColor: 'rgba(108, 117, 125, 1)',     // Light gray for legend
+          legendColor: 'rgba(108, 117, 125, 0.8)',   // Light gray for legend icon
         }
       ]
     },
@@ -691,27 +870,54 @@ function initializeCharts() {
     }
   });
 
-  // K8s Cluster Status Chart
+  // K8s Cluster Status Chart with dynamic colors
   const k8sClusterStatusCtx = document.getElementById('k8sClusterStatusChart').getContext('2d');
+  
+  // Helper function to get K8s chart colors from index.js functions  
+  function getK8sChartColors(status, opacity = 0.8) {
+    if (window.parent && window.parent.getK8sStatusColor) {
+      const colors = window.parent.getK8sStatusColor(status);
+      // Convert hex to rgba with specified opacity
+      const hex = colors.fill;
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+    // Fallback colors if parent function not available
+    const fallbackColors = {
+      'Creating': `rgba(59, 130, 246, ${opacity})`,    // Blue
+      'Active': `rgba(16, 185, 129, ${opacity})`,      // Green  
+      'Inactive': `rgba(245, 158, 11, ${opacity})`,    // Amber
+      'Updating': `rgba(247, 147, 26, ${opacity})`,    // Orange
+      'Deleting': `rgba(220, 38, 38, ${opacity})`,     // Red
+      'Failed': `rgba(239, 68, 68, ${opacity})`,       // Light Red
+      'Unknown': `rgba(107, 114, 128, ${opacity})`     // Gray
+    };
+    return fallbackColors[status] || fallbackColors['Unknown'];
+  }
+  
+  const k8sStatusLabels = ['Creating', 'Active', 'Inactive', 'Updating', 'Deleting', 'Failed', 'Unknown'];
+  
   charts.k8sClusterStatus = new Chart(k8sClusterStatusCtx, {
     type: 'bar',
     data: {
-      labels: ['Creating', 'Active', 'Inactive', 'Updating', 'Deleting', 'Failed', 'Unknown'],
+      labels: k8sStatusLabels,
       datasets: [
         {
           label: 'Cluster Count',
           data: [0, 0, 0, 0, 0, 0, 0],
-          backgroundColor: 'rgba(40, 167, 69, 0.8)', // Green with transparency
+          backgroundColor: k8sStatusLabels.map(status => getK8sChartColors(status, 0.8)),
         },
         {
           label: 'NodeGroup Count',
           data: [0, 0, 0, 0, 0, 0, 0],
-          backgroundColor: 'rgba(23, 162, 184, 0.8)', // Blue with transparency
+          backgroundColor: k8sStatusLabels.map(status => getK8sChartColors(status, 0.65)),
         },
         {
           label: 'Node Count',
           data: [0, 0, 0, 0, 0, 0, 0],
-          backgroundColor: 'rgba(255, 193, 7, 0.8)', // Yellow with transparency
+          backgroundColor: k8sStatusLabels.map(status => getK8sChartColors(status, 0.5)),
         }
       ]
     },
@@ -1172,13 +1378,37 @@ function updateResourceCounts() {
     const sshKeyElement = document.getElementById('sshKeyCount');
     if (sshKeyElement) sshKeyElement.textContent = sshKeyCount;
     console.log('SSH Key count:', sshKeyCount, 'Data:', centralData.sshKey);
-    // Update K8s Cluster count
+    
+    // Update K8s Cluster count with API status indicator
     const k8sClusterCount = centralData.k8sCluster ? centralData.k8sCluster.length : 0;
     const k8sClusterElement = document.getElementById('k8sClusterCount');
-    if (k8sClusterElement) k8sClusterElement.textContent = k8sClusterCount;
-    
     const totalK8sClusterElement = document.getElementById('totalK8sClusterCount');
-    if (totalK8sClusterElement) totalK8sClusterElement.textContent = k8sClusterCount;
+    
+    if (k8sClusterElement) {
+      k8sClusterElement.textContent = k8sClusterCount;
+      
+      // Add API status indicator for K8s clusters
+      if (centralData.apiStatus && centralData.apiStatus.k8sCluster === 'error') {
+        k8sClusterElement.title = `Last K8s API error: ${centralData.apiStatus.lastK8sClusterError?.message || 'Unknown error'}\nShowing cached data`;
+        k8sClusterElement.style.color = '#ffc107'; // Warning color for stale data
+      } else {
+        k8sClusterElement.title = '';
+        k8sClusterElement.style.color = ''; // Reset to default
+      }
+    }
+    
+    if (totalK8sClusterElement) {
+      totalK8sClusterElement.textContent = k8sClusterCount;
+      
+      // Add API status indicator for total K8s count
+      if (centralData.apiStatus && centralData.apiStatus.k8sCluster === 'error') {
+        totalK8sClusterElement.title = `Last K8s API error: ${centralData.apiStatus.lastK8sClusterError?.message || 'Unknown error'}\nShowing cached data`;
+        totalK8sClusterElement.style.color = '#ffc107'; // Warning color for stale data
+      } else {
+        totalK8sClusterElement.title = '';
+        totalK8sClusterElement.style.color = ''; // Reset to default
+      }
+    }
 
     // Update Connection count
     const connectionCount = centralData.connection ? centralData.connection.length : 0;
@@ -1189,6 +1419,10 @@ function updateResourceCounts() {
     const vpnCount = centralData.vpn ? centralData.vpn.length : 0;
     const vpnElement = document.getElementById('vpnCount');
     if (vpnElement) vpnElement.textContent = vpnCount;
+    
+    // Update VPN count badge (for table)
+    const vpnCountBadge = document.getElementById('vpnCountBadge');
+    if (vpnCountBadge) vpnCountBadge.textContent = vpnCount;
 
     // Update Custom Image count
     const customImageCount = centralData.customImage ? centralData.customImage.length : 0;
@@ -1330,13 +1564,37 @@ function updateCombinedStatusChart() {
     charts.combinedStatus.data.datasets[1].label = 'No VMs';
     charts.combinedStatus.data.datasets[1].backgroundColor = ['#f8f9fa'];
   } else {
+    // Use helper function defined in initializeCharts for consistent colors
+    function getChartColors(status, type = 'vm') {
+      if (window.parent && window.parent.getVmStatusColor) {
+        const colors = window.parent.getVmStatusColor(status);
+        if (type === 'mci') {
+          return colors.fill + 'CC'; // 80% opacity for MCI
+        } else {
+          return colors.fill + '99'; // 60% opacity for VM
+        }
+      }
+      // Fallback colors if parent function not available
+      const fallbackColors = {
+        'Preparing': type === 'mci' ? 'rgba(247, 147, 26, 0.8)' : 'rgba(247, 147, 26, 0.6)',
+        'Creating': type === 'mci' ? 'rgba(59, 130, 246, 0.8)' : 'rgba(59, 130, 246, 0.6)',
+        'Running': type === 'mci' ? 'rgba(16, 185, 129, 0.8)' : 'rgba(16, 185, 129, 0.6)',
+        'Suspended': type === 'mci' ? 'rgba(245, 158, 11, 0.8)' : 'rgba(245, 158, 11, 0.6)',
+        'Terminating': type === 'mci' ? 'rgba(239, 68, 68, 0.8)' : 'rgba(239, 68, 68, 0.6)',
+        'Terminated': type === 'mci' ? 'rgba(220, 38, 38, 0.8)' : 'rgba(220, 38, 38, 0.6)',
+        'Failed': type === 'mci' ? 'rgba(185, 28, 28, 0.8)' : 'rgba(185, 28, 28, 0.6)',
+        'Other': type === 'mci' ? 'rgba(156, 163, 175, 0.8)' : 'rgba(156, 163, 175, 0.6)'
+      };
+      return fallbackColors[status] || fallbackColors['Other'];
+    }
+    
     charts.combinedStatus.data.labels = statusLabels;
     charts.combinedStatus.data.datasets[0].data = mciDataArray;
     charts.combinedStatus.data.datasets[0].label = 'MCI Count';
-    charts.combinedStatus.data.datasets[0].backgroundColor = 'rgba(40, 167, 69, 0.8)';
+    charts.combinedStatus.data.datasets[0].backgroundColor = statusLabels.map(status => getChartColors(status, 'mci'));
     charts.combinedStatus.data.datasets[1].data = vmDataArray;
     charts.combinedStatus.data.datasets[1].label = 'VM Count';
-    charts.combinedStatus.data.datasets[1].backgroundColor = 'rgba(23, 162, 184, 0.8)';
+    charts.combinedStatus.data.datasets[1].backgroundColor = statusLabels.map(status => getChartColors(status, 'vm'));
   }
   charts.combinedStatus.update('none'); // Disable animation for better performance
 }
@@ -1698,14 +1956,38 @@ function updateK8sCharts() {
       charts.k8sClusterStatus.data.datasets[1].backgroundColor = ['#e9ecef'];
       charts.k8sClusterStatus.data.datasets[2].backgroundColor = ['#e9ecef'];
     } else {
+      // Helper function to get K8s chart colors from index.js functions  
+      function getK8sChartColors(status, opacity = 0.8) {
+        if (window.parent && window.parent.getK8sStatusColor) {
+          const colors = window.parent.getK8sStatusColor(status);
+          // Convert hex to rgba with specified opacity
+          const hex = colors.fill;
+          const r = parseInt(hex.slice(1, 3), 16);
+          const g = parseInt(hex.slice(3, 5), 16);
+          const b = parseInt(hex.slice(5, 7), 16);
+          return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+        }
+        // Fallback colors if parent function not available
+        const fallbackColors = {
+          'Creating': `rgba(59, 130, 246, ${opacity})`,    // Blue
+          'Active': `rgba(16, 185, 129, ${opacity})`,      // Green  
+          'Inactive': `rgba(245, 158, 11, ${opacity})`,    // Amber
+          'Updating': `rgba(247, 147, 26, ${opacity})`,    // Orange
+          'Deleting': `rgba(220, 38, 38, ${opacity})`,     // Red
+          'Failed': `rgba(239, 68, 68, ${opacity})`,       // Light Red
+          'Unknown': `rgba(107, 114, 128, ${opacity})`     // Gray
+        };
+        return fallbackColors[status] || fallbackColors['Unknown'];
+      }
+      
       charts.k8sClusterStatus.data.labels = statusLabels;
       charts.k8sClusterStatus.data.datasets[0].data = clusterDataArray;
       charts.k8sClusterStatus.data.datasets[1].data = nodeGroupDataArray;
       charts.k8sClusterStatus.data.datasets[2].data = nodeDataArray;
-      // Reset colors to original
-      charts.k8sClusterStatus.data.datasets[0].backgroundColor = 'rgba(40, 167, 69, 0.8)';
-      charts.k8sClusterStatus.data.datasets[1].backgroundColor = 'rgba(23, 162, 184, 0.8)';
-      charts.k8sClusterStatus.data.datasets[2].backgroundColor = 'rgba(255, 193, 7, 0.8)';
+      // Apply status-based colors with different opacity for each dataset
+      charts.k8sClusterStatus.data.datasets[0].backgroundColor = statusLabels.map(status => getK8sChartColors(status, 0.8));
+      charts.k8sClusterStatus.data.datasets[1].backgroundColor = statusLabels.map(status => getK8sChartColors(status, 0.65));
+      charts.k8sClusterStatus.data.datasets[2].backgroundColor = statusLabels.map(status => getK8sChartColors(status, 0.5));
     }
     
     charts.k8sClusterStatus.update('none'); // Disable animation for better performance
@@ -1727,6 +2009,12 @@ function updateK8sCharts() {
 
 // Update MCI table
 function updateMciTable() {
+  // Check if data has changed before updating
+  if (!hasDataChanged('mci-table', mciData)) {
+    console.log('[Performance] MCI table: Skipping update - no changes detected');
+    return;
+  }
+
   const tbody = document.getElementById('mciTableBody');
   tbody.innerHTML = '';
   
@@ -1735,7 +2023,7 @@ function updateMciTable() {
   if (countBadge) {
     countBadge.textContent = mciData.length;
   }
-  
+
   mciData.forEach(mci => {
     const row = document.createElement('tr');
     
@@ -1835,6 +2123,11 @@ function updateMciTable() {
     
     tbody.appendChild(row);
   });
+
+  // Reinitialize DataTable if needed
+  setTimeout(() => {
+    reinitializeDataTablesIfNeeded();
+  }, 100);
 }
 
 // Select MCI and update VM table
@@ -1937,14 +2230,21 @@ function updateShowAllButton() {
 
 // Update VM table
 function updateVmTable() {
-  const tbody = document.getElementById('vmTableBody');
-  tbody.innerHTML = '';
-  
-  // Filter VMs based on selected MCI
+  // Filter VMs based on selected MCI for data comparison
   let filteredVms = vmData;
   if (selectedMciId) {
     filteredVms = vmData.filter(vm => vm.mciId === selectedMciId);
   }
+  
+  // Check if data has changed before updating
+  const dataKey = selectedMciId ? `vm-table-${selectedMciId}` : 'vm-table-all';
+  if (!hasDataChanged(dataKey, filteredVms)) {
+    console.log(`[Performance] VM table (${dataKey}): Skipping update - no changes detected`);
+    return;
+  }
+
+  const tbody = document.getElementById('vmTableBody');
+  tbody.innerHTML = '';
   
   // Update VM count display
   const vmCountElement = document.getElementById('vmCountBadge');
@@ -2056,6 +2356,11 @@ function updateVmTable() {
     
     tbody.appendChild(row);
   });
+
+  // Reinitialize DataTable if needed
+  setTimeout(() => {
+    reinitializeDataTablesIfNeeded();
+  }, 100);
 }
 
 // Update resource display
@@ -2440,6 +2745,7 @@ function updateAllResourceTables() {
   updateConnectionTable();
   updateCustomImageTable();
   updateDataDiskTable();
+  updateVpnTable();
 }
 
 function updateVNetTable() {
@@ -2449,6 +2755,13 @@ function updateVNetTable() {
   }
   
   const vNetData = centralData.vNet || [];
+  
+  // Check if data has changed before updating
+  if (!hasDataChanged('vnet-table', vNetData)) {
+    console.log('[Performance] VNet table: Skipping update - no changes detected');
+    return;
+  }
+  
   const tableBody = document.getElementById('vNetTableBody');
   if (!tableBody) return;
   
@@ -2481,6 +2794,11 @@ function updateVNetTable() {
     `;
     tableBody.appendChild(row);
   });
+  
+  // Reinitialize DataTable if needed
+  setTimeout(() => {
+    reinitializeDataTablesIfNeeded();
+  }, 100);
 }
 
 function updateSecurityGroupTable() {
@@ -2490,6 +2808,13 @@ function updateSecurityGroupTable() {
   }
   
   const sgData = centralData.securityGroup || [];
+  
+  // Check if data has changed before updating
+  if (!hasDataChanged('security-group-table', sgData)) {
+    console.log('[Performance] Security Group table: Skipping update - no changes detected');
+    return;
+  }
+  
   const tableBody = document.getElementById('securityGroupTableBody');
   if (!tableBody) return;
   
@@ -2522,6 +2847,11 @@ function updateSecurityGroupTable() {
     `;
     tableBody.appendChild(row);
   });
+  
+  // Reinitialize DataTable if needed
+  setTimeout(() => {
+    reinitializeDataTablesIfNeeded();
+  }, 100);
 }
 
 function updateSshKeyTable() {
@@ -2531,6 +2861,12 @@ function updateSshKeyTable() {
   }
   
   const sshKeyData = centralData.sshKey || [];
+  
+  // Check if data has changed before updating
+  if (!hasDataChanged('ssh-key-table', sshKeyData)) {
+    console.log('[Performance] SSH Key table: Skipping update - no changes detected');
+    return;
+  }
   const tableBody = document.getElementById('sshKeyTableBody');
   if (!tableBody) return;
   
@@ -2577,6 +2913,12 @@ function updateK8sClusterTable() {
   const k8sData = centralData.k8sCluster || [];
   console.log('updateK8sClusterTable - K8s data:', k8sData);
   console.log('updateK8sClusterTable - Central data structure:', centralData);
+  
+  // Check if data has changed before updating
+  if (!hasDataChanged('k8s-cluster-table', k8sData)) {
+    console.log('[Performance] K8s Cluster table: Skipping update - no changes detected');
+    return;
+  }
   
   const tableBody = document.getElementById('k8sClusterTableBody');
   if (!tableBody) return;
@@ -2680,6 +3022,11 @@ function updateK8sClusterTable() {
   
   // Update node groups table
   updateK8sNodeGroupTable();
+  
+  // Reinitialize DataTable if needed
+  setTimeout(() => {
+    reinitializeDataTablesIfNeeded();
+  }, 100);
 }
 
 // Select K8s cluster and update node group table
@@ -3289,9 +3636,68 @@ function updateDataDiskTable() {
   });
 }
 
+function updateVpnTable() {
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  const vpnData = centralData.vpn || [];
+  
+  // Check if data has changed before updating
+  if (!hasDataChanged('vpn-table', vpnData)) {
+    console.log('[Performance] VPN table: Skipping update - no changes detected');
+    return;
+  }
+  
+  const tableBody = document.getElementById('vpnTableBody');
+  if (!tableBody) return;
+  
+  tableBody.innerHTML = '';
+  
+  // Update count badge
+  const countBadge = document.getElementById('vpnCountBadge');
+  if (countBadge) {
+    countBadge.textContent = vpnData.length;
+  }
+  
+  vpnData.forEach(vpn => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td title="${vpn.mciId || 'N/A'}">${smartTruncate(vpn.mciId || 'N/A', 'id')}</td>
+      <td title="${vpn.id || 'N/A'}">${smartTruncate(vpn.id || 'N/A', 'id')}</td>
+      <td><span class="status-badge status-${(vpn.status || 'unknown').toLowerCase()}">${vpn.status || 'Unknown'}</span></td>
+      <td title="${vpn.vpnSites ? vpn.vpnSites.length : 0}">${vpn.vpnSites ? vpn.vpnSites.length : 0} sites</td>
+      <td title="${vpn.connectionConfig?.providerName || 'N/A'}">${smartTruncate(vpn.connectionConfig?.providerName || 'N/A', 'provider')}</td>
+      <td title="${vpn.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(vpn.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
+      <td class="action-buttons">
+        <button class="btn btn-sm btn-outline-primary" onclick="viewVpnDetails('${vpn.mciId}', '${vpn.id}')" title="View Details">
+          <i class="fas fa-eye"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteVpn('${vpn.mciId}', '${vpn.id}')" title="Delete">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    `;
+    tableBody.appendChild(row);
+  });
+  
+  // Reinitialize DataTable if needed
+  setTimeout(() => {
+    reinitializeDataTablesIfNeeded();
+  }, 100);
+}
+
 // Resource management functions
 function refreshResourceList(resourceType) {
   console.log(`Refreshing ${resourceType} list...`);
+
+    // Special handling for VPN resources
+  if (resourceType === 'vpn') {
+    refreshVpnList();
+    return;
+  }
+  
   // Trigger refresh from parent window
   if (window.parent && window.parent.getMci) {
     window.parent.getMci();
@@ -4078,3 +4484,369 @@ window.debugK8sData = function() {
   console.log('Selected K8s Cluster ID:', selectedK8sClusterId);
   console.log('=== End K8s Debug ===');
 };
+
+// ===============================
+// DataTables Enhancement
+// ===============================
+
+// Store DataTable instances for efficient management
+let dataTableInstances = {};
+
+// Store previous data for change detection
+let previousData = {};
+
+// Development flag - set to true to disable change detection for debugging
+const DISABLE_CHANGE_DETECTION = false;
+
+// Simple data comparison function
+function hasDataChanged(tableId, newData) {
+  // Allow disabling change detection for debugging
+  if (DISABLE_CHANGE_DETECTION) {
+    console.log(`[DataTables] Change detection disabled, always updating ${tableId}`);
+    return true;
+  }
+  
+  try {
+    // Convert to JSON string for simple comparison
+    const newDataString = JSON.stringify(newData);
+    const oldDataString = previousData[tableId];
+    
+    // Always update on first run
+    if (oldDataString === undefined) {
+      previousData[tableId] = newDataString;
+      console.log(`[DataTables] First run for ${tableId}, data length: ${newDataString.length}`);
+      return true;
+    }
+    
+    // Simple string comparison
+    if (oldDataString !== newDataString) {
+      console.log(`[DataTables] Data changed for ${tableId}, old length: ${oldDataString.length}, new length: ${newDataString.length}`);
+      previousData[tableId] = newDataString;
+      return true;
+    }
+    
+    console.log(`[DataTables] No changes for ${tableId}, data length: ${newDataString.length}`);
+    return false;
+  } catch (error) {
+    console.warn(`[DataTables] Error comparing data for ${tableId}:`, error);
+    return true; // Update on error to be safe
+  }
+}
+
+// Initialize DataTables for dashboard tables
+function initializeDataTables() {
+  console.log('[DataTables] Starting initialization...');
+  
+  // Clear any existing DataTable state from localStorage to prevent conflicts
+  Object.keys(localStorage).forEach(key => {
+    if (key.startsWith('DataTables_')) {
+      localStorage.removeItem(key);
+      console.log(`[DataTables] Cleared localStorage key: ${key}`);
+    }
+  });
+
+  const tableConfigs = [
+    {
+      id: 'mci-table',
+      config: {
+        pageLength: 25,
+        responsive: true,
+        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+             '<"row"<"col-sm-12"tr>>' +
+             '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
+        language: {
+          search: "Search:",
+          lengthMenu: "Show _MENU_ entries",
+          info: "Showing _START_ to _END_ of _TOTAL_ entries",
+          paginate: {
+            first: "First",
+            last: "Last", 
+            next: "Next",
+            previous: "Previous"
+          }
+        },
+        order: [[0, 'asc']], // Default sort by first column
+        stateSave: false, // Disable state saving to avoid conflicts
+        scrollY: false, // Disable DataTables scrolling, use CSS instead
+        scrollCollapse: false,
+        columnDefs: [
+          { 
+            targets: -1, // Last column (Actions)
+            orderable: false,
+            searchable: false,
+            width: "200px",
+            className: "text-center",
+            responsivePriority: 1 // Highest priority for Actions column
+          }
+        ]
+      }
+    },
+    {
+      id: 'vm-table',
+      config: {
+        pageLength: 25,
+        responsive: true,
+        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+             '<"row"<"col-sm-12"tr>>' +
+             '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
+        language: {
+          search: "Search:",
+          lengthMenu: "Show _MENU_ entries",
+          info: "Showing _START_ to _END_ of _TOTAL_ entries",
+          paginate: {
+            first: "First",
+            last: "Last",
+            next: "Next", 
+            previous: "Previous"
+          }
+        },
+        order: [[0, 'asc']],
+        stateSave: false, // Disable state saving to avoid conflicts
+        scrollY: false,
+        scrollCollapse: false,
+        columnDefs: [
+          { 
+            targets: -1, // Actions column
+            orderable: false,
+            searchable: false,
+            width: "250px",
+            className: "text-center",
+            responsivePriority: 1 // Highest priority for Actions column
+          }
+        ]
+      }
+    },
+    {
+      id: 'vnet-table',
+      config: {
+        pageLength: 25,
+        responsive: true,
+        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+             '<"row"<"col-sm-12"tr>>' +
+             '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
+        language: {
+          search: "Search:",
+          lengthMenu: "Show _MENU_ entries",
+          info: "Showing _START_ to _END_ of _TOTAL_ entries"
+        },
+        order: [[0, 'asc']],
+        stateSave: false, // Disable state saving to avoid conflicts
+        columnDefs: [
+          { 
+            targets: -1, // Actions column
+            orderable: false,
+            searchable: false,
+            width: "150px",
+            className: "text-center",
+            responsivePriority: 1 // Highest priority for Actions column
+          }
+        ]
+      }
+    },
+    {
+      id: 'security-group-table',
+      config: {
+        pageLength: 25,
+        responsive: true,
+        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+             '<"row"<"col-sm-12"tr>>' +
+             '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
+        language: {
+          search: "Search:",
+          lengthMenu: "Show _MENU_ entries",
+          info: "Showing _START_ to _END_ of _TOTAL_ entries"
+        },
+        order: [[0, 'asc']],
+        stateSave: false, // Disable state saving to avoid conflicts
+        columnDefs: [
+          { 
+            targets: -1, // Actions column
+            orderable: false,
+            searchable: false,
+            width: "150px",
+            className: "text-center",
+            responsivePriority: 1 // Highest priority for Actions column
+          }
+        ]
+      }
+    },
+    {
+      id: 'ssh-key-table',
+      config: {
+        pageLength: 25,
+        responsive: true,
+        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+             '<"row"<"col-sm-12"tr>>' +
+             '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
+        language: {
+          search: "Search:",
+          lengthMenu: "Show _MENU_ entries",
+          info: "Showing _START_ to _END_ of _TOTAL_ entries"
+        },
+        order: [[0, 'asc']],
+        stateSave: false, // Disable state saving to avoid conflicts
+        columnDefs: [
+          { 
+            targets: -1, // Actions column
+            orderable: false,
+            searchable: false,
+            width: "150px",
+            className: "text-center",
+            responsivePriority: 1 // Highest priority for Actions column
+          }
+        ]
+      }
+    },
+    {
+      id: 'k8s-cluster-table',
+      config: {
+        pageLength: 25,
+        responsive: true,
+        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+             '<"row"<"col-sm-12"tr>>' +
+             '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
+        language: {
+          search: "Search:",
+          lengthMenu: "Show _MENU_ entries",
+          info: "Showing _START_ to _END_ of _TOTAL_ entries"
+        },
+        order: [[0, 'asc']],
+        stateSave: false, // Disable state saving to avoid conflicts
+        columnDefs: [
+          { 
+            targets: -1, // Actions column
+            orderable: false,
+            searchable: false,
+            width: "200px",
+            className: "text-center",
+            responsivePriority: 1 // Highest priority for Actions column
+          }
+        ]
+      }
+    },
+    {
+      id: 'vpn-table',
+      config: {
+        pageLength: 25,
+        responsive: true,
+        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+             '<"row"<"col-sm-12"tr>>' +
+             '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
+        language: {
+          search: "Search:",
+          lengthMenu: "Show _MENU_ entries",
+          info: "Showing _START_ to _END_ of _TOTAL_ entries"
+        },
+        order: [[0, 'asc']],
+        stateSave: false, // Disable state saving to avoid conflicts
+        columnDefs: [
+          { 
+            targets: -1, // Actions column
+            orderable: false,
+            searchable: false,
+            width: "150px",
+            className: "text-center",
+            responsivePriority: 1 // Highest priority for Actions column
+          }
+        ]
+      }
+    }
+  ];
+
+  tableConfigs.forEach(tableConfig => {
+    const tableElement = document.getElementById(tableConfig.id);
+    if (tableElement && !dataTableInstances[tableConfig.id]) {
+      try {
+        // Check if jQuery DataTable is available
+        if (typeof $ !== 'undefined' && $.fn.DataTable) {
+          // Destroy existing DataTable if it exists
+          if ($.fn.DataTable.isDataTable(`#${tableConfig.id}`)) {
+            $(`#${tableConfig.id}`).DataTable().destroy();
+            console.log(`[DataTables] Destroyed existing table: ${tableConfig.id}`);
+          }
+          
+          // Initialize with jQuery DataTable and enable searching/ordering
+          const config = {
+            ...tableConfig.config,
+            searching: true,
+            ordering: true,
+            stateSave: false, // Always disable state saving
+            order: [], // Reset any saved ordering to default
+            destroy: true, // Allow re-initialization
+          };
+          
+          dataTableInstances[tableConfig.id] = $(`#${tableConfig.id}`).DataTable(config);
+          console.log(`[DataTables] Initialized table with jQuery: ${tableConfig.id}`);
+          
+          // Verify that sorting classes are being applied after initialization
+          setTimeout(() => {
+            const headers = $(`#${tableConfig.id} thead th`);
+            console.log(`[DataTables] Verifying headers for ${tableConfig.id}:`);
+            headers.each((index, header) => {
+              const classes = header.className;
+              const hasOrderingClass = classes.includes('sorting') || classes.includes('sorting_asc') || classes.includes('sorting_desc');
+              console.log(`[DataTables] Header ${index}: "${$(header).text()}" | Classes: ${classes} | Has ordering: ${hasOrderingClass}`);
+            });
+            
+            // Check if search box and other DataTables controls are rendered
+            const wrapper = $(`#${tableConfig.id}_wrapper`);
+            const searchBox = wrapper.find('input[type="search"]');
+            const lengthSelect = wrapper.find('select[name$="_length"]');
+            const pagination = wrapper.find('.dataTables_paginate');
+            
+            console.log(`[DataTables] UI Elements for ${tableConfig.id}:`);
+            console.log(`[DataTables] - Wrapper exists: ${wrapper.length > 0}`);
+            console.log(`[DataTables] - Search box exists: ${searchBox.length > 0}, visible: ${searchBox.is(':visible')}`);
+            console.log(`[DataTables] - Length select exists: ${lengthSelect.length > 0}, visible: ${lengthSelect.is(':visible')}`);
+            console.log(`[DataTables] - Pagination exists: ${pagination.length > 0}, visible: ${pagination.is(':visible')}`);
+            
+            if (searchBox.length > 0) {
+              console.log(`[DataTables] - Search box element:`, searchBox[0]);
+              console.log(`[DataTables] - Search box CSS:`, window.getComputedStyle(searchBox[0]));
+            }
+          }, 200);
+          
+        } else {
+          console.warn(`[DataTables] jQuery DataTable not available for ${tableConfig.id}`);
+        }
+      } catch (error) {
+        console.warn(`[DataTables] Failed to initialize table ${tableConfig.id}:`, error);
+      }
+    }
+  });
+}
+
+// Initialize DataTables when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+  // Small delay to ensure all tables are rendered
+  setTimeout(() => {
+    initializeDataTables();
+  }, 500);
+});
+
+// Function to reinitialize DataTables if needed
+function reinitializeDataTablesIfNeeded() {
+  // Only reinitialize if not debugging (to avoid interference)
+  if (DISABLE_CHANGE_DETECTION) {
+    // During debugging, don't reinitialize to avoid conflicts
+    return;
+  }
+  
+  // Check if any DataTable instances exist and reinitialize if needed
+  Object.keys(dataTableInstances).forEach(tableId => {
+    const table = dataTableInstances[tableId];
+    if (table) {
+      try {
+        // Trigger a redraw to refresh the table
+        table.draw();
+      } catch (error) {
+        console.warn(`[DataTables] Failed to redraw table ${tableId}:`, error);
+      }
+    }
+  });
+}
+
+// Export functions for global access
+window.dataTableInstances = dataTableInstances;
+window.initializeDataTables = initializeDataTables;
+window.reinitializeDataTablesIfNeeded = reinitializeDataTablesIfNeeded;
