@@ -51,9 +51,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
 
-  <!-- Polyfill for older environments like Internet Explorer and Android 4.x -->
-  <script
-    src="https://polyfill.io/v3/polyfill.min.js?features=requestAnimationFrame,Element.prototype.classList,URL"></script>
+  <!-- Note: Polyfill removed as modern browsers (Chrome 24+, Firefox 23+, Safari 6.1+, Edge 12+) 
+       natively support requestAnimationFrame, Element.prototype.classList, and URL -->
+  <!-- Uncomment below if legacy browser support is required -->
+  <!--
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=requestAnimationFrame,Element.prototype.classList,URL"></script>
+  -->
 
   <!-- Bootstrap CSS and JS (with Popper.js for popovers and tooltips) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css"
@@ -1050,7 +1053,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
         <!-- Admin dashboards -->
         <div id="console" style="display:none; width:100%; height:100%; position:absolute; top:0; left:0;">
-          <iframe id="iframe" src="http://localhost:1324/swagger.html"
+          <iframe id="iframe" src="about:blank"
             style="visibility:visible; width:100%; height:100%; position:relative;"></iframe>
           <!-- <iframe id="iframe" src="http://localhost:1324/swagger.html"
             style="visibility:visible; width:50%; height:100%; position:relative;"></iframe>
@@ -1077,9 +1080,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         // Hide all views
         document.getElementById('map').style.display = "none";
         
-        // Reset console content to show Swagger
+        // Get current host dynamically
+        var currentHost = window.location.hostname;
+        
+        // Reset console content to show Swagger with dynamic host
         var console = document.getElementById('console');
-        console.innerHTML = '<iframe src="swagger.html" style="width:100%; height:100%; border:none;"></iframe>';
+        console.innerHTML = `<iframe src="http://${currentHost}:1324/swagger.html" style="width:100%; height:100%; border:none;"></iframe>`;
         console.style.display = "flex";
         
         // Switch to Control tab using Bootstrap tab API
@@ -1252,9 +1258,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             }, 100);
           }
           
-          // Update cached rect when layout changes
-          if (window.cachedMapRect !== undefined) {
-            window.cachedMapRect = mapContainer.getBoundingClientRect();
+          // Invalidate tooltip cache when layout changes
+          if (typeof window.invalidateTooltipCache === 'function') {
+            window.invalidateTooltipCache();
           }
         }
       }
@@ -1300,13 +1306,50 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         });
       });
 
-      // Simple drag detection for map cursor with tooltip
+      // Optimized tooltip positioning with smart caching
       const map = document.getElementById('map');
       const tooltip = document.getElementById('mouseTooltip');
       let isMouseDown = false;
-      window.cachedMapRect = map.getBoundingClientRect(); // Cache the rect globally
+      let cachedMapRect = null;
+      let cacheInvalidated = true;
       
-      map.addEventListener('mouseenter', () => tooltip.style.display = 'block');
+      // Function to update cache when needed
+      function updateMapRectCache() {
+        cachedMapRect = map.getBoundingClientRect();
+        cacheInvalidated = false;
+      }
+      
+      // Invalidate cache on events that change layout
+      window.invalidateTooltipCache = function() {
+        cacheInvalidated = true;
+      }
+      
+      // Listen for events that might change map position
+      window.addEventListener('resize', window.invalidateTooltipCache);
+      window.addEventListener('scroll', window.invalidateTooltipCache);
+      
+      // Listen for view changes (dashboard/map toggle)
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+            const target = mutation.target;
+            if (target.id === 'map' || target.id === 'console') {
+              window.invalidateTooltipCache();
+            }
+          }
+        });
+      });
+      
+      // Observe style changes on map and console elements
+      observer.observe(document.getElementById('map'), { attributes: true, attributeFilter: ['style'] });
+      observer.observe(document.getElementById('console'), { attributes: true, attributeFilter: ['style'] });
+      
+      map.addEventListener('mouseenter', () => {
+        tooltip.style.display = 'block';
+        // Update cache when mouse enters map area
+        updateMapRectCache();
+      });
+      
       map.addEventListener('mouseleave', () => { 
         isMouseDown = false; 
         map.style.cursor = 'crosshair'; 
@@ -1314,9 +1357,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       });
       
       map.addEventListener('mousemove', (e) => {
+        // Use cached rect, update only if cache is invalidated
+        if (cacheInvalidated) {
+          updateMapRectCache();
+        }
+        
         // Update tooltip position using cached rect
-        tooltip.style.left = (e.clientX - window.cachedMapRect.left) + 'px';
-        tooltip.style.top = (e.clientY - window.cachedMapRect.top) + 'px';
+        tooltip.style.left = (e.clientX - cachedMapRect.left) + 'px';
+        tooltip.style.top = (e.clientY - cachedMapRect.top) + 'px';
         
         // Update cursor and tooltip visibility if dragging
         if (isMouseDown) {
