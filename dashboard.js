@@ -1338,8 +1338,49 @@ function updateStatistics() {
       providers.add(cluster.connectionConfig.providerName);
     }
   });
+
+  // Calculate total unique regions from VMs and K8s clusters
+  const regions = new Set();
   
-  document.getElementById('totalMciCount').textContent = totalMci;
+  // Add regions from VMs
+  vmData.forEach(vm => {
+    let region = null;
+    
+    // Extract region information - try multiple sources
+    if (vm.region && vm.region.Region) {
+      region = vm.region.Region;
+    } else if (vm.location && vm.location.region) {
+      region = vm.location.region;
+    } else if (vm.connectionConfig && vm.connectionConfig.regionZoneInfo && vm.connectionConfig.regionZoneInfo.region) {
+      region = vm.connectionConfig.regionZoneInfo.region;
+    } else if (vm.regionZoneInfoList && vm.regionZoneInfoList.length > 0 && vm.regionZoneInfoList[0].regionName) {
+      region = vm.regionZoneInfoList[0].regionName;
+    }
+    
+    if (region) {
+      regions.add(region);
+    }
+  });
+  
+  // Add regions from K8s clusters
+  k8sData.forEach(cluster => {
+    let region = null;
+    
+    // Extract region information from cluster
+    if (cluster.region && cluster.region.Region) {
+      region = cluster.region.Region;
+    } else if (cluster.location && cluster.location.region) {
+      region = cluster.location.region;
+    } else if (cluster.connectionConfig && cluster.connectionConfig.regionZoneInfo && cluster.connectionConfig.regionZoneInfo.region) {
+      region = cluster.connectionConfig.regionZoneInfo.region;
+    }
+    
+    if (region) {
+      regions.add(region);
+    }
+  });
+  
+  document.getElementById('totalRegionCount').textContent = regions.size;
   document.getElementById('runningMciCount').textContent = runningMci;
   document.getElementById('failedMciCount').textContent = failedMci;
   document.getElementById('totalVmCount').textContent = totalVm;
