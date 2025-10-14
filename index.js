@@ -12168,7 +12168,7 @@ async function showSnapshotManagementModal() {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
           <h5 style="margin: 0;">Custom Images</h5>
           <div>
-            <button onclick="loadCustomImagesInModal()" class="btn btn-info btn-sm" style="margin-right: 5px;">🔄 Refresh Now</button>
+            <button id="refreshNowBtn" class="btn btn-info btn-sm" style="margin-right: 5px;">🔄 Refresh Now</button>
             <button id="toggleAutoRefreshBtn" class="btn btn-success btn-sm">⏸️ Pause Auto-refresh</button>
           </div>
         </div>
@@ -12189,6 +12189,9 @@ async function showSnapshotManagementModal() {
       htmlContainer: 'swal2-html-container-compact'
     },
     didOpen: async () => {
+      // Store namespace in window for access from modal functions
+      window.currentSnapshotNamespace = namespace;
+      
       // MCI selection change handler
       const loadVmsForMci = async function(mciId) {
         const vmSelect = document.getElementById('snapshotVmSelect');
@@ -12233,6 +12236,14 @@ async function showSnapshotManagementModal() {
       window.snapshotAutoRefreshInterval = null;
       window.snapshotLastImageData = null; // Reset cached data
       
+      // Setup refresh now button event listener
+      const refreshNowBtn = document.getElementById('refreshNowBtn');
+      if (refreshNowBtn) {
+        refreshNowBtn.addEventListener('click', function() {
+          loadCustomImagesInModal(namespace);
+        });
+      }
+      
       // Setup toggle button event listener
       const toggleBtn = document.getElementById('toggleAutoRefreshBtn');
       if (toggleBtn) {
@@ -12253,13 +12264,15 @@ async function showSnapshotManagementModal() {
         });
       }
       
-      // Initial load
-      loadCustomImagesInModal();
+      // Initial load with slight delay to ensure DOM is ready
+      setTimeout(() => {
+        loadCustomImagesInModal(namespace);
+      }, 100);
       
       // Start auto-refresh timer
       window.snapshotAutoRefreshInterval = setInterval(() => {
         if (window.snapshotAutoRefreshEnabled) {
-          loadCustomImagesInModal();
+          loadCustomImagesInModal(namespace);
         }
       }, 5000); // 5 seconds
     },
@@ -12270,6 +12283,8 @@ async function showSnapshotManagementModal() {
         window.snapshotAutoRefreshInterval = null;
       }
       window.snapshotAutoRefreshEnabled = false;
+      // Note: Don't clear window.currentSnapshotNamespace here
+      // It will be updated when a new modal opens
     }
   });
 }
@@ -12426,10 +12441,30 @@ async function createVmSnapshotFromModal() {
 }
 
 // Load Custom Images (with smart refresh to prevent flickering)
-async function loadCustomImagesInModal() {
-  const namespace = document.getElementById('namespace').value;
+async function loadCustomImagesInModal(namespace) {
+  // Priority: passed parameter > window storage > input field
+  if (!namespace) {
+    namespace = window.currentSnapshotNamespace || document.getElementById('namespace')?.value;
+  }
+  
+  console.log('loadCustomImagesInModal called with namespace:', namespace);
+  
+  if (!namespace) {
+    console.error('Namespace not available in loadCustomImagesInModal');
+    const container = document.getElementById('customImageListContainer');
+    if (container) {
+      container.innerHTML = '<p class="text-danger">Error: Namespace not available</p>';
+    }
+    return;
+  }
+  
   const config = getConfig();
   const container = document.getElementById('customImageListContainer');
+  
+  if (!container) {
+    console.error('customImageListContainer element not found');
+    return;
+  }
   
   // Update last refresh time
   const lastRefreshElement = document.getElementById('lastRefreshTime');
@@ -12523,7 +12558,11 @@ async function loadCustomImagesInModal() {
 
 // View Custom Image Details
 async function viewCustomImageDetails(imageId) {
-  const namespace = document.getElementById('namespace').value;
+  const namespace = window.currentSnapshotNamespace || document.getElementById('namespace')?.value;
+  if (!namespace) {
+    Swal.fire('Error', 'Namespace not available', 'error');
+    return;
+  }
   const config = getConfig();
 
   try {
@@ -12611,7 +12650,11 @@ async function deleteCustomImageFromModal(imageId) {
 
   if (!result.isConfirmed) return;
 
-  const namespace = document.getElementById('namespace').value;
+  const namespace = window.currentSnapshotNamespace || document.getElementById('namespace')?.value;
+  if (!namespace) {
+    Swal.fire('Error', 'Namespace not available', 'error');
+    return;
+  }
   const config = getConfig();
 
   try {
