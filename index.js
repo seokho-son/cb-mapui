@@ -2933,6 +2933,163 @@ function showFinalMciConfirmation(createMciReq, url, totalCost, totalNodeScale, 
 }
 
 // MCI Creation execution
+// Function to build cloud-agnostic custom images
+function proceedWithBuildAgnosticImage(createMciReq, snapshotName, snapshotDescription, cleanupMciAfterSnapshot, username, password) {
+  const hostname = configHostname;
+  const port = configPort;
+  const namespace = namespaceElement.value;
+  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/buildAgnosticImage`;
+  
+  // Prepare buildAgnosticImage request body
+  const buildImageReq = {
+    sourceMciReq: createMciReq,
+    snapshotReq: {
+      name: snapshotName,
+      description: snapshotDescription
+    },
+    cleanupMciAfterSnapshot: cleanupMciAfterSnapshot
+  };
+  
+  const jsonBody = JSON.stringify(buildImageReq, undefined, 4);
+  const spinnerId = addSpinnerTask("Building custom images from: " + createMciReq.name);
+  const requestId = generateRandomRequestId("build-image-" + createMciReq.name + "-", 10);
+  addRequestIdToSelect(requestId);
+
+  // Show progress notification
+  Swal.fire({
+    title: "📦 Building Cloud-Agnostic Images",
+    html: `
+      <div style="text-align: left; padding: 15px;">
+        <p><strong>Starting workflow...</strong></p>
+        <p style="color: #666; font-size: 0.9em;">
+          ⏳ This process may take 10-20 minutes<br>
+          1️⃣ Creating MCI infrastructure<br>
+          2️⃣ Executing post-deployment commands<br>
+          3️⃣ Creating custom snapshots<br>
+          4️⃣ Waiting for images to become Available<br>
+          ${cleanupMciAfterSnapshot ? '5️⃣ Cleaning up infrastructure' : '5️⃣ Preserving infrastructure'}
+        </p>
+      </div>
+    `,
+    icon: "info",
+    showConfirmButton: true,
+    confirmButtonText: "OK, Continue",
+    timer: 5000,
+    timerProgressBar: true
+  });
+
+  axios({
+    method: "post",
+    url: url,
+    headers: { "Content-Type": "application/json", "x-request-id": requestId },
+    data: jsonBody,
+    auth: {
+      username: username,
+      password: password,
+    },
+  })
+    .then((res) => {
+      console.log("BuildAgnosticImage completed:", res.data);
+      
+      const result = res.data;
+      
+      // Activate control-tab after successful operation
+      try {
+        document.querySelectorAll('.nav-link').forEach(tab => tab.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('show', 'active'));
+        
+        const controlTab = document.getElementById('control-tab');
+        const controlPane = document.getElementById('control');
+        
+        if (controlTab && controlPane) {
+          controlTab.classList.add('active');
+          controlPane.classList.add('show', 'active');
+          if (typeof $ !== 'undefined' && $.fn.tab) {
+            $(controlTab).tab('show');
+          }
+        }
+      } catch (error) {
+        console.log('Failed to activate control tab:', error);
+      }
+
+      // Display success message with details
+      Swal.fire({
+        icon: "success",
+        title: "✅ Custom Images Created Successfully!",
+        html: `
+          <div style="text-align: left; padding: 15px;">
+            <p><strong>Build Summary:</strong></p>
+            <ul style="list-style: none; padding-left: 0;">
+              <li>📦 <strong>MCI:</strong> ${result.mciId || 'N/A'}</li>
+              <li>⏱️ <strong>Duration:</strong> ${result.totalDuration || 'N/A'}</li>
+              <li>✅ <strong>Success:</strong> ${result.snapshotResult?.successCount || 0} images</li>
+              <li>❌ <strong>Failed:</strong> ${result.snapshotResult?.failCount || 0} images</li>
+              <li>🗑️ <strong>MCI Cleaned:</strong> ${result.mciCleanedUp ? 'Yes' : 'No'}</li>
+            </ul>
+            ${result.snapshotResult?.results ? `
+              <p><strong>Created Images:</strong></p>
+              <ul style="max-height: 200px; overflow-y: auto;">
+                ${result.snapshotResult.results.map(img => 
+                  `<li><strong>${img.imageId}</strong> (${img.subGroupId}) - ${img.status}</li>`
+                ).join('')}
+              </ul>
+            ` : ''}
+            <p style="color: #666; font-size: 0.9em; margin-top: 10px;">
+              ${result.message || 'Operation completed'}
+            </p>
+          </div>
+        `,
+        confirmButtonText: "View Custom Images",
+        showCancelButton: true,
+        cancelButtonText: "Close"
+      }).then((result) => {
+        if (result.isConfirmed) {
+          // Open Snapshot Management modal to show created images
+          showSnapshotManagementModal();
+        }
+      });
+
+      displayJsonData(res.data, typeInfo);
+      handleAxiosResponse(res);
+      updateMciList();
+      clearCircle("none");
+    })
+    .catch(function (error) {
+      errorAlert("Failed to build agnostic images from: " + createMciReq.name);
+      
+      let errorDetail = "Unknown error occurred";
+      if (error.response) {
+        console.log(error.response.data);
+        console.log(error.response.status);
+        console.log(error.response.headers);
+        displayJsonData(error.response.data, typeError);
+        errorDetail = error.response.data?.message || JSON.stringify(error.response.data);
+      } else {
+        console.log("Error", error.message);
+        errorDetail = error.message;
+      }
+      
+      Swal.fire({
+        icon: "error",
+        title: "❌ Image Build Failed",
+        html: `
+          <div style="text-align: left; padding: 15px;">
+            <p><strong>Error Details:</strong></p>
+            <div style="background-color: #f8f9fa; padding: 10px; border-radius: 5px; max-height: 200px; overflow-y: auto;">
+              <code>${errorDetail}</code>
+            </div>
+          </div>
+        `,
+        confirmButtonText: "Close"
+      });
+      
+      console.log(error.config);
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
+}
+
 function proceedWithMciCreation(createMciReq, url, username, password) {
   var jsonBody = JSON.stringify(createMciReq, undefined, 4);
   // MCI creation now tracked by spinner instead of console log
@@ -3009,12 +3166,27 @@ function proceedWithMciCreation(createMciReq, url, username, password) {
 }
 
 // Show post-deployment command dialog
-function showPostCommandDialog(createMciReq, mciCreationUrl, username, password) {
+function showPostCommandDialog(createMciReq, mciCreationUrl, username, password, buildAgnosticImage = false) {
   Swal.fire({
-    title: "<font size=5><b>Add post-deployment commands</b></font>",
+    title: buildAgnosticImage ? 
+      "<font size=5><b>📦 Build Cloud-Agnostic Custom Image</b></font>" : 
+      "<font size=5><b>Add post-deployment commands</b></font>",
     width: 900,
     html: `
       <div id="dynamicContainer" style="text-align: left;">
+        ${buildAgnosticImage ? `
+          <div style="background-color: #e3f2fd; padding: 12px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #2196f3;">
+            <p style="margin: 0; font-size: 0.9em; color: #1565c0;">
+              <strong>🔧 Image Building Workflow:</strong><br>
+              1️⃣ Create MCI infrastructure<br>
+              2️⃣ Execute post-deployment commands (setup software)<br>
+              3️⃣ Create custom snapshots from VMs<br>
+              4️⃣ Wait for images to become Available<br>
+              5️⃣ Cleanup infrastructure (optional)
+            </p>
+          </div>
+        ` : ''}
+        
         <p><font size=4><b>[Commands]</b></font></p>
         <div id="cmdContainer" style="margin-bottom: 20px;">
           <div id="cmdDiv1" class="cmdRow">
@@ -3066,9 +3238,42 @@ function showPostCommandDialog(createMciReq, mciCreationUrl, username, password)
           </div>
         </div>
         
+        ${buildAgnosticImage ? `
+          <hr style="margin: 20px 0;">
+          <p><font size=4><b>[Custom Image Settings]</b></font></p>
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 8px;">
+              <strong>Image Name Prefix:</strong>
+              <input type="text" id="snapshotName" style="width: 75%; margin-top: 5px;" 
+                     placeholder="custom-image" value="custom-image">
+            </label>
+            <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
+              The final image name will be: prefix-subgroupname (e.g., custom-image-g1)
+            </div>
+          </div>
+          
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 8px;">
+              <strong>Image Description:</strong>
+              <textarea id="snapshotDescription" style="width: 75%; height: 60px; margin-top: 5px; padding: 5px;" 
+                        placeholder="Description about this custom image">Custom image created with BuildAgnosticImage workflow</textarea>
+            </label>
+          </div>
+          
+          <div style="margin-bottom: 15px;">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+              <input type="checkbox" id="cleanupMciCheckbox" checked style="margin-right: 8px; transform: scale(1.2);">
+              <span style="color: #333; font-weight: 500;">🗑️ Cleanup MCI after image creation</span>
+            </label>
+            <div style="font-size: 0.8em; color: #666; margin-top: 3px; margin-left: 28px;">
+              Automatically terminate and delete MCI after custom images are created and available
+            </div>
+          </div>
+        ` : ''}
+        
       </div>`,
     showCancelButton: true,
-    confirmButtonText: "Add & Create MCI",
+    confirmButtonText: buildAgnosticImage ? "🚀 Build Custom Images" : "Add & Create MCI",
     didOpen: () => {
       window.addCmd = () => {
         const cmdContainer = document.getElementById('cmdContainer');
@@ -3107,7 +3312,21 @@ function showPostCommandDialog(createMciReq, mciCreationUrl, username, password)
         }
       }
       const labelSelector = document.getElementById('labelSelector').value.trim();
-      return { commands, labelSelector };
+      
+      const result = { commands, labelSelector };
+      
+      // Add buildAgnosticImage specific parameters if applicable
+      if (buildAgnosticImage) {
+        const snapshotName = document.getElementById('snapshotName')?.value?.trim() || 'custom-image';
+        const snapshotDescription = document.getElementById('snapshotDescription')?.value?.trim() || 'Custom image created with BuildAgnosticImage workflow';
+        const cleanupMci = document.getElementById('cleanupMciCheckbox')?.checked !== false;
+        
+        result.snapshotName = snapshotName;
+        result.snapshotDescription = snapshotDescription;
+        result.cleanupMciAfterSnapshot = cleanupMci;
+      }
+      
+      return result;
     }
   }).then((commandResult) => {
     if (commandResult.isConfirmed) {
@@ -3120,7 +3339,20 @@ function showPostCommandDialog(createMciReq, mciCreationUrl, username, password)
           createMciReq.postCommand.labelSelector = commandResult.value.labelSelector;
         }
       }
-      proceedWithMciCreation(createMciReq, mciCreationUrl, username, password);
+      
+      // Handle buildAgnosticImage workflow
+      if (buildAgnosticImage) {
+        proceedWithBuildAgnosticImage(
+          createMciReq, 
+          commandResult.value.snapshotName,
+          commandResult.value.snapshotDescription,
+          commandResult.value.cleanupMciAfterSnapshot,
+          username, 
+          password
+        );
+      } else {
+        proceedWithMciCreation(createMciReq, mciCreationUrl, username, password);
+      }
     }
   });
 }
@@ -4065,6 +4297,16 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
                   Execute custom commands on all VMs after successful deployment.
                 </div>
               </div>
+              
+              <div style="margin: 8px 0;">
+                <label style="display: flex; align-items: center; cursor: pointer; font-size: 0.9em;">
+                  <input type="checkbox" id="buildimage-checkbox" style="margin-right: 8px; transform: scale(1.2);">
+                  <span style="color: #333; font-weight: 500;">📦 Build Cloud-Agnostic Custom Image</span>
+                </label>
+                <div style="margin-left: 24px; margin-top: 4px; color: #666; font-size: 0.8em;">
+                  Create custom images from deployed VMs and optionally cleanup infrastructure.
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -4122,7 +4364,7 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
           updateReviewButtonState();
         };
         
-        window.updateReviewButtonState = function() {
+          window.updateReviewButtonState = function() {
           const selectedSubgroups = document.querySelectorAll('.subgroup-checkbox:checked');
           const reviewButton = document.getElementById('reviewWithSelectedSubgroups');
           const selectAllCheckbox = document.getElementById('selectAllSubgroups');
@@ -4147,7 +4389,19 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
           }
         };
         
-        window.getSelectedSubgroups = function() {
+        // Toggle Build Image options visibility
+        window.toggleBuildImageOptions = function() {
+          const buildImageCheckbox = document.getElementById('buildimage-checkbox');
+          const postCommandCheckbox = document.getElementById('postcommand-checkbox');
+          
+          if (buildImageCheckbox && buildImageCheckbox.checked) {
+            // When build image is enabled, automatically enable post-commands
+            if (postCommandCheckbox) {
+              postCommandCheckbox.checked = true;
+              postCommandCheckbox.disabled = false;
+            }
+          }
+        };        window.getSelectedSubgroups = function() {
           const selectedCheckboxes = document.querySelectorAll('.subgroup-checkbox:checked');
           return Array.from(selectedCheckboxes).map(cb => cb.getAttribute('data-subgroup-name'));
         };
@@ -4183,13 +4437,20 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
         subgroupCheckboxes.forEach(checkbox => {
           checkbox.addEventListener('change', updateReviewButtonState);
         });
+        
+        // Add change listener for build image checkbox
+        const buildImageCheckbox = document.getElementById('buildimage-checkbox');
+        if (buildImageCheckbox) {
+          buildImageCheckbox.addEventListener('change', toggleBuildImageOptions);
+        }
       },
       preConfirm: () => {
         if (validationStatus !== "error") {
           return {
             monitoring: document.getElementById('monitoring-checkbox') ? document.getElementById('monitoring-checkbox').checked : false,
             hold: document.getElementById('hold-checkbox') ? document.getElementById('hold-checkbox').checked : false,
-            addPostCommand: document.getElementById('postcommand-checkbox') ? document.getElementById('postcommand-checkbox').checked : false
+            addPostCommand: document.getElementById('postcommand-checkbox') ? document.getElementById('postcommand-checkbox').checked : false,
+            buildAgnosticImage: document.getElementById('buildimage-checkbox') ? document.getElementById('buildimage-checkbox').checked : false
           };
         }
         return null;
@@ -4227,9 +4488,9 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
               }
               
               // Handle post-deployment commands for force creation
-              if (options.addPostCommand) {
-                // Show the same post-command dialog as normal flow
-                showPostCommandDialog(createMciReq, mciCreationUrl, username, password);
+              if (options.addPostCommand || options.buildAgnosticImage) {
+                // Show the same post-command dialog as normal flow (with buildAgnosticImage flag)
+                showPostCommandDialog(createMciReq, mciCreationUrl, username, password, options.buildAgnosticImage);
               } else {
                 proceedWithMciCreation(createMciReq, mciCreationUrl, username, password);
               }
@@ -4249,9 +4510,9 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             mciCreationUrl += "?option=hold";
           }
 
-          if (options.addPostCommand) {
-            // Show post-command dialog
-            showPostCommandDialog(createMciReq, mciCreationUrl, username, password);
+          if (options.addPostCommand || options.buildAgnosticImage) {
+            // Show post-command dialog (with buildAgnosticImage flag)
+            showPostCommandDialog(createMciReq, mciCreationUrl, username, password, options.buildAgnosticImage);
           } else {
             proceedWithMciCreation(createMciReq, mciCreationUrl, username, password);
           }
@@ -4486,6 +4747,7 @@ function createMci() {
   }
 }
 window.createMci = createMci;
+window.proceedWithBuildAgnosticImage = proceedWithBuildAgnosticImage;
 
 // Function to check if K8s node image designation is needed
 async function checkK8sNodeImageDesignation(providerName, hostname, port, username, password) {
