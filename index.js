@@ -4401,7 +4401,8 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
               postCommandCheckbox.disabled = false;
             }
           }
-        };        window.getSelectedSubgroups = function() {
+        };
+        window.getSelectedSubgroups = function() {
           const selectedCheckboxes = document.querySelectorAll('.subgroup-checkbox:checked');
           return Array.from(selectedCheckboxes).map(cb => cb.getAttribute('data-subgroup-name'));
         };
