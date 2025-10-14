@@ -2943,6 +2943,11 @@ function updateSshKeyTable() {
     `;
     tableBody.appendChild(row);
   });
+  
+  // Reinitialize DataTable if needed
+  setTimeout(() => {
+    reinitializeDataTablesIfNeeded();
+  }, 100);
 }
 
 function updateK8sClusterTable() {
@@ -3611,14 +3616,28 @@ function updateCustomImageTable() {
   }
   
   imageData.forEach(image => {
+    // Extract region from regionList array (take first region if multiple)
+    const regionName = Array.isArray(image.regionList) && image.regionList.length > 0 
+      ? image.regionList[0] 
+      : (image.regionList || 'N/A');
+    
+    // Use imageStatus (new field) or fallback to status (old field)
+    const imageStatus = image.imageStatus || image.status || 'Unknown';
+    
+    // Use osType (new field) or fallback to guestOS (old field)
+    const osType = image.osType || image.guestOS || 'N/A';
+    
+    // Use providerName (new field) or fallback to connectionConfig (old field)
+    const providerName = image.providerName || image.connectionConfig?.providerName || 'N/A';
+    
     const row = document.createElement('tr');
     row.innerHTML = `
       <td title="${image.id}">${smartTruncate(image.id, 'id')}</td>
       <td title="${image.name || 'N/A'}">${smartTruncate(image.name || 'N/A', 'name')}</td>
-      <td><span class="status-badge status-${(image.status || 'unknown').toLowerCase()}">${image.status || 'Unknown'}</span></td>
-      <td title="${image.connectionConfig?.providerName || 'N/A'}">${smartTruncate(image.connectionConfig?.providerName || 'N/A', 'provider')}</td>
-      <td title="${image.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(image.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
-      <td title="${image.guestOS || 'N/A'}">${smartTruncate(image.guestOS || 'N/A', 'default')}</td>
+      <td><span class="status-badge status-${imageStatus.toLowerCase()}">${imageStatus}</span></td>
+      <td title="${providerName}">${smartTruncate(providerName, 'provider')}</td>
+      <td title="${regionName}">${smartTruncate(regionName, 'region')}</td>
+      <td title="${osType}">${smartTruncate(osType, 'default')}</td>
       <td>${image.creationDate ? new Date(image.creationDate).toLocaleDateString() : 'N/A'}</td>
       <td class="action-buttons">
         <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('customImage', '${image.id}')" title="View Details">
@@ -3631,6 +3650,11 @@ function updateCustomImageTable() {
     `;
     tableBody.appendChild(row);
   });
+  
+  // Reinitialize DataTable if needed
+  setTimeout(() => {
+    reinitializeDataTablesIfNeeded();
+  }, 100);
 }
 
 function updateDataDiskTable() {
@@ -3675,6 +3699,11 @@ function updateDataDiskTable() {
     `;
     tableBody.appendChild(row);
   });
+  
+  // Reinitialize DataTable if needed
+  setTimeout(() => {
+    reinitializeDataTablesIfNeeded();
+  }, 100);
 }
 
 function updateVpnTable() {
@@ -4367,29 +4396,30 @@ function openInfoLink(path) {
 
 // Scroll to specific section smoothly
 function scrollToSection(sectionId) {
-  // Map section IDs to actual HTML element IDs
-  const sectionMap = {
-    'connectionSection': 'connectionTable',
-    'vNetSection': 'vNetTable', 
-    'securityGroupSection': 'securityGroupTable',
-    'sshKeySection': 'sshKeyTable',
-    'vpnSection': 'vpnTable',
-    'k8sSection': 'k8sClusterTable',
-    'customImageSection': 'customImageTable',
-    'dataDiskSection': 'dataDiskTable',
-    'mciTable': 'mciTable',
-    'vmTable': 'vmTable'
-  };
+  // Try to find the section element directly (row with id)
+  let element = document.getElementById(sectionId);
   
-  const actualId = sectionMap[sectionId] || sectionId;
-  const element = document.getElementById(actualId);
+  // If not found, try alternative IDs (for backward compatibility)
+  if (!element) {
+    const alternativeMap = {
+      'mciTable': 'mciTable',
+      'vmTable': 'vmTable',
+      'providerRegionChart': 'providerRegionChart'
+    };
+    const alternativeId = alternativeMap[sectionId];
+    if (alternativeId) {
+      element = document.getElementById(alternativeId);
+    }
+  }
   
   if (element) {
-    // Find the parent row or section container
+    // Find the parent row or section container if element is not already a row
     let targetElement = element;
-    let container = element.closest('.row');
-    if (container) {
-      targetElement = container;
+    if (!element.classList.contains('row')) {
+      const container = element.closest('.row');
+      if (container) {
+        targetElement = container;
+      }
     }
     
     // Smooth scroll to the element
@@ -4412,7 +4442,7 @@ function scrollToSection(sectionId) {
       }, 3000);
     }
   } else {
-    console.warn(`Section with ID '${actualId}' not found`);
+    console.warn(`Section with ID '${sectionId}' not found`);
   }
 }
 

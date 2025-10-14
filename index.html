@@ -855,6 +855,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                       class="btn btn-warning w-100">💾 Remote File Transfer</button>
                   </div>
 
+                  <!-- Snapshot Management Field (Info) -->
+                  <div class="form-group">
+                    <button type="button" id="snapshotManagement" onClick="showSnapshotManagementModal();"
+                      class="btn btn-warning w-100">📸 Snapshot Management</button>
+                  </div>
+
                   <!-- Scale Out SubGroup Field -->
                   <div class="form-group">
                     <button type="button" id="scaleOutBtn" onClick="scaleOutSubGroupWithSelection();"
@@ -1384,11 +1390,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         map.style.cursor = 'crosshair'; 
         tooltip.style.display = 'block';
       });
-
-    </script>
-
-        });
-
     </script>
 
     <script type="text/javascript">
