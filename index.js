@@ -711,10 +711,13 @@ function showMciContextMenu(pixel, mciInfo) {
         <button onclick="transferFileToMci(); Swal.close();" class="btn btn-warning btn-context">📁 File Transfer</button>
         <button onclick="document.querySelector('.save-file').click(); Swal.close();" class="btn btn-warning btn-context">💾 Download Key</button>
 
-        <button onclick="scaleOutMciFromContext('` + mciInfo.name + `'); Swal.close();" class="btn btn-primary btn-context">⬆️ Scale Out</button>
+        <button onclick="showSnapshotManagementModal(); Swal.close();" class="btn btn-info btn-context">📸 Snapshots</button>       
         <button onclick="manageNLB(); Swal.close();" class="btn btn-info btn-context">⚖️ NLB</button>
         <button onclick="updateFirewallRules(); Swal.close();" class="btn btn-info btn-context">🔥 Firewall</button>
-        <button onclick="executeAction('delete'); Swal.close();" class="btn btn-danger btn-context" style="grid-column: span 3;">🗑️ Delete MCI</button>
+
+        <button onclick="scaleOutMciFromContext('` + mciInfo.name + `'); Swal.close();" class="btn btn-primary btn-context">⬆️ Scale Out</button>
+
+        <button onclick="executeAction('delete'); Swal.close();" class="btn btn-danger btn-context" style="grid-column: span 2;">🗑️ Delete MCI</button>
       </div>
     `,
     showConfirmButton: false,
@@ -5823,20 +5826,43 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
         console.log("Searching images for selected spec:", selectedSpec.id);
 
-        // Search images API call
-        axios({
-          method: "post",
-          url: searchImageURL,
-          headers: { "Content-Type": "application/json" },
-          data: JSON.stringify(searchImageBody),
-          auth: {
-            username: `${username}`,
-            password: `${password}`,
-          },
-        }).then((searchRes) => {
+        // Get namespace for custom image API call
+        var namespace = namespaceElement.value;
+
+        // Search images API call and custom images API call in parallel
+        Promise.all([
+          // Regular images search
+          axios({
+            method: "post",
+            url: searchImageURL,
+            headers: { "Content-Type": "application/json" },
+            data: JSON.stringify(searchImageBody),
+            auth: {
+              username: `${username}`,
+              password: `${password}`,
+            },
+          }),
+          // Custom images fetch
+          axios({
+            method: "get",
+            url: `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/customImage`,
+            headers: { "Content-Type": "application/json" },
+            auth: {
+              username: `${username}`,
+              password: `${password}`,
+            },
+          }).catch(err => {
+            console.log("Failed to fetch custom images (will continue with regular images only):", err);
+            return { data: { customImage: [] } }; // Return empty array if custom images API fails
+          })
+        ]).then(([searchRes, customImageRes]) => {
           console.log("searchImage response:", searchRes.data);
+          console.log("customImage response:", customImageRes.data);
 
           let availableImages = [];
+          let customImages = [];
+          
+          // Process regular images
           if (searchRes.data && searchRes.data.imageList && searchRes.data.imageList.length > 0) {
             availableImages = searchRes.data.imageList.map(img => ({
               id: img.id || "unknown",
@@ -5856,12 +5882,59 @@ function getRecommendedSpec(idx, latitude, longitude) {
               isGPUImage: img.isGPUImage || false,
               isKubernetesImage: img.isKubernetesImage || false,
               isBasicImage: img.isBasicImage || false,
+              isCustomImage: false,
               details: img.details || []
             }));
 
-            console.log("Available images for this spec:");
+            console.log("Available regular images for this spec:");
             console.table(availableImages);
           }
+
+          // Process custom images - filter by matching provider and region
+          if (customImageRes.data && customImageRes.data.customImage && customImageRes.data.customImage.length > 0) {
+            const selectedProvider = selectedSpec.providerName;
+            const selectedRegion = selectedSpec.regionName;
+            
+            customImages = customImageRes.data.customImage
+              .filter(img => {
+                // Match provider
+                const imgProvider = img.providerName || '';
+                if (imgProvider !== selectedProvider) return false;
+                
+                // Match region (regionList is an array)
+                const imgRegions = Array.isArray(img.regionList) ? img.regionList : [img.regionList];
+                if (!imgRegions.includes(selectedRegion)) return false;
+                
+                return true;
+              })
+              .map(img => ({
+                id: img.id || "unknown",
+                cspImageName: img.cspImageName || img.name || "unknown",
+                osType: img.osType || img.guestOS || "unknown",
+                osDistribution: img.osDistribution || img.description || "Custom Image",
+                osArchitecture: img.osArchitecture || "unknown",
+                creationDate: img.creationDate || "unknown",
+                description: img.description || "Custom Image",
+                imageStatus: img.imageStatus || img.status || "unknown",
+                osPlatform: img.osPlatform || "unknown",
+                osDiskType: img.osDiskType || "unknown",
+                osDiskSizeGB: img.osDiskSizeGB || "unknown",
+                providerName: img.providerName || "unknown",
+                connectionName: img.connectionName || "unknown",
+                infraType: img.infraType || "unknown",
+                isGPUImage: false,
+                isKubernetesImage: false,
+                isBasicImage: false,
+                isCustomImage: true, // Mark as custom image
+                details: img.details || []
+              }));
+
+            console.log("Available custom images for this spec:");
+            console.table(customImages);
+          }
+
+          // Merge custom images at the top, then regular images
+          availableImages = [...customImages, ...availableImages];
 
           if (availableImages.length === 0) {
             errorAlert("No images found for the selected specification");
@@ -5892,8 +5965,10 @@ function getRecommendedSpec(idx, latitude, longitude) {
                         const gpuSupport = image.isGPUImage ? 'T' : 'F';
                         const k8sSupport = image.isKubernetesImage ? 'T' : 'F';
                         
-                        // Add special styling for basic images
+                        // Add special styling for custom images and basic images
+                        const isCustomClass = image.isCustomImage ? 'custom-image-row' : '';
                         const isBasicClass = image.isBasicImage ? 'basic-image-row' : '';
+                        const customIcon = image.isCustomImage ? ' <span class="custom-image-icon" title="Custom Image (Snapshot)">📸</span>' : '';
                         const basicIcon = image.isBasicImage ? ' <span class="basic-image-icon" title="Basic OS Image">⭐</span>' : '';
                         const mlIcon = image.isGPUImage ? ' <span class="ml-image-icon" title="GPU Support">🧮</span>' : '';
                         const k8sIcon = image.isKubernetesImage ? ' <span class="k8s-image-icon" title="Kubernetes Support">☸️</span>' : '';
@@ -5908,8 +5983,8 @@ function getRecommendedSpec(idx, latitude, longitude) {
                         const truncatedDistribution = truncateText(image.osDistribution, 70);
                         
                         return `
-                          <tr id="image-row-${index}" class="${index === 0 ? 'selected-image' : ''} ${isBasicClass}" data-index="${index}">
-                            <td class="text-left">${index + 1}${basicIcon}</td>
+                          <tr id="image-row-${index}" class="${index === 0 ? 'selected-image' : ''} ${isCustomClass} ${isBasicClass}" data-index="${index}">
+                            <td class="text-left">${index + 1}${customIcon}${basicIcon}</td>
                             <td class="text-left">${image.osType}</td>
                             <td class="text-left" style="font-size: 0.85em; color: #0066cc;" title="${image.cspImageName}">${truncatedImageName}</td>
                             <td class="text-left" style="font-size: 0.9em;" title="${image.osDistribution}">${truncatedDistribution}</td>
@@ -6015,6 +6090,23 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 }
                 .basic-image-row:hover {
                   background-color: rgba(255, 193, 7, 0.15) !important;
+                }
+                
+                /* Custom Image row styling */
+                .custom-image-row {
+                  background-color: rgba(138, 43, 226, 0.1) !important;
+                  border-left: 3px solid #8a2be2 !important;
+                }
+                .custom-image-row:hover {
+                  background-color: rgba(138, 43, 226, 0.15) !important;
+                }
+                
+                /* Custom Image icon */
+                .custom-image-icon {
+                  color: #8a2be2;
+                  font-size: 1.1em;
+                  margin-left: 5px;
+                  text-shadow: 0 0 3px rgba(138, 43, 226, 0.5);
                 }
                 
                 /* Basic Image icon */
@@ -11975,3 +12067,579 @@ async function loadVpnDataFromMcis() {
 
 // Make function available globally for Dashboard to call
 window.syncMciSelectionFromDashboard = syncMciSelectionFromDashboard;
+
+// ============================================
+// Snapshot Management Functions
+// ============================================
+
+// Global variables for snapshot auto-refresh
+window.snapshotAutoRefreshEnabled = false;
+window.snapshotAutoRefreshInterval = null;
+window.snapshotLastImageData = null; // Store last image data to prevent unnecessary re-renders
+
+// Toggle Auto-refresh for Snapshot Management
+function toggleSnapshotAutoRefresh() {
+  window.snapshotAutoRefreshEnabled = !window.snapshotAutoRefreshEnabled;
+  
+  const btn = document.getElementById('toggleAutoRefreshBtn');
+  const status = document.getElementById('autoRefreshStatus');
+  
+  if (window.snapshotAutoRefreshEnabled) {
+    btn.innerHTML = '⏸️ Pause Auto-refresh';
+    btn.className = 'btn btn-success btn-sm';
+    status.innerHTML = '🟢 Auto-refreshing every 5 seconds';
+  } else {
+    btn.innerHTML = '▶️ Resume Auto-refresh';
+    btn.className = 'btn btn-warning btn-sm';
+    status.innerHTML = '🔴 Auto-refresh paused';
+  }
+}
+
+// Show Snapshot Management Modal
+async function showSnapshotManagementModal() {
+  const namespace = document.getElementById('namespace').value;
+  if (!namespace) {
+    Swal.fire('Warning', 'Please select a namespace first', 'warning');
+    return;
+  }
+
+  // Get pre-selected MCI from control panel (if any)
+  const preSelectedMci = document.getElementById('mciid')?.value || '';
+
+  // Load MCI list
+  const config = getConfig();
+  let mciList = [];
+  try {
+    const response = await axios.get(`http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/mci`, {
+      auth: { username: config.username, password: config.password },
+      headers: { 'Content-Type': 'application/json' }
+    });
+    mciList = response.data.mci || [];
+  } catch (error) {
+    console.error('Error loading MCI list:', error);
+  }
+
+  Swal.fire({
+    title: '📸 Snapshot Management',
+    html: `
+      <style>
+        .swal2-html-container { padding: 0 1.6em !important; }
+        .snapshot-compact-form { text-align: left; padding: 0; margin: 0; }
+        .snapshot-compact-form h5 { margin: 0 0 10px 0; font-size: 16px; }
+        .snapshot-compact-form .form-row { display: flex; gap: 10px; margin-bottom: 8px; }
+        .snapshot-compact-form .form-col { flex: 1; min-width: 0; }
+        .snapshot-compact-form label { display: block; margin: 0 0 3px 0; font-size: 13px; font-weight: 500; }
+        .snapshot-compact-form .form-control-sm { height: 28px; font-size: 13px; padding: 3px 8px; }
+        .snapshot-compact-form hr { margin: 12px 0; border-top: 1px solid #dee2e6; }
+        .snapshot-compact-form .btn { margin: 8px 0; }
+      </style>
+      <div class="snapshot-compact-form">
+        <h5>Create VM Snapshot</h5>
+        <div class="form-row">
+          <div class="form-col">
+            <label>Select MCI:</label>
+            <select id="snapshotMciSelect" class="form-control form-control-sm">
+              <option value="">-- Select MCI --</option>
+              ${mciList.map(mci => `<option value="${mci.id}" ${mci.id === preSelectedMci ? 'selected' : ''}>${mci.id}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-col">
+            <label>Select VM:</label>
+            <select id="snapshotVmSelect" class="form-control form-control-sm">
+              <option value="">-- Select MCI First --</option>
+            </select>
+            <small class="form-text text-muted" style="margin-top: 2px;">Select "🌐 All VMs" for MCI-wide snapshot</small>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <label>Snapshot Name (optional):</label>
+            <input type="text" id="snapshotName" class="form-control form-control-sm" placeholder="Auto-generated if empty">
+          </div>
+          <div class="form-col">
+            <label>Description (optional):</label>
+            <input type="text" id="snapshotDescription" class="form-control form-control-sm" placeholder="Snapshot description">
+          </div>
+        </div>
+        <button onclick="createVmSnapshotFromModal()" class="btn btn-primary btn-block">📸 Create Snapshot</button>
+        
+        <hr>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <h5 style="margin: 0;">Custom Images</h5>
+          <div>
+            <button onclick="loadCustomImagesInModal()" class="btn btn-info btn-sm" style="margin-right: 5px;">🔄 Refresh Now</button>
+            <button id="toggleAutoRefreshBtn" class="btn btn-success btn-sm">⏸️ Pause Auto-refresh</button>
+          </div>
+        </div>
+        <div style="font-size: 11px; color: #6c757d; margin-bottom: 5px;">
+          <span id="autoRefreshStatus">🟢 Auto-refreshing every 5 seconds</span> | 
+          <span id="lastRefreshTime">Last refresh: -</span>
+        </div>
+        <div id="customImageListContainer" style="max-height: 400px; overflow-y: auto;">
+          <p class="text-muted">Loading custom images...</p>
+        </div>
+      </div>
+    `,
+    width: '80%',
+    showConfirmButton: false,
+    showCancelButton: true,
+    cancelButtonText: '❌ Close',
+    customClass: {
+      htmlContainer: 'swal2-html-container-compact'
+    },
+    didOpen: async () => {
+      // MCI selection change handler
+      const loadVmsForMci = async function(mciId) {
+        const vmSelect = document.getElementById('snapshotVmSelect');
+        vmSelect.innerHTML = '<option value="">-- Loading VMs --</option>';
+        
+        if (!mciId) {
+          vmSelect.innerHTML = '<option value="">-- Select MCI First --</option>';
+          return;
+        }
+
+        try {
+          const response = await axios.get(
+            `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/mci/${mciId}`,
+            {
+              auth: { username: config.username, password: config.password },
+              headers: { 'Content-Type': 'application/json' }
+            }
+          );
+          
+          const vms = response.data.vm || [];
+          // Add "All VMs" option for MCI-wide snapshot
+          vmSelect.innerHTML = '<option value="">-- Select VM or All --</option>' + 
+            '<option value="__ALL_VMS__">🌐 All VMs (MCI Snapshot - one per subgroup)</option>' +
+            vms.map(vm => `<option value="${vm.id}">${vm.id} (${vm.status})</option>`).join('');
+        } catch (error) {
+          console.error('Error loading VM list:', error);
+          vmSelect.innerHTML = '<option value="">-- Error loading VMs --</option>';
+        }
+      };
+      
+      document.getElementById('snapshotMciSelect').addEventListener('change', async function() {
+        await loadVmsForMci(this.value);
+      });
+      
+      // If MCI is pre-selected, auto-load its VMs
+      if (preSelectedMci) {
+        await loadVmsForMci(preSelectedMci);
+      }
+      
+      // Auto-refresh setup (5 seconds interval)
+      window.snapshotAutoRefreshEnabled = true;
+      window.snapshotAutoRefreshInterval = null;
+      window.snapshotLastImageData = null; // Reset cached data
+      
+      // Setup toggle button event listener
+      const toggleBtn = document.getElementById('toggleAutoRefreshBtn');
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', function() {
+          window.snapshotAutoRefreshEnabled = !window.snapshotAutoRefreshEnabled;
+          
+          const status = document.getElementById('autoRefreshStatus');
+          
+          if (window.snapshotAutoRefreshEnabled) {
+            this.innerHTML = '⏸️ Pause Auto-refresh';
+            this.className = 'btn btn-success btn-sm';
+            if (status) status.innerHTML = '🟢 Auto-refreshing every 5 seconds';
+          } else {
+            this.innerHTML = '▶️ Resume Auto-refresh';
+            this.className = 'btn btn-warning btn-sm';
+            if (status) status.innerHTML = '🔴 Auto-refresh paused';
+          }
+        });
+      }
+      
+      // Initial load
+      loadCustomImagesInModal();
+      
+      // Start auto-refresh timer
+      window.snapshotAutoRefreshInterval = setInterval(() => {
+        if (window.snapshotAutoRefreshEnabled) {
+          loadCustomImagesInModal();
+        }
+      }, 5000); // 5 seconds
+    },
+    willClose: () => {
+      // Cleanup: clear auto-refresh timer when modal closes
+      if (window.snapshotAutoRefreshInterval) {
+        clearInterval(window.snapshotAutoRefreshInterval);
+        window.snapshotAutoRefreshInterval = null;
+      }
+      window.snapshotAutoRefreshEnabled = false;
+    }
+  });
+}
+
+// Create VM Snapshot (supports both single VM and MCI-wide snapshots)
+async function createVmSnapshotFromModal() {
+  const namespace = document.getElementById('namespace').value;
+  const mciId = document.getElementById('snapshotMciSelect').value;
+  const vmId = document.getElementById('snapshotVmSelect').value;
+  const snapshotName = document.getElementById('snapshotName').value;
+  const description = document.getElementById('snapshotDescription').value;
+
+  if (!mciId || !vmId) {
+    Swal.fire('Warning', 'Please select MCI and VM (or All VMs)', 'warning');
+    return;
+  }
+
+  const config = getConfig();
+  const isMciSnapshot = (vmId === '__ALL_VMS__');
+  
+  try {
+    Swal.fire({
+      title: isMciSnapshot ? 'Creating MCI Snapshots...' : 'Creating VM Snapshot...',
+      html: isMciSnapshot ? 
+        'Creating snapshots for all subgroups in parallel...<br>This may take several minutes...' : 
+        'This may take a few minutes...',
+      allowOutsideClick: false,
+      didOpen: () => { Swal.showLoading(); }
+    });
+
+    const requestBody = {
+      name: snapshotName || undefined,
+      description: description || undefined
+    };
+
+    let response;
+    if (isMciSnapshot) {
+      // MCI-wide snapshot (all subgroups)
+      response = await axios.post(
+        `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/mci/${mciId}/snapshot`,
+        requestBody,
+        {
+          auth: { username: config.username, password: config.password },
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+      
+      // Display MCI snapshot results
+      const results = response.data.results || [];
+      const successCount = response.data.successCount || 0;
+      const failCount = response.data.failCount || 0;
+      
+      const resultsHtml = results.map(result => {
+        const statusIcon = result.status === 'Success' ? '✅' : '❌';
+        const statusClass = result.status === 'Success' ? 'success' : 'danger';
+        const statusBadge = result.imageInfo?.imageStatus ? 
+          `<span class="badge badge-info" style="font-size: 11px;">${result.imageInfo.imageStatus}</span>` : '';
+        
+        return `
+          <tr>
+            <td>${statusIcon}</td>
+            <td>${result.subGroupId}</td>
+            <td>${result.vmId}</td>
+            <td>${result.imageId || 'N/A'} ${statusBadge}</td>
+            <td><span class="badge badge-${statusClass}">${result.status}</span></td>
+            <td style="font-size: 11px; color: ${result.error ? 'red' : 'inherit'};">${result.error || '-'}</td>
+          </tr>
+        `;
+      }).join('');
+      
+      Swal.fire({
+        icon: successCount > 0 ? 'success' : 'error',
+        title: 'MCI Snapshot Completed',
+        html: `
+          <div style="text-align: left; padding: 10px;">
+            <p><strong>MCI ID:</strong> ${response.data.mciId}</p>
+            <p><strong>Summary:</strong> 
+              <span class="badge badge-success">${successCount} Success</span> 
+              <span class="badge badge-danger">${failCount} Failed</span>
+            </p>
+            <div style="max-height: 400px; overflow-y: auto; margin-top: 10px;">
+              <table class="table table-sm table-bordered">
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>SubGroup</th>
+                    <th>VM ID</th>
+                    <th>Image ID</th>
+                    <th>Result</th>
+                    <th>Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${resultsHtml}
+                </tbody>
+              </table>
+            </div>
+            ${failCount > 0 ? 
+              '<p class="text-warning"><strong>⚠️ Note:</strong> Some snapshots failed. Check error details above.</p>' : 
+              '<p class="text-success"><strong>✅ All snapshots created successfully!</strong></p>'}
+          </div>
+        `,
+        width: '900px',
+        confirmButtonText: 'OK'
+      }).then(() => {
+        showSnapshotManagementModal();
+      });
+      
+    } else {
+      // Single VM snapshot
+      response = await axios.post(
+        `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/mci/${mciId}/vm/${vmId}/snapshot`,
+        requestBody,
+        {
+          auth: { username: config.username, password: config.password },
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+
+      // Create status badge with color
+      const statusClass = response.data.imageStatus === 'Available' ? 'success' : 
+                         response.data.imageStatus === 'Creating' ? 'info' : 
+                         response.data.imageStatus === 'Failed' ? 'danger' : 'warning';
+      
+      Swal.fire({
+        icon: 'success',
+        title: 'VM Snapshot Created!',
+        html: `
+          <div style="text-align: left; padding: 10px;">
+            <p><strong>Image ID:</strong> ${response.data.id}</p>
+            <p><strong>Image Status:</strong> <span class="badge badge-${statusClass}" style="font-size: 14px;">${response.data.imageStatus}</span></p>
+            <p><strong>Provider:</strong> ${response.data.providerName || 'N/A'}</p>
+            <p><strong>Region:</strong> ${response.data.regionList ? response.data.regionList.join(', ') : 'N/A'}</p>
+            <p><strong>Description:</strong> ${response.data.description || 'N/A'}</p>
+            ${response.data.imageStatus !== 'Available' ? 
+              '<p class="text-warning"><strong>⚠️ Note:</strong> Snapshot is being created. Status will be updated shortly.</p>' : 
+              '<p class="text-success"><strong>✅ Snapshot is ready to use!</strong></p>'}
+          </div>
+        `,
+        confirmButtonText: 'OK'
+      }).then(() => {
+        showSnapshotManagementModal();
+      });
+    }
+
+  } catch (error) {
+    console.error('Error creating snapshot:', error);
+    Swal.fire({
+      icon: 'error',
+      title: 'Snapshot Creation Failed',
+      text: error.response?.data?.message || error.message || 'Unknown error occurred'
+    });
+  }
+}
+
+// Load Custom Images (with smart refresh to prevent flickering)
+async function loadCustomImagesInModal() {
+  const namespace = document.getElementById('namespace').value;
+  const config = getConfig();
+  const container = document.getElementById('customImageListContainer');
+  
+  // Update last refresh time
+  const lastRefreshElement = document.getElementById('lastRefreshTime');
+  if (lastRefreshElement) {
+    const now = new Date();
+    lastRefreshElement.innerHTML = `Last refresh: ${now.toLocaleTimeString()}`;
+  }
+  
+  // Show loading only on first load
+  if (!window.snapshotLastImageData) {
+    container.innerHTML = '<p class="text-muted">Loading...</p>';
+  }
+
+  try {
+    const response = await axios.get(
+      `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/resources/customImage`,
+      {
+        auth: { username: config.username, password: config.password },
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+
+    const images = response.data.customImage || [];
+    
+    // Compare with last data to prevent unnecessary re-render
+    const currentDataString = JSON.stringify(images);
+    if (window.snapshotLastImageData === currentDataString) {
+      // Data hasn't changed, skip re-render
+      return;
+    }
+    
+    // Update stored data
+    window.snapshotLastImageData = currentDataString;
+    
+    if (images.length === 0) {
+      container.innerHTML = '<p class="text-muted">No custom images found</p>';
+      return;
+    }
+
+    let html = '<div style="overflow-x: auto;"><table class="table table-sm table-striped" style="font-size: 12px;"><thead><tr><th>Provider (Region)</th><th>ID (Status)</th><th>OS (Arch)</th><th>Description</th><th>Source VM UID</th><th>Created</th><th>Action</th></tr></thead><tbody>';
+    
+    images.forEach(img => {
+      // Enhanced status badge with icons and colors
+      let statusIcon = '';
+      
+      if (img.imageStatus === 'Available') {
+        statusIcon = '✅';
+      } else if (img.imageStatus === 'Unavailable') {
+        statusIcon = '⏳';
+      } else {
+        statusIcon = '⚠️';
+      }
+      
+      // Combine provider and region
+      const providerRegion = `${img.providerName || 'N/A'} (${img.regionList && img.regionList.length > 0 ? img.regionList[0] : 'N/A'})`;
+      
+      // Combine ID and status
+      const idWithStatus = `${img.id.substring(0, 12)}${img.id.length > 12 ? '...' : ''} (${statusIcon})`;
+      
+      // Combine OS type and architecture
+      const osInfo = `${img.osType || 'N/A'} (${img.osArchitecture || 'N/A'})`;
+      
+      // Truncate long description
+      const descShort = img.description && img.description.length > 40 ? 
+        img.description.substring(0, 40) + '...' : (img.description || 'N/A');
+      
+      html += `
+        <tr>
+          <td>${providerRegion}</td>
+          <td title="${img.id} - Status: ${img.imageStatus}">${idWithStatus}</td>
+          <td>${osInfo}</td>
+          <td title="${img.description || 'N/A'}">${descShort}</td>
+          <td title="${img.sourceVmUid || 'N/A'}">${img.sourceVmUid ? img.sourceVmUid.substring(0, 12) + '...' : 'N/A'}</td>
+          <td>${img.creationDate ? new Date(img.creationDate).toLocaleDateString() : 'N/A'}</td>
+          <td style="white-space: nowrap;">
+            <button onclick="viewCustomImageDetails('${img.id}')" class="btn btn-sm btn-info" title="View Details">👁️</button>
+            <button onclick="deleteCustomImageFromModal('${img.id}')" class="btn btn-sm btn-danger" title="Delete">🗑️</button>
+          </td>
+        </tr>
+      `;
+    });
+    
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+
+  } catch (error) {
+    console.error('Error loading custom images:', error);
+    container.innerHTML = '<p class="text-danger">Error loading custom images</p>';
+  }
+}
+
+// View Custom Image Details
+async function viewCustomImageDetails(imageId) {
+  const namespace = document.getElementById('namespace').value;
+  const config = getConfig();
+
+  try {
+    const response = await axios.get(
+      `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/resources/customImage/${imageId}`,
+      {
+        auth: { username: config.username, password: config.password },
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+
+    const img = response.data;
+    
+    // Create enhanced status badge with icon
+    let statusIcon = '';
+    let statusClass = 'warning';
+    let statusMessage = '';
+    
+    if (img.imageStatus === 'Available') {
+      statusIcon = '✅';
+      statusClass = 'success';
+      statusMessage = '<p class="text-success"><strong>This snapshot is ready to use for VM creation.</strong></p>';
+    } else if (img.imageStatus === 'Creating') {
+      statusIcon = '🔄';
+      statusClass = 'info';
+      statusMessage = '<p class="text-info"><strong>⏳ Snapshot is being created. Please wait until status becomes Available.</strong></p>';
+    } else if (img.imageStatus === 'Failed') {
+      statusIcon = '❌';
+      statusClass = 'danger';
+      statusMessage = '<p class="text-danger"><strong>⚠️ Snapshot creation failed. This image cannot be used.</strong></p>';
+    } else {
+      statusIcon = '⚠️';
+      statusClass = 'warning';
+      statusMessage = '<p class="text-warning"><strong>⚠️ Image status is ' + img.imageStatus + '. Check before using.</strong></p>';
+    }
+    
+    Swal.fire({
+      title: `📸 ${img.id}`,
+      html: `
+        <div style="text-align: left; padding: 10px;">
+          <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 15px; border-left: 4px solid var(--${statusClass});">
+            <p style="margin: 0;"><strong>Image Status:</strong></p>
+            <p style="margin: 10px 0; font-size: 16px;">
+              <span class="badge badge-${statusClass}" style="font-size: 16px; padding: 8px 12px;">${statusIcon} ${img.imageStatus}</span>
+            </p>
+            ${statusMessage}
+          </div>
+          <p><strong>Provider:</strong> ${img.providerName}</p>
+          <p><strong>Region:</strong> ${img.regionList ? img.regionList.join(', ') : 'N/A'}</p>
+          <p><strong>OS Type:</strong> ${img.osType || 'N/A'}</p>
+          <p><strong>OS Architecture:</strong> ${img.osArchitecture || 'N/A'}</p>
+          <p><strong>Description:</strong> ${img.description || 'N/A'}</p>
+          <p><strong>Created:</strong> ${img.creationDate || 'N/A'}</p>
+          <p><strong>Source VM UID:</strong> ${img.sourceVmUid || 'N/A'}</p>
+        </div>
+      `,
+      confirmButtonText: 'Close',
+      width: '600px'
+    }).then(() => {
+      // Return to Snapshot Management modal after closing
+      showSnapshotManagementModal();
+    });
+
+  } catch (error) {
+    console.error('Error loading custom image details:', error);
+    Swal.fire('Error', 'Failed to load image details', 'error').then(() => {
+      // Return to Snapshot Management modal even on error
+      showSnapshotManagementModal();
+    });
+  }
+}
+
+// Delete Custom Image
+async function deleteCustomImageFromModal(imageId) {
+  const result = await Swal.fire({
+    title: 'Delete Custom Image?',
+    text: `Are you sure you want to delete "${imageId}"?`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#d33',
+    cancelButtonColor: '#3085d6',
+    confirmButtonText: 'Yes, delete it!',
+    cancelButtonText: 'Cancel'
+  });
+
+  if (!result.isConfirmed) return;
+
+  const namespace = document.getElementById('namespace').value;
+  const config = getConfig();
+
+  try {
+    await axios.delete(
+      `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/resources/customImage/${imageId}`,
+      {
+        auth: { username: config.username, password: config.password },
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+
+    Swal.fire('Deleted!', 'Custom image has been deleted.', 'success').then(() => {
+      // Return to Snapshot Management modal after deletion
+      showSnapshotManagementModal();
+    });
+
+  } catch (error) {
+    console.error('Error deleting custom image:', error);
+    Swal.fire('Error', error.response?.data?.message || 'Failed to delete custom image', 'error').then(() => {
+      // Return to Snapshot Management modal even on error
+      showSnapshotManagementModal();
+    });
+  }
+}
+
+// Make functions globally available
+window.showSnapshotManagementModal = showSnapshotManagementModal;
+window.createVmSnapshotFromModal = createVmSnapshotFromModal;
+window.loadCustomImagesInModal = loadCustomImagesInModal;
+window.viewCustomImageDetails = viewCustomImageDetails;
+window.deleteCustomImageFromModal = deleteCustomImageFromModal;
