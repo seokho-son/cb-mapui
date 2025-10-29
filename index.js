@@ -7722,6 +7722,653 @@ function registerCspResource() {
 }
 window.registerCspResource = registerCspResource;
 
+// ==================== Schedule Resource Registration Functions ====================
+
+// Global variables for schedule job auto-refresh
+window.scheduleJobAutoRefreshEnabled = false;
+window.scheduleJobAutoRefreshInterval = null;
+
+// Main Schedule Job Management Modal
+async function showScheduleJobManagement() {
+  const config = getConfig();
+  const hostname = config.hostname;
+  const port = config.port;
+  const username = config.username;
+  const password = config.password;
+
+  // Load namespace and connection lists
+  let namespaces = [];
+  let connections = [];
+  
+  try {
+    const [nsResponse, connResponse] = await Promise.all([
+      axios.get(`http://${hostname}:${port}/tumblebug/ns?option=id`, {
+        auth: { username, password }
+      }),
+      axios.get(`http://${hostname}:${port}/tumblebug/connConfig`, {
+        auth: { username, password }
+      })
+    ]);
+    
+    namespaces = nsResponse.data.output || nsResponse.data.ns || [];
+    connections = connResponse.data.connectionconfig || [];
+  } catch (error) {
+    console.error('Error loading namespace/connection list:', error);
+    Swal.fire('❌ Error', 'Failed to load namespace/connection list', 'error');
+    return;
+  }
+
+  // Build options
+  const nsOptions = namespaces.map(ns => {
+    const nsId = typeof ns === 'string' ? ns : (ns.id || ns);
+    return `<option value="${nsId}">${nsId}</option>`;
+  }).join('');
+
+  const connOptions = '<option value="">All Connections</option>' + 
+    connections.map(conn => 
+      `<option value="${conn.configName}">${conn.configName} (${conn.providerName})</option>`
+    ).join('');
+
+  Swal.fire({
+    title: '📅 Schedule Job Management',
+    html: `
+      <style>
+        .schedule-compact-form { text-align: left; padding: 0; margin: 0; }
+        .schedule-compact-form h5 { margin: 0 0 10px 0; font-size: 16px; }
+        .schedule-compact-form .form-row { display: flex; gap: 10px; margin-bottom: 8px; }
+        .schedule-compact-form .form-col { flex: 1; min-width: 0; }
+        .schedule-compact-form .form-col-full { flex: 1 0 100%; }
+        .schedule-compact-form label { display: block; margin: 0 0 3px 0; font-size: 13px; font-weight: 500; }
+        .schedule-compact-form .form-control-sm { height: 28px; font-size: 13px; padding: 3px 8px; }
+        .schedule-compact-form select.form-control-sm { height: 30px; }
+        .schedule-compact-form hr { margin: 12px 0; border-top: 1px solid #dee2e6; }
+        .schedule-compact-form .btn { margin: 8px 0; }
+        .schedule-compact-form small { font-size: 11px; color: #6c757d; margin-top: 2px; display: block; }
+        .job-card { border: 1px solid #dee2e6; border-radius: 6px; padding: 12px; margin-bottom: 10px; background: #f8f9fa; }
+        .job-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .job-card-title { font-weight: 600; font-size: 13px; color: #333; }
+        .job-card-body { font-size: 12px; }
+        .job-card-footer { margin-top: 8px; display: flex; gap: 5px; flex-wrap: wrap; }
+        .job-card-footer .btn { margin: 0; font-size: 11px; padding: 2px 8px; }
+      </style>
+      <div class="schedule-compact-form">
+        <h5>➕ Create New Schedule Job</h5>
+        <div class="form-row">
+          <div class="form-col">
+            <label>Namespace ID *</label>
+            <select id="sched-nsId" class="form-control form-control-sm">
+              ${nsOptions}
+            </select>
+          </div>
+          <div class="form-col">
+            <label>Connection Name</label>
+            <select id="sched-connection" class="form-control form-control-sm">
+              ${connOptions}
+            </select>
+            <small>Leave empty for all connections</small>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <label>Interval (seconds) *</label>
+            <input type="number" id="sched-interval" class="form-control form-control-sm" value="3600" min="10">
+            <small>Min: 10s, Recommended: 1800s+</small>
+          </div>
+          <div class="form-col">
+            <label>MCI Name Prefix</label>
+            <input type="text" id="sched-mciPrefix" class="form-control form-control-sm" value="scheduled-mci">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <label>Registration Option</label>
+            <select id="sched-option" class="form-control form-control-sm">
+              <option value="">All Resources</option>
+              <option value="onlyVm">Only VMs</option>
+              <option value="exceptVm">Except VMs</option>
+            </select>
+          </div>
+          <div class="form-col">
+            <label>MCI Flag</label>
+            <select id="sched-mciFlag" class="form-control form-control-sm">
+              <option value="y">Single MCI</option>
+              <option value="n">Separate per VM</option>
+            </select>
+          </div>
+        </div>
+        <button onclick="createScheduleJobFromModal()" class="btn btn-primary btn-block">➕ Create Schedule Job</button>
+        
+        <hr>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <h5 style="margin: 0;">📋 Existing Schedule Jobs</h5>
+          <div>
+            <button id="refreshJobsBtn" class="btn btn-info btn-sm" style="margin-right: 5px;">🔄 Refresh</button>
+            <button id="toggleJobAutoRefreshBtn" class="btn btn-success btn-sm">⏸️ Pause Auto-refresh</button>
+          </div>
+        </div>
+        <div style="font-size: 11px; color: #6c757d; margin-bottom: 8px;">
+          <span id="jobAutoRefreshStatus">🟢 Auto-refreshing every 10 seconds</span> | 
+          <span id="jobLastRefreshTime">Last refresh: -</span>
+        </div>
+        <div id="scheduleJobListContainer" style="max-height: 450px; overflow-y: auto;">
+          <p class="text-muted">Loading schedule jobs...</p>
+        </div>
+      </div>
+    `,
+    width: '85%',
+    showConfirmButton: false,
+    showCancelButton: true,
+    cancelButtonText: '❌ Close',
+    didOpen: () => {
+      // Enable auto-refresh
+      window.scheduleJobAutoRefreshEnabled = true;
+      
+      // Setup refresh now button
+      const refreshBtn = document.getElementById('refreshJobsBtn');
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => loadScheduleJobsInModal());
+      }
+      
+      // Setup toggle auto-refresh button
+      const toggleBtn = document.getElementById('toggleJobAutoRefreshBtn');
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+          window.scheduleJobAutoRefreshEnabled = !window.scheduleJobAutoRefreshEnabled;
+          const status = document.getElementById('jobAutoRefreshStatus');
+          
+          if (window.scheduleJobAutoRefreshEnabled) {
+            toggleBtn.innerHTML = '⏸️ Pause Auto-refresh';
+            toggleBtn.className = 'btn btn-success btn-sm';
+            if (status) status.innerHTML = '🟢 Auto-refreshing every 10 seconds';
+          } else {
+            toggleBtn.innerHTML = '▶️ Resume Auto-refresh';
+            toggleBtn.className = 'btn btn-warning btn-sm';
+            if (status) status.innerHTML = '🔴 Auto-refresh paused';
+          }
+        });
+      }
+      
+      // Initial load
+      setTimeout(() => loadScheduleJobsInModal(), 100);
+      
+      // Start auto-refresh timer (10 seconds)
+      if (window.scheduleJobAutoRefreshInterval) {
+        clearInterval(window.scheduleJobAutoRefreshInterval);
+      }
+      window.scheduleJobAutoRefreshInterval = setInterval(() => {
+        if (window.scheduleJobAutoRefreshEnabled && Swal.isVisible()) {
+          loadScheduleJobsInModal();
+        }
+      }, 10000);
+    },
+    willClose: () => {
+      // Stop auto-refresh
+      window.scheduleJobAutoRefreshEnabled = false;
+      if (window.scheduleJobAutoRefreshInterval) {
+        clearInterval(window.scheduleJobAutoRefreshInterval);
+        window.scheduleJobAutoRefreshInterval = null;
+      }
+    }
+  });
+}
+window.showScheduleJobManagement = showScheduleJobManagement;
+
+// Load Schedule Jobs in Modal
+async function loadScheduleJobsInModal() {
+  const config = getConfig();
+  const container = document.getElementById('scheduleJobListContainer');
+  const lastRefreshTime = document.getElementById('jobLastRefreshTime');
+  
+  if (!container) return;
+  
+  try {
+    const response = await axios.get(
+      `http://${config.hostname}:${config.port}/tumblebug/registerCspResources/schedule`,
+      { auth: { username: config.username, password: config.password } }
+    );
+    
+    const jobs = response.data.jobs || [];
+    
+    if (lastRefreshTime) {
+      lastRefreshTime.innerHTML = `Last refresh: ${new Date().toLocaleTimeString()}`;
+    }
+    
+    if (jobs.length === 0) {
+      container.innerHTML = '<p class="text-muted text-center" style="padding: 20px;">No schedule jobs found. Create one above!</p>';
+      return;
+    }
+    
+    // Build job cards
+    container.innerHTML = jobs.map(job => {
+      // Execution State Badge (Scheduled, Executing, Stopped)
+      let executionStateBadge = '';
+      if (job.status === 'Executing') {
+        executionStateBadge = '<span class="badge badge-warning">⚙️ Executing</span>';
+      } else if (job.status === 'Stopped') {
+        executionStateBadge = '<span class="badge badge-secondary">⏹️ Stopped</span>';
+      } else { // Default to Scheduled
+        executionStateBadge = '<span class="badge badge-info">📅 Scheduled</span>';
+      }
+      
+      // Enabled/Paused Badge (only for active jobs, not for stopped)
+      let enabledBadge = '';
+      if (job.status !== 'Stopped') {
+        enabledBadge = job.enabled ? 
+          '<span class="badge badge-success">✅ Active</span>' : 
+          '<span class="badge badge-dark">⏸️ Paused</span>';
+      }
+      
+      // Auto-Disabled Warning
+      const autoDisabledBadge = job.autoDisabled ? 
+        '<span class="badge badge-danger">⚠️ Auto-Disabled</span>' : '';
+      
+      return `
+        <div class="job-card">
+          <div class="job-card-header">
+            <div class="job-card-title">${job.jobId}</div>
+            <div>${executionStateBadge} ${enabledBadge} ${autoDisabledBadge}</div>
+          </div>
+          <div class="job-card-body">
+            <div><strong>Namespace:</strong> ${job.nsId} | <strong>Connection:</strong> ${job.connectionName || 'All'}</div>
+            <div><strong>Interval:</strong> ${job.intervalSeconds}s (${Math.round(job.intervalSeconds/60)}m) | <strong>MCI Prefix:</strong> ${job.mciNamePrefix}</div>
+            <div><strong>Stats:</strong> Exec: ${job.executionCount} | Success: <span class="text-success">${job.successCount}</span> | Fail: <span class="text-danger">${job.failureCount}</span> | Consecutive Fails: ${job.consecutiveFailures}</div>
+            <div><strong>Next Execution:</strong> ${new Date(job.nextExecutionAt).toLocaleString()}</div>
+            ${job.lastExecutionAt ? `<div><strong>Last Execution:</strong> ${new Date(job.lastExecutionAt).toLocaleString()}</div>` : ''}
+          </div>
+          <div class="job-card-footer">
+            <button class="btn btn-info btn-sm" onclick="viewJobDetails('${job.jobId}')">🔍 Details</button>
+            ${job.enabled ? 
+              `<button class="btn btn-warning btn-sm" onclick="pauseJobFromModal('${job.jobId}')">⏸️ Pause</button>` :
+              `<button class="btn btn-success btn-sm" onclick="resumeJobFromModal('${job.jobId}')">▶️ Resume</button>`
+            }
+            <button class="btn btn-danger btn-sm" onclick="deleteJobFromModal('${job.jobId}')">🗑️ Delete</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+  } catch (error) {
+    console.error('Error loading schedule jobs:', error);
+    container.innerHTML = '<p class="text-danger text-center">Error loading jobs. Please try again.</p>';
+  }
+}
+window.loadScheduleJobsInModal = loadScheduleJobsInModal;
+
+// Create Schedule Job from Modal
+async function createScheduleJobFromModal() {
+  const config = getConfig();
+  const nsId = document.getElementById('sched-nsId').value;
+  const intervalSeconds = parseInt(document.getElementById('sched-interval').value);
+  const connectionName = document.getElementById('sched-connection').value;
+  const mciNamePrefix = document.getElementById('sched-mciPrefix').value;
+  const option = document.getElementById('sched-option').value;
+  const mciFlag = document.getElementById('sched-mciFlag').value;
+  
+  if (!nsId || !intervalSeconds || intervalSeconds < 10) {
+    Swal.fire('❌ Error', 'Please fill required fields correctly (interval min: 10s)', 'error');
+    return;
+  }
+  
+  const spinnerId = addSpinnerTask("Creating schedule job");
+  
+  try {
+    const requestBody = {
+      jobType: "registerCspResources",
+      nsId,
+      intervalSeconds,
+      connectionName,
+      mciNamePrefix,
+      option,
+      mciFlag
+    };
+    
+    const response = await axios.post(
+      `http://${config.hostname}:${config.port}/tumblebug/registerCspResources/schedule`,
+      requestBody,
+      {
+        headers: { "Content-Type": "application/json" },
+        auth: { username: config.username, password: config.password }
+      }
+    );
+    
+    console.log("Schedule Job Created:", response.data);
+    displayJsonData(response.data, typeInfo);
+    
+    Swal.fire({
+      icon: 'success',
+      title: '✅ Job Created!',
+      html: `Schedule job created successfully: <br><code>${response.data.jobId}</code>`,
+      timer: 2000,
+      showConfirmButton: false
+    }).then(() => {
+      // Refresh job list
+      loadScheduleJobsInModal();
+      // Reopen management modal
+      showScheduleJobManagement();
+    });
+    
+  } catch (error) {
+    console.error("Error creating schedule job:", error);
+    const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
+    Swal.fire('❌ Error', `Failed to create job: ${errorMsg}`, 'error');
+  } finally {
+    removeSpinnerTask(spinnerId);
+  }
+}
+window.createScheduleJobFromModal = createScheduleJobFromModal;
+
+// View Job Details
+async function viewJobDetails(jobId) {
+  const config = getConfig();
+  const spinnerId = addSpinnerTask("Loading job details");
+  
+  try {
+    const response = await axios.get(
+      `http://${config.hostname}:${config.port}/tumblebug/registerCspResources/schedule/${jobId}`,
+      { auth: { username: config.username, password: config.password } }
+    );
+    
+    const job = response.data;
+    displayJsonData(response.data, typeInfo);
+    
+    const detailsHtml = `
+      <div style="text-align: left; font-size: 13px;">
+        <table class="table table-sm table-bordered">
+          <tr><th style="width: 40%; background-color: #f8f9fa;">Job ID</th><td style="font-family: monospace; font-size: 11px;">${job.jobId}</td></tr>
+          <tr><th style="background-color: #f8f9fa;">Job Type</th><td>${job.jobType}</td></tr>
+          <tr><th style="background-color: #f8f9fa;">Namespace</th><td><span class="badge badge-info">${job.nsId}</span></td></tr>
+          <tr><th style="background-color: #f8f9fa;">Connection</th><td>${job.connectionName || '<span class="badge badge-secondary">All Connections</span>'}</td></tr>
+          <tr><th style="background-color: #f8f9fa;">MCI Prefix</th><td>${job.mciNamePrefix}</td></tr>
+          <tr><th style="background-color: #f8f9fa;">Option</th><td>${job.option || 'All Resources'}</td></tr>
+          <tr><th style="background-color: #f8f9fa;">MCI Flag</th><td>${job.mciFlag === 'y' ? 'Single MCI' : 'Separate per VM'}</td></tr>
+          <tr><th style="background-color: #f8f9fa;">Interval</th><td><strong>${job.intervalSeconds}</strong> seconds (${Math.round(job.intervalSeconds/60)} minutes)</td></tr>
+          <tr><th style="background-color: #f8f9fa;">Status</th><td>
+            ${job.enabled ? '<span class="badge badge-success">🟢 Enabled</span>' : '<span class="badge badge-secondary">⚫ Disabled</span>'}
+            ${job.autoDisabled ? '<span class="badge badge-warning">⚠️ Auto-Disabled</span>' : ''}
+          </td></tr>
+          <tr><th style="background-color: #f8f9fa;">Execution Count</th><td>${job.executionCount}</td></tr>
+          <tr><th style="background-color: #f8f9fa;">Success Count</th><td class="text-success"><strong>${job.successCount}</strong></td></tr>
+          <tr><th style="background-color: #f8f9fa;">Failure Count</th><td class="text-danger"><strong>${job.failureCount}</strong></td></tr>
+          <tr><th style="background-color: #f8f9fa;">Consecutive Failures</th><td>${job.consecutiveFailures}</td></tr>
+          <tr><th style="background-color: #f8f9fa;">Next Execution</th><td><strong>${new Date(job.nextExecutionAt).toLocaleString()}</strong></td></tr>
+          <tr><th style="background-color: #f8f9fa;">Created At</th><td>${new Date(job.createdAt).toLocaleString()}</td></tr>
+          ${job.lastExecutionAt ? `<tr><th style="background-color: #f8f9fa;">Last Execution</th><td>${new Date(job.lastExecutionAt).toLocaleString()}</td></tr>` : ''}
+        </table>
+      </div>
+    `;
+    
+    Swal.fire({
+      title: '🔍 Job Details',
+      html: detailsHtml,
+      width: '650px',
+      confirmButtonText: '👍 OK'
+    }).then(() => {
+      showScheduleJobManagement();
+    });
+    
+  } catch (error) {
+    console.error("Error loading job details:", error);
+    const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
+    Swal.fire('❌ Error', `Failed to load job details: ${errorMsg}`, 'error');
+  } finally {
+    removeSpinnerTask(spinnerId);
+  }
+}
+window.viewJobDetails = viewJobDetails;
+
+// Pause Job from Modal
+async function pauseJobFromModal(jobId) {
+  const config = getConfig();
+  const spinnerId = addSpinnerTask("Pausing job");
+  
+  try {
+    await axios.put(
+      `http://${config.hostname}:${config.port}/tumblebug/registerCspResources/schedule/${jobId}/pause`,
+      {},
+      { auth: { username: config.username, password: config.password } }
+    );
+    
+    Swal.fire({
+      icon: 'success',
+      title: '⏸️ Job Paused',
+      text: `Job paused: ${jobId}`,
+      timer: 1500,
+      showConfirmButton: false
+    });
+    
+    // Refresh job list
+    setTimeout(() => loadScheduleJobsInModal(), 500);
+    
+  } catch (error) {
+    console.error("Error pausing job:", error);
+    const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
+    Swal.fire('❌ Error', `Failed to pause job: ${errorMsg}`, 'error');
+  } finally {
+    removeSpinnerTask(spinnerId);
+  }
+}
+window.pauseJobFromModal = pauseJobFromModal;
+
+// Resume Job from Modal
+async function resumeJobFromModal(jobId) {
+  const config = getConfig();
+  const spinnerId = addSpinnerTask("Resuming job");
+  
+  try {
+    await axios.put(
+      `http://${config.hostname}:${config.port}/tumblebug/registerCspResources/schedule/${jobId}/resume`,
+      {},
+      { auth: { username: config.username, password: config.password } }
+    );
+    
+    Swal.fire({
+      icon: 'success',
+      title: '▶️ Job Resumed',
+      text: `Job resumed: ${jobId}`,
+      timer: 1500,
+      showConfirmButton: false
+    });
+    
+    // Refresh job list
+    setTimeout(() => loadScheduleJobsInModal(), 500);
+    
+  } catch (error) {
+    console.error("Error resuming job:", error);
+    const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
+    Swal.fire('❌ Error', `Failed to resume job: ${errorMsg}`, 'error');
+  } finally {
+    removeSpinnerTask(spinnerId);
+  }
+}
+window.resumeJobFromModal = resumeJobFromModal;
+
+// Delete Job from Modal
+async function deleteJobFromModal(jobId) {
+  const result = await Swal.fire({
+    title: '⚠️ Confirm Delete',
+    html: `Are you sure you want to delete this job?<br><code>${jobId}</code>`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: '✅ Yes, delete it',
+    confirmButtonColor: '#dc3545',
+    cancelButtonText: '❌ Cancel'
+  });
+  
+  if (!result.isConfirmed) return;
+  
+  const config = getConfig();
+  const spinnerId = addSpinnerTask("Deleting job");
+  
+  try {
+    await axios.delete(
+      `http://${config.hostname}:${config.port}/tumblebug/registerCspResources/schedule/${jobId}`,
+      { auth: { username: config.username, password: config.password } }
+    );
+    
+    Swal.fire({
+      icon: 'success',
+      title: '🗑️ Job Deleted',
+      text: `Job deleted: ${jobId}`,
+      timer: 1500,
+      showConfirmButton: false
+    });
+    
+    // Refresh job list
+    setTimeout(() => loadScheduleJobsInModal(), 500);
+    
+  } catch (error) {
+    console.error("Error deleting job:", error);
+    const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
+    Swal.fire('❌ Error', `Failed to delete job: ${errorMsg}`, 'error');
+  } finally {
+    removeSpinnerTask(spinnerId);
+  }
+}
+window.deleteJobFromModal = deleteJobFromModal;
+
+// ==================== End of Schedule Resource Registration Functions ====================
+
+function updateNsList() {
+  // Get all namespace select elements
+  var namespaceSelects = [
+    document.getElementById("namespace"),           // Provision tab
+    document.getElementById("namespace-control")    // Control tab  
+  ];
+  
+  // Store previous selections
+  var previousSelections = namespaceSelects.map(select => select ? select.value : '');
+  
+  // Clear options in all namespace selects
+  namespaceSelects.forEach(selectElement => {
+    if (selectElement) {
+      var i, L = selectElement.options.length - 1;
+      for (i = L; i >= 0; i--) {
+        selectElement.remove(i);
+      }
+    }
+  });
+
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
+
+  if (hostname && hostname != "" && port && port != "") {
+    var url = `http://${hostname}:${port}/tumblebug/ns?option=id`;
+
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+    })
+      .then((res) => {
+        if (res.data.output != null) {
+          // Update all namespace select elements
+          for (let item of res.data.output) {
+            if (item && item.trim() !== "") {
+              namespaceSelects.forEach((selectElement, index) => {
+                if (selectElement) {
+                  var option = document.createElement("option");
+                  option.value = item;
+                  option.text = item;
+                  selectElement.appendChild(option);
+                }
+              });
+            }
+          }
+          
+          // Restore previous selections
+          namespaceSelects.forEach((selectElement, index) => {
+            if (selectElement && previousSelections[index]) {
+              for (let i = 0; i < selectElement.options.length; i++) {
+                if (selectElement.options[i].value == previousSelections[index]) {
+                  selectElement.options[i].selected = true;
+                  break;
+                }
+              }
+            }
+          });
+        }
+      })
+      .finally(function () {
+        updateMciList();
+      });
+  }
+}
+
+// Function to sync namespace selection across all tabs
+function syncNamespaceSelection(selectedValue) {
+  var namespaceSelects = [
+    document.getElementById("namespace"),           // Provision tab
+    document.getElementById("namespace-control")    // Control tab  
+  ];
+  
+  namespaceSelects.forEach(selectElement => {
+    if (selectElement && selectElement.value !== selectedValue) {
+      selectElement.value = selectedValue;
+    }
+  });
+}
+
+var mciList = [];
+var mciHideList = [];
+
+function updateMciList() {
+  // Clear options in 'select'
+  var selectElement = document.getElementById("mciid");
+  var previousSelection = selectElement.value;
+  var i,
+    L = selectElement.options.length - 1;
+  for (i = L; i >= 0; i--) {
+    selectElement.remove(i);
+  }
+
+  var config = getConfig(); var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
+  var namespace = namespaceElement.value;
+
+  if (namespace && namespace != "") {
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
+
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+    })
+      .then((res) => {
+        if (res.data.output != null) {
+          // mciList = res.data.output;
+          for (let item of res.data.output) {
+            if (item && item.trim() !== "") {
+              var option = document.createElement("option");
+              option.value = item;
+              option.text = item;
+              selectElement.appendChild(option);
+            }
+          }
+          for (let i = 0; i < selectElement.options.length; i++) {
+            if (selectElement.options[i].value == previousSelection) {
+              selectElement.options[i].selected = true;
+              break;
+            }
+          }
+        }
+      })
+      .finally(function () {
+        // MCI list updated
+      });
+  }
+}
+
 function updateNsList() {
   // Get all namespace select elements
   var namespaceSelects = [

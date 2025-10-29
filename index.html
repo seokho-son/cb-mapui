@@ -920,6 +920,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                     </div>
                   </div>
 
+                  <!-- Schedule Resource Registration Field -->
+                  <div class="form-group col-12">
+                    <button type="button" id="scheduleJobsBtn" onClick="showScheduleJobManagement();"
+                      class="btn btn-success w-100">📅 Schedule Jobs Management</button>
+                  </div>
+
 
                   <!-- vNet ID Field -->
                   <div class="form-group col-12">
@@ -1059,12 +1065,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
         <!-- Admin dashboards -->
         <div id="console" style="display:none; width:100%; height:100%; position:absolute; top:0; left:0;">
-          <iframe id="iframe" src="about:blank"
-            style="visibility:visible; width:100%; height:100%; position:relative;"></iframe>
-          <!-- <iframe id="iframe" src="http://localhost:1324/swagger.html"
-            style="visibility:visible; width:50%; height:100%; position:relative;"></iframe>
-          <iframe id="iframe2" src="http://localhost:1024/spider/adminweb"
-            style="visibility:visible; width:50%; height:100%; position:relative;"></iframe> -->
+          <!-- Iframes will be dynamically added here -->
         </div>
       </div>
 
@@ -1073,6 +1074,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
     <script type="module" src="./index.js"></script>
     <script type="text/javascript">
+      // Cache current host to avoid repeated access
+      var currentHost = window.location.hostname;
+
       // Tab functionality
       $(document).ready(function () {
         // Enable Bootstrap tab functionality
@@ -1082,41 +1086,40 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         })
       });
 
-      function showSwagger() {
-        // Hide all views
+      // Helper function to show/hide iframes
+      function switchIframe(activeId, inactiveId, src) {
         document.getElementById('map').style.display = "none";
         
-        // Get current host dynamically
-        var currentHost = window.location.hostname;
-        
-        // Reset console content to show Swagger with dynamic host
         var console = document.getElementById('console');
-        console.innerHTML = `<iframe src="http://${currentHost}:1324/swagger.html" style="width:100%; height:100%; border:none;"></iframe>`;
         console.style.display = "flex";
         
-        // Switch to Control tab using Bootstrap tab API
-        $('#control-tab').tab('show');
+        // Get or create active iframe
+        var activeIframe = document.getElementById(activeId);
+        if (!activeIframe) {
+          activeIframe = document.createElement('iframe');
+          activeIframe.id = activeId;
+          activeIframe.src = src;
+          activeIframe.style.cssText = 'width:100%; height:100%; border:none; position:absolute; top:0; left:0;';
+          console.appendChild(activeIframe);
+        }
+        activeIframe.style.display = 'block';
         
-        // Update toggle buttons
+        // Hide inactive iframe if exists
+        var inactiveIframe = document.getElementById(inactiveId);
+        if (inactiveIframe) {
+          inactiveIframe.style.display = 'none';
+        }
+      }
+
+      function showSwagger() {
+        switchIframe('swagger-iframe', 'dashboard-iframe', `http://${currentHost}:1324/swagger.html`);
+        $('#control-tab').tab('show');
         updateToggleButtons('api');
       }
 
       function showDashboard() {
-        // Hide all dashboard views and show dashboard iframe
-        document.getElementById('map').style.display = "none";
-        
-        // Continue map data updates in background for dashboard sync
-        // Don't pause updates - just hide map rendering
-        
-        // Create or update dashboard iframe
-        var console = document.getElementById('console');
-        console.innerHTML = '<iframe src="dashboard.html" style="width:100%; height:100%; border:none;"></iframe>';
-        console.style.display = "flex";
-        
-        // Switch to Control tab using Bootstrap tab API
+        switchIframe('dashboard-iframe', 'swagger-iframe', 'dashboard.html');
         $('#control-tab').tab('show');
-        
-        // Update toggle buttons
         updateToggleButtons('dashboard');
       }
 
