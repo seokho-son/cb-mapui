@@ -27,7 +27,7 @@
   },
   "scripts": {
     "start": "parcel -p 1324 --host 0.0.0.0 index.html",
-    "build": "echo 'Removing temporal cache files' && rm -rf dist/* .parcel-cache/* && mkdir -p dist/img/ && cp -r img/ dist/ && cp redoc-swagger.html dist/ && cp swagger.html dist/ && cp dashboard.html dist/ && cp dashboard.js dist/ && parcel build --public-url . index.html"
+    "build": "echo 'Removing temporal cache files' && rm -rf dist/* .parcel-cache/* && mkdir -p dist/img/ && cp -r img/ dist/ && cp redoc-swagger.html dist/ && cp swagger.html dist/ && cp scalar.html dist/ && cp dashboard.html dist/ && cp dashboard.js dist/ && parcel build --public-url . index.html"
   },
   "description": "MapUI Client for CB-Tumblebug (display multi-cloud infra service)",
   "repository": {

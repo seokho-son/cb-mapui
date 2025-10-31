@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CB-Tumblebug API Client - Scalar</title>
+</head>
+<body>
+    <div id="api-reference-container"></div>
+
+    <!-- Load js-yaml for YAML parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@3.14.0/dist/js-yaml.min.js"></script>
+    
+    <script>
+        console.log('Scalar - Initializing...');
+
+        // Basic authentication details
+        const username = 'default';
+        const password = 'default';
+        const authHeader = 'Basic ' + btoa(username + ':' + password);
+
+        // API document URL configuration
+        const protocol = window.location.protocol;
+        const hostname = window.location.hostname;
+        const apiPort = '1323';
+        const apiDocPath = '/tumblebug/api/doc.yaml';
+        const apiDocUrl = `${protocol}//${hostname}:${apiPort}${apiDocPath}`;
+
+        console.log('Scalar - API URL:', apiDocUrl);
+
+        // Show loading message
+        document.getElementById('api-reference-container').innerHTML = `
+            <div style="padding: 40px; text-align: center; height: 100vh; display: flex; flex-direction: column; justify-content: center;">
+                <div style="font-size: 24px; margin-bottom: 20px;">🔄</div>
+                <h2>Loading API Documentation...</h2>
+                <p style="color: #666;">Fetching from ${apiDocUrl}</p>
+            </div>
+        `;
+
+        // Fetch YAML file with authentication
+        fetch(apiDocUrl, {
+            headers: { 'Authorization': authHeader }
+        })
+        .then(response => {
+            console.log('Scalar - Response status:', response.status);
+            if (!response.ok) {
+                throw new Error('Failed to fetch: ' + response.statusText);
+            }
+            return response.text();
+        })
+        .then((yamlText) => {
+            console.log('Scalar - YAML fetched, parsing...');
+            const spec = jsyaml.load(yamlText);
+            console.log('Scalar - YAML parsed successfully');
+            
+            // Clear container
+            const container = document.getElementById('api-reference-container');
+            container.innerHTML = '';
+            
+            // Create script element with Scalar configuration
+            const scriptElement = document.createElement('script');
+            scriptElement.id = 'api-reference';
+            scriptElement.type = 'application/json';
+            scriptElement.textContent = JSON.stringify(spec);
+            container.appendChild(scriptElement);
+            
+            console.log('Scalar - Loading Scalar library...');
+            
+            // Load Scalar library
+            const scalarLib = document.createElement('script');
+            scalarLib.src = 'https://cdn.jsdelivr.net/npm/@scalar/api-reference';
+            
+            scalarLib.onload = () => {
+                console.log('Scalar - Library loaded');
+                console.log('Scalar - Available window objects:', Object.keys(window).filter(k => k.toLowerCase().includes('scalar')));
+                
+                // Wait a bit for Scalar to initialize
+                setTimeout(() => {
+                    console.log('Scalar - Checking for initialization...');
+                    if (!container.querySelector('.scalar-app')) {
+                        console.error('Scalar - UI not rendered automatically, trying manual init');
+                        // Try manual initialization as fallback
+                        showError('Scalar UI did not render. Please refresh the page.');
+                    } else {
+                        console.log('Scalar - UI rendered successfully');
+                    }
+                }, 1000);
+            };
+            
+            scalarLib.onerror = () => {
+                console.error('Scalar - Failed to load library');
+                showError('Failed to load Scalar library from CDN');
+            };
+            
+            document.head.appendChild(scalarLib);
+        })
+        .catch(error => {
+            console.error('Scalar - Error:', error);
+            showError(error.message);
+        });
+
+        function showError(message) {
+            document.getElementById('api-reference-container').innerHTML = `
+                <div style="padding: 40px; text-align: center; height: 100vh; display: flex; flex-direction: column; justify-content: center;">
+                    <h2 style="color: #d32f2f;">❌ Failed to load API specification</h2>
+                    <p style="color: #666; margin: 20px 0;"><strong>Error:</strong> ${message}</p>
+                    <p style="color: #999; font-size: 14px;">API URL: ${apiDocUrl}</p>
+                    <p style="color: #999; font-size: 12px; margin-top: 20px;">Check console (F12) for details</p>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

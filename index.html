@@ -1065,6 +1065,17 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
         <!-- Admin dashboards -->
         <div id="console" style="display:none; width:100%; height:100%; position:absolute; top:0; left:0;">
+          <!-- API Doc Switcher (bottom-right floating) -->
+          <div id="api-doc-switcher" style="display:none; position: absolute; bottom: 15px; right: 15px; z-index: 1001; background: rgba(255, 255, 255, 0.95); border-radius: 6px; padding: 4px 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); border: 1px solid rgba(0,0,0,0.1); backdrop-filter: blur(10px);">
+            <div style="display: flex; align-items: center; gap: 4px; font-size: 10px;">
+              <button id="btn-switch-swagger" onclick="switchToSwagger()" class="btn btn-sm btn-outline-primary" style="padding: 1px 8px; font-size: 10px;">
+                Swagger
+              </button>
+              <button id="btn-switch-scalar" onclick="switchToScalar()" class="btn btn-sm btn-outline-info" style="padding: 1px 8px; font-size: 10px;">
+                Scalar
+              </button>
+            </div>
+          </div>
           <!-- Iframes will be dynamically added here -->
         </div>
       </div>
@@ -1086,6 +1097,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         })
       });
 
+      // ===== API Documentation Configuration =====
+      // Choose API documentation UI: 'swagger' or 'scalar'
+      var API_DOC_TYPE = 'swagger'; // Change to 'scalar' to use Scalar API Reference
+      
       // Helper function to show/hide iframes
       function switchIframe(activeId, inactiveId, src) {
         document.getElementById('map').style.display = "none";
@@ -1110,15 +1125,133 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           inactiveIframe.style.display = 'none';
         }
       }
-
+      
       function showSwagger() {
-        switchIframe('swagger-iframe', 'dashboard-iframe', `http://${currentHost}:1324/swagger.html`);
+        // Hide map and show console
+        document.getElementById('map').style.display = "none";
+        document.getElementById('console').style.display = "flex";
+        
+        // Hide dashboard iframe
+        var dashboardIframe = document.getElementById('dashboard-iframe');
+        if (dashboardIframe) {
+          dashboardIframe.style.display = 'none';
+        }
+        
+        // Show API doc based on current API_DOC_TYPE
+        if (API_DOC_TYPE === 'scalar') {
+          // Hide swagger, show or create scalar
+          var swaggerIframe = document.getElementById('swagger-iframe');
+          if (swaggerIframe) {
+            swaggerIframe.style.display = 'none';
+          }
+          
+          var scalarIframe = document.getElementById('scalar-iframe');
+          if (!scalarIframe) {
+            scalarIframe = document.createElement('iframe');
+            scalarIframe.id = 'scalar-iframe';
+            scalarIframe.src = `http://${currentHost}:1324/scalar.html`;
+            scalarIframe.style.cssText = 'width:100%; height:100%; border:none; position:absolute; top:0; left:0;';
+            document.getElementById('console').appendChild(scalarIframe);
+          }
+          scalarIframe.style.display = 'block';
+        } else {
+          // Hide scalar, show or create swagger
+          var scalarIframe = document.getElementById('scalar-iframe');
+          if (scalarIframe) {
+            scalarIframe.style.display = 'none';
+          }
+          
+          var swaggerIframe = document.getElementById('swagger-iframe');
+          if (!swaggerIframe) {
+            swaggerIframe = document.createElement('iframe');
+            swaggerIframe.id = 'swagger-iframe';
+            swaggerIframe.src = `http://${currentHost}:1324/swagger.html`;
+            swaggerIframe.style.cssText = 'width:100%; height:100%; border:none; position:absolute; top:0; left:0;';
+            document.getElementById('console').appendChild(swaggerIframe);
+          }
+          swaggerIframe.style.display = 'block';
+        }
+        
+        // Show API doc switcher
+        document.getElementById('api-doc-switcher').style.display = 'block';
+        updateApiDocSwitcherButtons();
+        
         $('#control-tab').tab('show');
         updateToggleButtons('api');
       }
 
+      // Function to switch to Swagger UI
+      function switchToSwagger() {
+        API_DOC_TYPE = 'swagger';
+        
+        // Hide scalar iframe
+        var scalarIframe = document.getElementById('scalar-iframe');
+        if (scalarIframe) {
+          scalarIframe.style.display = 'none';
+        }
+        
+        // Show or create swagger iframe
+        var swaggerIframe = document.getElementById('swagger-iframe');
+        if (!swaggerIframe) {
+          swaggerIframe = document.createElement('iframe');
+          swaggerIframe.id = 'swagger-iframe';
+          swaggerIframe.src = `http://${currentHost}:1324/swagger.html`;
+          swaggerIframe.style.cssText = 'width:100%; height:100%; border:none; position:absolute; top:0; left:0;';
+          document.getElementById('console').appendChild(swaggerIframe);
+        }
+        swaggerIframe.style.display = 'block';
+        
+        updateApiDocSwitcherButtons();
+      }
+
+      // Function to switch to Scalar
+      function switchToScalar() {
+        API_DOC_TYPE = 'scalar';
+        
+        // Hide swagger iframe
+        var swaggerIframe = document.getElementById('swagger-iframe');
+        if (swaggerIframe) {
+          swaggerIframe.style.display = 'none';
+        }
+        
+        // Show or create scalar iframe
+        var scalarIframe = document.getElementById('scalar-iframe');
+        if (!scalarIframe) {
+          scalarIframe = document.createElement('iframe');
+          scalarIframe.id = 'scalar-iframe';
+          scalarIframe.src = `http://${currentHost}:1324/scalar.html`;
+          scalarIframe.style.cssText = 'width:100%; height:100%; border:none; position:absolute; top:0; left:0;';
+          document.getElementById('console').appendChild(scalarIframe);
+        }
+        scalarIframe.style.display = 'block';
+        
+        updateApiDocSwitcherButtons();
+      }
+
+      // Update API doc switcher button states
+      function updateApiDocSwitcherButtons() {
+        var swaggerBtn = document.getElementById('btn-switch-swagger');
+        var scalarBtn = document.getElementById('btn-switch-scalar');
+        
+        if (API_DOC_TYPE === 'swagger') {
+          swaggerBtn.classList.remove('btn-outline-primary');
+          swaggerBtn.classList.add('btn-primary');
+          scalarBtn.classList.remove('btn-info');
+          scalarBtn.classList.add('btn-outline-info');
+        } else {
+          swaggerBtn.classList.remove('btn-primary');
+          swaggerBtn.classList.add('btn-outline-primary');
+          scalarBtn.classList.remove('btn-outline-info');
+          scalarBtn.classList.add('btn-info');
+        }
+      }
+
       function showDashboard() {
         switchIframe('dashboard-iframe', 'swagger-iframe', 'dashboard.html');
+        
+        // Hide API doc switcher when showing dashboard
+        document.getElementById('api-doc-switcher').style.display = 'none';
+        
         $('#control-tab').tab('show');
         updateToggleButtons('dashboard');
       }
@@ -1177,6 +1310,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       function showMap() {
         // Hide all dashboard views and show map
         document.getElementById('console').style.display = "none";
+        
+        // Hide API doc switcher when showing map
+        document.getElementById('api-doc-switcher').style.display = 'none';
         
         // Show map
         document.getElementById('map').style.display = "block";

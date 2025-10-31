@@ -21,9 +21,27 @@
             color: #fcfcfc;
             display: flex;
             align-items: center;
-            justify-content: center;
+            justify-content: space-between;
+            padding: 0 1rem;
             font-size: 20px;
             font-weight: bold;
+        }
+        #title-bar .title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #title-bar .switch-ui {
+            font-size: 14px;
+            font-weight: normal;
+        }
+        #title-bar .switch-ui a {
+            color: #61dafb;
+            text-decoration: none;
+            margin-left: 10px;
+        }
+        #title-bar .switch-ui a:hover {
+            text-decoration: underline;
         }
 
         #content-container {
@@ -67,7 +85,17 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui.css">
 </head>
 <body>
-    <div id="title-bar">     CB-Tumblebug API Dashboard</div>
+    <div id="title-bar">
+        <div class="title">
+            <span>CB-Tumblebug API Dashboard</span>
+            <span style="font-size: 12px; color: #aaa;">(ReDoc + Swagger UI)</span>
+        </div>
+        <div class="switch-ui">
+            Switch to: 
+            <a href="scalar.html">Scalar UI</a> |
+            <a href="swagger.html">Swagger UI</a>
+        </div>
+    </div>
     
     <div id="content-container">
         <div id="redoc-container"></div>
