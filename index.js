@@ -7773,6 +7773,7 @@ async function showScheduleJobManagement() {
     title: '📅 Schedule Job Management',
     html: `
       <style>
+        .schedule-job-modal-popup { min-width: 600px; max-width: 900px; }
         .schedule-compact-form { text-align: left; padding: 0; margin: 0; }
         .schedule-compact-form h5 { margin: 0 0 10px 0; font-size: 16px; }
         .schedule-compact-form .form-row { display: flex; gap: 10px; margin-bottom: 8px; }
@@ -7856,7 +7857,10 @@ async function showScheduleJobManagement() {
         </div>
       </div>
     `,
-    width: '85%',
+    width: '50%',
+    customClass: {
+      popup: 'schedule-job-modal-popup'
+    },
     showConfirmButton: false,
     showCancelButton: true,
     cancelButtonText: '❌ Close',
@@ -7969,12 +7973,10 @@ async function loadScheduleJobsInModal() {
             <div class="job-card-title">${job.jobId}</div>
             <div>${executionStateBadge} ${enabledBadge} ${autoDisabledBadge}</div>
           </div>
-          <div class="job-card-body">
-            <div><strong>Namespace:</strong> ${job.nsId} | <strong>Connection:</strong> ${job.connectionName || 'All'}</div>
-            <div><strong>Interval:</strong> ${job.intervalSeconds}s (${Math.round(job.intervalSeconds/60)}m) | <strong>MCI Prefix:</strong> ${job.mciNamePrefix}</div>
-            <div><strong>Stats:</strong> Exec: ${job.executionCount} | Success: <span class="text-success">${job.successCount}</span> | Fail: <span class="text-danger">${job.failureCount}</span> | Consecutive Fails: ${job.consecutiveFailures}</div>
-            <div><strong>Next Execution:</strong> ${new Date(job.nextExecutionAt).toLocaleString()}</div>
-            ${job.lastExecutionAt ? `<div><strong>Last Execution:</strong> ${new Date(job.lastExecutionAt).toLocaleString()}</div>` : ''}
+          <div class="job-card-body" style="padding: 8px 12px;">
+            <div style="font-size: 0.9em; line-height: 1.6;">
+              <strong>NS:</strong> ${job.nsId} | <strong>Conn:</strong> ${job.connectionName || 'All'} | <strong>Interval:</strong> ${job.intervalSeconds}s (${Math.round(job.intervalSeconds/60)}m) | <strong>MCI Prefix:</strong> ${job.mciNamePrefix} | <strong>Stats:</strong> Exec: ${job.executionCount}, Success: <span class="text-success">${job.successCount}</span>, Fail: <span class="text-danger">${job.failureCount}</span> (Consecutive: ${job.consecutiveFailures}) | <strong>Next:</strong> ${new Date(job.nextExecutionAt).toLocaleString()}${job.lastExecutionAt ? ` | <strong>Last:</strong> ${new Date(job.lastExecutionAt).toLocaleString()}` : ''}
+            </div>
           </div>
           <div class="job-card-footer">
             <button class="btn btn-info btn-sm" onclick="viewJobDetails('${job.jobId}')">🔍 Details</button>
@@ -8135,10 +8137,10 @@ async function pauseJobFromModal(jobId) {
       text: `Job paused: ${jobId}`,
       timer: 1500,
       showConfirmButton: false
+    }).then(() => {
+      // Reopen Schedule Job Management modal
+      showScheduleJobManagement();
     });
-    
-    // Refresh job list
-    setTimeout(() => loadScheduleJobsInModal(), 500);
     
   } catch (error) {
     console.error("Error pausing job:", error);
@@ -8168,10 +8170,10 @@ async function resumeJobFromModal(jobId) {
       text: `Job resumed: ${jobId}`,
       timer: 1500,
       showConfirmButton: false
+    }).then(() => {
+      // Reopen Schedule Job Management modal
+      showScheduleJobManagement();
     });
-    
-    // Refresh job list
-    setTimeout(() => loadScheduleJobsInModal(), 500);
     
   } catch (error) {
     console.error("Error resuming job:", error);
@@ -8212,10 +8214,10 @@ async function deleteJobFromModal(jobId) {
       text: `Job deleted: ${jobId}`,
       timer: 1500,
       showConfirmButton: false
+    }).then(() => {
+      // Reopen Schedule Job Management modal
+      showScheduleJobManagement();
     });
-    
-    // Refresh job list
-    setTimeout(() => loadScheduleJobsInModal(), 500);
     
   } catch (error) {
     console.error("Error deleting job:", error);

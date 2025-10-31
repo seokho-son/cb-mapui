@@ -34,6 +34,7 @@ COPY --from=builder /app/index.js ./
 COPY --from=builder /app/favicon.svg ./
 COPY --from=builder /app/redoc-swagger.html ./
 COPY --from=builder /app/swagger.html ./
+COPY --from=builder /app/scalar.html ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package-lock.json ./package-lock.json
 COPY --from=builder /app/package.json ./package.json
