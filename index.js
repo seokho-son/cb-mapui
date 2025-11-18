@@ -4929,6 +4929,14 @@ function createK8sCluster() {
             if (k8sVersion) {
               k8sClusterReq.version = k8sVersion;
             }
+            
+            // Add rootDiskType and rootDiskSize if available
+            if (subGroup.rootDiskType) {
+              k8sClusterReq.rootDiskType = subGroup.rootDiskType;
+            }
+            if (subGroup.rootDiskSize) {
+              k8sClusterReq.rootDiskSize = subGroup.rootDiskSize;
+            }
 
             const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sClusterDynamic`;
             
@@ -5194,6 +5202,14 @@ function addNodeGroupToK8sCluster() {
               specId: subGroup.specId,
               name: nodeGroupName
             };
+            
+            // Add rootDiskType and rootDiskSize if available
+            if (subGroup.rootDiskType) {
+              nodeGroupReq.rootDiskType = subGroup.rootDiskType;
+            }
+            if (subGroup.rootDiskSize) {
+              nodeGroupReq.rootDiskSize = subGroup.rootDiskSize;
+            }
 
             const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster/${clusterId}/k8sNodeGroupDynamic`;
             
@@ -6642,7 +6658,13 @@ function getRecommendedSpec(idx, latitude, longitude) {
               "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
               "<tr><th style='width: 50%;'>vCPU</th><td><b>" + selectedSpec.vCPU + "</b></td></tr>" +
               "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + selectedSpec.memoryGiB + "</b></td></tr>" +
-              "<tr><th style='width: 50%;'>RootDiskType</th><td><b>" + selectedSpec.rootDiskType + "</b></td></tr>" +
+              
+              "<tr><th style='width: 50%;'>RootDiskType</th><td>" +
+              "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Select disk type</span>" +
+              "<select id='rootDiskTypeSelect' style='width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px;'>" +
+              // Options will be dynamically populated based on CSP
+              "</select>" +
+              "</td></tr>" +
 
               "<tr><th style='width: 50%;'>RootDiskSize(GB)</th><td>" +
               "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Enter disk size in GB or 'default'</span>" +
@@ -6670,6 +6692,39 @@ function getRecommendedSpec(idx, latitude, longitude) {
               "</table><br>",
 
             didOpen: () => {
+              // Populate RootDiskType dropdown based on CSP
+              const rootDiskTypeSelect = document.getElementById('rootDiskTypeSelect');
+              if (rootDiskTypeSelect) {
+                // Root disk type options per CSP (based on cloudos_meta.yaml)
+                // TODO: Extract to configuration file or load dynamically to improve maintainability
+                const rootDiskTypes = {
+                  'aws': ['default', 'standard', 'gp2', 'gp3'],
+                  'azure': ['default', 'PremiumSSD', 'StandardSSD', 'StandardHDD'],
+                  'gcp': ['default', 'pd-standard', 'pd-balanced', 'pd-ssd', 'pd-extreme'],
+                  'alibaba': ['default', 'cloud_essd', 'cloud_efficiency', 'cloud', 'cloud_ssd'],
+                  'tencent': ['default', 'CLOUD_PREMIUM', 'CLOUD_SSD'],
+                  'ibm': ['default'],
+                  'ncp': ['default', 'SSD', 'HDD'],
+                  'nhn': ['default', 'General_HDD', 'General_SSD'],
+                  'kt': ['default', 'HDD', 'SSD']
+                };
+                
+                const providerName = selectedSpec.providerName.toLowerCase();
+                const validTypes = rootDiskTypes[providerName] || ['default'];
+                const currentValue = selectedSpec.rootDiskType || "default";
+                
+                // Populate options
+                validTypes.forEach(type => {
+                  const option = document.createElement('option');
+                  option.value = type;
+                  option.textContent = type;
+                  if (type === currentValue) {
+                    option.selected = true;
+                  }
+                  rootDiskTypeSelect.appendChild(option);
+                });
+              }
+
               // Focus on the VM count input for better user experience
               const vmCountInput = document.getElementById('vmCount');
               if (vmCountInput) {
@@ -6746,7 +6801,14 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 return false;
               }
 
-              // rootDiskSize input validation
+              // rootDiskType select validation
+              const rootDiskTypeSelect = document.getElementById('rootDiskTypeSelect');
+              let rootDiskTypeValue = rootDiskTypeSelect ? rootDiskTypeSelect.value : "default";
+              if (!rootDiskTypeValue) {
+                rootDiskTypeValue = "default";
+              }
+
+              // rootDiskSize input validation (actual value is retrieved after confirmation below)
               const rootDiskSizeInput = document.getElementById('rootDiskSizeCustom');
               let rootDiskSizeValue = rootDiskSizeInput.value.trim();
               if (rootDiskSizeValue === "-1") {
@@ -6785,9 +6847,14 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 createMciReqVm.subGroupSize = "1";
               }
 
+              const rootDiskTypeSelect = document.getElementById('rootDiskTypeSelect');
+              const rootDiskTypeValue = rootDiskTypeSelect ? rootDiskTypeSelect.value : "default";
+              console.log("RootDiskType:", rootDiskTypeValue);
+              createMciReqVm.rootDiskType = rootDiskTypeValue || "default";
+
               const rootDiskSizeInput = document.getElementById('rootDiskSizeCustom').value.trim();
               if (rootDiskSizeInput) {
-                console.log(rootDiskSizeInput);
+                console.log("RootDiskSize:", rootDiskSizeInput);
                 createMciReqVm.rootDiskSize = rootDiskSizeInput;
               } else {
                 createMciReqVm.rootDiskSize = "default";
@@ -9338,6 +9405,16 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
+    case "CB-TB-Deploy":
+      defaultRemoteCommand[0] = "curl -sSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/set-tb.sh | bash";
+      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:1324))'";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "M-CMP-Deploy":
+      defaultRemoteCommand[0] = "curl -sSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/set-tb.sh | bash";
+      defaultRemoteCommand[1] = "curl -sSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/set-mcmp.sh | sudo bash";
+      defaultRemoteCommand[2] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3001))'";
+      break;
     default:
       defaultRemoteCommand[0] = "ls -al";
       defaultRemoteCommand[1] = "";
@@ -9583,6 +9660,8 @@ function executeRemoteCmd() {
         <div style="margin-bottom: 15px;">
           <select id="predefinedScripts" style="width: 75%; padding: 5px;" onchange="loadPredefinedScript()">
             <option value="">-- Select a predefined script --</option>
+            <option value="CB-TB-Deploy">[Platform] Deploy CB-Tumblebug</option>
+            <option value="M-CMP-Deploy">[Platform] Deploy M-CMP (CB-TB, MC-Admin-CLI)</option>
             <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
             <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
             <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
