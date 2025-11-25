@@ -1338,7 +1338,7 @@ function generateRandomString() {
 }
 
 // Helper function to split K8s cluster name into multiple lines for better display
-function splitK8sNameToLines(name, maxLineLength = 10) {
+function splitK8sNameToLines(name, maxLineLength = 18) {
   if (!name) return [''];
   
   // If the name is short enough, return as single line
@@ -1377,10 +1377,10 @@ function splitK8sNameToLines(name, maxLineLength = 10) {
       lines.push(currentLine);
     }
     
-    return lines.slice(0, 2); // Limit to 2 lines maximum for K8s (less than MCI's 3)
+    return lines.slice(0, 3); // Allow up to 3 lines for longer K8s cluster names
   }
   
-  // Combine parts intelligently to create 1-2 lines
+  // Combine parts intelligently to create lines
   const lines = [];
   let currentLine = '';
   
@@ -1400,7 +1400,7 @@ function splitK8sNameToLines(name, maxLineLength = 10) {
     lines.push(currentLine);
   }
   
-  return lines.slice(0, 2); // Limit to 2 lines maximum for K8s
+  return lines.slice(0, 3); // Allow up to 3 lines for longer K8s cluster names
 }
 
 function changeSizeStatus(status) {
@@ -4774,13 +4774,14 @@ async function checkK8sNodeImageDesignation(providerName, hostname, port, userna
   }
 }
 
-// K8s Cluster creation function
+// K8s Cluster creation function (supports single and multi-cluster creation)
 function createK8sCluster() {
-  if (vmSubGroupReqeustFromSpecList.length !== 1) {
-    errorAlert("Please configure exactly one SubGroup to create K8s Cluster");
+  if (vmSubGroupReqeustFromSpecList.length < 1) {
+    errorAlert("Please configure at least one SubGroup to create K8s Cluster(s)");
     return;
   }
 
+  const isMultiCluster = vmSubGroupReqeustFromSpecList.length > 1;
   const subGroup = vmSubGroupReqeustFromSpecList[0];
   const spec = recommendedSpecList[0];
   
@@ -4794,6 +4795,126 @@ function createK8sCluster() {
   const password = configPassword;
   const namespace = namespaceElement.value;
 
+  // For multi-cluster, use namePrefix approach (simplified dialog)
+  if (isMultiCluster) {
+    // Build cluster configuration summary
+    const clusterSummary = vmSubGroupReqeustFromSpecList.map((sg, idx) => {
+      const sp = recommendedSpecList[idx];
+      return `<tr>
+        <td>${idx + 1}</td>
+        <td>${sp?.providerName || 'Unknown'}</td>
+        <td>${sp?.regionName || 'Unknown'}</td>
+        <td style="font-size: 0.8em;">${sp?.cspSpecName || 'Unknown'}</td>
+      </tr>`;
+    }).join('');
+
+    Swal.fire({
+      title: `Create ${vmSubGroupReqeustFromSpecList.length} K8s Clusters`,
+      html: `
+        <div style="text-align: left; padding: 15px;">
+          <div style="margin-bottom: 15px;">
+            <label style="font-weight: bold;">Cluster Name Prefix:</label><br>
+            <input type="text" id="k8sNamePrefix" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" 
+                   value="${k8sClusterRandomName}" placeholder="Enter name prefix">
+            <div style="font-size: 0.8em; color: #666; margin-top: 5px;">
+              Clusters will be named: {prefix}-{csp}-{number} (e.g., ${k8sClusterRandomName}-aws-1)
+            </div>
+          </div>
+          <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px; max-height: 200px; overflow-y: auto;">
+            <strong>Clusters to create (${vmSubGroupReqeustFromSpecList.length}):</strong>
+            <table style="width: 100%; font-size: 0.85em; margin-top: 8px;">
+              <tr style="background: #e9ecef;"><th>#</th><th>Provider</th><th>Region</th><th>Spec</th></tr>
+              ${clusterSummary}
+            </table>
+          </div>
+          <div style="font-size: 0.9em; color: #666;">
+            Note: All clusters will be created in parallel. K8s versions will use defaults for each provider.
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: `Create ${vmSubGroupReqeustFromSpecList.length} Clusters`,
+      cancelButtonText: "Cancel",
+      preConfirm: () => {
+        const namePrefix = document.getElementById('k8sNamePrefix').value.trim();
+        if (!namePrefix) {
+          Swal.showValidationMessage('Please enter name prefix');
+          return false;
+        }
+        return { namePrefix };
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        const { namePrefix } = result.value;
+        
+        // Build multi-cluster request
+        const clusters = vmSubGroupReqeustFromSpecList.map((sg, idx) => {
+          const clusterReq = {
+            imageId: sg.imageId || "default",
+            specId: sg.specId
+          };
+          if (sg.rootDiskType) clusterReq.rootDiskType = sg.rootDiskType;
+          if (sg.rootDiskSize) clusterReq.rootDiskSize = sg.rootDiskSize;
+          return clusterReq;
+        });
+
+        const multiClusterReq = {
+          namePrefix: namePrefix,
+          clusters: clusters
+        };
+
+        // Do not use skipVersionCheck without explicit version - let CB-TB use default versions per CSP
+        const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sMultiClusterDynamic`;
+        const taskId = addSpinnerTask(`Create ${clusters.length} K8s Clusters`);
+
+        axios.post(url, multiClusterReq, {
+          auth: { username, password },
+          headers: { 'Content-Type': 'application/json' }
+        }).then(function (response) {
+          removeSpinnerTask(taskId);
+          const createdClusters = response.data?.clusters || [];
+          const successCount = createdClusters.length;
+          const totalCount = clusters.length;
+          
+          const clusterList = createdClusters.length > 0 
+            ? createdClusters.map(c => `<li>${c.name || c.id || 'Unknown'} (${c.connectionName || 'N/A'})</li>`).join('')
+            : '<li>No clusters created</li>';
+
+          // Check if partial success (HTTP 207)
+          const isPartialSuccess = response.status === 207;
+          const title = isPartialSuccess ? "Partial Success" : 
+                       (successCount === totalCount && successCount > 0 ? "All Clusters Created!" : "Cluster Creation Failed");
+          const icon = isPartialSuccess ? "warning" :
+                      (successCount === totalCount && successCount > 0 ? "success" : "error");
+
+          Swal.fire({
+            title: title,
+            html: `
+              <div style="text-align: left;">
+                <p><strong>Created:</strong> ${successCount} / ${totalCount}</p>
+                <ul style="max-height: 150px; overflow-y: auto;">${clusterList}</ul>
+                ${isPartialSuccess ? `<p style="color: #dc3545; margin-top: 10px;">${response.data?.message || 'Some clusters failed to create'}</p>` : ''}
+              </div>
+            `,
+            icon: icon,
+            confirmButtonText: "OK"
+          });
+        }).catch(function (error) {
+          removeSpinnerTask(taskId);
+          console.error("Multi-cluster creation failed:", error);
+          
+          let errorMessage = "Failed to create K8s Clusters";
+          if (error.response?.data) {
+            errorMessage += `\n${error.response.data.message || error.response.data.error || ''}`;
+          }
+          errorAlert(errorMessage);
+        });
+      }
+    });
+    return;
+  }
+
+  // Single cluster creation (original flow)
   // First, get available K8s versions
   const versionUrl = `http://${hostname}:${port}/tumblebug/availableK8sVersion?providerName=${spec.providerName}&regionName=${spec.regionName}`;
   
@@ -5028,19 +5149,13 @@ function createK8sCluster() {
 }
 window.createK8sCluster = createK8sCluster;
 
-// Add NodeGroup to existing K8s Cluster function
+// Add NodeGroup to existing K8s Cluster function (supports single and multi-NodeGroup)
 function addNodeGroupToK8sCluster() {
-  if (vmSubGroupReqeustFromSpecList.length !== 1) {
-    errorAlert("Please configure exactly one SubGroup to add NodeGroup to K8s Cluster");
+  if (vmSubGroupReqeustFromSpecList.length < 1) {
+    errorAlert("Please configure at least one SubGroup to add NodeGroup(s) to K8s Cluster");
     return;
   }
 
-  const subGroup = vmSubGroupReqeustFromSpecList[0];
-  const spec = recommendedSpecList[0];
-  
-  // Generate random name for NodeGroup
-  const k8sNodeGroupRandomName = "ng-" + generateRandomString();
-  
   const hostname = configHostname;
   const port = configPort;
   const username = configUsername;
@@ -5049,31 +5164,41 @@ function addNodeGroupToK8sCluster() {
 
   // First, get list of existing K8s clusters
   const listUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster`;
-  
   const listTaskId = addSpinnerTask("listK8sClusters");
   
-  axios.get(listUrl, {
-    auth: {
-      username: username,
-      password: password
-    }
-  }).then(function (response) {
+  axios.get(listUrl, { auth: { username, password } }).then(function (response) {
     removeSpinnerTask(listTaskId);
     
-    // API response can have different structures:
-    // 1. Latest API: { cluster: [...] } (according to swagger)
-    // 2. Current API: { K8sClusterInfo: [...] } (according to actual response)
-    // Handle both cases for compatibility
     const clusters = response.data?.cluster || response.data?.K8sClusterInfo || [];
     
     if (clusters.length === 0) {
       errorAlert("No K8s clusters found. Please create a K8s cluster first.");
       return;
     }
-    
-    // Create cluster selection dialog - show all clusters but enable only Active ones with matching provider/region
-    const subGroupProvider = spec.providerName; // e.g., "gcp"
-    const subGroupRegion = spec.regionName; // e.g., "asia-northeast3"
+
+    const isMultiNodeGroup = vmSubGroupReqeustFromSpecList.length > 1;
+
+    if (isMultiNodeGroup) {
+      // Multi-NodeGroup: Each SubGroup maps to a compatible cluster
+      showMultiNodeGroupDialog(clusters, hostname, port, username, password, namespace);
+    } else {
+      // Single NodeGroup (original flow)
+      showSingleNodeGroupDialog(clusters, hostname, port, username, password, namespace);
+    }
+  }).catch(function (error) {
+    removeSpinnerTask(listTaskId);
+    console.error("Failed to get K8s cluster list:", error);
+    errorAlert("Failed to get K8s cluster list");
+  });
+}
+
+// Single NodeGroup dialog (original behavior)
+function showSingleNodeGroupDialog(clusters, hostname, port, username, password, namespace) {
+  const subGroup = vmSubGroupReqeustFromSpecList[0];
+  const spec = recommendedSpecList[0];
+  const k8sNodeGroupRandomName = "ng-" + generateRandomString();
+  const subGroupProvider = spec.providerName;
+  const subGroupRegion = spec.regionName;
     
     const clusterOptions = clusters.map(cluster => {
       // Use cluster-level status for determining availability
@@ -5277,24 +5402,160 @@ function addNodeGroupToK8sCluster() {
     }).catch(function (error) {
       // Handle any unexpected errors in the NodeGroup dialog
       console.error("NodeGroup addition dialog error:", error);
-      // Clean up spinner if it was started
-      if (taskId) {
-        removeSpinnerTask(taskId);
-      }
+    });
+}
+
+// Multi-NodeGroup dialog: maps each SubGroup to compatible clusters
+function showMultiNodeGroupDialog(clusters, hostname, port, username, password, namespace) {
+  const nodeGroupPrefix = "ng-" + generateRandomString();
+  
+  // Build mapping of SubGroups to compatible clusters
+  const subGroupMappings = vmSubGroupReqeustFromSpecList.map((sg, idx) => {
+    const spec = recommendedSpecList[idx];
+    const provider = spec?.providerName || '';
+    const region = spec?.regionName || '';
+    
+    // Find compatible clusters (Active + matching provider/region)
+    const compatibleClusters = clusters.filter(c => {
+      const cProvider = c?.connectionConfig?.providerName || '';
+      const cRegion = c?.connectionConfig?.regionDetail?.regionId || '';
+      return c?.status === 'Active' && cProvider === provider && cRegion === region;
     });
     
-  }).catch(function (error) {
-    removeSpinnerTask(listTaskId);
-    console.error("Failed to get K8s cluster list:", error);
+    return { idx, sg, spec, provider, region, compatibleClusters };
+  });
+
+  // Check if any SubGroup has compatible clusters
+  const hasAnyCompatible = subGroupMappings.some(m => m.compatibleClusters.length > 0);
+  if (!hasAnyCompatible) {
+    errorAlert("No compatible K8s clusters found for any SubGroup configuration.\n\nEnsure you have Active clusters matching the Provider/Region of your SubGroups.");
+    return;
+  }
+
+  // Build HTML for cluster selection per SubGroup
+  const mappingRows = subGroupMappings.map(m => {
+    const clusterOpts = m.compatibleClusters.length > 0
+      ? m.compatibleClusters.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
+      : '<option value="" disabled>No compatible cluster</option>';
     
-    let errorMessage = "Failed to get K8s cluster list";
-    if (error.response && error.response.data) {
-      errorMessage += `\n${error.response.data.message || error.response.data.error || ''}`;
+    return `<tr>
+      <td>${m.idx + 1}</td>
+      <td>${m.provider}</td>
+      <td style="font-size:0.8em;">${m.region}</td>
+      <td><select id="clusterSelect_${m.idx}" style="width:100%;padding:4px;font-size:0.85em;" ${m.compatibleClusters.length === 0 ? 'disabled' : ''}>
+        ${clusterOpts}
+      </select></td>
+    </tr>`;
+  }).join('');
+
+  Swal.fire({
+    title: `Add ${vmSubGroupReqeustFromSpecList.length} NodeGroups`,
+    html: `
+      <div style="text-align: left; padding: 10px;">
+        <div style="margin-bottom: 15px;">
+          <label style="font-weight: bold;">NodeGroup Name Prefix:</label><br>
+          <input type="text" id="ngNamePrefix" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;" 
+                 value="${nodeGroupPrefix}" placeholder="Enter prefix">
+        </div>
+        <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; max-height: 250px; overflow-y: auto;">
+          <strong>SubGroup → Cluster Mapping:</strong>
+          <table style="width: 100%; font-size: 0.85em; margin-top: 8px;">
+            <tr style="background: #e9ecef;"><th>#</th><th>Provider</th><th>Region</th><th>Target Cluster</th></tr>
+            ${mappingRows}
+          </table>
+        </div>
+        <div style="font-size: 0.85em; color: #666; margin-top: 10px;">
+          Each NodeGroup will be added to its selected cluster sequentially.
+        </div>
+      </div>
+    `,
+    showCancelButton: true,
+    confirmButtonText: `Add ${vmSubGroupReqeustFromSpecList.length} NodeGroups`,
+    cancelButtonText: "Cancel",
+    preConfirm: () => {
+      const prefix = document.getElementById('ngNamePrefix').value.trim();
+      if (!prefix) {
+        Swal.showValidationMessage('Please enter name prefix');
+        return false;
+      }
+      
+      // Collect cluster selections
+      const selections = [];
+      for (let i = 0; i < vmSubGroupReqeustFromSpecList.length; i++) {
+        const sel = document.getElementById(`clusterSelect_${i}`);
+        if (sel && sel.value) {
+          selections.push({ idx: i, clusterId: sel.value });
+        }
+      }
+      
+      if (selections.length === 0) {
+        Swal.showValidationMessage('No valid cluster selections');
+        return false;
+      }
+      
+      return { prefix, selections };
     }
-    
-    errorAlert(errorMessage);
+  }).then((result) => {
+    if (result.isConfirmed) {
+      const { prefix, selections } = result.value;
+      executeMultiNodeGroupAddition(selections, prefix, hostname, port, username, password, namespace);
+    }
   });
 }
+
+// Execute multiple NodeGroup additions sequentially
+async function executeMultiNodeGroupAddition(selections, prefix, hostname, port, username, password, namespace) {
+  const results = [];
+  const taskId = addSpinnerTask(`Add ${selections.length} NodeGroups`);
+
+  try {
+    for (const sel of selections) {
+      const sg = vmSubGroupReqeustFromSpecList[sel.idx];
+      const ngName = `${prefix}-${sel.idx + 1}`;
+      
+      const nodeGroupReq = {
+        imageId: sg.imageId || "default",
+        specId: sg.specId,
+        name: ngName
+      };
+      if (sg.rootDiskType) nodeGroupReq.rootDiskType = sg.rootDiskType;
+      if (sg.rootDiskSize) nodeGroupReq.rootDiskSize = sg.rootDiskSize;
+
+      const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster/${sel.clusterId}/k8sNodeGroupDynamic`;
+      
+      try {
+        await axios.post(url, nodeGroupReq, {
+          auth: { username, password },
+          headers: { 'Content-Type': 'application/json' }
+        });
+        results.push({ ngName, clusterId: sel.clusterId, success: true });
+      } catch (error) {
+        console.error(`Failed to add NodeGroup ${ngName}:`, error);
+        results.push({ ngName, clusterId: sel.clusterId, success: false, error: error.response?.data?.message || error.message });
+      }
+    }
+  } finally {
+    removeSpinnerTask(taskId);
+  }
+
+  const successCount = results.filter(r => r.success).length;
+  const resultList = results.map(r => 
+    `<li style="color: ${r.success ? '#28a745' : '#dc3545'};">${r.ngName} → ${r.clusterId}: ${r.success ? '✓' : '✗ ' + (r.error || 'Failed')}</li>`
+  ).join('');
+
+  Swal.fire({
+    title: successCount === results.length ? "All NodeGroups Added!" : "NodeGroups Added (Partial)",
+    html: `
+      <div style="text-align: left;">
+        <p><strong>Added:</strong> ${successCount} / ${results.length}</p>
+        <ul style="max-height: 150px; overflow-y: auto; font-size: 0.9em;">${resultList}</ul>
+      </div>
+    `,
+    icon: successCount === results.length ? "success" : "warning",
+    confirmButtonText: "OK"
+  });
+}
+
 window.addNodeGroupToK8sCluster = addNodeGroupToK8sCluster;
 
 // Function to set Kubernetes-appropriate configuration values
@@ -7007,7 +7268,8 @@ function updateSubGroupReview() {
   const actionButtonsContainer = document.createElement('div');
   actionButtonsContainer.className = 'mt-3 pt-3 border-top';
   
-  // Check if only one SubGroup exists to enable Append SubGroup button
+  // Check if SubGroups exist for K8s operations (now supports multi-cluster)
+  const hasSubGroups = vmSubGroupReqeustFromSpecList.length >= 1;
   const hasOneSubGroup = vmSubGroupReqeustFromSpecList.length === 1;
   
   // Get current workload type
@@ -7041,18 +7303,18 @@ function updateSubGroupReview() {
     `;
   } else if (workloadType === 'k8s') {
     console.log('Generating K8s buttons...');
-    // K8s workload buttons
+    // K8s workload buttons - supports both single and multi-cluster creation
     buttonsHtml += `
       <div class="border-top pt-2">
         <small class="text-muted d-block mb-2">Kubernetes Cluster</small>
-        <button type="button" onClick="createK8sCluster();" class="btn btn-primary btn-sm ${!hasOneSubGroup ? 'disabled' : ''}" 
-                style="font-size: 0.85rem; padding: 8px 12px; width: 100%; margin-bottom: 4px;" ${!hasOneSubGroup ? 'disabled' : ''}>
-          ☸️ Create K8s Cluster
+        <button type="button" onClick="createK8sCluster();" class="btn btn-primary btn-sm ${!hasSubGroups ? 'disabled' : ''}" 
+                style="font-size: 0.85rem; padding: 8px 12px; width: 100%; margin-bottom: 4px;" ${!hasSubGroups ? 'disabled' : ''}>
+          ☸️ Create K8s Cluster${vmSubGroupReqeustFromSpecList.length > 1 ? 's (' + vmSubGroupReqeustFromSpecList.length + ')' : ''}
         </button>
         <div class="d-flex" style="gap: 4px;">
-          <button type="button" onClick="addNodeGroupToK8sCluster();" class="btn btn-outline-primary btn-sm ${!hasOneSubGroup ? 'disabled' : ''}" 
-                  style="font-size: 0.75rem; padding: 6px 8px; flex: 1;" ${!hasOneSubGroup ? 'disabled' : ''}>
-            ➕ Add NodeGroup to K8s Cluster
+          <button type="button" onClick="addNodeGroupToK8sCluster();" class="btn btn-outline-primary btn-sm ${!hasSubGroups ? 'disabled' : ''}" 
+                  style="font-size: 0.75rem; padding: 6px 8px; flex: 1;" ${!hasSubGroups ? 'disabled' : ''}>
+            ➕ Add NodeGroup${vmSubGroupReqeustFromSpecList.length > 1 ? 's' : ''} to K8s Cluster
           </button>
           <button type="button" onClick="clearCircle('clearText');" class="btn btn-outline-secondary btn-sm" 
                   style="font-size: 0.7rem; padding: 6px 8px; min-width: 60px;">
