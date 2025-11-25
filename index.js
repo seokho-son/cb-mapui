@@ -4938,11 +4938,18 @@ function createK8sCluster() {
               k8sClusterReq.rootDiskSize = subGroup.rootDiskSize;
             }
 
-            const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sClusterDynamic`;
+            // Check if using custom version (not from available versions list)
+            const selectedVersion = document.getElementById('k8sVersionSelect').value;
+            const isCustomVersion = selectedVersion === 'custom';
+            
+            // Add skipVersionCheck parameter for custom versions
+            const skipVersionParam = isCustomVersion ? '?skipVersionCheck=true' : '';
+            const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sClusterDynamic${skipVersionParam}`;
             
             // Debug: uncomment if K8s creation debugging needed
             // console.log("Creating K8s Cluster:", k8sClusterReq);
             // console.log("Image designation needed:", imageDesignationNeeded);
+            // console.log("Using custom version:", isCustomVersion);
             
             taskId = addSpinnerTask("Create K8s "+k8sClusterReq.name);
             
