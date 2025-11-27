@@ -152,6 +152,8 @@ var mciGeo = new Array();
 var k8sName = new Array();
 var k8sStatus = new Array();
 var k8sCoords = new Array(); // Store individual coordinates for text rendering
+var k8sClusterGroups = new Array(); // Store cluster group polygons (from clustergroup label)
+var k8sClusterGroupNames = new Array(); // Store cluster group names
 
 var cspListDisplayEnabled = document.getElementById("displayOn");
 var recommendPolicy = document.getElementById("recommendPolicy");
@@ -3052,7 +3054,7 @@ function proceedWithBuildAgnosticImage(createMciReq, snapshotName, snapshotDescr
       displayJsonData(res.data, typeInfo);
       handleAxiosResponse(res);
       updateMciList();
-      clearCircle("none");
+      // Keep configuration for reuse - user can manually clear if needed
     })
     .catch(function (error) {
       errorAlert("Failed to build agnostic images from: " + createMciReq.name);
@@ -3144,7 +3146,7 @@ function proceedWithMciCreation(createMciReq, url, username, password) {
 
       updateMciList();
 
-      clearCircle("none");
+      // Keep configuration for reuse - user can manually clear if needed
       console.log("Created " + createMciReq.name);
     })
     .catch(function (error) {
@@ -4873,12 +4875,19 @@ function createK8sCluster() {
         }).then(function (response) {
           removeSpinnerTask(taskId);
           const createdClusters = response.data?.clusters || [];
+          const failedClusters = response.data?.failedClusters || [];
           const successCount = createdClusters.length;
+          const failedCount = failedClusters.length;
           const totalCount = clusters.length;
           
           const clusterList = createdClusters.length > 0 
-            ? createdClusters.map(c => `<li>${c.name || c.id || 'Unknown'} (${c.connectionName || 'N/A'})</li>`).join('')
+            ? createdClusters.map(c => `<li style="color: #28a745;">\u2713 ${c.name || c.id || 'Unknown'} (${c.connectionName || 'N/A'})</li>`).join('')
             : '<li>No clusters created</li>';
+
+          // Build failed clusters list with details
+          const failedList = failedClusters.length > 0
+            ? failedClusters.map(f => `<li style="color: #dc3545;">\u2717 ${f.name || 'Unknown'} (${f.connectionName || 'N/A'})<br><small style="color: #888; margin-left: 20px;">${f.error || 'Unknown error'}</small></li>`).join('')
+            : '';
 
           // Check if partial success (HTTP 207)
           const isPartialSuccess = response.status === 207;
@@ -4892,8 +4901,11 @@ function createK8sCluster() {
             html: `
               <div style="text-align: left;">
                 <p><strong>Created:</strong> ${successCount} / ${totalCount}</p>
-                <ul style="max-height: 150px; overflow-y: auto;">${clusterList}</ul>
-                ${isPartialSuccess ? `<p style="color: #dc3545; margin-top: 10px;">${response.data?.message || 'Some clusters failed to create'}</p>` : ''}
+                <ul style="max-height: 150px; overflow-y: auto; list-style: none; padding-left: 0;">${clusterList}</ul>
+                ${failedCount > 0 ? `
+                  <p style="margin-top: 15px;"><strong>Failed:</strong> ${failedCount}</p>
+                  <ul style="max-height: 150px; overflow-y: auto; list-style: none; padding-left: 0;">${failedList}</ul>
+                ` : ''}
               </div>
             `,
             icon: icon,
@@ -12721,8 +12733,7 @@ function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, 
         confirmButtonText: "OK"
       });
       
-      // Clear MCI configuration pins and settings after successful scale out (like createMci)
-      clearCircle("none");
+      // Keep configuration for reuse - user can manually clear if needed
       
       // Refresh MCI status after scale out
       setTimeout(() => {
@@ -12822,6 +12833,23 @@ function drawObjects(event) {
 
     vectorContext.setStyle(polyStyle);
     vectorContext.drawGeometry(geometries[i]);
+  }
+
+  // Draw K8s Cluster Group Geometry (clusters with same clustergroup label)
+  for (i = k8sClusterGroups.length - 1; i >= 0; --i) {
+    var k8sGroupPolyStyle = new Style({
+      stroke: new Stroke({
+        width: 2,
+        color: [75, 0, 130, 0.8], // Indigo color for K8s groups
+        lineDash: [8, 4] // Dashed line to distinguish from MCI
+      }),
+      fill: new Fill({
+        color: [138, 43, 226, 0.15], // BlueViolet with transparency
+      }),
+    });
+
+    vectorContext.setStyle(k8sGroupPolyStyle);
+    vectorContext.drawGeometry(k8sClusterGroups[i]);
   }
 
   if (cspPointsCircle.length) {
@@ -13070,6 +13098,35 @@ function drawObjects(event) {
     vectorContext.drawGeometry(geometries[i]);
   }
 
+  // Draw K8s Cluster Group labels (drawn last to appear on top of polygons)
+  for (i = k8sClusterGroups.length - 1; i >= 0; --i) {
+    if (k8sClusterGroupNames[i]) {
+      const extent = k8sClusterGroups[i].getExtent();
+      const centerX = (extent[0] + extent[2]) / 2;
+      const topY = extent[3]; // Use top of polygon instead of center
+      const labelPoint = new Point([centerX, topY]);
+      
+      const k8sGroupNameStyle = new Style({
+        text: new Text({
+          text: `⎈ ${k8sClusterGroupNames[i]}`, // Kubernetes helm symbol
+          font: "bold 28px sans-serif", // Larger than individual K8s cluster labels (24px)
+          scale: 1.0,
+          offsetY: 0, // Label at the top edge of the polygon
+          stroke: new Stroke({
+            color: [255, 255, 255, 1], // White stroke
+            width: 3,
+          }),
+          fill: new Fill({
+            color: [75, 0, 130, 1], // Indigo text
+          }),
+        }),
+      });
+      
+      vectorContext.setStyle(k8sGroupNameStyle);
+      vectorContext.drawGeometry(labelPoint);
+    }
+  }
+
 
   map.render();
 }
@@ -13169,6 +13226,12 @@ function loadK8sClusterData() {
       k8sName = [];
       k8sStatus = [];
       k8sCoords = [];
+      k8sClusterGroups = [];
+      k8sClusterGroupNames = [];
+      
+      // Temporary object to group clusters by clustergroup label
+      // Note: Using plain object instead of Map because 'Map' is overridden by OpenLayers import
+      const clusterGroupMap = {};
       
       console.log("resourceLocation k8s[0]");
       for (let i = 0; i < k8sClusterData.length; i++) {
@@ -13184,18 +13247,52 @@ function loadK8sClusterData() {
           k8sName.push(item.name || item.id);
           k8sStatus.push(item.status || 'Unknown');
           k8sCoords.push(coords);
+          
+          // Group by clustergroup label if present
+          if (item.label && item.label.clustergroup) {
+            const groupName = item.label.clustergroup;
+            if (!clusterGroupMap[groupName]) {
+              clusterGroupMap[groupName] = [];
+            }
+            clusterGroupMap[groupName].push(coords);
+          }
         }
       }
-      console.log(resourceLocation);
+      
+      // Create polygons for cluster groups with 2+ clusters
+      // Note: 2 points create a line connecting clusters, which is intentional
+      Object.entries(clusterGroupMap).forEach(([groupName, coords]) => {
+        if (coords.length >= 2) {
+          // Create deep copy for convexHull (it modifies the array)
+          const pointsCopy = coords.map(c => [...c]);
+          const hullPoints = convexHull(pointsCopy);
+          
+          if (hullPoints.length >= 2) {
+            // Close the polygon (or line for 2 points)
+            const closedHull = [...hullPoints, hullPoints[0]];
+            k8sClusterGroups.push(new Polygon([closedHull]));
+            k8sClusterGroupNames.push(groupName);
+          }
+        }
+      });
+      
       if (resourceLocation.length > 0) {
-        geoResourceLocation.k8s[0] = new MultiPoint([resourceLocation]);
+        geoResourceLocation.k8s[0] = new MultiPoint(resourceLocation);
       }
+      
+      // Trigger map re-render to display updated K8s cluster data
+      map.render();
     } else {
       // Clear k8s icons when list is empty
       geoResourceLocation.k8s = [];
       k8sName = [];
       k8sStatus = [];
       k8sCoords = [];
+      k8sClusterGroups = [];
+      k8sClusterGroupNames = [];
+      
+      // Trigger map re-render to clear K8s icons
+      map.render();
     }
     
     console.log('K8s cluster data loaded successfully:', k8sClusterData.length, 'clusters');
