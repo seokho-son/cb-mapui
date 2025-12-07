@@ -6559,7 +6559,20 @@ function getRecommendedSpec(idx, latitude, longitude) {
                   <h5 style="font-size: 0.85rem;margin-bottom:5px;flex-shrink:0;">Selected Image Details</h5>
                   <div id="imageDetailsContent" style="flex:1;overflow-y:auto;"></div>
                 </div>
+                <details id="directImageIdContainer" style="margin-top:10px;border:1px solid #ced4da;border-radius:5px;background-color:#f8f9fa;">
+                  <summary style="padding:8px 12px;cursor:pointer;font-size:0.8rem;color:#6c757d;user-select:none;">Enter Image ID directly...</summary>
+                  <div style="padding:10px 12px;border-top:1px solid #ced4da;">
+                    <div style="display:flex;gap:8px;align-items:center;">
+                      <input type="text" id="directImageIdInput" placeholder="e.g., ami-0abcdef1234567890" aria-label="Direct Image ID Input" style="flex:1;padding:6px 8px;border:1px solid #ced4da;border-radius:4px;font-size:0.8rem;">
+                      <button type="button" id="useDirectImageIdBtn" class="btn btn-info btn-sm" style="padding:4px 10px;font-size:0.75rem;">Apply</button>
+                      <button type="button" id="clearDirectImageIdBtn" class="btn btn-outline-secondary btn-sm" style="padding:4px 8px;font-size:0.75rem;">Clear</button>
+                    </div>
+                    <div id="directImageIdStatus" style="margin-top:6px;font-size:0.75rem;"></div>
+                  </div>
+                </details>
                 <input type="hidden" id="selectedImageIndex" value="0">
+                <input type="hidden" id="useDirectImageIdFlag" value="false">
+                <input type="hidden" id="directImageIdValue" value="">
               </div>
               <style>
                 /* Apply compact styling to all DataTable elements */
@@ -6842,18 +6855,71 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
               // Initialize image details
               updateImageDetails(0);
+
+              // Direct Image ID button handlers
+              $('#useDirectImageIdBtn').on('click', function() {
+                const directImageId = $('#directImageIdInput').val().trim();
+                if (!directImageId) {
+                  $('#directImageIdStatus').html('<span style="color:red;">⚠️ Please enter an Image ID</span>');
+                  return;
+                }
+                // Set the flags and value
+                $('#useDirectImageIdFlag').val('true');
+                $('#directImageIdValue').val(directImageId);
+                // Clear table selection and show status
+                $('#imageSelectionTable tbody tr').removeClass('selected-image');
+                // XSS-safe: escape user input before inserting into HTML
+                const escapedId = $('<div>').text(directImageId).html();
+                $('#directImageIdStatus').html('<span style="color:green;">✅ Applied: <code>' + escapedId + '</code></span>');
+                $('#directImageIdContainer').css('border-color', '#28a745').css('background-color', '#d4edda');
+              });
+
+              $('#clearDirectImageIdBtn').on('click', function() {
+                $('#useDirectImageIdFlag').val('false');
+                $('#directImageIdValue').val('');
+                $('#directImageIdInput').val('');
+                $('#directImageIdStatus').html('');
+                $('#directImageIdContainer').css('border-color', '#ced4da').css('background-color', '#f8f9fa');
+                // Re-select the first row
+                selectImageRow(0);
+              });
             },
             showCancelButton: true,
             confirmButtonText: "Continue",
             cancelButtonText: "Cancel",
             preConfirm: () => {
-              return parseInt(document.getElementById('selectedImageIndex').value);
+              const useDirect = document.getElementById('useDirectImageIdFlag').value === 'true';
+              const directImageId = document.getElementById('directImageIdValue').value;
+              const selectedIndex = parseInt(document.getElementById('selectedImageIndex').value);
+              return {
+                useDirectImageId: useDirect,
+                directImageId: directImageId,
+                selectedIndex: selectedIndex
+              };
             }
           }).then((imageResult) => {
             if (imageResult.isConfirmed) {
-              // User selected an image and confirmed
-              var selectedImage = availableImages[imageResult.value];
-              console.log("User selected image:", selectedImage);
+              // Determine which image to use
+              let selectedImageId;
+              let selectedImage;
+              
+              if (imageResult.value.useDirectImageId && imageResult.value.directImageId) {
+                // User specified a direct image ID
+                selectedImageId = imageResult.value.directImageId;
+                selectedImage = {
+                  cspImageName: selectedImageId,
+                  osDistribution: "Direct Image ID (will be auto-registered if available in CSP)",
+                  osType: "Unknown",
+                  osArchitecture: "Unknown",
+                  isDirectInput: true
+                };
+                console.log("User specified direct image ID:", selectedImageId);
+              } else {
+                // User selected from the list
+                selectedImage = availableImages[imageResult.value.selectedIndex];
+                selectedImageId = selectedImage.cspImageName;
+                console.log("User selected image from list:", selectedImage);
+              }
 
               // Now proceed to the final spec confirmation step
               addRegionMarker(selectedSpec.id);
@@ -6867,7 +6933,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
               var diskSize = document.getElementById("diskSize");
 
               createMciReqVm.specId = selectedSpec.id;
-              createMciReqVm.imageId = selectedImage.cspImageName; // Use selected image instead of osImage.value
+              createMciReqVm.imageId = selectedImageId; // Use selected image ID (from list or custom input)
               createMciReqVm.rootDiskType = selectedSpec.rootDiskType;
 
               var diskSizeInput = diskSize.value;
@@ -6925,7 +6991,16 @@ function getRecommendedSpec(idx, latitude, longitude) {
             width: 800,
             html:
               "<font size=3>" +
-              "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
+              // Spec-Image Pair Review Result Section
+              "<div id='specImageReviewSection' style='margin-bottom:15px;padding:10px;border:1px solid #ddd;border-radius:5px;background-color:#f8f9fa;'>" +
+              "<div style='display:flex;align-items:center;gap:8px;margin-bottom:8px;'>" +
+              "<span style='font-weight:bold;'>Pair Validation:</span>" +
+              "<span id='specImageReviewStatus' style='padding:3px 10px;border-radius:12px;font-size:0.85em;background-color:#6c757d;color:white;'>Checking...</span>" +
+              "<span id='specImageReviewSpinner' style='font-size:0.9em;'>⏳</span>" +
+              "</div>" +
+              "<div id='specImageReviewDetails' style='font-size:0.85em;color:#666;'></div>" +
+              "</div>" +
+              "<table style='width:80%; text-align:left; margin-top:10px; margin-left:10px; table-layout: auto;'>" +
               "<tr><th style='width: 50%;'>Recommended Spec</th><td><b><span style='color: black; font-size: larger;'>" + selectedSpec.cspSpecName + "</span></b></td></tr>" +
               "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; font-size: larger;'> $ " + costPerHour + " (at least)</span></b></td></tr>" +
               "<tr><th style='width: 50%;'>Image</th><td>" + imageSelectHTML + "</td></tr>" +
@@ -6972,6 +7047,81 @@ function getRecommendedSpec(idx, latitude, longitude) {
               "</table><br>",
 
             didOpen: () => {
+              // Call specImagePairReview API
+              const reviewSpecImagePair = async () => {
+                const statusEl = document.getElementById('specImageReviewStatus');
+                const spinnerEl = document.getElementById('specImageReviewSpinner');
+                const detailsEl = document.getElementById('specImageReviewDetails');
+                const sectionEl = document.getElementById('specImageReviewSection');
+                
+                try {
+                  const response = await fetch(`http://${hostname}:${port}/tumblebug/specImagePairReview`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': 'Basic ' + btoa(configUsername + ':' + configPassword)
+                    },
+                    body: JSON.stringify({
+                      specId: selectedSpec.id,
+                      imageId: selectedImageId
+                    })
+                  });
+                  
+                  if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                  }
+                  
+                  const result = await response.json();
+                  spinnerEl.style.display = 'none';
+                  
+                  // Helper function to escape HTML (prevent XSS)
+                  const escapeHtml = (str) => $('<div>').text(str).html();
+                  
+                  if (result.isValid) {
+                    statusEl.textContent = '✓ Valid';
+                    statusEl.style.backgroundColor = '#28a745';
+                    sectionEl.style.borderColor = '#28a745';
+                    sectionEl.style.backgroundColor = '#d4edda';
+                    
+                    let details = [];
+                    // Show main message first
+                    if (result.message) details.push(escapeHtml(result.message));
+                    if (result.estimatedCost) details.push('Cost: ' + escapeHtml(result.estimatedCost));
+                    if (result.info && result.info.length > 0) details.push(...result.info.map(escapeHtml));
+                    if (result.warnings && result.warnings.length > 0) {
+                      detailsEl.innerHTML = details.join(' | ') + 
+                        '<br><span style="color:#856404;">⚠ ' + result.warnings.map(escapeHtml).join('<br>⚠ ') + '</span>';
+                    } else {
+                      detailsEl.innerHTML = details.join(' | ');
+                    }
+                  } else {
+                    statusEl.textContent = '✗ Risk Detected';
+                    statusEl.style.backgroundColor = '#dc3545';
+                    sectionEl.style.borderColor = '#dc3545';
+                    sectionEl.style.backgroundColor = '#f8d7da';
+                    
+                    // Show main message prominently
+                    let content = '';
+                    if (result.message) {
+                      content += '<strong>' + escapeHtml(result.message) + '</strong>';
+                    }
+                    let errors = result.errors || [];
+                    if (errors.length > 0) {
+                      content += '<br><span style="color:#dc3545;">' + errors.map(escapeHtml).join('<br>') + '</span>';
+                    }
+                    detailsEl.innerHTML = content;
+                  }
+                } catch (error) {
+                  spinnerEl.style.display = 'none';
+                  statusEl.textContent = '⚠ Check Failed';
+                  statusEl.style.backgroundColor = '#ffc107';
+                  statusEl.style.color = '#212529';
+                  detailsEl.textContent = 'Could not verify: ' + error.message;
+                  detailsEl.style.color = '#856404';
+                }
+              };
+              reviewSpecImagePair();
+
               // Populate RootDiskType dropdown based on CSP
               const rootDiskTypeSelect = document.getElementById('rootDiskTypeSelect');
               if (rootDiskTypeSelect) {
