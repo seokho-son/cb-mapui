@@ -6563,7 +6563,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
                   <summary style="padding:8px 12px;cursor:pointer;font-size:0.8rem;color:#6c757d;user-select:none;">Enter Image ID directly...</summary>
                   <div style="padding:10px 12px;border-top:1px solid #ced4da;">
                     <div style="display:flex;gap:8px;align-items:center;">
-                      <input type="text" id="directImageIdInput" placeholder="e.g., ami-0abcdef1234567890" style="flex:1;padding:6px 8px;border:1px solid #ced4da;border-radius:4px;font-size:0.8rem;">
+                      <input type="text" id="directImageIdInput" placeholder="e.g., ami-0abcdef1234567890" aria-label="Direct Image ID Input" style="flex:1;padding:6px 8px;border:1px solid #ced4da;border-radius:4px;font-size:0.8rem;">
                       <button type="button" id="useDirectImageIdBtn" class="btn btn-info btn-sm" style="padding:4px 10px;font-size:0.75rem;">Apply</button>
                       <button type="button" id="clearDirectImageIdBtn" class="btn btn-outline-secondary btn-sm" style="padding:4px 8px;font-size:0.75rem;">Clear</button>
                     </div>
@@ -6864,19 +6864,19 @@ function getRecommendedSpec(idx, latitude, longitude) {
                   return;
                 }
                 // Set the flags and value
-                document.getElementById('useDirectImageIdFlag').value = 'true';
-                document.getElementById('directImageIdValue').value = directImageId;
+                $('#useDirectImageIdFlag').val('true');
+                $('#directImageIdValue').val(directImageId);
                 // Clear table selection and show status
-                document.querySelectorAll('#imageSelectionTable tbody tr').forEach(row => {
-                  row.classList.remove('selected-image');
-                });
-                $('#directImageIdStatus').html('<span style="color:green;">✅ Applied: <code>' + directImageId + '</code></span>');
+                $('#imageSelectionTable tbody tr').removeClass('selected-image');
+                // XSS-safe: escape user input before inserting into HTML
+                const escapedId = $('<div>').text(directImageId).html();
+                $('#directImageIdStatus').html('<span style="color:green;">✅ Applied: <code>' + escapedId + '</code></span>');
                 $('#directImageIdContainer').css('border-color', '#28a745').css('background-color', '#d4edda');
               });
 
               $('#clearDirectImageIdBtn').on('click', function() {
-                document.getElementById('useDirectImageIdFlag').value = 'false';
-                document.getElementById('directImageIdValue').value = '';
+                $('#useDirectImageIdFlag').val('false');
+                $('#directImageIdValue').val('');
                 $('#directImageIdInput').val('');
                 $('#directImageIdStatus').html('');
                 $('#directImageIdContainer').css('border-color', '#ced4da').css('background-color', '#f8f9fa');
@@ -7067,8 +7067,15 @@ function getRecommendedSpec(idx, latitude, longitude) {
                     })
                   });
                   
+                  if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                  }
+                  
                   const result = await response.json();
                   spinnerEl.style.display = 'none';
+                  
+                  // Helper function to escape HTML (prevent XSS)
+                  const escapeHtml = (str) => $('<div>').text(str).html();
                   
                   if (result.isValid) {
                     statusEl.textContent = '✓ Valid';
@@ -7078,12 +7085,12 @@ function getRecommendedSpec(idx, latitude, longitude) {
                     
                     let details = [];
                     // Show main message first
-                    if (result.message) details.push(result.message);
-                    if (result.estimatedCost) details.push(`Cost: ${result.estimatedCost}`);
-                    if (result.info && result.info.length > 0) details.push(...result.info);
+                    if (result.message) details.push(escapeHtml(result.message));
+                    if (result.estimatedCost) details.push('Cost: ' + escapeHtml(result.estimatedCost));
+                    if (result.info && result.info.length > 0) details.push(...result.info.map(escapeHtml));
                     if (result.warnings && result.warnings.length > 0) {
                       detailsEl.innerHTML = details.join(' | ') + 
-                        '<br><span style="color:#856404;">⚠ ' + result.warnings.join('<br>⚠ ') + '</span>';
+                        '<br><span style="color:#856404;">⚠ ' + result.warnings.map(escapeHtml).join('<br>⚠ ') + '</span>';
                     } else {
                       detailsEl.innerHTML = details.join(' | ');
                     }
@@ -7096,11 +7103,11 @@ function getRecommendedSpec(idx, latitude, longitude) {
                     // Show main message prominently
                     let content = '';
                     if (result.message) {
-                      content += '<strong>' + result.message + '</strong>';
+                      content += '<strong>' + escapeHtml(result.message) + '</strong>';
                     }
                     let errors = result.errors || [];
                     if (errors.length > 0) {
-                      content += '<br><span style="color:#dc3545;">' + errors.join('<br>') + '</span>';
+                      content += '<br><span style="color:#dc3545;">' + errors.map(escapeHtml).join('<br>') + '</span>';
                     }
                     detailsEl.innerHTML = content;
                   }
@@ -7109,7 +7116,8 @@ function getRecommendedSpec(idx, latitude, longitude) {
                   statusEl.textContent = '⚠ Check Failed';
                   statusEl.style.backgroundColor = '#ffc107';
                   statusEl.style.color = '#212529';
-                  detailsEl.innerHTML = '<span style="color:#856404;">Could not verify: ' + error.message + '</span>';
+                  detailsEl.textContent = 'Could not verify: ' + error.message;
+                  detailsEl.style.color = '#856404';
                 }
               };
               reviewSpecImagePair();
