@@ -681,18 +681,50 @@ function findNearestMci(clickCoord) {
 
 // Function to show MCI context menu
 function showMciContextMenu(pixel, mciInfo) {
-  // Set the selected MCI in the control panel
-  const mciSelect = document.getElementById('mciid');
-  if (mciSelect) {
-    // Find and select the MCI option
-    for (let option of mciSelect.options) {
-      if (option.value === mciInfo.name) {
-        mciSelect.value = mciInfo.name;
-        // Trigger change event to update dependent fields
-        mciSelect.dispatchEvent(new Event('change'));
+  // Sync namespace from Provision tab to Control tab
+  const provisionNamespace = document.getElementById('namespace');
+  const controlNamespace = document.getElementById('namespace-control');
+  if (provisionNamespace && controlNamespace && provisionNamespace.value) {
+    // Ensure the namespace option exists in control tab
+    let optionExists = false;
+    for (let option of controlNamespace.options) {
+      if (option.value === provisionNamespace.value) {
+        optionExists = true;
         break;
       }
     }
+    if (!optionExists) {
+      const newOption = document.createElement('option');
+      newOption.value = provisionNamespace.value;
+      newOption.text = provisionNamespace.value;
+      controlNamespace.add(newOption);
+    }
+    controlNamespace.value = provisionNamespace.value;
+    controlNamespace.dispatchEvent(new Event('change'));
+  }
+
+  // Set the selected MCI in the control panel
+  const mciSelect = document.getElementById('mciid');
+  if (mciSelect) {
+    // Check if the MCI option exists, if not, add it
+    let optionExists = false;
+    for (let option of mciSelect.options) {
+      if (option.value === mciInfo.name) {
+        optionExists = true;
+        mciSelect.value = mciInfo.name;
+        break;
+      }
+    }
+    if (!optionExists) {
+      // Add the MCI option if it doesn't exist (for failed MCIs that weren't loaded to control tab)
+      const newOption = document.createElement('option');
+      newOption.value = mciInfo.name;
+      newOption.text = mciInfo.name;
+      mciSelect.add(newOption);
+      mciSelect.value = mciInfo.name;
+    }
+    // Trigger change event to update dependent fields
+    mciSelect.dispatchEvent(new Event('change'));
   }
   
   // Show context menu using SweetAlert
@@ -7847,6 +7879,15 @@ function controlMCI(action) {
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
 
+  if (!namespace) {
+    errorAlert("Please select a namespace first");
+    return;
+  }
+  if (!mciid) {
+    errorAlert("Please select an MCI first");
+    return;
+  }
+
   var spinnerId = addSpinnerTask(action + ": " + mciid);
   infoAlert(action + ": " + mciid);
 
@@ -8040,6 +8081,16 @@ function statusMCI() {
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
 
+  // Validate required parameters
+  if (!namespace || namespace === "") {
+    errorAlert("Namespace is not selected. Please select a namespace first or switch to Control tab and back.");
+    return;
+  }
+  if (!mciid || mciid === "") {
+    errorAlert("MCI ID is not selected. Please select an MCI first.");
+    return;
+  }
+
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}`;
 
   axios({
@@ -8061,13 +8112,21 @@ function statusMCI() {
         console.log(error.response.data);
         console.log(error.response.status);
         console.log(error.response.headers);
+        // Provide more detailed error message
+        const errorData = error.response.data;
+        const status = error.response.status;
+        let errorMsg = "";
+        if (status === 404) {
+          errorMsg = `MCI '${mciid}' not found in namespace '${namespace}'.\n\nThis may happen if:\n- The MCI was deleted\n- The namespace is incorrect\n- The MCI creation failed completely`;
+        } else {
+          errorMsg = JSON.stringify(errorData, null, 2).replace(/['",]+/g, "");
+        }
+        errorAlert(errorMsg);
       } else {
         console.log("Error", error.message);
+        errorAlert("Network error: " + error.message);
       }
       console.log(error.config);
-      errorAlert(
-        JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, "")
-      );
     });
 }
 window.statusMCI = statusMCI;
@@ -10053,10 +10112,17 @@ function executeRemoteCmd() {
   var subgroupid = getSubGroupIdFromVmSelection();
   var vmid = document.getElementById("vmid").value;
 
-  let cmdCount = 3; // Initial number of textboxes
+  if (!namespace) {
+    errorAlert("Please select a namespace first");
+    return;
+  }
+  if (!mciid) {
+    errorAlert("Please select an MCI first");
+    return;
+  }
 
-  if (mciid) {
-    var spinnerId = "";
+  let cmdCount = 3; // Initial number of textboxes
+  var spinnerId = "";
 
     console.log(
       "Forward remote ssh command to MCI:" + mciid
@@ -10281,10 +10347,6 @@ function executeRemoteCmd() {
         removeSpinnerTask(spinnerId);
       }
     });
-  } else {
-    errorAlert("MCI ID is not assigned");
-    console.log(" MCI ID is not assigned");
-  }
 }
 window.executeRemoteCmd = executeRemoteCmd;
 
@@ -10299,8 +10361,16 @@ function transferFileToMci() {
   var subgroupid = getSubGroupIdFromVmSelection();
   var vmid = document.getElementById("vmid").value;
 
-  if (mciid) {
-    console.log("[Transfer file to MCI:" + mciid + "]\n");
+  if (!namespace) {
+    errorAlert("Please select a namespace first");
+    return;
+  }
+  if (!mciid) {
+    errorAlert("Please select an MCI first");
+    return;
+  }
+
+  console.log("[Transfer file to MCI:" + mciid + "]\n");
 
     // Swal popup for selecting file and target path
     Swal.fire({
@@ -10423,10 +10493,6 @@ function transferFileToMci() {
         console.log("File transfer was canceled.");
       }
     });
-  } else {
-    errorAlert("MCI ID is not assigned");
-    console.log("MCI ID is not assigned.");
-  }
 }
 window.transferFileToMci = transferFileToMci;
 
@@ -10439,10 +10505,18 @@ function getAccessInfo() {
   var namespace = namespaceElement.value;
   var mciid = mciidElement.value;
 
-  if (mciid) {
-    console.log(
-      "Retrieve access information for MCI:" + mciid
-    );
+  if (!namespace) {
+    errorAlert("Please select a namespace first");
+    return;
+  }
+  if (!mciid) {
+    errorAlert("Please select an MCI first");
+    return;
+  }
+
+  console.log(
+    "Retrieve access information for MCI:" + mciid
+  );
 
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=accessinfo`;
 
@@ -10457,9 +10531,6 @@ function getAccessInfo() {
       console.log(res); // for debug
       displayJsonData(res.data, typeInfo);
     });
-  } else {
-    console.log(" MCI ID is not assigned");
-  }
 }
 window.getAccessInfo = getAccessInfo;
 
@@ -10713,6 +10784,15 @@ function updateFirewallRules() {
   var mciId = mciidElement.value;
   var subgroupid = getSubGroupIdFromVmSelection();
   var vmid = document.getElementById("vmid").value;
+
+  if (!nsId) {
+    errorAlert("Please select a namespace first");
+    return;
+  }
+  if (!mciId) {
+    errorAlert("Please select an MCI first");
+    return;
+  }
 
   const assocUrl = `http://${hostname}:${port}/tumblebug/ns/${nsId}/mci/${mciId}/associatedResources`;
   axios({
@@ -12173,8 +12253,13 @@ function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, po
 
 // Function to show MCI Actions menu in SweetAlert
 function showActionsMenu() {
+  var namespace = namespaceElement.value;
   var mciid = document.getElementById("mciid").value;
   
+  if (!namespace) {
+    errorAlert("Please select a namespace first");
+    return;
+  }
   if (!mciid) {
     errorAlert("Please select an MCI first");
     return;
