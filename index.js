@@ -2879,12 +2879,15 @@ function showFinalMciConfirmation(createMciReq, url, totalCost, totalNodeScale, 
                   <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
                   <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
                   <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
-                  <option value="vLLM">[LLM vLLM] vLLM Server</option>
+                  <option value="vLLM">[LLM vLLM] vLLM Install</option>
+                  <option value="vLLMServe">[LLM vLLM] vLLM Model Serve</option>
                   <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
                   <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
                   <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
                   <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
                   <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
+                  <option value="Netdata">[Observability] Netdata Monitor</option>
+                  <option value="Netdata-Status">[Observability] Check Netdata Status</option>
                   <option value="WeaveScope">[Observability] Weave Scope</option>
                   <option value="ELK">[Observability] ELK Stack</option>
                   <option value="Jitsi">[Video Conference] Jitsi Meet</option>
@@ -3245,12 +3248,15 @@ function showPostCommandDialog(createMciReq, mciCreationUrl, username, password,
             <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
             <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
             <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
-            <option value="vLLM">[LLM vLLM] vLLM Server</option>
+            <option value="vLLM">[LLM vLLM] vLLM Install</option>
+            <option value="vLLMServe">[LLM vLLM] vLLM Model Serve</option>
             <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
             <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
             <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
             <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
             <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
+            <option value="Netdata">[Observability] Netdata Monitor</option>
+            <option value="Netdata-Status">[Observability] Check Netdata Status</option>
             <option value="WeaveScope">[Observability] Weave Scope</option>
             <option value="ELK">[Observability] ELK Stack</option>
             <option value="Jitsi">[Video Conference] Jitsi Meet</option>
@@ -9826,9 +9832,14 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "sudo ~/startServer.sh ";
       break;
     case "vLLM":
-      defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/llmServer.py";
-      defaultRemoteCommand[1] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/startServer.sh; chmod +x ~/startServer.sh";
-      defaultRemoteCommand[2] = "~/startServer.sh " + "--ip " + "$$Func(GetPublicIPs(separator=' '))" + " --port 5000" + " --token 1024" + " --model tiiuae/falcon-7b-instruct";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployvLLM.sh | sh";
+      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:8000/v1))'";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "vLLMServe":
+      defaultRemoteCommand[0] = "source ~/venv_vllm/bin/activate && nohup python -m vllm.entrypoints.openai.api_server --model $$Func(AssignTask(task='Qwen/Qwen2.5-1.5B-Instruct, meta-llama/Llama-3.2-3B-Instruct, mistralai/Mistral-7B-Instruct-v0.3, deepseek-ai/DeepSeek-R1-Distill-Qwen-7B')) --host 0.0.0.0 --port 8000 --trust-remote-code > ~/vllm-serve.log 2>&1 &";
+      defaultRemoteCommand[1] = "sleep 5 && echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:8000/v1))'";
+      defaultRemoteCommand[2] = "tail -n 20 ~/vllm-serve.log";
       break;
     case "Nvidia":
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/installCudaDriver.sh | sh";
@@ -9837,6 +9848,16 @@ function setDefaultRemoteCommandsByApp(appName) {
       break;
     case "Nvidia-Status":
       defaultRemoteCommand[0] = "nvidia-smi";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "Netdata":
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployNetdataMonitor.sh | sh";
+      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:19999))'";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "Netdata-Status":
+      defaultRemoteCommand[0] = "sudo systemctl status netdata --no-pager";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
@@ -10162,12 +10183,15 @@ function executeRemoteCmd() {
             <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
             <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
             <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
-            <option value="vLLM">[LLM vLLM] vLLM Server</option>
+            <option value="vLLM">[LLM vLLM] vLLM Install</option>
+            <option value="vLLMServe">[LLM vLLM] vLLM Model Serve</option>
             <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
             <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
             <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
             <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
             <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
+            <option value="Netdata">[Observability] Netdata Monitor</option>
+            <option value="Netdata-Status">[Observability] Check Netdata Status</option>
             <option value="WeaveScope">[Observability] Weave Scope</option>
             <option value="ELK">[Observability] ELK Stack</option>
             <option value="Jitsi">[Video Conference] Jitsi Meet</option>
