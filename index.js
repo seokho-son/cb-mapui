@@ -6179,6 +6179,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
     Swal.fire({
       title: "Select a Spec from the Recommendation List",
       width: 900,
+      position: 'center',
 
       // Spec selection popup HTML part with row selection instead of buttons
       html: `
@@ -6986,27 +6987,13 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 // need to validate requested disk size >= default disk size given by vm spec
               }
 
-              // Create a visually appealing image display for the final confirmation
-              const truncateImageText = (text, maxLength) => {
-                if (text.length <= maxLength) return text;
-                return text.substring(0, maxLength) + '..';
-              };
-
-              const truncatedDistribution = truncateImageText(selectedImage.osDistribution, 60);
-              const truncatedImageName = truncateImageText(selectedImage.cspImageName, 40);
-
+              // Create image display for the confirmation popup (full width available)
               let imageSelectHTML = `
-                <div style="padding: 10px; border: 1px solid #ddd; border-radius: 6px; background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-                  <div style="margin-bottom: 8px;">
-                    <div style="font-size: 0.8em; color: #6c757d; line-height: 1.4;">
-                      <div style="margin-bottom: 3px;" title="(${selectedImage.cspImageName})">
-                        <code style="background-color: #e9ecef; padding: 2px 4px; border-radius: 3px; font-size: 0.75em;">${truncatedImageName}</code>
-                      </div>
-                    </div>
-                    <div style="font-size: 0.9em; font-weight: bold; color: #28a745; margin-bottom: 4px;" title="${selectedImage.osDistribution}">
-                    ${truncatedDistribution}
-                    </div>
+                <div>
+                  <div style="font-size: 0.85rem; font-weight: 600; color: #333; margin-bottom: 4px; word-break: break-word;">
+                    ${selectedImage.osDistribution}
                   </div>
+                  <code style="font-size: 0.8rem; color: #666; background: #e9ecef; padding: 4px 8px; border-radius: 4px; display: block; word-break: break-all; max-height: 60px; overflow-y: auto;">${selectedImage.cspImageName}</code>
                 </div>
               `;
 
@@ -7014,75 +7001,21 @@ function getRecommendedSpec(idx, latitude, longitude) {
           if (costPerHour == "-1" || costPerHour == "") {
             costPerHour = "unknown";
           }
-          let acceleratorType = selectedSpec.acceleratorType;
-          let acceleratorModel = selectedSpec.acceleratorModel;
-          if (acceleratorType == "gpu") {
-            acceleratorType = "<tr><th style='width: 50%;'>AcceleratorType</th><td><b><span style='color: red; font-size: larger;'>GPU</span></b></td></tr>"
-            acceleratorModel = "<tr><th style='width: 50%;'>AcceleratorModel</th><td><b><span style='color: red; font-size: larger;'>" + acceleratorModel + "</span></b></td></tr>"
-          } else {
-            acceleratorType = "<tr><th style='width: 50%;'>AcceleratorType</th><td><b><span style='color: black;'>None</span></b></td></tr>"
-            acceleratorModel = "<tr><th style='width: 50%;'>AcceleratorModel</th><td><b><span style='color: black;'>" + acceleratorModel + "</span></b></td></tr>"
-          }
+          
+          // Store costPerHour in selectedSpec for buildSpecConfigPopupHtml
+          selectedSpec.costPerHour = costPerHour;
 
+          // Use setTimeout to open as independent popup (not nested)
+          setTimeout(() => {
           Swal.fire({
-            title: "Recommended Spec and CSP region <br>",
-            width: 800,
-            html:
-              "<font size=3>" +
-              // Spec-Image Pair Review Result Section
-              "<div id='specImageReviewSection' style='margin-bottom:15px;padding:10px;border:1px solid #ddd;border-radius:5px;background-color:#f8f9fa;'>" +
-              "<div style='display:flex;align-items:center;gap:8px;margin-bottom:8px;'>" +
-              "<span style='font-weight:bold;'>Pair Validation:</span>" +
-              "<span id='specImageReviewStatus' style='padding:3px 10px;border-radius:12px;font-size:0.85em;background-color:#6c757d;color:white;'>Checking...</span>" +
-              "<span id='specImageReviewSpinner' style='font-size:0.9em;'>⏳</span>" +
-              "</div>" +
-              "<div id='specImageReviewDetails' style='font-size:0.85em;color:#666;'></div>" +
-              "</div>" +
-              "<table style='width:80%; text-align:left; margin-top:10px; margin-left:10px; table-layout: auto;'>" +
-              "<tr><th style='width: 50%;'>Recommended Spec</th><td><b><span style='color: black; font-size: larger;'>" + selectedSpec.cspSpecName + "</span></b></td></tr>" +
-              "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; font-size: larger;'> $ " + costPerHour + " (at least)</span></b></td></tr>" +
-              "<tr><th style='width: 50%;'>Image</th><td>" + imageSelectHTML + "</td></tr>" +
-
-              "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
-              "<tr><th style='width: 50%;'>Provider</th><td><b><span style='color: blue; font-size: larger;'>" + selectedSpec.providerName.toUpperCase() + "</span></b></td></tr>" +
-              "<tr><th style='width: 50%;'>Region</th><td><b>" + selectedSpec.regionName + "</b></td></tr>" +
-              "<tr><th style='width: 50%;'>ConnectionConfig</th><td><b>" + selectedSpec.connectionName + "</b></td></tr>" +
-
-              "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
-              "<tr><th style='width: 50%;'>vCPU</th><td><b>" + selectedSpec.vCPU + "</b></td></tr>" +
-              "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + selectedSpec.memoryGiB + "</b></td></tr>" +
-              
-              "<tr><th style='width: 50%;'>RootDiskType</th><td>" +
-              "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Select disk type</span>" +
-              "<select id='rootDiskTypeSelect' style='width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px;'>" +
-              // Options will be dynamically populated based on CSP
-              "</select>" +
-              "</td></tr>" +
-
-              "<tr><th style='width: 50%;'>RootDiskSize(GB)</th><td>" +
-              "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Enter disk size in GB or 'default'</span>" +
-              "<input type='text' id='rootDiskSizeCustom' style='width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px;' value='" + createMciReqVm.rootDiskSize + "'>" +
-              "</td></tr>" +
-
-              "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
-              acceleratorModel +
-              "<tr><th style='width: 50%;'>AcceleratorCount</th><td><b>" + selectedSpec.acceleratorCount + "</b></td></tr>" +
-              "<tr><th style='width: 50%;'>AcceleratorMemoryGB</th><td><b>" + selectedSpec.acceleratorMemoryGB + "</b></td></tr>" +
-
-              // Label input field
-              "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
-              "<tr><th style='width: 50%;'>User Labels</th><td>" +
-              "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Enter in key=value, separated by commas</span>" +
-              "<input type='text' id='vmLabels' style='width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px;' placeholder='role=worker,env=prod,tier=frontend'>" +
-              "</td></tr>" +
-
-              // vm count input field
-              "<tr><th style='width: 50%;'>------</th><td><b>" + "" + "</b></td></tr>" +
-              "<tr><th style='width: 50%;'>SubGroup Scale</th><td>" +
-              "<span style='font-size: 0.9em; color: #666; display: block; margin-bottom: 5px;'>Enter the number of VMs for scaling (1 ~ 1000)</span>" +
-              "<input type='number' id='vmCount' style='width:100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px;' min='1' max='10' value='1'>" +
-              "</td></tr>" +
-              "</table><br>",
+            title: "📋 SubGroup Configuration",
+            width: 650,
+            html: buildSpecConfigPopupHtml(selectedSpec, createMciReqVm, {
+              isEdit: false,
+              showValidation: true,
+              imageSelectHTML: imageSelectHTML,
+              currentLabels: ''
+            }),
 
             didOpen: () => {
               // Call specImagePairReview API
@@ -7160,38 +7093,11 @@ function getRecommendedSpec(idx, latitude, longitude) {
               };
               reviewSpecImagePair();
 
-              // Populate RootDiskType dropdown based on CSP
-              const rootDiskTypeSelect = document.getElementById('rootDiskTypeSelect');
-              if (rootDiskTypeSelect) {
-                // Root disk type options per CSP (based on cloudos_meta.yaml)
-                // TODO: Extract to configuration file or load dynamically to improve maintainability
-                const rootDiskTypes = {
-                  'aws': ['default', 'standard', 'gp2', 'gp3'],
-                  'azure': ['default', 'PremiumSSD', 'StandardSSD', 'StandardHDD'],
-                  'gcp': ['default', 'pd-standard', 'pd-balanced', 'pd-ssd', 'pd-extreme'],
-                  'alibaba': ['default', 'cloud_essd', 'cloud_efficiency', 'cloud', 'cloud_ssd'],
-                  'tencent': ['default', 'CLOUD_PREMIUM', 'CLOUD_SSD'],
-                  'ibm': ['default'],
-                  'ncp': ['default', 'SSD', 'HDD'],
-                  'nhn': ['default', 'General_HDD', 'General_SSD'],
-                  'kt': ['default', 'HDD', 'SSD']
-                };
-                
-                const providerName = selectedSpec.providerName.toLowerCase();
-                const validTypes = rootDiskTypes[providerName] || ['default'];
-                const currentValue = selectedSpec.rootDiskType || "default";
-                
-                // Populate options
-                validTypes.forEach(type => {
-                  const option = document.createElement('option');
-                  option.value = type;
-                  option.textContent = type;
-                  if (type === currentValue) {
-                    option.selected = true;
-                  }
-                  rootDiskTypeSelect.appendChild(option);
-                });
-              }
+              // Populate RootDiskType dropdown based on CSP (using common helper)
+              populateRootDiskTypeSelect('rootDiskTypeSelect', selectedSpec.providerName, selectedSpec.rootDiskType || 'default');
+
+              // Fetch and populate Zone dropdown using the new availableZonesForSpec API (GET method)
+              populateZoneSelect('zoneSelect', 'zoneLoadingSpinner', selectedSpec.id, '', 'zoneStatusMessage');
 
               // Focus on the VM count input for better user experience
               const vmCountInput = document.getElementById('vmCount');
@@ -7255,9 +7161,11 @@ function getRecommendedSpec(idx, latitude, longitude) {
               autocapitalize: "off",
             },
             showCancelButton: true,
-            confirmButtonText: "Confirm",
+            confirmButtonText: "➕ Add SubGroup",
+            confirmButtonColor: '#28a745',
+            cancelButtonText: "Cancel",
             //showLoaderOnConfirm: true,
-            position: "top-end",
+            position: "center",
             //back(disabled section)ground color
             backdrop: `rgba(0, 0, 0, 0.08)`,
             preConfirm: () => {
@@ -7328,20 +7236,19 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 createMciReqVm.rootDiskSize = "default";
               }
 
+              // Get selected zone (optional)
+              const zoneSelect = document.getElementById('zoneSelect');
+              const selectedZone = zoneSelect ? zoneSelect.value : "";
+              if (selectedZone) {
+                console.log("Zone:", selectedZone);
+                createMciReqVm.zone = selectedZone;
+              }
+
+              // Parse labels using common helper function
               const vmLabelsInput = document.getElementById('vmLabels').value.trim();
-              if (vmLabelsInput) {
-
-                const labels = {};
-                vmLabelsInput.split(',').forEach(pair => {
-                  const [key, value] = pair.trim().split('=');
-                  if (key && value) {
-                    labels[key] = value;
-                  }
-                });
-
-                if (Object.keys(labels).length > 0) {
-                  createMciReqVm.label = labels;
-                }
+              const labels = parseLabelsString(vmLabelsInput);
+              if (Object.keys(labels).length > 0) {
+                createMciReqVm.label = labels;
               }
 
 
@@ -7349,8 +7256,19 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 `${createMciReqVm.specId}` +
                 `\t(${createMciReqVm.subGroupSize})`
               );
-              vmSubGroupReqeustFromSpecList.push(createMciReqVm);
-              recommendedSpecList.push(recommendedSpec);
+              
+              // Check if we're editing an existing SubGroup or adding a new one
+              if (window.editingSubGroupIndex >= 0) {
+                // Update existing SubGroup
+                vmSubGroupReqeustFromSpecList[window.editingSubGroupIndex] = createMciReqVm;
+                recommendedSpecList[window.editingSubGroupIndex] = recommendedSpec;
+                console.log(`Updated SubGroup at index ${window.editingSubGroupIndex}`);
+                window.editingSubGroupIndex = -1; // Reset editing mode
+              } else {
+                // Add new SubGroup
+                vmSubGroupReqeustFromSpecList.push(createMciReqVm);
+                recommendedSpecList.push(recommendedSpec);
+              }
               
               // Update SubGroup review panel
               updateSubGroupReview();
@@ -7392,9 +7310,12 @@ function getRecommendedSpec(idx, latitude, longitude) {
               }
             }
           });
+          // Delay (ms) to ensure previous popup is fully closed before opening new one
+          }, 100);
             } else {
               // User canceled image selection
               console.log("Image selection canceled");
+              window.editingSubGroupIndex = -1; // Reset editing mode
               latLonInputPairIdx--;
               cspPointsCircle.pop();
               if (cspPointsCircle.length > 0) {
@@ -7410,6 +7331,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
       } else {
         // User canceled spec selection
         console.log("Spec selection canceled");
+        window.editingSubGroupIndex = -1; // Reset editing mode
         latLonInputPairIdx--;
         cspPointsCircle.pop();
         if (cspPointsCircle.length > 0) {
@@ -7438,6 +7360,411 @@ function getRecommendedSpec(idx, latitude, longitude) {
   });
 }
 window.getRecommendedSpec = getRecommendedSpec;
+
+// Global variable for SubGroup editing mode (-1 means new, >= 0 means editing existing index)
+window.editingSubGroupIndex = -1;
+
+// ========== Common Helper Functions for Spec Configuration Popup ==========
+
+// Root disk type options per CSP (based on cloudos_meta.yaml)
+const ROOT_DISK_TYPES = {
+  'aws': ['default', 'standard', 'gp2', 'gp3'],
+  'azure': ['default', 'PremiumSSD', 'StandardSSD', 'StandardHDD'],
+  'gcp': ['default', 'pd-standard', 'pd-balanced', 'pd-ssd', 'pd-extreme'],
+  'alibaba': ['default', 'cloud_essd', 'cloud_efficiency', 'cloud', 'cloud_ssd'],
+  'tencent': ['default', 'CLOUD_PREMIUM', 'CLOUD_SSD'],
+  'ibm': ['default'],
+  'ncp': ['default', 'SSD', 'HDD'],
+  'nhn': ['default', 'General_HDD', 'General_SSD'],
+  'kt': ['default', 'HDD', 'SSD']
+};
+
+/**
+ * Populate RootDiskType dropdown based on cloud provider.
+ * @param {string} selectId - DOM element ID of the select dropdown
+ * @param {string} providerName - Cloud provider name (e.g., 'aws', 'gcp')
+ * @param {string} currentValue - Currently selected disk type value
+ */
+function populateRootDiskTypeSelect(selectId, providerName, currentValue) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  
+  const validTypes = ROOT_DISK_TYPES[providerName.toLowerCase()] || ['default'];
+  validTypes.forEach(type => {
+    const option = document.createElement('option');
+    option.value = type;
+    option.textContent = type;
+    if (type === currentValue) option.selected = true;
+    select.appendChild(option);
+  });
+}
+
+/**
+ * Fetch available zones from API and populate Zone dropdown.
+ * @param {string} selectId - DOM element ID of the zone select dropdown
+ * @param {string} spinnerId - DOM element ID of the loading spinner
+ * @param {string} specId - Spec ID to query zones for
+ * @param {string} currentZone - Currently selected zone value
+ * @param {string|null} statusMessageId - DOM element ID for status message display
+ */
+async function populateZoneSelect(selectId, spinnerId, specId, currentZone, statusMessageId) {
+  const zoneSelect = document.getElementById(selectId);
+  const spinner = document.getElementById(spinnerId);
+  const statusMessage = statusMessageId ? document.getElementById(statusMessageId) : null;
+  
+  if (!zoneSelect || !specId) {
+    if (spinner) spinner.style.display = 'none';
+    return;
+  }
+  
+  // Use same protocol as current page for API calls
+  const apiProtocol = window.location.protocol === 'https:' ? 'https' : 'http';
+  
+  try {
+    const response = await fetch(`${apiProtocol}://${configHostname}:${configPort}/tumblebug/availableZonesForSpec?specId=${encodeURIComponent(specId)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Basic ' + btoa(configUsername + ':' + configPassword)
+      }
+    });
+    
+    if (spinner) spinner.style.display = 'none';
+    const result = await response.json();
+    
+    if (response.ok && result.availableZones && result.availableZones.length > 0) {
+      result.availableZones.forEach(zone => {
+        const option = document.createElement('option');
+        option.value = zone;
+        option.textContent = zone;
+        if (zone === currentZone) option.selected = true;
+        zoneSelect.appendChild(option);
+      });
+      
+      if (statusMessage) {
+        statusMessage.textContent = `${result.availableZones.length} verified zone(s) available`;
+        statusMessage.style.color = '#28a745';
+      }
+    } else if (result.hasZoneConcept === false) {
+      if (statusMessage) {
+        statusMessage.textContent = 'Zone not applicable, auto-selection will be used';
+        statusMessage.style.color = '#666';
+      }
+    } else {
+      if (statusMessage) {
+        statusMessage.textContent = result.errorMessage || 'No verified zones available';
+        statusMessage.style.color = '#856404';
+      }
+    }
+  } catch (error) {
+    if (spinner) spinner.style.display = 'none';
+    if (statusMessage) {
+      const errorDetails = error && error.message ? ` (${error.message})` : '';
+      statusMessage.textContent = 'Failed to fetch zones. Please check your connection.' + errorDetails;
+      statusMessage.style.color = '#dc3545';
+    }
+    console.warn('Zone fetch failed:', error);
+  }
+}
+
+/**
+ * Parse labels from comma-separated key=value string format.
+ * @param {string} labelsText - Comma-separated labels (e.g., "role=worker, env=prod")
+ * @returns {Object} Parsed labels as key-value object
+ */
+function parseLabelsString(labelsText) {
+  const labels = {};
+  if (labelsText) {
+    labelsText.split(',').forEach(pair => {
+      const [key, value] = pair.trim().split('=');
+      if (key && value) {
+        labels[key.trim()] = value.trim();
+      }
+    });
+  }
+  return labels;
+}
+
+/**
+ * Convert labels object to comma-separated key=value string.
+ * @param {Object} labelsObj - Labels as key-value object
+ * @returns {string} Comma-separated string (e.g., "role=worker, env=prod")
+ */
+function labelsToString(labelsObj) {
+  if (!labelsObj) return '';
+  return Object.entries(labelsObj).map(([k, v]) => `${k}=${v}`).join(', ');
+}
+
+// ========== Common Popup Styles ==========
+const POPUP_STYLES = `
+  <style>
+    .popup-container { text-align: left; }
+    .popup-section {
+      background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+    .popup-section-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #6c757d;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #e9ecef;
+    }
+    .popup-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+    .popup-row:last-child { margin-bottom: 0; }
+    .popup-col { flex: 1; min-width: 0; }
+    .popup-col-2 { flex: 2; }
+    .popup-field { display: flex; flex-direction: column; gap: 2px; }
+    .popup-label { font-size: 0.75rem; color: #888; font-weight: 500; }
+    .popup-value { font-size: 0.85rem; font-weight: 600; color: #333; }
+    .popup-value-sm { font-size: 0.8rem; color: #555; word-break: break-all; }
+    .popup-value-highlight { color: #0d6efd; }
+    .popup-value-price { color: #dc3545; }
+    .popup-value-gpu { color: #dc3545; font-weight: 700; }
+    .popup-input {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #ced4da;
+      border-radius: 5px;
+      font-size: 0.85rem;
+    }
+    .popup-input:focus {
+      border-color: #0d6efd;
+      box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
+      outline: none;
+    }
+    .popup-select {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #ced4da;
+      border-radius: 5px;
+      font-size: 0.85rem;
+      background: white;
+    }
+    .popup-hint { font-size: 0.7rem; color: #999; }
+    .popup-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .popup-badge-provider {
+      background: linear-gradient(135deg, #0d6efd 0%, #0056b3 100%);
+      color: white;
+    }
+    .popup-inline { display: flex; align-items: center; gap: 6px; }
+  </style>
+`;
+
+/**
+ * Build HTML for SubGroup Configuration popup with spec, image, and VM settings.
+ * Creates a modern, compact layout with grouped sections.
+ * @param {Object} spec - VM specification object with provider, region, CPU, memory, etc.
+ * @param {Object} vm - VM configuration object with imageId, zone, labels, etc.
+ * @param {Object} options - Optional configuration parameters
+ * @param {boolean} options.isEdit - Whether this is edit mode (vs new spec selection)
+ * @param {string} options.imageSelectHTML - Custom HTML for image selection input
+ * @param {boolean} options.showValidation - Show validation section (for new specs)
+ * @param {Object} options.validationResult - Validation result object
+ * @returns {string} Complete HTML string for the popup content
+ */
+function buildSpecConfigPopupHtml(spec, vm, options = {}) {
+  const isEdit = options.isEdit || false;
+  const imageSelectHTML = options.imageSelectHTML || `<span class="popup-value-sm">${vm.imageId || 'N/A'}</span>`;
+  const costPerHour = spec.costPerHour || 'N/A';
+  const hasGpu = spec.acceleratorType === "gpu" || spec.acceleratorModel;
+  
+  let html = POPUP_STYLES + '<div class="popup-container">';
+  
+  // Pair Validation Section (only for new spec selection)
+  if (!isEdit && options.showValidation) {
+    html += `
+      <div id="specImageReviewSection" class="popup-section" style="background: linear-gradient(135deg, #e9ecef 0%, #f8f9fa 100%); padding: 8px 12px;">
+        <div class="popup-inline">
+          <span style="font-weight: 600; font-size: 0.8rem; color: #495057;">Validation</span>
+          <span id="specImageReviewStatus" class="popup-badge" style="background: #6c757d; color: white;">Checking...</span>
+          <span id="specImageReviewSpinner">⏳</span>
+        </div>
+        <div id="specImageReviewDetails" style="font-size: 0.75rem; color: #666; margin-top: 4px;"></div>
+      </div>
+    `;
+  }
+  
+  // SubGroup Name (only for edit mode)
+  if (isEdit) {
+    html += `
+      <div class="popup-section">
+        <div class="popup-row">
+          <div class="popup-col">
+            <div class="popup-field">
+              <label class="popup-label">📝 SubGroup Name</label>
+              <input type="text" id="editSubGroupName" class="popup-input" value="${vm.name || ''}" placeholder="Enter name">
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  
+  // ☁️ Provider Section (Provider, Region, Zone)
+  html += `
+    <div class="popup-section">
+      <div class="popup-section-title">☁️ Provider</div>
+      <div class="popup-row">
+        <div class="popup-col">
+          <div class="popup-field">
+            <span class="popup-label">Provider</span>
+            <span class="popup-badge popup-badge-provider">${spec.providerName.toUpperCase()}</span>
+          </div>
+        </div>
+        <div class="popup-col">
+          <div class="popup-field">
+            <span class="popup-label">Region</span>
+            <span class="popup-value">${spec.regionName}</span>
+          </div>
+        </div>
+        <div class="popup-col popup-col-2">
+          <div class="popup-field">
+            <label class="popup-label">Zone (Optional)</label>
+            <div class="popup-inline">
+              <select id="${isEdit ? 'editZoneSelect' : 'zoneSelect'}" class="popup-select" style="flex: 1;">
+                <option value="">Auto (default)</option>
+              </select>
+              <span id="${isEdit ? 'editZoneLoadingSpinner' : 'zoneLoadingSpinner'}">⏳</span>
+            </div>
+            ${!isEdit ? '<div id="zoneStatusMessage" class="popup-hint"></div>' : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // 💻 Spec Section
+  html += `
+    <div class="popup-section">
+      <div class="popup-section-title">💻 Spec</div>
+      <div class="popup-row">
+        <div class="popup-col">
+          <div class="popup-field">
+            <span class="popup-label">Spec Name</span>
+            <span class="popup-value popup-value-highlight">${spec.cspSpecName}</span>
+          </div>
+        </div>
+        <div class="popup-col">
+          <div class="popup-field">
+            <span class="popup-label">Price/hr</span>
+            <span class="popup-value popup-value-price">$${costPerHour}</span>
+          </div>
+        </div>
+        <div class="popup-col">
+          <div class="popup-field">
+            <span class="popup-label">vCPU</span>
+            <span class="popup-value">${spec.vCPU} cores</span>
+          </div>
+        </div>
+        <div class="popup-col">
+          <div class="popup-field">
+            <span class="popup-label">Memory</span>
+            <span class="popup-value">${spec.memoryGiB} GiB</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // 🎮 GPU Section (only if applicable)
+  if (hasGpu || spec.acceleratorCount) {
+    html += `
+      <div class="popup-section" style="background: linear-gradient(135deg, #fff5f5 0%, #fff 100%); border-color: #ffcdd2; padding: 8px 12px;">
+        <div class="popup-row">
+          <div class="popup-col">
+            <div class="popup-field">
+              <span class="popup-label">🎮 GPU Model</span>
+              <span class="popup-value popup-value-gpu">${spec.acceleratorModel || 'None'}</span>
+            </div>
+          </div>
+          <div class="popup-col">
+            <div class="popup-field">
+              <span class="popup-label">Count</span>
+              <span class="popup-value popup-value-gpu">${spec.acceleratorCount || 'N/A'}</span>
+            </div>
+          </div>
+          <div class="popup-col">
+            <div class="popup-field">
+              <span class="popup-label">GPU Memory</span>
+              <span class="popup-value">${spec.acceleratorMemoryGB ? spec.acceleratorMemoryGB + ' GB' : 'N/A'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  
+  // 🖼️ Image Section
+  html += `
+    <div class="popup-section">
+      <div class="popup-section-title">🖼️ Image</div>
+      <div class="popup-row">
+        <div class="popup-col">
+          <div class="popup-field">
+            ${isEdit ? `<span class="popup-value-sm">${vm.imageId || 'N/A'}</span>` : imageSelectHTML}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // 🏷️ Configuration Section (Disk Type, Disk Size, Labels, VM Count)
+  html += `
+    <div class="popup-section">
+      <div class="popup-section-title">🏷️ Configuration</div>
+      <div class="popup-row">
+        <div class="popup-col">
+          <div class="popup-field">
+            <label class="popup-label">Disk Type</label>
+            <select id="${isEdit ? 'editRootDiskTypeSelect' : 'rootDiskTypeSelect'}" class="popup-select"></select>
+          </div>
+        </div>
+        <div class="popup-col">
+          <div class="popup-field">
+            <label class="popup-label">Disk Size (GB)</label>
+            <input type="text" id="${isEdit ? 'editRootDiskSize' : 'rootDiskSizeCustom'}" class="popup-input" value="${vm.rootDiskSize || 'default'}">
+          </div>
+        </div>
+        <div class="popup-col popup-col-2">
+          <div class="popup-field">
+            <label class="popup-label">Labels <span class="popup-hint">(key=value, comma separated)</span></label>
+            <input type="text" id="${isEdit ? 'editVmLabels' : 'vmLabels'}" class="popup-input" 
+                   value="${options.currentLabels || ''}" placeholder="role=worker, env=prod">
+          </div>
+        </div>
+      </div>
+      <div class="popup-row">
+        <div class="popup-col">
+          <div class="popup-field">
+            <label class="popup-label">VM Count (1-1000)</label>
+            <input type="number" id="${isEdit ? 'editVmCount' : 'vmCount'}" class="popup-input" 
+                   min="1" max="1000" value="${vm.subGroupSize || '1'}">
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  html += '</div>';
+  return html;
+}
 
 // SubGroup Management Functions
 function updateSubGroupReview() {
@@ -7569,18 +7896,33 @@ function createSubGroupItem(vm, spec, index) {
   item.style.backgroundColor = '#f8f9fa';
   
   const providerColor = getProviderColor(spec?.providerName);
+  // Lightening factors for hierarchical badge colors (provider > region > zone)
+  const REGION_LIGHTEN_FACTOR = 0.4;  // 40% lighter for region
+  const ZONE_LIGHTEN_FACTOR = 0.6;    // 60% lighter for zone
+  const regionColor = lightenColor(providerColor, REGION_LIGHTEN_FACTOR);
+  const zoneColor = lightenColor(providerColor, ZONE_LIGHTEN_FACTOR);
+  // Use contrast calculation for text colors to ensure accessibility
+  const providerTextColor = getContrastTextColor(providerColor);
+  const regionTextColor = getContrastTextColor(regionColor);
+  const zoneTextColor = getContrastTextColor(zoneColor);
+  
+  // Build zone badge HTML if zone is specified
+  const zoneBadge = vm.zone 
+    ? `<span class="badge mr-1" style="background-color: ${zoneColor}; color: ${zoneTextColor}; font-size: 0.7rem;">${vm.zone}</span>`
+    : '';
   
   item.innerHTML = `
     <div class="d-flex align-items-start justify-content-between">
       <div class="flex-grow-1" style="min-width: 0;">
         <div class="d-flex align-items-center mb-1 flex-wrap">
-          <span class="badge badge-primary mr-2" style="font-size: 0.75rem;">${vm.name || `SubGroup-${index + 1}`}</span>
-          <span class="badge mr-2" style="background-color: ${providerColor}; color: white; font-size: 0.7rem;">
-            ${spec?.providerName || 'Unknown'} - ${spec?.regionName || 'Unknown Region'}
+          <span class="badge mr-1" style="background-color: #343a40; color: white; font-size: 0.75rem;">💻 ${vm.name || `SubGroup-${index + 1}`} ⨉ ${vm.subGroupSize}</span>
+          <span class="badge mr-1" style="background-color: ${providerColor}; color: ${providerTextColor}; font-size: 0.7rem;">
+            ${(spec?.providerName || 'Unknown').toUpperCase()}
           </span>
-          <span class="badge badge-secondary mr-2" style="font-size: 0.75rem; font-weight: bold;">
-            💻 ${vm.subGroupSize}
+          <span class="badge mr-1" style="background-color: ${regionColor}; color: ${regionTextColor}; font-size: 0.7rem;">
+            ${spec?.regionName || 'Unknown Region'}
           </span>
+          ${zoneBadge}
         </div>
         <div class="small text-muted" style="font-size: 0.7rem; line-height: 1.2;">
           <div style="margin-bottom: 2px;"><strong>Spec:</strong> ${spec?.cspSpecName || vm.specId}</div>
@@ -7647,65 +7989,160 @@ function generateProviderColor(provider) {
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 }
 
+/**
+ * Lighten a color by mixing with white.
+ * Supports HSL, HEX, and RGB color formats.
+ * @param {string} color - Color string in HSL, HEX, or RGB format
+ * @param {number} amount - Lightening amount (0-1, where 1 is fully white)
+ * @returns {string} Lightened color in HSL or RGB format
+ */
+function lightenColor(color, amount) {
+  // HSL lightness thresholds
+  const MAX_LIGHTNESS = 95;           // Maximum lightness to prevent pure white
+  const LIGHTNESS_MULTIPLIER = 40;    // How much lightness increases per amount unit
+  
+  // Handle HSL colors
+  if (color.startsWith('hsl')) {
+    const match = color.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+    if (match) {
+      const h = parseInt(match[1]);
+      const s = parseInt(match[2]);
+      const l = Math.min(MAX_LIGHTNESS, parseInt(match[3]) + (amount * LIGHTNESS_MULTIPLIER));
+      return `hsl(${h}, ${s}%, ${l}%)`;
+    }
+  }
+  
+  // Handle HEX colors
+  let hex = color.replace('#', '');
+  if (hex.length === 3) {
+    hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+  }
+  
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  
+  // Mix with white
+  const newR = Math.round(r + (255 - r) * amount);
+  const newG = Math.round(g + (255 - g) * amount);
+  const newB = Math.round(b + (255 - b) * amount);
+  
+  return `rgb(${newR}, ${newG}, ${newB})`;
+}
+
+/**
+ * Get contrasting text color (dark or light) based on background color.
+ * Uses luminance calculation for accessibility compliance.
+ * @param {string} color - Background color in HSL, HEX, or RGB format
+ * @returns {string} Contrasting text color ('#333' for dark text, 'white' for light text)
+ */
+function getContrastTextColor(color) {
+  // Thresholds for determining text color contrast
+  // Based on WCAG accessibility guidelines for readable text
+  const HSL_LIGHTNESS_THRESHOLD = 60;   // HSL lightness above this gets dark text
+  const LUMINANCE_THRESHOLD = 0.6;       // Relative luminance above this gets dark text
+  
+  let r, g, b;
+  
+  if (color.startsWith('hsl')) {
+    // For HSL, check lightness directly
+    const match = color.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+    if (match) {
+      const l = parseInt(match[3]);
+      return l > HSL_LIGHTNESS_THRESHOLD ? '#333' : 'white';
+    }
+  } else if (color.startsWith('rgb')) {
+    const match = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+    if (match) {
+      r = parseInt(match[1]);
+      g = parseInt(match[2]);
+      b = parseInt(match[3]);
+    }
+  } else {
+    // HEX color
+    let hex = color.replace('#', '');
+    if (hex.length === 3) {
+      hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    }
+    r = parseInt(hex.substring(0, 2), 16);
+    g = parseInt(hex.substring(2, 4), 16);
+    b = parseInt(hex.substring(4, 6), 16);
+  }
+  
+  // Calculate relative luminance using ITU-R BT.601 luma coefficients
+  // Formula: Y = 0.299*R + 0.587*G + 0.114*B (normalized to 0-1)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > LUMINANCE_THRESHOLD ? '#333' : 'white';
+}
+
 function editSubGroup(index) {
   const vm = vmSubGroupReqeustFromSpecList[index];
   const spec = recommendedSpecList[index];
   
+  if (!spec || !vm) {
+    console.error('Spec or VM not found for index:', index);
+    return;
+  }
+  
+  // Set editing mode
+  window.editingSubGroupIndex = index;
+  
+  // Build zone options (will be populated after dialog opens)
+  const currentZone = vm.zone || '';
+  
+  // Parse current labels using common helper
+  const currentLabels = labelsToString(vm.label);
+  
   Swal.fire({
-    title: `✏️ Edit ${vm.name || `SubGroup-${index + 1}`}`,
-    html: `
-      <div class="text-left">
-        <div class="form-group">
-          <label>SubGroup Name:</label>
-          <input type="text" id="edit-name" class="form-control" value="${vm.name}" placeholder="SubGroup Name">
-        </div>
-        <div class="form-group">
-          <label>VM Count:</label>
-          <input type="number" id="edit-count" class="form-control" value="${vm.subGroupSize}" min="1" max="100">
-        </div>
-        <div class="form-group">
-          <label>Root Disk Size:</label>
-          <input type="text" id="edit-disk" class="form-control" value="${vm.rootDiskSize}" placeholder="default or size in GB">
-        </div>
-        <div class="form-group">
-          <label>Labels (key=value, comma separated):</label>
-          <input type="text" id="edit-labels" class="form-control" value="${vm.label ? Object.entries(vm.label).map(([k,v]) => `${k}=${v}`).join(', ') : ''}" placeholder="env=prod, team=dev">
-        </div>
-      </div>
-    `,
+    title: "✏️ Edit SubGroup Configuration",
+    width: 650,
+    html: buildSpecConfigPopupHtml(spec, vm, {
+      isEdit: true,
+      currentLabels: currentLabels
+    }),
+    didOpen: () => {
+      // Use common helpers for dropdown population
+      populateRootDiskTypeSelect('editRootDiskTypeSelect', spec.providerName, vm.rootDiskType || 'default');
+      populateZoneSelect('editZoneSelect', 'editZoneLoadingSpinner', spec.id, currentZone, null);
+    },
     showCancelButton: true,
-    confirmButtonText: 'Save Changes',
+    confirmButtonText: '💾 Save Changes',
     cancelButtonText: 'Cancel',
+    confirmButtonColor: '#28a745',
     preConfirm: () => {
-      const name = document.getElementById('edit-name').value.trim();
-      const count = parseInt(document.getElementById('edit-count').value);
-      const disk = document.getElementById('edit-disk').value.trim();
-      const labelsText = document.getElementById('edit-labels').value.trim();
+      const name = document.getElementById('editSubGroupName').value.trim();
+      const count = parseInt(document.getElementById('editVmCount').value);
+      const diskType = document.getElementById('editRootDiskTypeSelect').value;
+      const diskSize = document.getElementById('editRootDiskSize').value.trim();
+      const zone = document.getElementById('editZoneSelect').value;
+      const labelsText = document.getElementById('editVmLabels').value.trim();
       
-      if (!name || isNaN(count) || count < 1) {
-        Swal.showValidationMessage('Please provide valid name and VM count');
+      if (isNaN(count) || count < 1) {
+        Swal.showValidationMessage('Please provide valid VM count');
         return false;
       }
       
-      // Parse labels
-      const labels = {};
-      if (labelsText) {
-        labelsText.split(',').forEach(pair => {
-          const [key, value] = pair.trim().split('=');
-          if (key && value) {
-            labels[key.trim()] = value.trim();
-          }
-        });
-      }
+      // Use common helper for label parsing
+      const labels = parseLabelsString(labelsText);
       
-      return { name, count, disk: disk || 'default', labels };
+      return { name, count, diskType, diskSize: diskSize || 'default', zone, labels };
     }
   }).then((result) => {
+    window.editingSubGroupIndex = -1; // Reset editing mode
+    
     if (result.isConfirmed) {
       // Update the VM configuration
       vmSubGroupReqeustFromSpecList[index].name = result.value.name;
       vmSubGroupReqeustFromSpecList[index].subGroupSize = result.value.count.toString();
-      vmSubGroupReqeustFromSpecList[index].rootDiskSize = result.value.disk;
+      vmSubGroupReqeustFromSpecList[index].rootDiskType = result.value.diskType;
+      vmSubGroupReqeustFromSpecList[index].rootDiskSize = result.value.diskSize;
+      
+      if (result.value.zone) {
+        vmSubGroupReqeustFromSpecList[index].zone = result.value.zone;
+      } else {
+        delete vmSubGroupReqeustFromSpecList[index].zone;
+      }
+      
       if (Object.keys(result.value.labels).length > 0) {
         vmSubGroupReqeustFromSpecList[index].label = result.value.labels;
       } else {
