@@ -1347,8 +1347,9 @@ function updateStatistics() {
     let region = null;
     
     // Extract region information - try multiple sources
-    if (vm.region && vm.region.Region) {
-      region = vm.region.Region;
+    // Note: JSON field is lowercase 'region' (from Go struct tag `json:"region"`)
+    if (vm.region && vm.region.region) {
+      region = vm.region.region;
     } else if (vm.location && vm.location.region) {
       region = vm.location.region;
     } else if (vm.connectionConfig && vm.connectionConfig.regionZoneInfo && vm.connectionConfig.regionZoneInfo.region) {
@@ -1367,8 +1368,9 @@ function updateStatistics() {
     let region = null;
     
     // Extract region information from cluster
-    if (cluster.region && cluster.region.Region) {
-      region = cluster.region.Region;
+    // Note: JSON field is lowercase 'region' (from Go struct tag `json:"region"`)
+    if (cluster.region && cluster.region.region) {
+      region = cluster.region.region;
     } else if (cluster.location && cluster.location.region) {
       region = cluster.location.region;
     } else if (cluster.connectionConfig && cluster.connectionConfig.regionZoneInfo && cluster.connectionConfig.regionZoneInfo.region) {
@@ -1682,8 +1684,9 @@ function updateProviderRegionChart() {
       }
       
       // Extract region information - try multiple sources
-      if (vm.region && vm.region.Region) {
-        region = vm.region.Region;
+      // Note: JSON field is lowercase 'region' (from Go struct tag `json:"region"`)
+      if (vm.region && vm.region.region) {
+        region = vm.region.region;
       } else if (vm.location && vm.location.region) {
         region = vm.location.region;
       } else if (vm.connectionConfig && vm.connectionConfig.regionZoneInfo && vm.connectionConfig.regionZoneInfo.region) {
@@ -1733,9 +1736,9 @@ function updateProviderRegionChart() {
       if (cluster.connectionConfig && cluster.connectionConfig.regionDetail && cluster.connectionConfig.regionDetail.regionId) {
         region = cluster.connectionConfig.regionDetail.regionId;
         console.log('Region from connectionConfig.regionDetail.regionId:', region);
-      } else if (cluster.region && cluster.region.Region) {
-        region = cluster.region.Region;
-        console.log('Region from cluster.region.Region:', region);
+      } else if (cluster.region && cluster.region.region) {
+        region = cluster.region.region;
+        console.log('Region from cluster.region.region:', region);
       } else if (cluster.location && cluster.location.region) {
         region = cluster.location.region;
         console.log('Region from cluster.location.region:', region);
@@ -2310,7 +2313,7 @@ function updateVmTable() {
     const row = document.createElement('tr');
     
     const provider = vm.connectionConfig ? vm.connectionConfig.providerName : 'Unknown';
-    const region = vm.region ? vm.region.Region : (vm.location ? vm.location.cloudType : 'N/A');
+    const region = vm.region ? vm.region.region : (vm.location ? vm.location.region : 'N/A');
     const spec = vm.specId || 'N/A';
     const publicIp = vm.publicIP || 'N/A';
     const privateIp = vm.privateIP || 'N/A';
