@@ -2884,6 +2884,7 @@ function showFinalMciConfirmation(createMciReq, url, totalCost, totalNodeScale, 
                   <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
                   <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
                   <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
+                  <option value="OpenWebUI-vLLM">[LLM WebUI] Open WebUI for vLLM</option>
                   <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
                   <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
                   <option value="Netdata">[Observability] Netdata Monitor</option>
@@ -3253,6 +3254,7 @@ function showPostCommandDialog(createMciReq, mciCreationUrl, username, password,
             <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
             <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
             <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
+            <option value="OpenWebUI-vLLM">[LLM WebUI] Open WebUI for vLLM</option>
             <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
             <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
             <option value="Netdata">[Observability] Netdata Monitor</option>
@@ -10269,7 +10271,7 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "sudo ~/startServer.sh ";
       break;
     case "vLLM":
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployvLLM.sh | sh";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployvLLM.sh | bash";
       defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:8000/v1))'";
       defaultRemoteCommand[2] = "";
       break;
@@ -10314,9 +10316,14 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "OLLAMA_HOST=0.0.0.0:3000 ollama list";
       break;
     case "OpenWebUI":
-      defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh; chmod +x ~/deployOpenWebUI.sh";
-      defaultRemoteCommand[1] = "sudo ~/deployOpenWebUI.sh \"$$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))\"";
-      defaultRemoteCommand[2] = "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh | bash -s -- ollama \"$$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))\"";
+      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "OpenWebUI-vLLM":
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh | bash -s -- vllm \"$$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:8000/v1))\"";
+      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
+      defaultRemoteCommand[2] = "";
       break;
     case "RayHead-Deploy":
       defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/ray/ray-head-setup.sh";
@@ -10625,6 +10632,7 @@ function executeRemoteCmd() {
             <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
             <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
             <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
+            <option value="OpenWebUI-vLLM">[LLM WebUI] Open WebUI for vLLM</option>
             <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
             <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
             <option value="Netdata">[Observability] Netdata Monitor</option>
