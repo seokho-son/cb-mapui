@@ -679,8 +679,23 @@ function findNearestMci(clickCoord) {
   return (minDistance < 100) ? nearestMci : null;
 }
 
+// Store the MCI selected via right-click context menu
+let contextMenuSelectedMci = null;
+
+// Helper function to get the currently selected MCI ID
+// Prioritizes context menu selection over dropdown selection
+function getSelectedMciId() {
+  if (contextMenuSelectedMci) {
+    return contextMenuSelectedMci;
+  }
+  return mciidElement ? mciidElement.value : null;
+}
+
 // Function to show MCI context menu
 function showMciContextMenu(pixel, mciInfo) {
+  // Store the selected MCI for use in control actions
+  contextMenuSelectedMci = mciInfo.name;
+  
   // Sync namespace from Provision tab to Control tab
   const provisionNamespace = document.getElementById('namespace');
   const controlNamespace = document.getElementById('namespace-control');
@@ -699,8 +714,8 @@ function showMciContextMenu(pixel, mciInfo) {
       newOption.text = provisionNamespace.value;
       controlNamespace.add(newOption);
     }
+    // Set value without triggering change event (avoid updateMciList race condition)
     controlNamespace.value = provisionNamespace.value;
-    controlNamespace.dispatchEvent(new Event('change'));
   }
 
   // Set the selected MCI in the control panel
@@ -711,7 +726,6 @@ function showMciContextMenu(pixel, mciInfo) {
     for (let option of mciSelect.options) {
       if (option.value === mciInfo.name) {
         optionExists = true;
-        mciSelect.value = mciInfo.name;
         break;
       }
     }
@@ -721,10 +735,9 @@ function showMciContextMenu(pixel, mciInfo) {
       newOption.value = mciInfo.name;
       newOption.text = mciInfo.name;
       mciSelect.add(newOption);
-      mciSelect.value = mciInfo.name;
     }
-    // Trigger change event to update dependent fields
-    mciSelect.dispatchEvent(new Event('change'));
+    // Set value without triggering change event
+    mciSelect.value = mciInfo.name;
   }
   
   // Show context menu using SweetAlert
@@ -760,6 +773,13 @@ function showMciContextMenu(pixel, mciInfo) {
     width: '700px',
     customClass: {
       popup: 'swal2-mci-context'
+    },
+    willClose: () => {
+      // Clear context menu selection when popup closes
+      // This allows normal dropdown selection to work again
+      setTimeout(() => {
+        contextMenuSelectedMci = null;
+      }, 100);
     }
   });
 }
@@ -8322,7 +8342,7 @@ function controlMCI(action) {
   var username = config.username;
   var password = config.password;
   var namespace = namespaceElement.value;
-  var mciid = mciidElement.value;
+  var mciid = getSelectedMciId();
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -8524,7 +8544,7 @@ function statusMCI() {
   var username = config.username;
   var password = config.password;
   var namespace = namespaceElement.value;
-  var mciid = mciidElement.value;
+  var mciid = getSelectedMciId();
 
   // Validate required parameters
   if (!namespace || namespace === "") {
@@ -8585,7 +8605,7 @@ function deleteMCI() {
   var username = config.username;
   var password = config.password;
   var namespace = namespaceElement.value;
-  var mciid = mciidElement.value;
+  var mciid = getSelectedMciId();
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=terminate`;
 
@@ -10573,7 +10593,7 @@ function executeRemoteCmd() {
   var username = config.username;
   var password = config.password;
   var namespace = namespaceElement.value;
-  var mciid = mciidElement.value;
+  var mciid = getSelectedMciId();
   var subgroupid = getSubGroupIdFromVmSelection();
   var vmid = document.getElementById("vmid").value;
 
@@ -10972,7 +10992,7 @@ function getAccessInfo() {
   var username = config.username;
   var password = config.password;
   var namespace = namespaceElement.value;
-  var mciid = mciidElement.value;
+  var mciid = getSelectedMciId();
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -12723,7 +12743,7 @@ function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, po
 // Function to show MCI Actions menu in SweetAlert
 function showActionsMenu() {
   var namespace = namespaceElement.value;
-  var mciid = document.getElementById("mciid").value;
+  var mciid = getSelectedMciId();
   
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -12796,7 +12816,7 @@ function executeAction(action) {
   
   // Add confirmation for dangerous actions
   if (action === 'terminate') {
-    var mciid = document.getElementById("mciid").value;
+    var mciid = getSelectedMciId();
     Swal.fire({
       title: "⚠️ Confirm Termination",
       html: `
@@ -12820,7 +12840,7 @@ function executeAction(action) {
       }
     });
   } else if (action === 'withdraw') {
-    var mciid = document.getElementById("mciid").value;
+    var mciid = getSelectedMciId();
     Swal.fire({
       title: "⚠️ Confirm Withdraw",
       html: `
@@ -12843,7 +12863,7 @@ function executeAction(action) {
       }
     });
   } else if (action === 'delete') {
-    var mciid = document.getElementById("mciid").value;
+    var mciid = getSelectedMciId();
     Swal.fire({
       title: "⚠️ Confirm Delete",
       html: `
