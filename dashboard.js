@@ -1250,6 +1250,8 @@ function normalizeMciStatus(status) {
     return 'Creating';
   } else if (statusStr.includes('Preparing')) {
     return 'Preparing';
+  } else if (statusStr.includes('Empty')) {
+    return 'Empty';
   } else if (statusStr.includes('Suspended')) {
     return 'Suspended';
   } else if (statusStr.includes('Failed')) {
@@ -1279,6 +1281,8 @@ function normalizeMciStatus(status) {
       return 'Creating';
     case 'Preparing':
       return 'Preparing';
+    case 'Empty':
+      return 'Empty';
     case 'Terminating':
       return 'Terminating';
     default:
@@ -1851,6 +1855,7 @@ function categorizeStatus(status) {
   if (statusStr.includes('running')) return 'Running';
   if (statusStr.includes('creating')) return 'Creating';
   if (statusStr.includes('preparing')) return 'Preparing';
+  if (statusStr.includes('empty')) return 'Empty';
   if (statusStr.includes('suspended')) return 'Suspended';
   if (statusStr.includes('failed') || statusStr.includes('partial-failed')) return 'Failed';
   if (statusStr.includes('terminating')) return 'Terminating';

@@ -1174,6 +1174,10 @@ function getVmStatusColor(status) {
   else if (status === "Prepared" || statusStr.includes("Prepared")) {
     fillColor = "#ea580c"; // orange-600 - darker orange for prepared state
   }
+  // Empty state - Gray (MCI exists but has no VMs)
+  else if (status === "Empty" || statusStr.includes("Empty")) {
+    fillColor = "#9ca3af"; // gray-400 - gray for empty MCI (no VMs)
+  }
   // Suspended/Paused states - Yellow/Orange shades (paused but recoverable)
   else if (status === "Suspended" || statusStr.includes("suspended")) {
     fillColor = "#f59e0b"; // amber-500 - amber for suspended/paused state
@@ -1906,7 +1910,7 @@ function displayJsonData(jsonData, type) {
   outputAlert(jsonData, type);
 }
 
-// Handle MCI without VMs (preparing, prepared states)
+// Handle MCI without VMs (preparing, prepared, empty states)
 function handleMciWithoutVms(mciItem, cnt) {
   // Get current map extent to position MCIs in upper-left area
   var mapView = map.getView();
@@ -1944,9 +1948,9 @@ function handleMciWithoutVms(mciItem, cnt) {
   var verticalSpacing = (topBound - bottomBound) * 0.05; // 5% of map height per MCI
   var preparingMciCount = 0;
   
-  // Count how many preparing/prepared/failed MCIs we already have to determine stacking position
+  // Count how many preparing/prepared/empty/failed MCIs we already have to determine stacking position
   for (var k = 0; k < cnt; k++) {
-    if (mciStatus[k] && (mciStatus[k] === "Preparing" || mciStatus[k] === "Prepared" || mciStatus[k] === "Failed")) {
+    if (mciStatus[k] && (mciStatus[k] === "Preparing" || mciStatus[k] === "Prepared" || mciStatus[k] === "Failed" || mciStatus[k].includes("Empty"))) {
       preparingMciCount++;
     }
   }
@@ -2070,11 +2074,11 @@ function getMci() {
               continue;
             }
 
-            // Handle MCI without VMs (preparing, prepared states)
+            // Handle MCI without VMs (preparing, prepared, empty, failed states)
             if (item.vm == null || item.vm.length === 0) {
               // Debug: uncomment if needed
               // console.log("MCI without VMs:", item);
-              if (item.status === "Preparing" || item.status === "Prepared" || item.status === "Failed") {
+              if (item.status === "Preparing" || item.status === "Prepared" || item.status === "Failed" || item.status.includes("Empty")) {
                 handleMciWithoutVms(item, cnt);
                 cnt++;
               }
