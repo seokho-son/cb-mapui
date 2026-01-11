@@ -148,6 +148,12 @@ var mciName = new Array();
 var mciStatus = new Array();
 var mciTargetAction = new Array(); // Store targetAction information for each MCI
 var mciGeo = new Array();
+var locationlessMciIndices = new Array(); // Track indices of MCIs without location (preparing, prepared, failed, empty)
+
+// Constants for positioning locationless MCIs (preparing, prepared, failed, empty states)
+const LOCATIONLESS_MCI_LEFT_OFFSET = 0.12;    // 12% offset from left edge to prevent name clipping
+const LOCATIONLESS_MCI_TOP_OFFSET = 0.03;     // 3% offset from top edge
+const LOCATIONLESS_MCI_VERTICAL_SPACING = 0.05; // 5% of map height between stacked MCIs
 
 var k8sName = new Array();
 var k8sStatus = new Array();
@@ -1174,6 +1180,10 @@ function getVmStatusColor(status) {
   else if (status === "Prepared" || statusStr.includes("Prepared")) {
     fillColor = "#ea580c"; // orange-600 - darker orange for prepared state
   }
+  // Empty state - Gray (MCI exists but has no VMs)
+  else if (status === "Empty" || statusStr.includes("Empty")) {
+    fillColor = "#9ca3af"; // gray-400 - gray for empty MCI (no VMs)
+  }
   // Suspended/Paused states - Yellow/Orange shades (paused but recoverable)
   else if (status === "Suspended" || statusStr.includes("suspended")) {
     fillColor = "#f59e0b"; // amber-500 - amber for suspended/paused state
@@ -1906,7 +1916,7 @@ function displayJsonData(jsonData, type) {
   outputAlert(jsonData, type);
 }
 
-// Handle MCI without VMs (preparing, prepared states)
+// Handle MCI without VMs (preparing, prepared, empty states)
 function handleMciWithoutVms(mciItem, cnt) {
   // Get current map extent to position MCIs in upper-left area
   var mapView = map.getView();
@@ -1919,10 +1929,8 @@ function handleMciWithoutVms(mciItem, cnt) {
   var topBound = mapExtent[3]; // maximum latitude
   
   // Calculate upper-left position (offset from the edge for better visibility)
-  var edgeLeftOffset = 0.08;
-  var edgeTopOffset = 0.02;
-  var defaultLon = leftBound + (rightBound - leftBound) * edgeLeftOffset;
-  var defaultLat = topBound - (topBound - bottomBound) * edgeTopOffset;
+  var defaultLon = leftBound + (rightBound - leftBound) * LOCATIONLESS_MCI_LEFT_OFFSET;
+  var defaultLat = topBound - (topBound - bottomBound) * LOCATIONLESS_MCI_TOP_OFFSET;
 
   // If MCI has label with location info, try to extract it (optional override)
   if (mciItem.label && typeof mciItem.label === 'object') {
@@ -1941,12 +1949,12 @@ function handleMciWithoutVms(mciItem, cnt) {
   
   // Add vertical offset to avoid overlapping if multiple preparing MCIs exist
   // Stack them vertically downward from the upper-left position
-  var verticalSpacing = (topBound - bottomBound) * 0.05; // 5% of map height per MCI
+  var verticalSpacing = (topBound - bottomBound) * LOCATIONLESS_MCI_VERTICAL_SPACING;
   var preparingMciCount = 0;
   
-  // Count how many preparing/prepared/failed MCIs we already have to determine stacking position
+  // Count how many preparing/prepared/empty/failed MCIs we already have to determine stacking position
   for (var k = 0; k < cnt; k++) {
-    if (mciStatus[k] && (mciStatus[k] === "Preparing" || mciStatus[k] === "Prepared" || mciStatus[k] === "Failed")) {
+    if (mciStatus[k] && (mciStatus[k] === "Preparing" || mciStatus[k] === "Prepared" || mciStatus[k] === "Failed" || mciStatus[k].includes("Empty"))) {
       preparingMciCount++;
     }
   }
@@ -1957,6 +1965,9 @@ function handleMciWithoutVms(mciItem, cnt) {
   // Create a simple point geometry for text positioning (no background shape)
   geometries[cnt] = new Point([defaultLon, defaultLat]);
   mciGeo[cnt] = new Point([defaultLon, defaultLat]);
+  
+  // Register this MCI for dynamic position updates on map move
+  locationlessMciIndices.push({ index: cnt, stackPosition: preparingMciCount });
   
   // Store MCI status
   mciStatus[cnt] = mciItem.status;
@@ -2053,6 +2064,9 @@ function getMci() {
 
         cnt = cntInit;
         
+        // Reset locationless MCI tracking for new data load
+        locationlessMciIndices = [];
+        
         if (obj.mci != null && obj.mci.length > 0) {
           debugLog.api(`Processing ${obj.mci.length} MCIs for map display`);
           for (let item of obj.mci) {
@@ -2070,11 +2084,11 @@ function getMci() {
               continue;
             }
 
-            // Handle MCI without VMs (preparing, prepared states)
+            // Handle MCI without VMs (preparing, prepared, empty, failed states)
             if (item.vm == null || item.vm.length === 0) {
               // Debug: uncomment if needed
               // console.log("MCI without VMs:", item);
-              if (item.status === "Preparing" || item.status === "Prepared" || item.status === "Failed") {
+              if (item.status === "Preparing" || item.status === "Prepared" || item.status === "Failed" || item.status.includes("Empty")) {
                 handleMciWithoutVms(item, cnt);
                 cnt++;
               }
@@ -2242,6 +2256,7 @@ function getMci() {
           mciName = [];
           mciStatus = [];
           mciGeo = [];
+          locationlessMciIndices = []; // Clear locationless MCI tracking
           
           // Force map re-render to show empty state
           map.render();
@@ -13518,6 +13533,29 @@ function drawObjects(event) {
   //event.frameState = event.frameState / 10;
   //console.log("event.frameState");
   //console.log(event.frameState);
+
+  // Update locationless MCI positions in real-time for smooth animation
+  // This is lightweight as it only involves simple coordinate calculations
+  if (locationlessMciIndices.length > 0) {
+    var mapView = map.getView();
+    var mapExtent = mapView.calculateExtent(map.getSize());
+    
+    var leftBound = mapExtent[0];
+    var rightBound = mapExtent[2];
+    var bottomBound = mapExtent[1];
+    var topBound = mapExtent[3];
+    
+    var verticalSpacing = (topBound - bottomBound) * LOCATIONLESS_MCI_VERTICAL_SPACING;
+    
+    for (var idx = 0; idx < locationlessMciIndices.length; idx++) {
+      var item = locationlessMciIndices[idx];
+      var defaultLon = leftBound + (rightBound - leftBound) * LOCATIONLESS_MCI_LEFT_OFFSET;
+      var defaultLat = topBound - (topBound - bottomBound) * LOCATIONLESS_MCI_TOP_OFFSET;
+      defaultLat -= verticalSpacing * idx;
+      
+      geometries[item.index].setCoordinates([defaultLon, defaultLat]);
+    }
+  }
 
   var vectorContext = getVectorContext(event);
   var frameState = event.frameState;
