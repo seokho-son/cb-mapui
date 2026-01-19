@@ -426,8 +426,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           <button type="button" id="mapToggle" class="btn btn-link text-muted" onclick="showMap()">
             🗺️ Map
           </button>
+          <button type="button" id="graphToggle" class="btn btn-link text-muted" onclick="showGraph()">
+            🕸️ Topol
+          </button>
           <button type="button" id="dashboardToggle" class="btn btn-link text-muted" onclick="showDashboard()">
-            📊 Dashboard
+            📊 Board
           </button>
           <button type="button" id="apiToggle" class="btn btn-link text-muted" onclick="showSwagger()">
             🛠️ API
@@ -1018,6 +1021,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
       <!-- Right Column for Map or API-->
       <div class="col-md-9">
+
         <div id="map" class="map" style="display:block;">
           <div id="popup"></div>
 
@@ -1063,6 +1067,48 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
         </div>
 
+        <!-- ========== RESOURCE GRAPH CONTAINER (Resource Graph Feature) ========== -->
+        <div id="resource-graph-container" style="display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; background: #f8f9fa;">
+          <!-- Graph Controls (top-right floating) -->
+          <div id="graph-controls" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(255, 255, 255, 0.95); border-radius: 8px; padding: 8px 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 1px solid rgba(0,0,0,0.1); backdrop-filter: blur(10px);">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px;">
+              <button onclick="window.ResourceGraph?.reset()" class="btn btn-sm btn-outline-secondary" title="Reset View" aria-label="Reset view">
+                <i class="fas fa-expand"></i>
+              </button>
+              <div class="btn-group" role="group" aria-label="Layout options">
+                <button onclick="window.ResourceGraph?.runLayout('concentric')" class="btn btn-sm btn-outline-secondary" title="Concentric Layout (Type-based)" aria-label="Concentric layout">
+                  <i class="fas fa-circle-notch"></i>
+                </button>
+                <button onclick="window.ResourceGraph?.runLayout('cose-bilkent')" class="btn btn-sm btn-outline-secondary" title="Force-Directed Layout" aria-label="Force-directed layout">
+                  <i class="fas fa-project-diagram"></i>
+                </button>
+              </div>
+              <button onclick="window.ResourceGraph?.exportPng()" class="btn btn-sm btn-outline-info" title="Export as PNG" aria-label="Export as PNG">
+                <i class="fas fa-image"></i>
+              </button>
+              <span style="color: #6c757d; font-size: 11px; margin-left: 8px;">
+                <i class="fas fa-mouse-pointer"></i> Click: Info | Double-click: Focus | Right-click: Menu
+              </span>
+            </div>
+          </div>
+          <!-- Graph Legend (bottom-left) -->
+          <div id="graph-legend" style="position: absolute; bottom: 10px; left: 10px; z-index: 1000; background: rgba(255, 255, 255, 0.95); border-radius: 8px; padding: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); font-size: 11px;">
+            <div style="font-weight: bold; margin-bottom: 6px;">Legend</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+              <span><span style="display:inline-block;width:12px;height:12px;background:#007bff;border-radius:2px;margin-right:4px;"></span>MCI</span>
+              <span><span style="display:inline-block;width:12px;height:12px;background:#6610f2;border-radius:2px;margin-right:4px;"></span>SubGroup</span>
+              <span><span style="display:inline-block;width:12px;height:12px;background:#28a745;border-radius:50%;margin-right:4px;"></span>VM</span>
+              <span><span style="display:inline-block;width:12px;height:12px;background:#ffc107;transform:rotate(45deg);margin-right:4px;"></span>VNet</span>
+              <span><span style="display:inline-block;width:12px;height:12px;background:#17a2b8;transform:rotate(45deg);margin-right:4px;"></span>Subnet</span>
+              <span><span style="display:inline-block;width:12px;height:12px;background:#dc3545;border-radius:2px;margin-right:4px;"></span>SecurityGroup</span>
+              <span><span style="display:inline-block;width:12px;height:12px;background:#6f42c1;border-radius:2px;margin-right:4px;"></span>SSHKey</span>
+              <span><span style="display:inline-block;width:12px;height:12px;background:#e83e8c;border-radius:2px;margin-right:4px;"></span>Spec</span>
+              <span><span style="display:inline-block;width:12px;height:12px;background:#795548;border-radius:2px;margin-right:4px;"></span>Image</span>
+            </div>
+          </div>
+        </div>
+        <!-- ========== END RESOURCE GRAPH CONTAINER ========== -->
+
         <!-- Admin dashboards -->
         <div id="console" style="display:none; width:100%; height:100%; position:absolute; top:0; left:0;">
           <!-- API Doc Switcher (bottom-right floating) -->
@@ -1105,6 +1151,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       function switchIframe(activeId, inactiveId, src) {
         document.getElementById('map').style.display = "none";
         
+        // Hide resource graph container
+        var graphContainer = document.getElementById('resource-graph-container');
+        if (graphContainer) {
+          graphContainer.style.display = 'none';
+        }
+        if (window.ResourceGraph) {
+          window.ResourceGraph.hide();
+        }
+        
         var console = document.getElementById('console');
         console.style.display = "flex";
         
@@ -1130,6 +1185,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         // Hide map and show console
         document.getElementById('map').style.display = "none";
         document.getElementById('console').style.display = "flex";
+        
+        // Hide resource graph container
+        var graphContainer = document.getElementById('resource-graph-container');
+        if (graphContainer) {
+          graphContainer.style.display = 'none';
+        }
+        if (window.ResourceGraph) {
+          window.ResourceGraph.hide();
+        }
         
         // Hide dashboard iframe
         var dashboardIframe = document.getElementById('dashboard-iframe');
@@ -1314,6 +1378,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         // Hide API doc switcher when showing map
         document.getElementById('api-doc-switcher').style.display = 'none';
         
+        // Hide resource graph container
+        var graphContainer = document.getElementById('resource-graph-container');
+        if (graphContainer) {
+          graphContainer.style.display = 'none';
+        }
+        if (window.ResourceGraph) {
+          window.ResourceGraph.hide();
+        }
+        
         // Show map
         document.getElementById('map').style.display = "block";
         
@@ -1321,20 +1394,49 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         updateToggleButtons('map');
       }
 
+      function showGraph() {
+        // Hide all dashboard views
+        document.getElementById('console').style.display = "none";
+        
+        // Hide API doc switcher
+        document.getElementById('api-doc-switcher').style.display = 'none';
+        
+        // Hide map (graph will be shown in its place)
+        document.getElementById('map').style.display = "none";
+        
+        // Show resource graph container
+        var graphContainer = document.getElementById('resource-graph-container');
+        if (graphContainer) {
+          graphContainer.style.display = 'block';
+        }
+        
+        // Initialize/show resource graph
+        if (window.ResourceGraph) {
+          window.ResourceGraph.show();
+        }
+        
+        // Update toggle buttons
+        updateToggleButtons('graph');
+      }
+
       // Update toggle button states
       function updateToggleButtons(activeView) {
         const mapToggle = document.getElementById('mapToggle');
+        const graphToggle = document.getElementById('graphToggle');
         const dashboardToggle = document.getElementById('dashboardToggle');
         const apiToggle = document.getElementById('apiToggle');
         
         // Reset all buttons to link style (minimal appearance)
         mapToggle.className = 'btn btn-link text-muted';
+        graphToggle.className = 'btn btn-link text-muted';
         dashboardToggle.className = 'btn btn-link text-muted';
         apiToggle.className = 'btn btn-link text-muted';
         
         // Set active state
         if (activeView === 'map') {
           mapToggle.className = 'btn btn-link text-dark font-weight-bold';
+        } else if (activeView === 'graph') {
+          graphToggle.className = 'btn btn-link text-dark font-weight-bold';
         } else if (activeView === 'dashboard') {
           dashboardToggle.className = 'btn btn-link text-dark font-weight-bold';
         } else if (activeView === 'api') {

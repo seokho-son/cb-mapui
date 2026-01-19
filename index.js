@@ -101,6 +101,11 @@ import Swal from "sweetalert2";
 import axios, { AxiosError } from "axios";
 import JSONFormatter from "json-formatter-js";
 
+// ========== RESOURCE GRAPH MODULE (Resource Graph Feature) ==========
+// Import resource graph module for interactive resource visualization
+import './resource-graph.js';
+// ========== END RESOURCE GRAPH MODULE ==========
+
 useGeographic();
 var i, j;
 var cnti, cntj;
