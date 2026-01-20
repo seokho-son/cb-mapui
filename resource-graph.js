@@ -15,16 +15,21 @@
  */
 
 import cytoscape from 'cytoscape';
-import coseBilkent from 'cytoscape-cose-bilkent';
+import fcose from 'cytoscape-fcose';
+import Swal from 'sweetalert2';
+import JSONFormatter from 'json-formatter-js';
 
 // Register layout extension
-cytoscape.use(coseBilkent);
+cytoscape.use(fcose);
 
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
 
 const GRAPH_CONFIG = {
+  // Character width approximation for 12px font (used for label wrapping)
+  charWidth: 7,
+  
   // Node colors by resource type
   nodeColors: {
     namespace: '#6c757d',
@@ -63,27 +68,32 @@ const GRAPH_CONFIG = {
     region: 'round-rectangle',
     zone: 'round-rectangle'
   },
-  // Layout options - cose-bilkent (force-directed, good for compound nodes)
+  // Layout options - fcose (faster, better compound node handling)
   layout: {
-    name: 'cose-bilkent',
+    name: 'fcose',
+    quality: 'default',            // 'draft', 'default', 'proof'
     animate: true,
     animationDuration: 500,
     nodeDimensionsIncludeLabels: true,
-    idealEdgeLength: 60,           // Shorter edges (was 80)
-    nodeRepulsion: 4000,           // Slightly less repulsion (was 5000)
-    nestingFactor: 0.3,            // Children closer to parent center (was 0.5)
-    gravity: 0.5,                  // Slightly higher gravity (was 0.4)
-    gravityRange: 1.5,
-    gravityCompound: 2.5,          // Stronger pull for compound members (was 1.5)
-    gravityRangeCompound: 2.5,     // Larger range (was 2.0)
-    numIter: 3000,
+    nodeSeparation: 40,            // Minimum distance between nodes (lower = tighter grid)
+    idealEdgeLength: edge => 50,   // Edge length (shorter = children closer)
+    nodeRepulsion: node => 4500,   // Node repulsion force
+    nestingFactor: 0.1,            // Children closer to parent center
+    gravity: 0.4,                  // Pull toward center
+    gravityRange: 3.8,
+    gravityCompound: 1.5,          // Pull compound members closer together
+    gravityRangeCompound: 2.0,
+    numIter: 2500,
     tile: true,
-    tilingPaddingVertical: 5,      // Tighter tiling (was 10)
-    tilingPaddingHorizontal: 5,    // Tighter tiling (was 10)
-    edgeElasticity: 0.35,          // More flexible edges (was 0.45)
-    randomize: false,
+    tilingPaddingVertical: 5,      // Padding between tiled nodes (grid spacing)
+    tilingPaddingHorizontal: 5,    // Padding between tiled nodes (grid spacing)
+    edgeElasticity: edge => 0.45,  // Edge flexibility
+    randomize: false,              // Consistent layout
     fit: true,
-    padding: 30
+    padding: 30,
+    // Packing options for disconnected components (compound nodes)
+    packComponents: true,
+    componentSpacing: 60           // Space between disconnected components
   },
   // Alternative layout - Concentric (type-based layers, flat nodes only)
   layoutConcentric: {
@@ -227,9 +237,8 @@ function getNodeMaxWidth(type) {
  * @returns {number} - Max characters per line
  */
 function getMaxCharsPerLine(type) {
-  const charWidth = 7;  // Approx char width for 12px font
   const maxWidth = getNodeMaxWidth(type);
-  return Math.floor(maxWidth / charWidth);  // Use 100% of node width
+  return Math.floor(maxWidth / GRAPH_CONFIG.charWidth);
 }
 
 /**
@@ -310,8 +319,6 @@ function formatLabel(icon, text, maxCharsPerLine, nodeType) {
 function reformatCompoundNodeLabels() {
   if (!cy) return;
   
-  const charWidth = 7;  // Approx char width for 12px font
-  
   // Process all nodes that are compound types (not just :parent)
   cy.nodes().forEach(node => {
     const type = node.data('type');
@@ -330,11 +337,11 @@ function reformatCompoundNodeLabels() {
       // Has children: use actual bounding box width
       const bb = node.boundingBox();
       const actualWidth = bb.w;
-      maxCharsPerLine = Math.floor(actualWidth / charWidth);  // Use 100% of width
+      maxCharsPerLine = Math.floor(actualWidth / GRAPH_CONFIG.charWidth);
     } else {
       // No children: use predefined max width (like regular nodes)
       const maxWidth = getNodeMaxWidth(type);
-      maxCharsPerLine = Math.floor(maxWidth / charWidth);  // Use 100% of width
+      maxCharsPerLine = Math.floor(maxWidth / GRAPH_CONFIG.charWidth);
     }
     
     if (maxCharsPerLine < 10) return;  // Too narrow, skip
@@ -457,7 +464,8 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
           'target-arrow-shape': 'triangle',
           'curve-style': 'bezier',
           'control-point-step-size': 40,  // Spacing between parallel edges
-          'opacity': 0.7
+          'opacity': 0.7,
+          'events': 'no'  // Disable mouse events on edges (not selectable)
         }
       },
       // Selected node style
@@ -483,6 +491,13 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
         selector: '.faded',
         style: {
           'opacity': 0.2
+        }
+      },
+      // Hidden style for completely invisible elements (second click on focused node)
+      {
+        selector: '.hidden',
+        style: {
+          'display': 'none'
         }
       },
       // Highlighted edge style for focus view
@@ -571,12 +586,14 @@ function registerGraphEvents() {
 
   // Single click - show node info
   cy.on('tap', 'node', function(evt) {
+    evt.stopPropagation();  // Prevent background click handler
     const node = evt.target;
     showNodeInfo(node);
   });
 
   // Double click - focus on neighbors
   cy.on('dbltap', 'node', function(evt) {
+    evt.stopPropagation();  // Prevent background click handler
     const node = evt.target;
     focusOnNeighbors(node);
   });
@@ -584,6 +601,7 @@ function registerGraphEvents() {
   // Right click - context menu
   cy.on('cxttap', 'node', function(evt) {
     evt.preventDefault();
+    evt.stopPropagation();  // Prevent background click handler
     const node = evt.target;
     const position = evt.renderedPosition;
     showContextMenu(node, position);
@@ -887,9 +905,28 @@ export function mciDataToGraph(mciList, namespace) {
           type: 'securityGroup',
           color: GRAPH_CONFIG.nodeColors.securityGroup,
           fullId: sg.id,
+          vNetId: sg.vNetId,  // Store vNetId for edge creation
           originalData: sg
         }
       });
+      
+      // Create edge to VNet if vNetId exists and vnet visibility is enabled
+      if (sg.vNetId && nodeTypeVisibility.vnet) {
+        const vnetNodeId = `vnet-${sg.vNetId}`;
+        const edgeId = `edge-sg-vnet-${sg.id}-${sg.vNetId}`;
+        // Only create edge if VNet node exists
+        if (resourceSet.has(vnetNodeId) && !edges.find(e => e.data.id === edgeId)) {
+          edges.push({
+            data: {
+              id: edgeId,
+              source: `sg-${sg.id}`,
+              target: vnetNodeId,
+              relationship: 'belongs-to',
+              type: 'sg-vnet'
+            }
+          });
+        }
+      }
       
       // Create edge to CSP/Region/Zone if location info exists
       createLocationEdge(`sg-${sg.id}`, sg, locationEdgeSet);
@@ -953,7 +990,7 @@ export function mciDataToGraph(mciList, namespace) {
   
   // Debug: Log namespace-level dataDisk list
   if (dataDiskList.length > 0) {
-    console.log(`[ResourceGraph] Namespace has ${dataDiskList.length} DataDisks:`, dataDiskList.map(d => d.id));
+    console.debug(`[ResourceGraph] Namespace has ${dataDiskList.length} DataDisks:`, dataDiskList.map(d => d.id));
   }
   
   // Build lookup map for dataDisk
@@ -1100,7 +1137,7 @@ export function mciDataToGraph(mciList, namespace) {
           
           // Debug: Log dataDiskIds for each VM
           if (vm.dataDiskIds && vm.dataDiskIds.length > 0) {
-            console.log(`[ResourceGraph] VM ${vm.id} has dataDiskIds:`, vm.dataDiskIds);
+            console.debug(`[ResourceGraph] VM ${vm.id} has dataDiskIds:`, vm.dataDiskIds);
           }
           
           // VM node - parent is subgroup if visible, otherwise MCI
@@ -1765,8 +1802,37 @@ export function runLayout(layoutName = null) {
   let options;
   if (layoutName === 'concentric') {
     options = GRAPH_CONFIG.layoutConcentric;
-  } else if (layoutName === 'cose-bilkent' || layoutName === null) {
-    options = GRAPH_CONFIG.layout;  // Default is cose-bilkent
+  } else if (layoutName === 'fcose' || layoutName === null) {
+    options = { ...GRAPH_CONFIG.layout };  // Default is fcose
+    
+    // Add relative placement constraint: namespace on left, cloud nodes on right
+    const nsNodes = cy.nodes('[type="namespace"]');
+    const cspRootNode = cy.getElementById('csp-root');
+    const cspNodes = cy.nodes('[type="csp"]');
+    
+    const constraints = [];
+    
+    if (nsNodes.length) {
+      // If cspRoot exists and is visible, use it
+      if (cspRootNode.length && cspRootNode.visible()) {
+        nsNodes.forEach(ns => {
+          constraints.push({ left: ns.id(), right: 'csp-root', gap: 150 });
+        });
+      } 
+      // Otherwise, constrain against individual csp nodes (top-level when cspRoot is hidden)
+      else if (cspNodes.length) {
+        const topLevelCspNodes = cspNodes.filter(node => !node.parent().length);
+        nsNodes.forEach(ns => {
+          topLevelCspNodes.forEach(csp => {
+            constraints.push({ left: ns.id(), right: csp.id(), gap: 120 });
+          });
+        });
+      }
+      
+      if (constraints.length) {
+        options.relativePlacementConstraint = constraints;
+      }
+    }
   } else {
     options = { ...GRAPH_CONFIG.layout, name: layoutName };
   }
@@ -1792,6 +1858,30 @@ export function runLayout(layoutName = null) {
 export function focusOnNeighbors(node) {
   if (!cy) return;
 
+  // If this node is already highlighted, hide faded elements and re-layout
+  if (node.hasClass('highlighted')) {
+    // Hide all faded elements (make them invisible)
+    cy.elements('.faded').addClass('hidden');
+    // Re-run layout on visible elements only
+    const visibleElements = cy.elements().not('.hidden');
+    visibleElements.layout({
+      ...GRAPH_CONFIG.layout,
+      fit: true,
+      padding: 50
+    }).run();
+    return;
+  }
+
+  // Helper: Filter out container/hierarchy compound nodes to avoid selecting all children
+  // These nodes have many children that shouldn't be auto-included in focus
+  const filterContainerNodes = (nodes) => {
+    return nodes.filter(n => {
+      const type = n.data('type');
+      // Exclude namespace, cspRoot, csp, region - these are container nodes
+      return !['namespace', 'cspRoot', 'csp', 'region'].includes(type);
+    });
+  };
+
   // Get neighborhood (connected elements), excluding invisible edges
   const visibleEdges = node.connectedEdges().filter(edge => !edge.data('invisible'));
   const visibleNeighborNodes = visibleEdges.connectedNodes();
@@ -1803,6 +1893,11 @@ export function focusOnNeighbors(node) {
   
   // Get ancestors of all neighbor nodes (to show VNets when Subnets are connected)
   const neighborAncestors = visibleNeighborNodes.ancestors();
+  
+  // Get descendants of neighbor nodes, but exclude container nodes
+  // to avoid selecting all nodes in the graph
+  const filteredNeighbors = filterContainerNodes(visibleNeighborNodes);
+  const neighborDescendants = filteredNeighbors.descendants();
   
   // Get neighbors of parent nodes (for consolidated edges), excluding invisible edges
   // When edges are consolidated at SubGroup/MCI level, VM/SubGroup nodes need to show parent's connections
@@ -1816,6 +1911,10 @@ export function focusOnNeighbors(node) {
   // Also get ancestors of parent's neighbors (to show VNets for parent-connected Subnets)
   const parentNeighborAncestors = parentNeighbors.nodes().ancestors();
   
+  // Get descendants of parent's neighbors, but filter out container nodes
+  const filteredParentNeighbors = filterContainerNodes(parentNeighbors.nodes());
+  const parentNeighborDescendants = filteredParentNeighbors.descendants();
+  
   // Get neighbors of child nodes (for compound nodes like MCI, SubGroup, VNet)
   // When MCI is selected, show all connections of its SubGroups and VMs
   let childNeighbors = cy.collection();
@@ -1828,22 +1927,42 @@ export function focusOnNeighbors(node) {
   // Get ancestors of child's neighbors (to show VNets for child-connected Subnets)
   const childNeighborAncestors = childNeighbors.nodes().ancestors();
   
+  // Get descendants of child's neighbors, but filter out container nodes
+  const filteredChildNeighbors = filterContainerNodes(childNeighbors.nodes());
+  const childNeighborDescendants = filteredChildNeighbors.descendants();
+  
   // Combine all related elements
   const related = neighborhood
     .union(parents)
     .union(children)
     .union(neighborAncestors)
+    .union(neighborDescendants)
     .union(parentNeighbors)
     .union(parentNeighborAncestors)
+    .union(parentNeighborDescendants)
     .union(childNeighbors)
-    .union(childNeighborAncestors);
+    .union(childNeighborAncestors)
+    .union(childNeighborDescendants);
 
-  // Fade all elements and remove previous highlights
+  // Get all edges connected to related nodes (for proper edge fading)
+  // Exclude invisible edges from display
+  const relatedNodes = related.nodes();
+  const allRelatedEdges = relatedNodes.connectedEdges().filter(edge => {
+    // Exclude invisible edges
+    if (edge.data('invisible')) return false;
+    // Only include edges where BOTH source and target are in related nodes
+    const source = edge.source();
+    const target = edge.target();
+    return relatedNodes.contains(source) && relatedNodes.contains(target);
+  });
+
+  // Fade all elements first
   cy.elements().addClass('faded');
-  cy.edges().removeClass('highlighted-edge');
+  cy.elements().removeClass('highlighted').removeClass('highlighted-edge');
   
   // Highlight related elements
   related.removeClass('faded');
+  allRelatedEdges.removeClass('faded');
   node.removeClass('faded').addClass('highlighted');
   
   // Highlight edges connected to the selected node, its descendants, and parent (consolidated edges)
@@ -1855,6 +1974,7 @@ export function focusOnNeighbors(node) {
     );
   });
   
+  // Highlight primary edges (directly connected to selected node or its hierarchy)
   const highlightEdges = visibleEdges
     .union(childNeighbors.edges())
     .union(parentVisibleEdges)
@@ -1871,9 +1991,13 @@ export function focusOnNeighbors(node) {
 export function resetFocus() {
   if (!cy) return;
 
-  cy.elements().removeClass('faded').removeClass('highlighted');
-  cy.edges().removeClass('highlighted-edge');
+  // Remove all focus-related classes from all elements
+  cy.elements().removeClass('faded highlighted highlighted-edge hidden');
+  
+  // Fit view with padding
   cy.fit(undefined, 30);
+  
+  console.debug('[ResourceGraph] Focus reset');
 }
 
 // ============================================================================
@@ -1882,18 +2006,65 @@ export function resetFocus() {
 
 /**
  * Show detailed information for a node
+ * Uses JSONFormatter for rich JSON viewing when available
  * @param {Object} node - Cytoscape node object
  */
 function showNodeInfo(node) {
-  const data = node.data();
-  const originalData = data.originalData || {};
+  try {
+    const data = node.data();
+    const originalData = data.originalData || {};
+    const type = data.type || 'unknown';
+    const label = data.label || data.id || 'Unknown';
 
-  let content = '';
-  const type = data.type;
+    console.log('[ResourceGraph] showNodeInfo called for:', type, label);
 
+    // Build summary content for quick overview
+    let summaryContent = buildSummaryContent(type, originalData, data);
+
+    // Check if JSONFormatter is available for full details view
+    const hasJsonFormatter = typeof JSONFormatter !== 'undefined';
+
+    // Extract display name from label (remove emoji prefix if present)
+    const displayName = label.replace(/^[^\s]+\s/, '') || label;
+
+    if (Swal) {
+      Swal.fire({
+        title: `${getTypeEmoji(type)} ${displayName}`,
+        html: `<div style="text-align: left; padding: 15px; color: #e0e0e0;">${summaryContent}</div>`,
+        background: "#0e1746",
+        color: "#fff",
+        confirmButtonText: 'Close',
+        showDenyButton: hasJsonFormatter && Object.keys(originalData).length > 0,
+        denyButtonText: '📋 Full JSON',
+        denyButtonColor: '#6c757d',
+        showCancelButton: true,
+        cancelButtonText: '🎯 Focus Related',
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#28a745',
+        width: '500px'
+      }).then((result) => {
+        if (result.dismiss === Swal.DismissReason.cancel) {
+          focusOnNeighbors(node);
+        } else if (result.isDenied) {
+          showFullJsonDetails(type, originalData, data);
+        }
+      });
+    } else {
+      console.warn('[ResourceGraph] Swal not available for showNodeInfo');
+      alert(`${type}: ${displayName}\n\n${JSON.stringify(originalData, null, 2).substring(0, 500)}`);
+    }
+  } catch (error) {
+    console.error('[ResourceGraph] Error in showNodeInfo:', error);
+  }
+}
+
+/**
+ * Build summary HTML content for a node based on its type
+ */
+function buildSummaryContent(type, originalData, data) {
   switch (type) {
     case 'vm':
-      content = `
+      return `
         <div style="text-align: left;">
           <p><strong>Name:</strong> ${originalData.name || 'N/A'}</p>
           <p><strong>ID:</strong> ${originalData.id || 'N/A'}</p>
@@ -1901,49 +2072,200 @@ function showNodeInfo(node) {
           <p><strong>Public IP:</strong> ${originalData.publicIP || 'N/A'}</p>
           <p><strong>Private IP:</strong> ${originalData.privateIP || 'N/A'}</p>
           <p><strong>Region:</strong> ${originalData.region?.Region || 'N/A'}</p>
+          <p><strong>Zone:</strong> ${originalData.region?.Zone || 'N/A'}</p>
+          <p><strong>Spec:</strong> ${originalData.cspSpecName || originalData.specId || 'N/A'}</p>
           <p><strong>Connection:</strong> ${originalData.connectionName || 'N/A'}</p>
         </div>
       `;
-      break;
 
     case 'mci':
-      content = `
+      return `
         <div style="text-align: left;">
           <p><strong>Name:</strong> ${originalData.name || 'N/A'}</p>
           <p><strong>ID:</strong> ${originalData.id || 'N/A'}</p>
           <p><strong>Status:</strong> <span style="color: ${getStatusColor(originalData.status)}">${originalData.status || 'N/A'}</span></p>
           <p><strong>VMs:</strong> ${originalData.vm?.length || 0}</p>
           <p><strong>Description:</strong> ${originalData.description || 'N/A'}</p>
+          <p><strong>Install Mon Agent:</strong> ${originalData.installMonAgent || 'N/A'}</p>
         </div>
       `;
-      break;
+
+    case 'vnet':
+      return `
+        <div style="text-align: left;">
+          <p><strong>Name:</strong> ${originalData.name || 'N/A'}</p>
+          <p><strong>ID:</strong> ${originalData.id || 'N/A'}</p>
+          <p><strong>CIDR Block:</strong> ${originalData.cidrBlock || 'N/A'}</p>
+          <p><strong>Subnets:</strong> ${originalData.subnetInfoList?.length || 0}</p>
+          <p><strong>Connection:</strong> ${originalData.connectionName || 'N/A'}</p>
+          <p><strong>CSP Resource ID:</strong> ${originalData.cspResourceId || 'N/A'}</p>
+        </div>
+      `;
+
+    case 'subnet':
+      return `
+        <div style="text-align: left;">
+          <p><strong>Name:</strong> ${originalData.name || 'N/A'}</p>
+          <p><strong>ID:</strong> ${originalData.id || 'N/A'}</p>
+          <p><strong>IPv4 CIDR:</strong> ${originalData.ipv4CIDR || 'N/A'}</p>
+          <p><strong>Zone:</strong> ${originalData.zone || 'N/A'}</p>
+          <p><strong>CSP Resource ID:</strong> ${originalData.cspResourceId || 'N/A'}</p>
+        </div>
+      `;
+
+    case 'securityGroup':
+      const rulesCount = originalData.firewallRules?.length || 0;
+      return `
+        <div style="text-align: left;">
+          <p><strong>Name:</strong> ${originalData.name || 'N/A'}</p>
+          <p><strong>ID:</strong> ${originalData.id || 'N/A'}</p>
+          <p><strong>VNet ID:</strong> ${originalData.vNetId || 'N/A'}</p>
+          <p><strong>Firewall Rules:</strong> ${rulesCount}</p>
+          <p><strong>Connection:</strong> ${originalData.connectionName || 'N/A'}</p>
+          <p><strong>CSP Resource ID:</strong> ${originalData.cspResourceId || 'N/A'}</p>
+        </div>
+      `;
+
+    case 'sshKey':
+      return `
+        <div style="text-align: left;">
+          <p><strong>Name:</strong> ${originalData.name || 'N/A'}</p>
+          <p><strong>ID:</strong> ${originalData.id || 'N/A'}</p>
+          <p><strong>Username:</strong> ${originalData.username || 'N/A'}</p>
+          <p><strong>Fingerprint:</strong> ${originalData.fingerprint || 'N/A'}</p>
+          <p><strong>Connection:</strong> ${originalData.connectionName || 'N/A'}</p>
+          <p><strong>CSP Resource ID:</strong> ${originalData.cspResourceId || 'N/A'}</p>
+        </div>
+      `;
+
+    case 'dataDisk':
+      return `
+        <div style="text-align: left;">
+          <p><strong>Name:</strong> ${originalData.name || 'N/A'}</p>
+          <p><strong>ID:</strong> ${originalData.id || 'N/A'}</p>
+          <p><strong>Size (GB):</strong> ${originalData.diskSize || 'N/A'}</p>
+          <p><strong>Type:</strong> ${originalData.diskType || 'N/A'}</p>
+          <p><strong>Status:</strong> ${originalData.status || 'N/A'}</p>
+          <p><strong>Connection:</strong> ${originalData.connectionName || 'N/A'}</p>
+        </div>
+      `;
+
+    case 'subgroup':
+      return `
+        <div style="text-align: left;">
+          <p><strong>Name:</strong> ${originalData.name || data.label || 'N/A'}</p>
+          <p><strong>ID:</strong> ${originalData.id || data.id || 'N/A'}</p>
+          <p><strong>VMs:</strong> ${originalData.vmCount || 'N/A'}</p>
+        </div>
+      `;
+
+    case 'namespace':
+      return `
+        <div style="text-align: left;">
+          <p><strong>Name:</strong> ${originalData.name || data.label || 'N/A'}</p>
+          <p><strong>ID:</strong> ${originalData.id || data.id || 'N/A'}</p>
+          <p><strong>Description:</strong> ${originalData.description || 'N/A'}</p>
+        </div>
+      `;
 
     default:
-      content = `
+      return `
         <div style="text-align: left;">
           <p><strong>Type:</strong> ${type}</p>
           <p><strong>ID:</strong> ${originalData.id || data.id || 'N/A'}</p>
+          <p><strong>Name:</strong> ${originalData.name || data.label || 'N/A'}</p>
         </div>
       `;
   }
+}
 
-  // Use SweetAlert2 (already included in CB-MapUI)
-  if (window.Swal) {
-    window.Swal.fire({
-      title: `${getTypeEmoji(type)} ${data.label.replace(/^[^\s]+\s/, '')}`,
-      html: content,
-      icon: 'info',
-      confirmButtonText: 'Close',
-      showCancelButton: type === 'vm',
-      cancelButtonText: 'Focus Related',
-      confirmButtonColor: '#3085d6',
-      cancelButtonColor: '#28a745'
-    }).then((result) => {
-      if (result.dismiss === window.Swal.DismissReason.cancel) {
-        focusOnNeighbors(node);
-      }
+/**
+ * Show full JSON details using JSONFormatter
+ * Styled similar to index.js Get Status popup
+ */
+function showFullJsonDetails(type, originalData, data) {
+  const jsonOutputConfig = {
+    theme: "dark",
+    hoverPreviewEnabled: true,
+    hoverPreviewArrayCount: 100,
+    hoverPreviewFieldCount: 5,
+    animateOpen: true,
+    animateClose: true,
+    useToJSON: true,
+    quotesOnKeys: false,
+    quotesOnValues: false
+  };
+
+  const title = `${getTypeEmoji(type)} ${originalData.name || originalData.id || data.label || 'Details'}`;
+
+  if (typeof JSONFormatter === 'undefined') {
+    // Fallback to plain JSON with dark style
+    Swal.fire({
+      title: title,
+      html: `<div id="json-output" class="form-control" style="height: auto; background-color: black; text-align: left; padding: 10px; overflow: auto; max-height: 400px;">
+        <pre style="color: #fff; margin: 0; white-space: pre-wrap; word-break: break-all;">${JSON.stringify(originalData, null, 2)}</pre>
+      </div>`,
+      background: "#0e1746",
+      width: '50%',
+      showCloseButton: true,
+      showConfirmButton: true,
+      confirmButtonText: 'Close'
     });
+    return;
   }
+
+  Swal.fire({
+    title: title,
+    html: '<div id="resource-json-output" class="form-control" style="height: auto; background-color: black; text-align: left; padding: 10px; overflow: auto; max-height: 400px;"></div>',
+    background: "#0e1746",
+    width: '50%',
+    showCloseButton: true,
+    showConfirmButton: true,
+    confirmButtonText: 'Close',
+    didOpen: () => {
+      setTimeout(() => {
+        const container = document.getElementById('resource-json-output');
+        if (container) {
+          const formatter = new JSONFormatter(originalData, 2, jsonOutputConfig);
+          const renderedElement = formatter.render();
+          container.appendChild(renderedElement);
+
+          // Remove quotes from string values
+          setTimeout(() => {
+            const stringElements = container.querySelectorAll('.json-formatter-string');
+            stringElements.forEach(element => {
+              if (element.textContent.startsWith('"') && element.textContent.endsWith('"')) {
+                element.textContent = element.textContent.slice(1, -1);
+              }
+            });
+          }, 100);
+
+          // Apply custom styles for JSONFormatter value strings
+          const existingStyle = document.getElementById('resource-graph-json-style');
+          if (!existingStyle) {
+            const style = document.createElement('style');
+            style.id = 'resource-graph-json-style';
+            style.textContent = `
+              #resource-json-output .json-formatter-string {
+                word-wrap: break-word !important;
+                overflow-wrap: break-word !important;
+                white-space: pre-wrap !important;
+                word-break: break-all !important;
+                max-width: 100% !important;
+              }
+              #resource-json-output .json-formatter-row .json-formatter-string {
+                word-wrap: break-word !important;
+                overflow-wrap: break-word !important;
+                white-space: pre-wrap !important;
+                word-break: break-all !important;
+              }
+            `;
+            document.head.appendChild(style);
+          }
+        }
+      }, 50);
+    }
+  });
 }
 
 function getStatusColor(status) {
@@ -1966,7 +2288,7 @@ function getTypeEmoji(type) {
     sshKey: '🔑',
     dataDisk: '💾',
     spec: '📐',
-    image: '�️'
+    image: '🖼️'
   };
   return emojis[type] || '📌';
 }
@@ -2053,8 +2375,8 @@ function copyToClipboard(text) {
   if (!navigator.clipboard) {
     // Fallback for non-HTTPS or unsupported browsers
     console.warn('[ResourceGraph] Clipboard API not available');
-    if (window.Swal) {
-      window.Swal.fire({
+    if (Swal) {
+      Swal.fire({
         title: 'Copy Failed',
         text: 'Clipboard not available in this context',
         icon: 'warning',
@@ -2066,8 +2388,8 @@ function copyToClipboard(text) {
   }
   
   navigator.clipboard.writeText(text).then(() => {
-    if (window.Swal) {
-      window.Swal.fire({
+    if (Swal) {
+      Swal.fire({
         title: 'Copied!',
         text: text,
         icon: 'success',
@@ -2077,8 +2399,8 @@ function copyToClipboard(text) {
     }
   }).catch(err => {
     console.error('[ResourceGraph] Failed to copy:', err);
-    if (window.Swal) {
-      window.Swal.fire({
+    if (Swal) {
+      Swal.fire({
         title: 'Copy Failed',
         text: 'Could not copy to clipboard',
         icon: 'error',
@@ -2308,7 +2630,7 @@ export function exportGraphAsJson() {
 export function toggleNodeType(nodeType) {
   if (!(nodeType in nodeTypeVisibility)) {
     console.warn(`[ResourceGraph] Unknown node type: ${nodeType}`);
-    return false;
+    return { state: false, affectedTypes: [] };
   }
   
   const newState = !nodeTypeVisibility[nodeType];

@@ -1097,7 +1097,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 <button onclick="window.ResourceGraph?.runLayout('concentric')" class="btn btn-sm btn-outline-secondary" title="Concentric Layout (Type-based)" aria-label="Concentric layout">
                   <i class="fas fa-circle-notch"></i>
                 </button>
-                <button onclick="window.ResourceGraph?.runLayout('cose-bilkent')" class="btn btn-sm btn-outline-secondary" title="Force-Directed Layout" aria-label="Force-directed layout">
+                <button onclick="window.ResourceGraph?.runLayout('fcose')" class="btn btn-sm btn-outline-secondary" title="Force-Directed Layout" aria-label="Force-directed layout">
                   <i class="fas fa-project-diagram"></i>
                 </button>
               </div>
@@ -1114,9 +1114,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             <div style="font-weight: bold; margin-bottom: 6px;">Legend <span style="font-weight: normal; color: #888; font-size: 10px;">(click to toggle)</span></div>
             <div style="display: flex; flex-wrap: wrap; gap: 8px;">
               <!-- CSP/Location hierarchy (default OFF) -->
-              <span class="legend-item inactive" data-node-type="csp" onclick="toggleLegendItem('csp')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle CSP nodes (enables Region, Zone)"><span style="display:inline-block;width:12px;height:12px;background:#ff6b35;border-radius:2px;margin-right:4px;"></span>CSP</span>
-              <span class="legend-item inactive" data-node-type="region" onclick="toggleLegendItem('region')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle Region nodes (requires CSP)"><span style="display:inline-block;width:12px;height:12px;background:#1e90ff;border-radius:2px;margin-right:4px;"></span>Region</span>
-              <span class="legend-item inactive" data-node-type="zone" onclick="toggleLegendItem('zone')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle Zone nodes (requires CSP, Region)"><span style="display:inline-block;width:12px;height:12px;background:#32cd32;border-radius:2px;margin-right:4px;"></span>Zone</span>
+              <span class="legend-item inactive" data-node-type="csp" onclick="toggleLegendItem('csp')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle CSP nodes"><span style="display:inline-block;width:12px;height:12px;background:#ff6b35;border-radius:2px;margin-right:4px;"></span>CSP</span>
+              <span class="legend-item inactive" data-node-type="region" onclick="toggleLegendItem('region')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle Region nodes (auto-enables CSP)"><span style="display:inline-block;width:12px;height:12px;background:#1e90ff;border-radius:2px;margin-right:4px;"></span>Region</span>
+              <span class="legend-item inactive" data-node-type="zone" onclick="toggleLegendItem('zone')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle Zone nodes (auto-enables CSP, Region)"><span style="display:inline-block;width:12px;height:12px;background:#32cd32;border-radius:2px;margin-right:4px;"></span>Zone</span>
               <span style="color:#ccc;">|</span>
               <!-- Infrastructure (toggleable, default ON) -->
               <span class="legend-item active" data-node-type="mci" onclick="toggleLegendItem('mci')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle MCI nodes (enables SubGroup, VM)"><span style="display:inline-block;width:12px;height:12px;background:#007bff;border-radius:2px;margin-right:4px;"></span>MCI</span>
