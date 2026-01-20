@@ -2592,15 +2592,7 @@ async function viewMciDetails(mciId) {
     return;
   }
   
-  const formatter = new JSONFormatter(mci, 2);
-  
-  Swal.fire({
-    title: `MCI Details: ${mciId}`,
-    html: `<div style="text-align: left; max-height: 400px; overflow-y: auto;">${formatter.render().outerHTML}</div>`,
-    width: '80%',
-    showCloseButton: true,
-    showConfirmButton: false
-  });
+  showJsonDetailsPopup(`🖥️ MCI Details: ${mciId}`, mci);
 }
 
 // View VM details
@@ -2611,15 +2603,7 @@ async function viewVmDetails(mciId, vmId) {
     return;
   }
   
-  const formatter = new JSONFormatter(vm, 2);
-  
-  Swal.fire({
-    title: `VM Details: ${vmId}`,
-    html: `<div style="text-align: left; max-height: 400px; overflow-y: auto;">${formatter.render().outerHTML}</div>`,
-    width: '80%',
-    showCloseButton: true,
-    showConfirmButton: false
-  });
+  showJsonDetailsPopup(`💻 VM Details: ${vmId}`, vm);
 }
 
 // Show create MCI modal
@@ -3932,23 +3916,98 @@ function viewResourceDetails(resourceType, resourceId) {
   const resource = resourceData.find(item => item.id === resourceId || item.configName === resourceId);
   
   if (resource) {
-    const jsonFormatter = new JSONFormatter(resource, 2);
-    
-    Swal.fire({
-      title: `${resourceType} Details`,
-      html: `
-        <div style="text-align: left; max-height: 400px; overflow-y: auto;">
-          <div id="jsonViewer"></div>
-        </div>
-      `,
-      width: '800px',
-      didOpen: () => {
-        document.getElementById('jsonViewer').appendChild(jsonFormatter.render());
-      }
-    });
+    const emoji = getResourceEmoji(resourceType);
+    showJsonDetailsPopup(`${emoji} ${resourceType} Details: ${resourceId}`, resource);
   } else {
     Swal.fire('Error', 'Resource not found', 'error');
   }
+}
+
+// Get emoji for resource type
+function getResourceEmoji(resourceType) {
+  const emojis = {
+    'vNet': '🌐',
+    'subnet': '🔀',
+    'securityGroup': '🛡️',
+    'sshKey': '🔑',
+    'dataDisk': '💾',
+    'customImage': '🖼️',
+    'connection': '🔗',
+    'mci': '🖥️',
+    'vm': '💻',
+    'k8sCluster': '☸️',
+    'k8sNodeGroup': '📦'
+  };
+  return emojis[resourceType] || '📋';
+}
+
+// Common function for showing JSON details in dark-themed popup
+function showJsonDetailsPopup(title, data) {
+  const jsonOutputConfig = {
+    theme: 'dark',
+    hoverPreviewEnabled: true,
+    hoverPreviewArrayCount: 100,
+    hoverPreviewFieldCount: 5,
+    animateOpen: true,
+    animateClose: true,
+    useToJSON: true,
+    quotesOnKeys: false,
+    quotesOnValues: false
+  };
+
+  Swal.fire({
+    title: title,
+    html: '<div id="dashboard-json-output" class="form-control" style="height: auto; background-color: black; text-align: left; padding: 10px; overflow: auto; max-height: 400px;"></div>',
+    background: '#0e1746',
+    color: '#fff',
+    width: '50%',
+    showCloseButton: true,
+    showConfirmButton: true,
+    confirmButtonText: 'Close',
+    didOpen: () => {
+      setTimeout(() => {
+        const container = document.getElementById('dashboard-json-output');
+        if (container) {
+          const formatter = new JSONFormatter(data, 2, jsonOutputConfig);
+          const renderedElement = formatter.render();
+          container.appendChild(renderedElement);
+
+          // Remove quotes from string values
+          setTimeout(() => {
+            const stringElements = container.querySelectorAll('.json-formatter-string');
+            stringElements.forEach(element => {
+              if (element.textContent.startsWith('"') && element.textContent.endsWith('"')) {
+                element.textContent = element.textContent.slice(1, -1);
+              }
+            });
+          }, 100);
+
+          // Apply custom styles for JSONFormatter value strings
+          const existingStyle = document.getElementById('dashboard-json-style');
+          if (!existingStyle) {
+            const style = document.createElement('style');
+            style.id = 'dashboard-json-style';
+            style.textContent = `
+              #dashboard-json-output .json-formatter-string {
+                word-wrap: break-word !important;
+                overflow-wrap: break-word !important;
+                white-space: pre-wrap !important;
+                word-break: break-all !important;
+                max-width: 100% !important;
+              }
+              #dashboard-json-output .json-formatter-row .json-formatter-string {
+                word-wrap: break-word !important;
+                overflow-wrap: break-word !important;
+                white-space: pre-wrap !important;
+                word-break: break-all !important;
+              }
+            `;
+            document.head.appendChild(style);
+          }
+        }
+      }, 50);
+    }
+  });
 }
 
 function deleteResource(resourceType, resourceId, parameters = {}) {
@@ -4191,18 +4250,7 @@ function viewK8sClusterDetails(clusterId) {
     return;
   }
   
-  Swal.fire({
-    title: `K8s Cluster Details: ${clusterId}`,
-    html: `<div id="jsonContainer" style="text-align: left; max-height: 400px; overflow-y: auto;"></div>`,
-    width: '80%',
-    showCloseButton: true,
-    showConfirmButton: false,
-    didOpen: () => {
-      const formatter = new JSONFormatter(cluster, 2);
-      const container = document.getElementById('jsonContainer');
-      container.appendChild(formatter.render());
-    }
-  });
+  showJsonDetailsPopup(`☸️ K8s Cluster Details: ${clusterId}`, cluster);
 }
 
 function downloadKubeconfig(clusterId) {
@@ -4262,15 +4310,7 @@ function viewNodeGroupDetails(clusterId, nodeGroupName) {
     return;
   }
   
-  const formatter = new JSONFormatter(nodeGroup, 2);
-  
-  Swal.fire({
-    title: `Node Group Details: ${nodeGroupName}`,
-    html: `<div style="text-align: left; max-height: 400px; overflow-y: auto;">${formatter.render().outerHTML}</div>`,
-    width: '80%',
-    showCloseButton: true,
-    showConfirmButton: false
-  });
+  showJsonDetailsPopup(`📦 Node Group Details: ${nodeGroupName}`, nodeGroup);
 }
 
 function toggleAutoScaling(clusterId, nodeGroupName, enable) {
