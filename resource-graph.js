@@ -37,7 +37,12 @@ const GRAPH_CONFIG = {
     sshKey: '#6f42c1',
     dataDisk: '#20c997',
     spec: '#e83e8c',
-    image: '#795548'
+    image: '#795548',
+    // CSP hierarchy colors
+    cspRoot: '#2c3e50',    // Dark blue-gray - CSP container
+    csp: '#ff6b35',        // Orange - cloud provider
+    region: '#1e90ff',     // DodgerBlue - region
+    zone: '#32cd32'        // LimeGreen - availability zone
   },
   // Node shapes by resource type
   nodeShapes: {
@@ -51,7 +56,12 @@ const GRAPH_CONFIG = {
     sshKey: 'pentagon',
     dataDisk: 'barrel',
     spec: 'rectangle',
-    image: 'rectangle'
+    image: 'rectangle',
+    // CSP hierarchy shapes
+    cspRoot: 'round-rectangle',
+    csp: 'round-rectangle',
+    region: 'round-rectangle',
+    zone: 'round-rectangle'
   },
   // Layout options - cose-bilkent (force-directed, good for compound nodes)
   layout: {
@@ -92,7 +102,11 @@ const GRAPH_CONFIG = {
     concentric: function(node) {
       const type = node.data('type');
       const levels = {
-        namespace: 5,
+        namespace: 6,
+        cspRoot: 6,
+        csp: 5,
+        region: 4,
+        zone: 3,
         mci: 4,
         subgroup: 3,
         vm: 2,
@@ -124,6 +138,221 @@ let cy = null;
 let isGraphVisible = false;
 let currentNamespace = null;
 let lastDataHash = null;  // For change detection
+
+// Node type visibility settings (toggled via legend)
+// Some types are disabled by default to reduce visual complexity
+const nodeTypeVisibility = {
+  // Infrastructure (toggleable)
+  mci: true,
+  subgroup: true,
+  vm: true,
+  // Network resources
+  vnet: true,
+  subnet: false,  // Disabled by default (child of VNet)
+  securityGroup: true,
+  sshKey: true,
+  dataDisk: false,  // Disabled by default
+  // CSP/Location hierarchy (disabled by default)
+  cspRoot: false,
+  csp: false,
+  region: false,
+  zone: false,
+  // Spec/Image (disabled by default - too many connections)
+  spec: false,
+  image: false
+};
+
+// Hierarchical dependencies: child -> parent chain
+// When enabling a child, all parents must also be enabled
+const nodeTypeDependencies = {
+  // Location hierarchy: zone -> region -> csp -> cspRoot
+  zone: ['region', 'csp', 'cspRoot'],
+  region: ['csp', 'cspRoot'],
+  csp: ['cspRoot'],
+  // Network hierarchy: subnet -> vnet
+  subnet: ['vnet'],
+  // Infrastructure hierarchy: vm -> subgroup -> mci
+  vm: ['subgroup', 'mci'],
+  subgroup: ['mci']
+};
+
+// Reverse dependencies: parent -> children
+// When disabling a parent, all children should also be disabled
+const nodeTypeChildren = {
+  cspRoot: ['csp', 'region', 'zone'],
+  csp: ['region', 'zone'],
+  region: ['zone'],
+  vnet: ['subnet'],
+  mci: ['subgroup', 'vm'],
+  subgroup: ['vm']
+};
+
+/**
+ * Get maximum width for a node type
+ * @param {string} type - Node type
+ * @returns {number} - Maximum width in pixels
+ */
+function getNodeMaxWidth(type) {
+  switch (type) {
+    case 'namespace':
+    case 'cspRoot':
+      return 200;
+    case 'mci':
+    case 'csp':
+      return 160;
+    case 'subgroup':
+    case 'region':
+      return 140;
+    case 'vm':
+    case 'zone':
+      return 130;
+    case 'vnet':
+    case 'subnet':
+      return 150;
+    case 'securityGroup':
+    case 'sshKey':
+    case 'dataDisk':
+      return 130;
+    case 'spec':
+    case 'image':
+      return 140;
+    default:
+      return 130;
+  }
+}
+
+/**
+ * Get max characters per line for a node type
+ * @param {string} type - Node type
+ * @returns {number} - Max characters per line
+ */
+function getMaxCharsPerLine(type) {
+  const charWidth = 7;  // Approx char width for 12px font
+  const maxWidth = getNodeMaxWidth(type);
+  return Math.floor(maxWidth / charWidth);  // Use 100% of node width
+}
+
+/**
+ * Check if a node type is a compound/group node
+ * Compound nodes expand to fit children, so their width is dynamic
+ * @param {string} type - Node type
+ * @returns {boolean} - True if compound node
+ */
+function isCompoundNodeType(type) {
+  const compoundTypes = ['namespace', 'mci', 'subgroup', 'vnet', 'cspRoot', 'csp', 'region'];
+  return compoundTypes.includes(type);
+}
+
+/**
+ * Format label with line breaks for long text
+ * Cytoscape's text-wrap: 'wrap' only breaks on whitespace,
+ * so we manually insert newlines for long continuous strings.
+ * For compound nodes, returns label without line breaks (will be updated after layout)
+ * @param {string} icon - Emoji icon
+ * @param {string} text - Label text
+ * @param {number} maxCharsPerLine - Max characters per line
+ * @param {string} [nodeType] - Optional node type to check if compound
+ * @returns {string} - Formatted label with newlines
+ */
+function formatLabel(icon, text, maxCharsPerLine, nodeType) {
+  // Compound nodes: return without line breaks, will be reformatted after layout
+  // based on actual rendered width
+  if (nodeType && isCompoundNodeType(nodeType)) {
+    return `${icon} ${text}`;
+  }
+  
+  // Account for icon (2 chars including space after)
+  const firstLineMax = maxCharsPerLine - 2;
+  
+  if (text.length <= firstLineMax) {
+    return `${icon} ${text}`;
+  }
+  
+  // Split long text into multiple lines
+  const lines = [];
+  let remaining = text;
+  let isFirstLine = true;
+  
+  while (remaining.length > 0) {
+    const lineMax = isFirstLine ? firstLineMax : maxCharsPerLine;
+    
+    if (remaining.length <= lineMax) {
+      lines.push(remaining);
+      break;
+    }
+    
+    // Find best break point (prefer after hyphen, underscore, or dot)
+    let breakPoint = lineMax;
+    const breakChars = ['-', '_', '.', '/'];
+    
+    for (const char of breakChars) {
+      const pos = remaining.lastIndexOf(char, lineMax);
+      if (pos > lineMax * 0.4) {  // At least 40% of the line
+        breakPoint = pos + 1;  // Break after the character
+        break;
+      }
+    }
+    
+    lines.push(remaining.substring(0, breakPoint));
+    remaining = remaining.substring(breakPoint);
+    isFirstLine = false;
+  }
+  
+  return `${icon} ${lines.join('\n')}`;
+}
+
+/**
+ * Reformat compound node labels based on actual rendered width or node max width
+ * Called after layout is complete
+ * - For nodes with children (:parent): use actual bounding box width
+ * - For nodes without children: use predefined max width (like regular nodes)
+ */
+function reformatCompoundNodeLabels() {
+  if (!cy) return;
+  
+  const charWidth = 7;  // Approx char width for 12px font
+  
+  // Process all nodes that are compound types (not just :parent)
+  cy.nodes().forEach(node => {
+    const type = node.data('type');
+    if (!isCompoundNodeType(type)) return;
+    
+    const label = node.data('label') || '';
+    // Skip if already has newlines (already formatted)
+    if (label.includes('\n')) return;
+    
+    // Check if this node has children (is actually acting as a parent)
+    const hasChildren = node.children().length > 0;
+    
+    let maxCharsPerLine;
+    
+    if (hasChildren) {
+      // Has children: use actual bounding box width
+      const bb = node.boundingBox();
+      const actualWidth = bb.w;
+      maxCharsPerLine = Math.floor(actualWidth / charWidth);  // Use 100% of width
+    } else {
+      // No children: use predefined max width (like regular nodes)
+      const maxWidth = getNodeMaxWidth(type);
+      maxCharsPerLine = Math.floor(maxWidth / charWidth);  // Use 100% of width
+    }
+    
+    if (maxCharsPerLine < 10) return;  // Too narrow, skip
+    
+    // Extract icon and text from current label
+    const iconMatch = label.match(/^([\p{Emoji}\p{Emoji_Presentation}]+)\s*/u);
+    if (!iconMatch) return;
+    
+    const icon = iconMatch[1];
+    const text = label.substring(iconMatch[0].length);
+    
+    // Reformat with calculated width (pass null for nodeType to force formatting)
+    const newLabel = formatLabel(icon, text, maxCharsPerLine, null);
+    if (newLabel !== label) {
+      node.data('label', newLabel);
+    }
+  });
+}
 
 /**
  * Generate a simple hash for data comparison
@@ -163,46 +392,46 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
     maxZoom: GRAPH_CONFIG.zoom.max,
     
     style: [
-      // Base node style - rounded rectangle with text wrapping (GoJS-like)
+      // Base node style - rounded rectangle with manual line breaks (GoJS-like)
       {
         selector: 'node',
         style: {
           'label': 'data(label)',
           'text-valign': 'center',
           'text-halign': 'center',
-          'text-wrap': 'wrap',           // Enable text wrapping
-          'text-max-width': function(ele) {  // Dynamic max-width based on node width
-            const label = ele.data('label') || '';
-            const nodeWidth = Math.max(90, Math.min(160, label.length * 8));
-            return nodeWidth - 16;  // Subtract padding
-          },
-          'font-size': '13px',
+          'text-wrap': 'wrap',           // Required for \n to work in labels
+          'font-size': '12px',
           'font-weight': 'bold',
           'color': '#fff',
           'text-outline-color': 'data(color)',
           'text-outline-width': 2,
           'background-color': 'data(color)',
           'shape': 'round-rectangle',    // Rounded rectangle like GoJS
-          'width': function(ele) {       // Dynamic width based on label
+          'width': function(ele) {       // Fixed max width per type, min based on label
             const label = ele.data('label') || '';
-            return Math.max(90, Math.min(160, label.length * 8));
+            const type = ele.data('type');
+            const maxWidth = getNodeMaxWidth(type);
+            // Get longest line for width calculation
+            const lines = label.split('\n');
+            const longestLine = lines.reduce((a, b) => a.length > b.length ? a : b, '');
+            const labelWidth = longestLine.length * 7;  // Approx width for 12px font
+            return Math.max(80, Math.min(maxWidth, labelWidth + 20));
           },
-          'height': function(ele) {      // Dynamic height based on label
+          'height': function(ele) {      // Dynamic height based on actual newlines in label
             const label = ele.data('label') || '';
-            const nodeWidth = Math.max(90, Math.min(160, label.length * 8));
-            const charsPerLine = Math.floor((nodeWidth - 16) / 7.5);  // Approx chars per line for 13px font
-            const lines = Math.ceil(label.length / charsPerLine);
-            return Math.max(40, lines * 18 + 14);
+            const lines = label.split('\n').length;
+            return Math.max(36, lines * 16 + 12);  // 16px per line + padding
           },
-          'padding': '8px'
+          'padding': '6px'
         }
       },
-      // Compound node (parent) style
+      // Compound node (parent) style - manual line breaks for group labels
       {
         selector: 'node:parent',
         style: {
           'text-valign': 'top',
           'text-halign': 'center',
+          'text-wrap': 'wrap',           // Required for \n to work in labels
           'background-opacity': 0.2,
           'border-width': 2,
           'border-color': 'data(color)',
@@ -216,28 +445,6 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
           'shape': 'ellipse',
           'background-opacity': 0.15,
           'border-style': 'dashed'
-        }
-      },
-      // Subnet node - wider to accommodate longer names
-      {
-        selector: 'node[type="subnet"]',
-        style: {
-          'width': function(ele) {
-            const label = ele.data('label') || '';
-            return Math.max(100, Math.min(200, label.length * 9));  // Wider range for subnet
-          },
-          'text-max-width': function(ele) {
-            const label = ele.data('label') || '';
-            const nodeWidth = Math.max(100, Math.min(200, label.length * 9));
-            return nodeWidth - 16;
-          },
-          'height': function(ele) {
-            const label = ele.data('label') || '';
-            const nodeWidth = Math.max(100, Math.min(200, label.length * 9));
-            const charsPerLine = Math.floor((nodeWidth - 16) / 7.5);
-            const lines = Math.ceil(label.length / charsPerLine);
-            return Math.max(40, lines * 18 + 14);
-          }
         }
       },
       // Edge style
@@ -445,78 +652,211 @@ export function mciDataToGraph(mciList, namespace) {
   nodes.push({
     data: {
       id: nsId,
-      label: `📁 ${namespace}`,
+      label: formatLabel('📁', namespace, getMaxCharsPerLine('namespace'), 'namespace'),
       type: 'namespace',
       color: GRAPH_CONFIG.nodeColors.namespace,
       originalData: { id: namespace, type: 'namespace' }
     }
   });
 
-  // Create VNet nodes with their Subnets as children (compound structure)
-  const vnetNodeIds = [];  // Track for sibling edges
-  vNetList.forEach(vnet => {
-    if (resourceSet.has(`vnet-${vnet.id}`)) return;
-    resourceSet.add(`vnet-${vnet.id}`);
+  // ========== CSP / Region / Zone hierarchy ==========
+  // Track created CSP/Region/Zone nodes to avoid duplicates
+  const cspNodes = new Set();
+  const regionNodes = new Set();
+  const zoneNodes = new Set();
+  
+  // Helper function to extract location info from resource
+  function getLocationInfo(resource) {
+    if (!resource || !resource.connectionConfig) return null;
+    const cc = resource.connectionConfig;
+    const rz = cc.regionZoneInfo || {};
+    return {
+      provider: cc.providerName || null,
+      region: rz.assignedRegion || null,
+      zone: rz.assignedZone || null
+    };
+  }
+  
+  // Helper function to create CSP/Region/Zone hierarchy nodes and return the target node ID
+  function ensureLocationNodes(locationInfo) {
+    // Skip if CSP nodes are disabled via legend toggle
+    if (!nodeTypeVisibility.csp) return null;
+    if (!locationInfo || !locationInfo.provider) return null;
     
-    const vnetNodeId = `vnet-${vnet.id}`;
-    vnetNodeIds.push(vnetNodeId);  // Track for sibling edges
-    const vnetParts = vnet.id.split('-');
-    const vnetLabel = vnetParts.length > 3 
-      ? `${vnetParts[0]}-${vnetParts.slice(-2).join('-')}` 
-      : vnet.id;
+    const { provider, region, zone } = locationInfo;
     
-    // VNet as compound node (parent of subnets)
-    nodes.push({
-      data: {
-        id: vnetNodeId,
-        label: `🌐 ${vnetLabel}`,
-        parent: nsId,
-        type: 'vnet',
-        color: GRAPH_CONFIG.nodeColors.vnet,
-        fullId: vnet.id,
-        cidrBlock: vnet.cidrBlock,
-        originalData: vnet
-      }
-    });
-    
-    // Add Subnet nodes as children of VNet
-    const subnetNodeIds = [];
-    if (vnet.subnetInfoList && Array.isArray(vnet.subnetInfoList)) {
-      vnet.subnetInfoList.forEach(subnet => {
-        const subnetNodeId = `subnet-${subnet.id}`;
-        if (!resourceSet.has(subnetNodeId)) {
-          resourceSet.add(subnetNodeId);
-          subnetNodeIds.push(subnetNodeId);
-          nodes.push({
-            data: {
-              id: subnetNodeId,
-              label: `🔀 ${subnet.name || subnet.id}`,
-              parent: vnetNodeId, // Subnet is child of VNet
-              type: 'subnet',
-              color: GRAPH_CONFIG.nodeColors.subnet,
-              fullId: subnet.id,
-              ipv4_CIDR: subnet.ipv4_CIDR,
-              originalData: subnet
-            }
-          });
+    // Create CSP root group node if not exists (independent of namespace)
+    const cspRootId = 'csp-root';
+    if (nodeTypeVisibility.cspRoot && !resourceSet.has(cspRootId)) {
+      resourceSet.add(cspRootId);
+      nodes.push({
+        data: {
+          id: cspRootId,
+          label: '☁️ Cloud Providers',
+          type: 'cspRoot',
+          color: GRAPH_CONFIG.nodeColors.cspRoot,
+          originalData: { id: 'csp-root', type: 'cspRoot' }
         }
       });
-      
-      // Add invisible edges between subnets in the same VNet to keep them close
-      // (Subnets are typically few, so invisible edges work better than tiling)
-      for (let i = 0; i < subnetNodeIds.length - 1; i++) {
+    }
+    
+    const cspNodeId = `csp-${provider}`;
+    
+    // Create CSP node if not exists (parent is csp-root if visible, otherwise no parent)
+    if (!cspNodes.has(cspNodeId)) {
+      cspNodes.add(cspNodeId);
+      nodes.push({
+        data: {
+          id: cspNodeId,
+          label: formatLabel('☁️', provider.toUpperCase(), getMaxCharsPerLine('csp'), 'csp'),
+          parent: nodeTypeVisibility.cspRoot ? cspRootId : undefined,
+          type: 'csp',
+          color: GRAPH_CONFIG.nodeColors.csp,
+          provider: provider,
+          originalData: { id: provider, type: 'csp', provider }
+        }
+      });
+    }
+    
+    // If no region or region visibility disabled, return CSP node
+    if (!region || !nodeTypeVisibility.region) return cspNodeId;
+    
+    const regionNodeId = `region-${provider}-${region}`;
+    
+    // Create Region node if not exists
+    if (!regionNodes.has(regionNodeId)) {
+      regionNodes.add(regionNodeId);
+      nodes.push({
+        data: {
+          id: regionNodeId,
+          label: formatLabel('🌍', region, getMaxCharsPerLine('region'), 'region'),
+          parent: cspNodeId,
+          type: 'region',
+          color: GRAPH_CONFIG.nodeColors.region,
+          provider: provider,
+          region: region,
+          originalData: { id: region, type: 'region', provider, region }
+        }
+      });
+    }
+    
+    // If no zone or zone visibility disabled, return Region node
+    if (!zone || !nodeTypeVisibility.zone) return regionNodeId;
+    
+    const zoneNodeId = `zone-${provider}-${region}-${zone}`;
+    
+    // Create Zone node if not exists
+    if (!zoneNodes.has(zoneNodeId)) {
+      zoneNodes.add(zoneNodeId);
+      nodes.push({
+        data: {
+          id: zoneNodeId,
+          label: formatLabel('📍', zone, getMaxCharsPerLine('zone')),
+          parent: regionNodeId,
+          type: 'zone',
+          color: GRAPH_CONFIG.nodeColors.zone,
+          provider: provider,
+          region: region,
+          zone: zone,
+          originalData: { id: zone, type: 'zone', provider, region, zone }
+        }
+      });
+    }
+    
+    return zoneNodeId;
+  }
+  
+  // Helper to create edge from resource to its location (Zone > Region > CSP)
+  function createLocationEdge(sourceNodeId, resource, edgeSet) {
+    const locationInfo = getLocationInfo(resource);
+    const targetNodeId = ensureLocationNodes(locationInfo);
+    if (targetNodeId) {
+      const edgeId = `edge-${sourceNodeId}-${targetNodeId}`;
+      if (!edgeSet.has(edgeId)) {
+        edgeSet.add(edgeId);
         edges.push({
           data: {
-            id: `subnet-link-${vnetNodeId}-${i}`,
-            source: subnetNodeIds[i],
-            target: subnetNodeIds[i + 1],
-            type: 'subnet-sibling',
-            invisible: true
+            id: edgeId,
+            source: sourceNodeId,
+            target: targetNodeId,
+            relationship: 'hosted-in'
           }
         });
       }
     }
-  });
+    return targetNodeId;
+  }
+  
+  // Track location edges to avoid duplicates
+  const locationEdgeSet = new Set();
+  // Create VNet nodes with their Subnets as children (compound structure)
+  const vnetNodeIds = [];  // Track for sibling edges
+  if (nodeTypeVisibility.vnet) {
+    vNetList.forEach(vnet => {
+      if (resourceSet.has(`vnet-${vnet.id}`)) return;
+      resourceSet.add(`vnet-${vnet.id}`);
+      
+      const vnetNodeId = `vnet-${vnet.id}`;
+      vnetNodeIds.push(vnetNodeId);  // Track for sibling edges
+      
+      // VNet as compound node (parent of subnets)
+      nodes.push({
+        data: {
+          id: vnetNodeId,
+          label: formatLabel('🌐', vnet.id, getMaxCharsPerLine('vnet'), 'vnet'),
+          parent: nsId,
+          type: 'vnet',
+          color: GRAPH_CONFIG.nodeColors.vnet,
+          fullId: vnet.id,
+          cidrBlock: vnet.cidrBlock,
+          originalData: vnet
+        }
+      });
+      
+      // Create edge to CSP/Region/Zone if location info exists
+      createLocationEdge(vnetNodeId, vnet, locationEdgeSet);
+      
+      // Add Subnet nodes as children of VNet (only if subnet visibility is enabled)
+      const subnetNodeIds = [];
+      if (nodeTypeVisibility.subnet && vnet.subnetInfoList && Array.isArray(vnet.subnetInfoList)) {
+        vnet.subnetInfoList.forEach(subnet => {
+          // Include vnet.id in subnet node ID for uniqueness across VNets
+          const subnetNodeId = `subnet-${vnet.id}-${subnet.id}`;
+          if (!resourceSet.has(subnetNodeId)) {
+            resourceSet.add(subnetNodeId);
+            subnetNodeIds.push(subnetNodeId);
+            nodes.push({
+              data: {
+                id: subnetNodeId,
+                label: formatLabel('🔀', subnet.name || subnet.id, getMaxCharsPerLine('subnet')),
+                parent: vnetNodeId, // Subnet is child of VNet
+                type: 'subnet',
+                color: GRAPH_CONFIG.nodeColors.subnet,
+                fullId: subnet.id,
+                vNetId: vnet.id,
+                ipv4_CIDR: subnet.ipv4_CIDR,
+                originalData: subnet
+              }
+            });
+          }
+        });
+        
+        // Add invisible edges between subnets in the same VNet to keep them close
+        // (Subnets are typically few, so invisible edges work better than tiling)
+        for (let i = 0; i < subnetNodeIds.length - 1; i++) {
+          edges.push({
+            data: {
+              id: `subnet-link-${vnetNodeId}-${i}`,
+              source: subnetNodeIds[i],
+              target: subnetNodeIds[i + 1],
+              type: 'subnet-sibling',
+              invisible: true
+            }
+          });
+        }
+      }
+    });
+  }
 
   // Add invisible edges between VNets to keep them grouped
   for (let i = 0; i < vnetNodeIds.length - 1; i++) {
@@ -533,28 +873,28 @@ export function mciDataToGraph(mciList, namespace) {
 
   // Create SecurityGroup nodes (bound to namespace)
   const sgNodeIds = [];  // Track for sibling edges
-  securityGroupList.forEach(sg => {
-    if (resourceSet.has(`sg-${sg.id}`)) return;
-    resourceSet.add(`sg-${sg.id}`);
-    sgNodeIds.push(`sg-${sg.id}`);  // Track for sibling edges
-    
-    const sgParts = sg.id.split('-');
-    const sgLabel = sgParts.length > 3 
-      ? `${sgParts[0]}-${sgParts.slice(-2).join('-')}` 
-      : sg.id;
-    
-    nodes.push({
-      data: {
-        id: `sg-${sg.id}`,
-        label: `🛡️ ${sgLabel}`,
-        parent: nsId,
-        type: 'securityGroup',
-        color: GRAPH_CONFIG.nodeColors.securityGroup,
-        fullId: sg.id,
-        originalData: sg
-      }
+  if (nodeTypeVisibility.securityGroup) {
+    securityGroupList.forEach(sg => {
+      if (resourceSet.has(`sg-${sg.id}`)) return;
+      resourceSet.add(`sg-${sg.id}`);
+      sgNodeIds.push(`sg-${sg.id}`);  // Track for sibling edges
+      
+      nodes.push({
+        data: {
+          id: `sg-${sg.id}`,
+          label: formatLabel('🛡️', sg.id, getMaxCharsPerLine('securityGroup')),
+          parent: nsId,
+          type: 'securityGroup',
+          color: GRAPH_CONFIG.nodeColors.securityGroup,
+          fullId: sg.id,
+          originalData: sg
+        }
+      });
+      
+      // Create edge to CSP/Region/Zone if location info exists
+      createLocationEdge(`sg-${sg.id}`, sg, locationEdgeSet);
     });
-  });
+  }
 
   // Add invisible edges between SecurityGroups to keep them grouped
   for (let i = 0; i < sgNodeIds.length - 1; i++) {
@@ -571,28 +911,28 @@ export function mciDataToGraph(mciList, namespace) {
 
   // Create SSHKey nodes (bound to namespace)
   const sshKeyNodeIds = [];  // Track for sibling edges
-  sshKeyList.forEach(key => {
-    if (resourceSet.has(`sshkey-${key.id}`)) return;
-    resourceSet.add(`sshkey-${key.id}`);
-    sshKeyNodeIds.push(`sshkey-${key.id}`);  // Track for sibling edges
-    
-    const keyParts = key.id.split('-');
-    const keyLabel = keyParts.length > 3 
-      ? `${keyParts[0]}-${keyParts.slice(-1)}` 
-      : key.id;
-    
-    nodes.push({
-      data: {
-        id: `sshkey-${key.id}`,
-        label: `🔑 ${keyLabel}`,
-        parent: nsId,
-        type: 'sshKey',
-        color: GRAPH_CONFIG.nodeColors.sshKey,
-        fullId: key.id,
-        originalData: key
-      }
+  if (nodeTypeVisibility.sshKey) {
+    sshKeyList.forEach(key => {
+      if (resourceSet.has(`sshkey-${key.id}`)) return;
+      resourceSet.add(`sshkey-${key.id}`);
+      sshKeyNodeIds.push(`sshkey-${key.id}`);  // Track for sibling edges
+      
+      nodes.push({
+        data: {
+          id: `sshkey-${key.id}`,
+          label: formatLabel('🔑', key.id, getMaxCharsPerLine('sshKey')),
+          parent: nsId,
+          type: 'sshKey',
+          color: GRAPH_CONFIG.nodeColors.sshKey,
+          fullId: key.id,
+          originalData: key
+        }
+      });
+      
+      // Create edge to CSP/Region/Zone if location info exists
+      createLocationEdge(`sshkey-${key.id}`, key, locationEdgeSet);
     });
-  });
+  }
 
   // Add invisible edges between SSHKeys to keep them grouped
   for (let i = 0; i < sshKeyNodeIds.length - 1; i++) {
@@ -602,6 +942,57 @@ export function mciDataToGraph(mciList, namespace) {
         source: sshKeyNodeIds[i],
         target: sshKeyNodeIds[i + 1],
         type: 'sshkey-sibling',
+        invisible: true
+      }
+    });
+  }
+
+  // Create DataDisk nodes (bound to namespace)
+  const dataDiskList = centralData.dataDisk || [];
+  const dataDiskNodeIds = [];  // Track for sibling edges
+  
+  // Debug: Log namespace-level dataDisk list
+  if (dataDiskList.length > 0) {
+    console.log(`[ResourceGraph] Namespace has ${dataDiskList.length} DataDisks:`, dataDiskList.map(d => d.id));
+  }
+  
+  // Build lookup map for dataDisk
+  const dataDiskMap = new Map();
+  dataDiskList.forEach(disk => dataDiskMap.set(disk.id, disk));
+  
+  if (nodeTypeVisibility.dataDisk) {
+    dataDiskList.forEach(disk => {
+      if (resourceSet.has(`disk-${disk.id}`)) return;
+      resourceSet.add(`disk-${disk.id}`);
+      dataDiskNodeIds.push(`disk-${disk.id}`);  // Track for sibling edges
+      
+      nodes.push({
+        data: {
+          id: `disk-${disk.id}`,
+          label: formatLabel('💾', disk.id, getMaxCharsPerLine('dataDisk')),
+          parent: nsId,
+          type: 'dataDisk',
+          color: GRAPH_CONFIG.nodeColors.dataDisk,
+          fullId: disk.id,
+          diskType: disk.diskSize,
+          diskSize: disk.diskSize,
+          originalData: disk
+        }
+      });
+      
+      // Create edge to CSP/Region/Zone if location info exists
+      createLocationEdge(`disk-${disk.id}`, disk, locationEdgeSet);
+    });
+  }
+
+  // Add invisible edges between DataDisks to keep them grouped
+  for (let i = 0; i < dataDiskNodeIds.length - 1; i++) {
+    edges.push({
+      data: {
+        id: `disk-link-${i}`,
+        source: dataDiskNodeIds[i],
+        target: dataDiskNodeIds[i + 1],
+        type: 'disk-sibling',
         invisible: true
       }
     });
@@ -617,6 +1008,9 @@ export function mciDataToGraph(mciList, namespace) {
   const imageNodeIds = [];  // Track Image nodes for sibling edges
 
   mciList.forEach(mci => {
+    // Skip MCI if visibility disabled
+    if (!nodeTypeVisibility.mci) return;
+    
     const mciId = `mci-${mci.id}`;
     mciNodeIds.push(mciId);  // Track for sibling edges
     
@@ -624,7 +1018,7 @@ export function mciDataToGraph(mciList, namespace) {
     nodes.push({
       data: {
         id: mciId,
-        label: `🖥️ ${mci.name || mci.id}`,
+        label: formatLabel('🖥️', mci.name || mci.id, getMaxCharsPerLine('mci'), 'mci'),
         parent: nsId,
         type: 'mci',
         status: mci.status,
@@ -655,36 +1049,42 @@ export function mciDataToGraph(mciList, namespace) {
 
       // Track edges at different levels for consolidation
       const mciEdges = {
+        vNets: new Set(),
         subnets: new Set(),
         securityGroups: new Set(),
         sshKeys: new Set(),
         specs: new Set(),
-        images: new Set()
+        images: new Set(),
+        dataDisks: new Set()
       };
 
       Object.entries(subGroups).forEach(([subGroupId, vms]) => {
         const subGroupNodeId = `subgroup-${mci.id}-${subGroupId}`;
         subGroupNodeIds.push(subGroupNodeId);  // Track for sibling edges
         
-        // Always create subgroup node
-        nodes.push({
-          data: {
-            id: subGroupNodeId,
-            label: `📦 ${subGroupId}`,
-            parent: mciId,
-            type: 'subgroup',
-            color: GRAPH_CONFIG.nodeColors.subgroup,
-            originalData: { id: subGroupId, type: 'subgroup', mciId: mci.id }
-          }
-        });
+        // Create subgroup node only if visibility enabled
+        if (nodeTypeVisibility.subgroup) {
+          nodes.push({
+            data: {
+              id: subGroupNodeId,
+              label: formatLabel('📦', subGroupId, getMaxCharsPerLine('subgroup'), 'subgroup'),
+              parent: mciId,
+              type: 'subgroup',
+              color: GRAPH_CONFIG.nodeColors.subgroup,
+              originalData: { id: subGroupId, type: 'subgroup', mciId: mci.id }
+            }
+          });
+        }
 
         // Track edges at subgroup level for consolidation
         const subGroupEdges = {
+          vNets: new Set(),
           subnets: new Set(),
           securityGroups: new Set(),
           sshKeys: new Set(),
           specs: new Set(),
-          images: new Set()
+          images: new Set(),
+          dataDisks: new Set()
         };
 
         // Track VM node IDs for invisible sibling edges within subgroup
@@ -695,12 +1095,21 @@ export function mciDataToGraph(mciList, namespace) {
           const vmNodeId = `vm-${mci.id}-${vm.id}`;
           vmNodeIds.push(vmNodeId);  // Track for sibling edges
           
-          // VM node - parent is always subgroup now
+          // Skip VM node creation if visibility disabled
+          if (!nodeTypeVisibility.vm) return;
+          
+          // Debug: Log dataDiskIds for each VM
+          if (vm.dataDiskIds && vm.dataDiskIds.length > 0) {
+            console.log(`[ResourceGraph] VM ${vm.id} has dataDiskIds:`, vm.dataDiskIds);
+          }
+          
+          // VM node - parent is subgroup if visible, otherwise MCI
+          const vmParent = nodeTypeVisibility.subgroup ? subGroupNodeId : mciId;
           nodes.push({
             data: {
               id: vmNodeId,
-              label: `💻 ${vm.name || vm.id}`,
-              parent: subGroupNodeId,
+              label: formatLabel('💻', vm.name || vm.id, getMaxCharsPerLine('vm')),
+              parent: vmParent,
               type: 'vm',
               status: vm.status,
               color: GRAPH_CONFIG.nodeColors.vm,
@@ -709,43 +1118,71 @@ export function mciDataToGraph(mciList, namespace) {
               originalData: vm
             }
           });
+          
+          // Create edge to CSP/Region/Zone if location info exists
+          createLocationEdge(vmNodeId, vm, locationEdgeSet);
 
           // Collect subnet connections for consolidation
-          if (vm.subnetId) {
-            const subnetNodeId = `subnet-${vm.subnetId}`;
-            const isUnknown = vm.subnetId === 'unknown';
+          // Collect VNet and Subnet connections for consolidation (only if visibility enabled)
+          if (vm.subnetId && nodeTypeVisibility.vnet) {
+            const isSubnetUnknown = vm.subnetId === 'unknown';
+            const isVNetUnknown = !vm.vNetId || vm.vNetId === 'unknown';
             
-            // Create subnet node only if it doesn't exist
-            if (!resourceSet.has(subnetNodeId)) {
+            // Determine VNet node ID
+            const vnetNodeId = isVNetUnknown ? 'vnet-unknown' : `vnet-${vm.vNetId}`;
+            
+            // Create VNet node if unknown (known VNets are created from vNetList)
+            if (isVNetUnknown && !resourceSet.has(vnetNodeId)) {
+              resourceSet.add(vnetNodeId);
+              nodes.push({
+                data: {
+                  id: vnetNodeId,
+                  label: '🌐 VNet (unknown)',
+                  parent: nsId,
+                  type: 'vnet',
+                  color: GRAPH_CONFIG.nodeColors.vnet,
+                  isUnknown: true,
+                  fullId: 'unknown',
+                  originalData: { id: 'unknown', type: 'vnet' }
+                }
+              });
+            }
+            
+            // Track VNet edge
+            subGroupEdges.vNets.add(vnetNodeId);
+            
+            // Subnet node ID includes VNet ID for uniqueness (same subnet ID can exist in different VNets)
+            const vnetIdForSubnet = isVNetUnknown ? 'unknown' : vm.vNetId;
+            const subnetNodeId = isSubnetUnknown 
+              ? 'subnet-unknown'  // Single shared node for all unknown subnets
+              : `subnet-${vnetIdForSubnet}-${vm.subnetId}`;
+            
+            // Create subnet node only if it doesn't exist and subnet visibility is enabled
+            if (nodeTypeVisibility.subnet && !resourceSet.has(subnetNodeId)) {
               resourceSet.add(subnetNodeId);
-              const subnetParts = vm.subnetId.split('-');
-              const subnetLabel = isUnknown 
+              const subnetText = isSubnetUnknown 
                 ? 'Subnet (unknown)'
-                : (subnetParts.length > 3 
-                    ? `${subnetParts[0]}-${subnetParts.slice(-2).join('-')}` 
-                    : vm.subnetId);
-              
-              const parentVNetId = subnetToVNetMap.get(vm.subnetId);
-              const parentNodeId = parentVNetId ? `vnet-${parentVNetId}` : nsId;
+                : vm.subnetId;
               
               nodes.push({
                 data: {
                   id: subnetNodeId,
-                  label: `🔀 ${subnetLabel}`,
-                  parent: parentNodeId,
+                  label: formatLabel('🔀', subnetText, getMaxCharsPerLine('subnet')),
+                  parent: vnetNodeId,  // Subnet is always child of VNet
                   type: 'subnet',
                   color: GRAPH_CONFIG.nodeColors.subnet,
-                  isUnknown: isUnknown,
+                  isUnknown: isSubnetUnknown,
                   fullId: vm.subnetId,
-                  originalData: { id: vm.subnetId, type: 'subnet' }
+                  vNetId: vnetIdForSubnet,
+                  originalData: { id: vm.subnetId, vNetId: vnetIdForSubnet, type: 'subnet' }
                 }
               });
             }
-            subGroupEdges.subnets.add(subnetNodeId);
+            if (nodeTypeVisibility.subnet) subGroupEdges.subnets.add(subnetNodeId);
           }
 
-          // Collect SecurityGroup connections for consolidation
-          if (vm.securityGroupIds && Array.isArray(vm.securityGroupIds)) {
+          // Collect SecurityGroup connections for consolidation (only if visibility enabled)
+          if (nodeTypeVisibility.securityGroup && vm.securityGroupIds && Array.isArray(vm.securityGroupIds)) {
             vm.securityGroupIds.forEach(sgId => {
               if (!sgId) return;
               
@@ -754,16 +1191,11 @@ export function mciDataToGraph(mciList, namespace) {
               
               if (!resourceSet.has(sgNodeId)) {
                 resourceSet.add(sgNodeId);
-                const sgParts = sgId.split('-');
-                const sgLabel = isUnknown
-                  ? 'SG (unknown)'
-                  : (sgParts.length > 3 
-                      ? `${sgParts[0]}-${sgParts.slice(-2).join('-')}` 
-                      : sgId);
+                const sgText = isUnknown ? 'SG (unknown)' : sgId;
                 nodes.push({
                   data: {
                     id: sgNodeId,
-                    label: `🛡️ ${sgLabel}`,
+                    label: formatLabel('🛡️', sgText, getMaxCharsPerLine('securityGroup')),
                     parent: nsId,
                     type: 'securityGroup',
                     color: GRAPH_CONFIG.nodeColors.securityGroup,
@@ -777,24 +1209,23 @@ export function mciDataToGraph(mciList, namespace) {
             });
           }
 
-          // Collect SSHKey connections for consolidation
-          if (vm.sshKeyId && vm.sshKeyId !== 'unknown') {
-            const sshKeyNodeId = `sshkey-${vm.sshKeyId}`;
+          // Collect SSHKey connections for consolidation (only if visibility enabled)
+          if (vm.sshKeyId && nodeTypeVisibility.sshKey) {
+            const isUnknown = vm.sshKeyId === 'unknown';
+            const sshKeyNodeId = `sshkey-${vm.sshKeyId}`;  // Shared node for unknown
             
             if (!resourceSet.has(sshKeyNodeId)) {
               resourceSet.add(sshKeyNodeId);
-              const sshParts = vm.sshKeyId.split('-');
-              const sshLabel = sshParts.length > 3 
-                ? `${sshParts[0]}-${sshParts.slice(-1)}` 
-                : vm.sshKeyId;
+              const sshText = isUnknown ? 'SSHKey (unknown)' : vm.sshKeyId;
               nodes.push({
                 data: {
                   id: sshKeyNodeId,
-                  label: `🔑 ${sshLabel}`,
+                  label: formatLabel('🔑', sshText, getMaxCharsPerLine('sshKey')),
                   parent: nsId,
                   type: 'sshKey',
                   color: GRAPH_CONFIG.nodeColors.sshKey,
                   fullId: vm.sshKeyId,
+                  isUnknown: isUnknown,
                   originalData: { id: vm.sshKeyId, type: 'sshKey' }
                 }
               });
@@ -802,24 +1233,30 @@ export function mciDataToGraph(mciList, namespace) {
             subGroupEdges.sshKeys.add(sshKeyNodeId);
           }
 
-          // Collect Spec connections for consolidation
-          if (vm.specId && vm.specId !== 'unknown') {
-            const specNodeId = `spec-${vm.specId}`;
+          // Collect Spec connections for consolidation (only if spec visibility enabled)
+          if (vm.specId && nodeTypeVisibility.spec) {
+            const isUnknown = vm.specId === 'unknown';
+            const specNodeId = `spec-${vm.specId}`;  // Shared node for unknown
             
             if (!resourceSet.has(specNodeId)) {
               resourceSet.add(specNodeId);
-              specNodeIds.push(specNodeId);  // Track for sibling edges
-              const specParts = vm.specId.split('+');
-              const specLabel = specParts.length === 3 
-                ? `${specParts[0]}/${specParts[2]}` 
-                : vm.specId.substring(0, 30);
+              if (!isUnknown) specNodeIds.push(specNodeId);  // Track for sibling edges (not for unknown)
+              const specText = isUnknown
+                ? 'Spec (unknown)'
+                : (() => {
+                    const specParts = vm.specId.split('+');
+                    return specParts.length === 3 
+                      ? `${specParts[0]}/${specParts[2]}` 
+                      : vm.specId;
+                  })();
               nodes.push({
                 data: {
                   id: specNodeId,
-                  label: `📐 ${specLabel}`,
+                  label: formatLabel('📐', specText, getMaxCharsPerLine('spec')),
                   type: 'spec',
                   color: GRAPH_CONFIG.nodeColors.spec,
                   fullId: vm.specId,
+                  isUnknown: isUnknown,
                   originalData: { id: vm.specId, type: 'spec' }
                 }
               });
@@ -827,23 +1264,23 @@ export function mciDataToGraph(mciList, namespace) {
             subGroupEdges.specs.add(specNodeId);
           }
 
-          // Collect Image connections for consolidation
-          if (vm.imageId && vm.imageId !== 'unknown') {
-            const imageNodeId = `image-${vm.imageId}`;
+          // Collect Image connections for consolidation (only if image visibility enabled)
+          if (vm.imageId && nodeTypeVisibility.image) {
+            const isUnknown = vm.imageId === 'unknown';
+            const imageNodeId = `image-${vm.imageId}`;  // Shared node for unknown
             
             if (!resourceSet.has(imageNodeId)) {
               resourceSet.add(imageNodeId);
-              imageNodeIds.push(imageNodeId);  // Track for sibling edges
-              const imageLabel = vm.imageId.length > 25 
-                ? vm.imageId.substring(0, 22) + '...' 
-                : vm.imageId;
+              if (!isUnknown) imageNodeIds.push(imageNodeId);  // Track for sibling edges (not for unknown)
+              const imageText = isUnknown ? 'Image (unknown)' : vm.imageId;
               nodes.push({
                 data: {
                   id: imageNodeId,
-                  label: `🖼️ ${imageLabel}`,
+                  label: formatLabel('🖼️', imageText, getMaxCharsPerLine('image')),
                   type: 'image',
                   color: GRAPH_CONFIG.nodeColors.image,
                   fullId: vm.imageId,
+                  isUnknown: isUnknown,
                   originalData: { id: vm.imageId, type: 'image' }
                 }
               });
@@ -852,28 +1289,37 @@ export function mciDataToGraph(mciList, namespace) {
           }
 
           // DataDisk connections - always individual (each VM has its own disks)
-          if (vm.dataDiskIds && Array.isArray(vm.dataDiskIds) && vm.dataDiskIds.length > 0) {
+          // No subgroup/MCI level consolidation - each VM connects directly to its disks
+          if (nodeTypeVisibility.dataDisk && vm.dataDiskIds && Array.isArray(vm.dataDiskIds) && vm.dataDiskIds.length > 0) {
             vm.dataDiskIds.forEach(diskId => {
-              if (!diskId || diskId === 'unknown') return;
+              if (!diskId) return;
               
+              const isUnknown = diskId === 'unknown';
               const diskNodeId = `disk-${diskId}`;
+              
+              // Check if disk exists in namespace-level dataDiskMap
+              const diskData = dataDiskMap.get(diskId);
+              
+              // Create node only if not already created (from namespace-level or previous VM)
               if (!resourceSet.has(diskNodeId)) {
                 resourceSet.add(diskNodeId);
-                const diskParts = diskId.split('-');
-                const diskLabel = diskParts.length > 3 
-                  ? `${diskParts[0]}-${diskParts.slice(-1)}` 
-                  : diskId;
+                const diskText = isUnknown ? 'Disk (unknown)' : diskId;
                 nodes.push({
                   data: {
                     id: diskNodeId,
-                    label: `💾 ${diskLabel}`,
+                    label: formatLabel('💾', diskText, getMaxCharsPerLine('dataDisk')),
+                    parent: nsId,  // DataDisk belongs to namespace
                     type: 'dataDisk',
                     color: GRAPH_CONFIG.nodeColors.dataDisk,
                     fullId: diskId,
-                    originalData: { id: diskId, type: 'dataDisk' }
+                    diskType: diskData?.diskType,
+                    diskSize: diskData?.diskSize,
+                    isUnknown: isUnknown,
+                    originalData: diskData || { id: diskId, type: 'dataDisk' }
                   }
                 });
               }
+              
               edges.push({
                 data: {
                   id: `edge-${vmNodeId}-${diskNodeId}`,
@@ -889,17 +1335,49 @@ export function mciDataToGraph(mciList, namespace) {
         // VMs within SubGroup rely on tiling for compact layout (no invisible edges)
 
         // Check if all VMs in subgroup share the same resources
+        const allVmsShareVNet = subGroupEdges.vNets.size === 1 && vms.every(vm => vm.vNetId || vm.subnetId);
         const allVmsShareSubnet = subGroupEdges.subnets.size === 1 && vms.every(vm => vm.subnetId);
         const allVmsShareSG = subGroupEdges.securityGroups.size > 0 && 
           vms.every(vm => vm.securityGroupIds && vm.securityGroupIds.length > 0);
-        const allVmsShareSSHKey = subGroupEdges.sshKeys.size === 1 && 
-          vms.every(vm => vm.sshKeyId && vm.sshKeyId !== 'unknown');
-        const allVmsShareSpec = subGroupEdges.specs.size === 1 && 
-          vms.every(vm => vm.specId && vm.specId !== 'unknown');
-        const allVmsShareImage = subGroupEdges.images.size === 1 && 
-          vms.every(vm => vm.imageId && vm.imageId !== 'unknown');
+        const allVmsShareSSHKey = subGroupEdges.sshKeys.size === 1 && vms.every(vm => vm.sshKeyId);
+        const allVmsShareSpec = subGroupEdges.specs.size === 1 && vms.every(vm => vm.specId);
+        const allVmsShareImage = subGroupEdges.images.size === 1 && vms.every(vm => vm.imageId);
 
         // Create edges from subgroup if all VMs share the same target, else from individual VMs
+        // VNet edges
+        if (allVmsShareVNet) {
+          subGroupEdges.vNets.forEach(target => mciEdges.vNets.add(target));
+          
+          if (!hasSingleSubGroup) {
+            subGroupEdges.vNets.forEach(target => {
+              edges.push({
+                data: {
+                  id: `edge-${subGroupNodeId}-${target}`,
+                  source: subGroupNodeId,
+                  target: target,
+                  relationship: 'uses'
+                }
+              });
+            });
+          }
+        } else {
+          // Create individual edges from VMs to VNet
+          vms.forEach(vm => {
+            const vmNodeId = `vm-${mci.id}-${vm.id}`;
+            const isVNetUnknown = !vm.vNetId || vm.vNetId === 'unknown';
+            const vnetNodeId = isVNetUnknown ? 'vnet-unknown' : `vnet-${vm.vNetId}`;
+            edges.push({
+              data: {
+                id: `edge-${vmNodeId}-${vnetNodeId}`,
+                source: vmNodeId,
+                target: vnetNodeId,
+                relationship: 'uses'
+              }
+            });
+          });
+        }
+
+        // Subnet edges
         if (allVmsShareSubnet) {
           // Add to MCI-level tracking for further consolidation
           subGroupEdges.subnets.forEach(target => mciEdges.subnets.add(target));
@@ -918,15 +1396,21 @@ export function mciDataToGraph(mciList, namespace) {
             });
           }
         } else {
-          // Create individual edges from VMs
+          // Create individual edges from VMs to Subnet
           vms.forEach(vm => {
             if (vm.subnetId) {
               const vmNodeId = `vm-${mci.id}-${vm.id}`;
+              const isSubnetUnknown = vm.subnetId === 'unknown';
+              const isVNetUnknown = !vm.vNetId || vm.vNetId === 'unknown';
+              const vnetIdForSubnet = isVNetUnknown ? 'unknown' : vm.vNetId;
+              const subnetNodeId = isSubnetUnknown 
+                ? 'subnet-unknown' 
+                : `subnet-${vnetIdForSubnet}-${vm.subnetId}`;
               edges.push({
                 data: {
-                  id: `edge-${vmNodeId}-subnet-${vm.subnetId}`,
+                  id: `edge-${vmNodeId}-${subnetNodeId}`,
                   source: vmNodeId,
-                  target: `subnet-${vm.subnetId}`,
+                  target: subnetNodeId,
                   relationship: 'uses'
                 }
               });
@@ -1082,6 +1566,16 @@ export function mciDataToGraph(mciList, namespace) {
 
       // If single subgroup and all share same resources, create edges from MCI
       if (hasSingleSubGroup) {
+        mciEdges.vNets.forEach(target => {
+          edges.push({
+            data: {
+              id: `edge-${mciId}-${target}`,
+              source: mciId,
+              target: target,
+              relationship: 'uses'
+            }
+          });
+        });
         mciEdges.subnets.forEach(target => {
           edges.push({
             data: {
@@ -1132,6 +1626,7 @@ export function mciDataToGraph(mciList, namespace) {
             }
           });
         });
+        // Note: DataDisk edges are always from individual VMs, not consolidated to MCI level
       }
     }
   });
@@ -1170,6 +1665,20 @@ export function mciDataToGraph(mciList, namespace) {
         source: imageNodeIds[i],
         target: imageNodeIds[i + 1],
         type: 'image-sibling',
+        invisible: true
+      }
+    });
+  }
+
+  // Add invisible edges between CSP nodes to keep them grouped
+  const cspNodeArray = Array.from(cspNodes);
+  for (let i = 0; i < cspNodeArray.length - 1; i++) {
+    edges.push({
+      data: {
+        id: `csp-link-${i}`,
+        source: cspNodeArray[i],
+        target: cspNodeArray[i + 1],
+        type: 'csp-sibling',
         invisible: true
       }
     });
@@ -1263,6 +1772,12 @@ export function runLayout(layoutName = null) {
   }
   
   const layout = cy.layout(options);
+  
+  // Reformat compound node labels after layout completes
+  layout.on('layoutstop', () => {
+    reformatCompoundNodeLabels();
+  });
+  
   layout.run();
 }
 
@@ -1778,6 +2293,82 @@ export function exportGraphAsJson() {
 }
 
 // ============================================================================
+// CSP VISIBILITY TOGGLE
+// ============================================================================
+
+/**
+ * Toggle CSP/Region/Zone nodes visibility
+ * @returns {boolean} - New visibility state
+ */
+/**
+ * Toggle visibility of a specific node type
+ * @param {string} nodeType - The node type to toggle (e.g., 'csp', 'region', 'spec', 'image')
+ * @returns {boolean} - New visibility state
+ */
+export function toggleNodeType(nodeType) {
+  if (!(nodeType in nodeTypeVisibility)) {
+    console.warn(`[ResourceGraph] Unknown node type: ${nodeType}`);
+    return false;
+  }
+  
+  const newState = !nodeTypeVisibility[nodeType];
+  nodeTypeVisibility[nodeType] = newState;
+  
+  const affectedTypes = [nodeType];
+  
+  if (newState) {
+    // Enabling: also enable all parent dependencies
+    const parents = nodeTypeDependencies[nodeType] || [];
+    parents.forEach(parent => {
+      if (!nodeTypeVisibility[parent]) {
+        nodeTypeVisibility[parent] = true;
+        affectedTypes.push(parent);
+      }
+    });
+  } else {
+    // Disabling: also disable all children
+    const children = nodeTypeChildren[nodeType] || [];
+    children.forEach(child => {
+      if (nodeTypeVisibility[child]) {
+        nodeTypeVisibility[child] = false;
+        affectedTypes.push(child);
+      }
+    });
+  }
+  
+  console.log(`[ResourceGraph] ${nodeType} visibility: ${newState ? 'ON' : 'OFF'}${affectedTypes.length > 1 ? ` (also affected: ${affectedTypes.slice(1).join(', ')})` : ''}`);
+  
+  // Force graph refresh with new setting
+  lastDataHash = null;  // Reset hash to force update
+  
+  // Trigger update if we have data
+  const centralData = window.cloudBaristaCentralData;
+  if (centralData && centralData.mciData && currentNamespace) {
+    updateGraph(centralData.mciData, currentNamespace, true, centralData);
+  }
+  
+  // Return both the new state and affected types for UI update
+  return { state: nodeTypeVisibility[nodeType], affectedTypes };
+}
+
+/**
+ * Get visibility state of a specific node type
+ * @param {string} nodeType - The node type to check
+ * @returns {boolean} - Current visibility state
+ */
+export function getNodeTypeVisibility(nodeType) {
+  return nodeTypeVisibility[nodeType] || false;
+}
+
+/**
+ * Get all node type visibility states
+ * @returns {Object} - Copy of nodeTypeVisibility object
+ */
+export function getAllNodeTypeVisibility() {
+  return { ...nodeTypeVisibility };
+}
+
+// ============================================================================
 // GLOBAL EXPORTS (for use from HTML)
 // ============================================================================
 
@@ -1792,7 +2383,10 @@ window.ResourceGraph = {
   runLayout: runLayout,
   exportPng: exportGraphAsPng,
   exportJson: exportGraphAsJson,
-  subscribeToUpdates: subscribeToUpdates
+  subscribeToUpdates: subscribeToUpdates,
+  toggleNodeType: toggleNodeType,
+  getNodeTypeVisibility: getNodeTypeVisibility,
+  getAllNodeTypeVisibility: getAllNodeTypeVisibility
 };
 
 // Auto-subscribe when module loads
