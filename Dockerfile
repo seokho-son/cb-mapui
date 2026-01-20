@@ -31,6 +31,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/img ./dist/img
 COPY --from=builder /app/index.html ./
 COPY --from=builder /app/index.js ./
+COPY --from=builder /app/resource-graph.js ./
 COPY --from=builder /app/favicon.svg ./
 COPY --from=builder /app/redoc-swagger.html ./
 COPY --from=builder /app/swagger.html ./

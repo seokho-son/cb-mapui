@@ -2787,6 +2787,7 @@ window.showAllVms = showAllVms;
 // Resource table management functions
 function updateAllResourceTables() {
   updateVNetTable();
+  updateSubnetTable();
   updateSecurityGroupTable();
   updateSshKeyTable();
   updateK8sClusterTable();
@@ -2796,6 +2797,9 @@ function updateAllResourceTables() {
   updateDataDiskTable();
   updateVpnTable();
 }
+
+// Track selected VNet for subnet filtering
+let selectedVNetId = null;
 
 function updateVNetTable() {
   let centralData = {};
@@ -2824,6 +2828,7 @@ function updateVNetTable() {
   
   vNetData.forEach(vnet => {
     const row = document.createElement('tr');
+    const subnetCount = vnet.subnetInfoList ? vnet.subnetInfoList.length : 0;
     row.innerHTML = `
       <td title="${vnet.id}">${smartTruncate(vnet.id, 'id')}</td>
       <td title="${vnet.name || 'N/A'}">${smartTruncate(vnet.name || 'N/A', 'name')}</td>
@@ -2831,7 +2836,11 @@ function updateVNetTable() {
       <td title="${vnet.connectionConfig?.providerName || 'N/A'}">${smartTruncate(vnet.connectionConfig?.providerName || 'N/A', 'provider')}</td>
       <td title="${vnet.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(vnet.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
       <td title="${vnet.cidrBlock || 'N/A'}">${smartTruncate(vnet.cidrBlock || 'N/A', 'default')}</td>
-      <td>${vnet.subnetInfoList ? vnet.subnetInfoList.length : 0}</td>
+      <td>
+        <a href="#" onclick="showSubnetsForVNet('${vnet.id}'); return false;" class="badge badge-info" style="cursor: pointer;" role="button" aria-label="View subnets for this VNet">
+          ${subnetCount} subnet${subnetCount !== 1 ? 's' : ''}
+        </a>
+      </td>
       <td class="action-buttons">
         <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('vNet', '${vnet.id}')" title="View Details">
           <i class="fas fa-eye"></i>
@@ -2849,6 +2858,120 @@ function updateVNetTable() {
     reinitializeDataTablesIfNeeded();
   }, 100);
 }
+
+// Subnet table functions
+function showSubnetsForVNet(vnetId) {
+  selectedVNetId = vnetId;
+  updateSubnetTable();
+  
+  // Show subnet section and scroll to it
+  const subnetSection = document.getElementById('subnetSection');
+  if (subnetSection) {
+    subnetSection.style.display = 'block';
+    subnetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  
+  // Update selected VNet badge
+  const selectedBadge = document.getElementById('selectedVNetBadge');
+  if (selectedBadge) {
+    selectedBadge.textContent = `VNet: ${smartTruncate(vnetId, 'id')}`;
+    selectedBadge.title = vnetId;
+  }
+}
+
+function showAllSubnets() {
+  selectedVNetId = null;
+  updateSubnetTable();
+  
+  const selectedBadge = document.getElementById('selectedVNetBadge');
+  if (selectedBadge) {
+    selectedBadge.textContent = 'All VNets';
+    selectedBadge.title = '';
+  }
+}
+
+function hideSubnetTable() {
+  const subnetSection = document.getElementById('subnetSection');
+  if (subnetSection) {
+    subnetSection.style.display = 'none';
+  }
+  selectedVNetId = null;
+}
+
+function updateSubnetTable() {
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+  
+  const vNetData = centralData.vNet || [];
+  
+  // Collect all subnets with their parent VNet info
+  let allSubnets = [];
+  vNetData.forEach(vnet => {
+    if (vnet.subnetInfoList && Array.isArray(vnet.subnetInfoList)) {
+      vnet.subnetInfoList.forEach(subnet => {
+        allSubnets.push({
+          ...subnet,
+          vnetId: vnet.id,
+          vnetName: vnet.name
+        });
+      });
+    }
+  });
+  
+  // Filter by selected VNet if applicable
+  const subnetsToShow = selectedVNetId 
+    ? allSubnets.filter(s => s.vnetId === selectedVNetId)
+    : allSubnets;
+  
+  const tableBody = document.getElementById('subnetTableBody');
+  if (!tableBody) return;
+  
+  tableBody.innerHTML = '';
+  
+  // Update count badge
+  const countBadge = document.getElementById('subnetCountBadge');
+  if (countBadge) {
+    countBadge.textContent = subnetsToShow.length;
+  }
+  
+  if (subnetsToShow.length === 0) {
+    tableBody.innerHTML = `
+      <tr>
+        <td colspan="6" class="text-center text-muted">No subnets found</td>
+      </tr>
+    `;
+    return;
+  }
+  
+  subnetsToShow.forEach(subnet => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td title="${subnet.id || 'N/A'}">${smartTruncate(subnet.id || 'N/A', 'id')}</td>
+      <td title="${subnet.name || 'N/A'}">${smartTruncate(subnet.name || 'N/A', 'name')}</td>
+      <td title="${subnet.vnetId}">
+        <a href="#" onclick="showSubnetsForVNet('${subnet.vnetId}'); return false;" style="cursor: pointer;">
+          ${smartTruncate(subnet.vnetId, 'id')}
+        </a>
+      </td>
+      <td>${subnet.ipv4_CIDR || 'N/A'}</td>
+      <td>${subnet.ipv6_CIDR || 'N/A'}</td>
+      <td>${subnet.zone || 'N/A'}</td>
+    `;
+    tableBody.appendChild(row);
+  });
+  
+  // Reinitialize DataTable if needed
+  setTimeout(() => {
+    reinitializeDataTablesIfNeeded();
+  }, 100);
+}
+
+// Export subnet functions to window
+window.showSubnetsForVNet = showSubnetsForVNet;
+window.showAllSubnets = showAllSubnets;
+window.hideSubnetTable = hideSubnetTable;
 
 function updateSecurityGroupTable() {
   let centralData = {};

@@ -1431,6 +1431,42 @@ limitations under the License.
       </div>
     </div>
 
+    <!-- Subnet Table (shows subnets of selected VNet) -->
+    <div class="row" id="subnetSection" style="display: none;">
+      <div class="col-12">
+        <div class="content-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5><i class="fas fa-project-diagram"></i> Subnets <span class="badge badge-info ml-2" id="selectedVNetBadge"></span> <span class="badge badge-secondary ml-2" id="subnetCountBadge">0</span></h5>
+            <div>
+              <button class="btn btn-secondary btn-sm" onclick="showAllSubnets()">
+                <i class="fas fa-list"></i> Show All
+              </button>
+              <button class="btn btn-outline-secondary btn-sm" onclick="hideSubnetTable()">
+                <i class="fas fa-times"></i> Close
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive table-container">
+            <table class="table table-hover" id="subnetTable">
+              <thead>
+                <tr>
+                  <th>Subnet ID</th>
+                  <th>Name</th>
+                  <th>VNet ID</th>
+                  <th>IPv4 CIDR</th>
+                  <th>IPv6 CIDR</th>
+                  <th>Zone</th>
+                </tr>
+              </thead>
+              <tbody id="subnetTableBody">
+                <!-- Data will be populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Security Groups Table -->
     <div class="row" id="securityGroupSection">
       <div class="col-12">
