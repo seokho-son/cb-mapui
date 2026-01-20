@@ -8819,6 +8819,16 @@ async function showScheduleJobManagement() {
         .schedule-compact-form label { display: block; margin: 0 0 3px 0; font-size: 13px; font-weight: 500; }
         .schedule-compact-form .form-control-sm { height: 28px; font-size: 13px; padding: 3px 8px; }
         .schedule-compact-form select.form-control-sm { height: 30px; }
+        .schedule-option-dropdown { position: relative; width: 100%; }
+        .schedule-option-btn { width: 100%; height: 34px; font-size: 14.5px; padding: 4px 10px; padding-right: 36px; text-align: left; background-color: #fff; border: 1px solid #ced4da; border-radius: 0.25rem; cursor: pointer; color: #495057; position: relative; }
+        .schedule-option-btn::after { content: ""; position: absolute; right: 4px; top: 50%; width: 0.45em; height: 0.45em; border-right: 0.16em solid #495057; border-bottom: 0.16em solid #495057; transform: translateY(-65%) rotate(45deg); pointer-events: none; color: #495057; opacity: 0.85; }
+        .schedule-option-btn:hover { background-color: #fff; border-color: #ced4da; }
+        .schedule-option-menu { display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ced4da; border-radius: 0.25rem; margin-top: 2px; max-height: 200px; overflow-y: auto; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .schedule-option-menu.show { display: block; }
+        .schedule-option-item { padding: 6px 10px; cursor: pointer; font-size: 13px; }
+        .schedule-option-item:hover { background-color: #f8f9fa; }
+        .schedule-option-item .form-check { margin-bottom: 0; }
+        .schedule-option-item .form-check-label { cursor: pointer; width: 100%; }
         .schedule-compact-form hr { margin: 12px 0; border-top: 1px solid #dee2e6; }
         .schedule-compact-form .btn { margin: 8px 0; }
         .schedule-compact-form small { font-size: 11px; color: #6c757d; margin-top: 2px; display: block; }
@@ -8860,11 +8870,50 @@ async function showScheduleJobManagement() {
         <div class="form-row">
           <div class="form-col">
             <label>Registration Option</label>
-            <select id="sched-option" class="form-control form-control-sm">
-              <option value="">All Resources</option>
-              <option value="onlyVm">Only VMs</option>
-              <option value="exceptVm">Except VMs</option>
-            </select>
+            <div class="schedule-option-dropdown">
+              <button type="button" class="schedule-option-btn" id="sched-option-btn">
+                <span id="sched-option-text">All Resources</span>
+              </button>
+              <div class="schedule-option-menu" id="sched-option-menu">
+                <div class="schedule-option-item">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="sched-option-all" value="" checked>
+                    <label class="form-check-label" for="sched-option-all">All Resources</label>
+                  </div>
+                </div>
+                <div class="schedule-option-item">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="sched-option-vnet" value="vNet">
+                    <label class="form-check-label" for="sched-option-vnet">vNet</label>
+                  </div>
+                </div>
+                <div class="schedule-option-item">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="sched-option-sg" value="securityGroup">
+                    <label class="form-check-label" for="sched-option-sg">securityGroup</label>
+                  </div>
+                </div>
+                <div class="schedule-option-item">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="sched-option-sshkey" value="sshKey">
+                    <label class="form-check-label" for="sched-option-sshkey">sshKey</label>
+                  </div>
+                </div>
+                <div class="schedule-option-item">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="sched-option-vm" value="vm">
+                    <label class="form-check-label" for="sched-option-vm">vm</label>
+                  </div>
+                </div>
+                <div class="schedule-option-item">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="sched-option-customimage" value="customImage">
+                    <label class="form-check-label" for="sched-option-customimage">customImage</label>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <small>Default : All Resources</small>
           </div>
           <div class="form-col">
             <label>MCI Flag</label>
@@ -8904,6 +8953,92 @@ async function showScheduleJobManagement() {
     didOpen: () => {
       // Enable auto-refresh
       window.scheduleJobAutoRefreshEnabled = true;
+      
+      // Setup dropdown toggle
+      const dropdownBtn = document.getElementById('sched-option-btn');
+      const dropdownMenu = document.getElementById('sched-option-menu');
+      const dropdownText = document.getElementById('sched-option-text');
+      
+      if (dropdownBtn && dropdownMenu) {
+        dropdownBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          dropdownMenu.classList.toggle('show');
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+          if (!dropdownMenu.contains(e.target) && e.target !== dropdownBtn) {
+            dropdownMenu.classList.remove('show');
+          }
+        });
+      }
+      
+      // Function to update button text based on selections
+      const updateDropdownText = () => {
+        const allCheckbox = document.getElementById('sched-option-all');
+        if (allCheckbox && allCheckbox.checked) {
+          dropdownText.textContent = 'All Resources';
+          return;
+        }
+        
+        const selected = [];
+        const checkboxes = [
+          { id: 'sched-option-vnet', label: 'vNet' },
+          { id: 'sched-option-sg', label: 'securityGroup' },
+          { id: 'sched-option-sshkey', label: 'sshKey' },
+          { id: 'sched-option-vm', label: 'vm' },
+          { id: 'sched-option-customimage', label: 'customImage' }
+        ];
+        
+        checkboxes.forEach(cb => {
+          const checkbox = document.getElementById(cb.id);
+          if (checkbox && checkbox.checked) {
+            selected.push(cb.label);
+          }
+        });
+        
+        if (selected.length === 0) {
+          dropdownText.textContent = 'Select options...';
+        } else if (selected.length <= 2) {
+          dropdownText.textContent = selected.join(', ');
+        } else {
+          dropdownText.textContent = `${selected.length} options selected`;
+        }
+      };
+      
+      // Setup checkbox behavior for Registration Option
+      const allCheckbox = document.getElementById('sched-option-all');
+      const resourceCheckboxes = [
+        'sched-option-vnet',
+        'sched-option-sg',
+        'sched-option-sshkey',
+        'sched-option-vm',
+        'sched-option-customimage'
+      ];
+      
+      if (allCheckbox) {
+        allCheckbox.addEventListener('change', function() {
+          if (this.checked) {
+            resourceCheckboxes.forEach(id => {
+              const cb = document.getElementById(id);
+              if (cb) cb.checked = false;
+            });
+          }
+          updateDropdownText();
+        });
+      }
+      
+      resourceCheckboxes.forEach(id => {
+        const cb = document.getElementById(id);
+        if (cb) {
+          cb.addEventListener('change', function() {
+            if (this.checked && allCheckbox) {
+              allCheckbox.checked = false;
+            }
+            updateDropdownText();
+          });
+        }
+      });
       
       // Setup refresh now button
       const refreshBtn = document.getElementById('refreshJobsBtn');
@@ -9041,7 +9176,30 @@ async function createScheduleJobFromModal() {
   const intervalSeconds = parseInt(document.getElementById('sched-interval').value);
   const connectionName = document.getElementById('sched-connection').value;
   const mciNamePrefix = document.getElementById('sched-mciPrefix').value;
-  const option = document.getElementById('sched-option').value;
+  
+  // Get selected options from checkboxes
+  const allCheckbox = document.getElementById('sched-option-all');
+  let option = '';
+  if (allCheckbox && allCheckbox.checked) {
+    option = ''; // All Resources (empty string)
+  } else {
+    const selectedOptions = [];
+    const optionCheckboxes = [
+      { id: 'sched-option-vnet', value: 'vNet' },
+      { id: 'sched-option-sg', value: 'securityGroup' },
+      { id: 'sched-option-sshkey', value: 'sshKey' },
+      { id: 'sched-option-vm', value: 'vm' },
+      { id: 'sched-option-customimage', value: 'customImage' }
+    ];
+    optionCheckboxes.forEach(opt => {
+      const checkbox = document.getElementById(opt.id);
+      if (checkbox && checkbox.checked) {
+        selectedOptions.push(opt.value);
+      }
+    });
+    option = selectedOptions.join(',');
+  }
+  
   const mciFlag = document.getElementById('sched-mciFlag').value;
   
   if (!nsId || !intervalSeconds || intervalSeconds < 10) {
