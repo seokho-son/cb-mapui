@@ -1088,30 +1088,27 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         <!-- ========== RESOURCE GRAPH CONTAINER (Resource Graph Feature) ========== -->
         <div id="resource-graph-container" style="display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; background: #f8f9fa;">
           <!-- Graph Controls (top-right floating) -->
-          <div id="graph-controls" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(255, 255, 255, 0.95); border-radius: 8px; padding: 8px 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 1px solid rgba(0,0,0,0.1); backdrop-filter: blur(10px);">
-            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px;">
-              <button onclick="window.ResourceGraph?.reset()" class="btn btn-sm btn-outline-secondary" title="Reset View" aria-label="Reset view">
+          <div id="graph-controls" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onmouseup="event.stopPropagation()" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(255, 255, 255, 0.95); border-radius: 8px; padding: 4px 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 1px solid rgba(0,0,0,0.1); backdrop-filter: blur(10px);">
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 11px;">
+              <button onclick="window.ResourceGraph?.reset()" class="btn btn-sm btn-outline-secondary" title="Reset View" aria-label="Reset view" style="padding: 2px 6px;">
                 <i class="fas fa-expand"></i>
               </button>
               <div class="btn-group" role="group" aria-label="Layout options">
-                <button onclick="window.ResourceGraph?.runLayout('concentric')" class="btn btn-sm btn-outline-secondary" title="Concentric Layout (Type-based)" aria-label="Concentric layout">
+                <button onclick="window.ResourceGraph?.runLayout('concentric')" class="btn btn-sm btn-outline-secondary" title="Concentric Layout (Type-based)" aria-label="Concentric layout" style="padding: 2px 6px;">
                   <i class="fas fa-circle-notch"></i>
                 </button>
-                <button onclick="window.ResourceGraph?.runLayout('fcose')" class="btn btn-sm btn-outline-secondary" title="Force-Directed Layout" aria-label="Force-directed layout">
+                <button onclick="window.ResourceGraph?.runLayout('fcose')" class="btn btn-sm btn-outline-secondary" title="Force-Directed Layout" aria-label="Force-directed layout" style="padding: 2px 6px;">
                   <i class="fas fa-project-diagram"></i>
                 </button>
               </div>
-              <button onclick="window.ResourceGraph?.exportPng()" class="btn btn-sm btn-outline-info" title="Export as PNG" aria-label="Export as PNG">
+              <button onclick="window.ResourceGraph?.exportPng()" class="btn btn-sm btn-outline-info" title="Export as PNG" aria-label="Export as PNG" style="padding: 2px 6px;">
                 <i class="fas fa-image"></i>
               </button>
-              <span style="color: #6c757d; font-size: 11px; margin-left: 8px;">
-                <i class="fas fa-mouse-pointer"></i> Click: Info | Double-click: Focus | Right-click: Menu
-              </span>
             </div>
           </div>
           <!-- Graph Legend (bottom-left, interactive) -->
-          <div id="graph-legend" style="position: absolute; bottom: 10px; left: 10px; z-index: 1000; background: rgba(255, 255, 255, 0.95); border-radius: 8px; padding: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); font-size: 11px;">
-            <div style="font-weight: bold; margin-bottom: 6px;">Legend <span style="font-weight: normal; color: #888; font-size: 10px;">(click to toggle)</span></div>
+          <!-- Note: onclick stopPropagation prevents click from reaching Cytoscape canvas and triggering resetFocus -->
+          <div id="graph-legend" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onmouseup="event.stopPropagation()" style="position: absolute; bottom: 10px; left: 10px; z-index: 1000; background: rgba(255, 255, 255, 0.95); border-radius: 8px; padding: 6px 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); font-size: 11px;">
             <div style="display: flex; flex-wrap: wrap; gap: 8px;">
               <!-- CSP/Location hierarchy (default OFF) -->
               <span class="legend-item inactive" data-node-type="csp" onclick="toggleLegendItem('csp')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle CSP nodes"><span style="display:inline-block;width:12px;height:12px;background:#ff6b35;border-radius:2px;margin-right:4px;"></span>CSP</span>
@@ -1124,8 +1121,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               <span class="legend-item active" data-node-type="vm" onclick="toggleLegendItem('vm')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle VM nodes (requires SubGroup)"><span style="display:inline-block;width:12px;height:12px;background:#28a745;border-radius:50%;margin-right:4px;"></span>VM</span>
               <span style="color:#ccc;">|</span>
               <!-- Network resources (toggleable, default ON) -->
-              <span class="legend-item active" data-node-type="vnet" onclick="toggleLegendItem('vnet')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle VNet nodes (enables Subnet)"><span style="display:inline-block;width:12px;height:12px;background:#ffc107;transform:rotate(45deg);margin-right:4px;"></span>VNet</span>
-              <span class="legend-item inactive" data-node-type="subnet" onclick="toggleLegendItem('subnet')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle Subnet nodes (requires VNet)"><span style="display:inline-block;width:12px;height:12px;background:#17a2b8;transform:rotate(45deg);margin-right:4px;"></span>Subnet</span>
+              <span class="legend-item active" data-node-type="vnet" onclick="toggleLegendItem('vnet')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle VNet nodes (enables Subnet)"><span style="display:inline-block;width:12px;height:12px;background:#e6a700;transform:rotate(45deg);margin-right:4px;"></span>VNet</span>
+              <span class="legend-item inactive" data-node-type="subnet" onclick="toggleLegendItem('subnet')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle Subnet nodes (requires VNet)"><span style="display:inline-block;width:12px;height:12px;background:#ffc107;transform:rotate(45deg);margin-right:4px;"></span>Subnet</span>
               <span class="legend-item active" data-node-type="securityGroup" onclick="toggleLegendItem('securityGroup')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle SecurityGroup nodes"><span style="display:inline-block;width:12px;height:12px;background:#dc3545;border-radius:2px;margin-right:4px;"></span>SG</span>
               <span class="legend-item active" data-node-type="sshKey" onclick="toggleLegendItem('sshKey')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle SSHKey nodes"><span style="display:inline-block;width:12px;height:12px;background:#6f42c1;border-radius:2px;margin-right:4px;"></span>SSHKey</span>
               <span class="legend-item inactive" data-node-type="dataDisk" onclick="toggleLegendItem('dataDisk')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle DataDisk nodes"><span style="display:inline-block;width:12px;height:12px;background:#20c997;border-radius:3px;margin-right:4px;"></span>Disk</span>
@@ -1133,6 +1130,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               <!-- Spec/Image (default OFF - too many connections) -->
               <span class="legend-item inactive" data-node-type="spec" onclick="toggleLegendItem('spec')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle Spec nodes"><span style="display:inline-block;width:12px;height:12px;background:#e83e8c;border-radius:2px;margin-right:4px;"></span>Spec</span>
               <span class="legend-item inactive" data-node-type="image" onclick="toggleLegendItem('image')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle Image nodes"><span style="display:inline-block;width:12px;height:12px;background:#795548;border-radius:2px;margin-right:4px;"></span>Image</span>
+              <span style="color:#ccc;">|</span>
+              <!-- Unused resources group -->
+              <span class="legend-item active" data-node-type="unusedGroup" onclick="toggleLegendItem('unusedGroup')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle Unused Resources grouping"><span style="display:inline-block;width:12px;height:12px;background:#d5d8dc;border-radius:2px;margin-right:4px;"></span>Unused</span>
             </div>
           </div>
         </div>

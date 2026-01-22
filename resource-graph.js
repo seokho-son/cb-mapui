@@ -32,12 +32,12 @@ const GRAPH_CONFIG = {
   
   // Node colors by resource type
   nodeColors: {
-    namespace: '#6c757d',
+    namespace: '#e8eaed',    // Very light gray - namespace container
     mci: '#007bff',
     subgroup: '#6610f2',   // Indigo - distinct from subnet
-    vm: '#28a745',
-    vnet: '#ffc107',
-    subnet: '#17a2b8',     // Cyan - matches legend
+    vm: '#28a745',         // Green - VM nodes
+    vnet: '#e6a700',       // Dark Gold - parent network
+    subnet: '#ffc107',     // Yellow/Gold - child of vnet
     securityGroup: '#dc3545',
     sshKey: '#6f42c1',
     dataDisk: '#20c997',
@@ -47,7 +47,9 @@ const GRAPH_CONFIG = {
     cspRoot: '#2c3e50',    // Dark blue-gray - CSP container
     csp: '#ff6b35',        // Orange - cloud provider
     region: '#1e90ff',     // DodgerBlue - region
-    zone: '#32cd32'        // LimeGreen - availability zone
+    zone: '#32cd32',       // LimeGreen - availability zone
+    // Unused resources group
+    unusedGroup: '#d5d8dc' // Very light gray - unused resources container
   },
   // Node shapes by resource type
   nodeShapes: {
@@ -149,6 +151,10 @@ let isGraphVisible = false;
 let currentNamespace = null;
 let lastDataHash = null;  // For change detection
 
+// Focus state tracking - preserved across graph updates
+let focusedNodeIds = new Set();  // Set of node IDs that are currently focused
+let isCompactViewActive = false; // Whether compact view is active
+
 // Node type visibility settings (toggled via legend)
 // Some types are disabled by default to reduce visual complexity
 const nodeTypeVisibility = {
@@ -169,7 +175,9 @@ const nodeTypeVisibility = {
   zone: false,
   // Spec/Image (disabled by default - too many connections)
   spec: false,
-  image: false
+  image: false,
+  // Unused resources group (enabled by default)
+  unusedGroup: true
 };
 
 // Hierarchical dependencies: child -> parent chain
@@ -362,6 +370,59 @@ function reformatCompoundNodeLabels() {
 }
 
 /**
+ * Arrange nodes inside "Unused Resources" group in a compact grid layout
+ * Called after main layout completes to organize unused resources neatly
+ */
+function arrangeUnusedResourcesInGrid() {
+  if (!cy) return;
+  
+  // Find all unusedGroup nodes
+  const unusedGroups = cy.nodes('[type="unusedGroup"]');
+  if (unusedGroups.length === 0) return;
+  
+  unusedGroups.forEach(group => {
+    const children = group.children();
+    if (children.length === 0) return;
+    
+    // Get group's current bounding box center
+    const groupBB = group.boundingBox();
+    const centerX = (groupBB.x1 + groupBB.x2) / 2;
+    const centerY = (groupBB.y1 + groupBB.y2) / 2;
+    
+    // Grid configuration
+    const padding = 20;
+    const cellWidth = 120;  // Width per cell
+    const cellHeight = 80;  // Height per cell
+    
+    // Calculate optimal columns (aim for roughly square grid)
+    const numNodes = children.length;
+    const cols = Math.ceil(Math.sqrt(numNodes));
+    const rows = Math.ceil(numNodes / cols);
+    
+    // Calculate grid dimensions
+    const gridWidth = cols * cellWidth;
+    const gridHeight = rows * cellHeight;
+    
+    // Starting position (top-left of grid, centered on group)
+    const startX = centerX - (gridWidth / 2) + (cellWidth / 2);
+    const startY = centerY - (gridHeight / 2) + (cellHeight / 2) + padding; // Extra padding for label
+    
+    // Position each child in grid
+    children.forEach((child, index) => {
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+      
+      const x = startX + (col * cellWidth);
+      const y = startY + (row * cellHeight);
+      
+      child.position({ x, y });
+    });
+    
+    console.debug(`[ResourceGraph] Arranged ${numNodes} unused resources in ${cols}x${rows} grid`);
+  });
+}
+
+/**
  * Generate a simple hash for data comparison
  * @param {*} data - Data to hash
  * @returns {string} - Hash string
@@ -410,7 +471,7 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
           'font-size': '12px',
           'font-weight': 'bold',
           'color': '#fff',
-          'text-outline-color': 'data(color)',
+          'text-outline-color': '#000',  // Black outline for better readability
           'text-outline-width': 2,
           'background-color': 'data(color)',
           'shape': 'round-rectangle',    // Rounded rectangle like GoJS
@@ -429,7 +490,14 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
             const lines = label.split('\n').length;
             return Math.max(36, lines * 16 + 12);  // 16px per line + padding
           },
-          'padding': '6px'
+          'padding': '6px',
+          // Shadow effect using underlay - light from top-left, shadow to bottom-right
+          'underlay-color': '#555',
+          'underlay-opacity': 0.18,
+          'underlay-padding': 2,
+          'underlay-shape': 'round-rectangle',
+          'underlay-offset-x': 4,
+          'underlay-offset-y': 4
         }
       },
       // Compound node (parent) style - manual line breaks for group labels
@@ -439,19 +507,49 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
           'text-valign': 'top',
           'text-halign': 'center',
           'text-wrap': 'wrap',           // Required for \n to work in labels
-          'background-opacity': 0.2,
+          'background-color': 'data(color)',
+          'background-opacity': 0.25,    // Slightly transparent but visible
           'border-width': 2,
           'border-color': 'data(color)',
-          'padding': '20px'
+          'padding': '20px',
+          // Shadow effect for compound nodes - light from top-left, shadow to bottom-right
+          'underlay-color': '#666',
+          'underlay-opacity': 0.15,
+          'underlay-padding': 3,
+          'underlay-shape': 'round-rectangle',
+          'underlay-offset-x': 5,
+          'underlay-offset-y': 5
         }
       },
-      // VNet compound node - ellipse shape to distinguish from MCI/SubGroup
+      // VNet compound node - distinct style
       {
         selector: 'node[type="vnet"]:parent',
         style: {
-          'shape': 'ellipse',
+          'shape': 'round-rectangle',
+          'background-opacity': 0.3,
+          'border-style': 'dashed',
+          'border-width': 3,
+          'underlay-shape': 'round-rectangle'
+        }
+      },
+      // Unused Resources compound node - distinct style
+      {
+        selector: 'node[type="unusedGroup"]',
+        style: {
+          'shape': 'round-rectangle',
+          'background-color': GRAPH_CONFIG.nodeColors.unusedGroup,
           'background-opacity': 0.15,
-          'border-style': 'dashed'
+          'border-style': 'dashed',
+          'border-width': 2,
+          'border-color': GRAPH_CONFIG.nodeColors.unusedGroup,
+          'text-valign': 'top',
+          'text-halign': 'center',
+          'font-weight': 'bold',
+          'padding': '25px',
+          'underlay-color': GRAPH_CONFIG.nodeColors.unusedGroup,
+          'underlay-opacity': 0.1,
+          'underlay-padding': 10,
+          'underlay-shape': 'round-rectangle'
         }
       },
       // Edge style
@@ -500,6 +598,13 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
           'display': 'none'
         }
       },
+      // Type-hidden style for nodes hidden via legend toggle
+      {
+        selector: '.type-hidden',
+        style: {
+          'display': 'none'
+        }
+      },
       // Highlighted edge style for focus view
       {
         selector: 'edge.highlighted-edge',
@@ -511,29 +616,92 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
           'z-index': 999
         }
       },
-      // Status-based VM styles
+      // Status-based text colors for VM and MCI (text-outline stays black for contrast)
+      // Running states - Green
       {
         selector: 'node[status="Running"]',
         style: {
-          'border-width': 3,
-          'border-color': '#28a745',
-          'border-style': 'solid'
+          'color': '#10b981'  // emerald-500
         }
       },
+      // Creating/Starting states - Blue
+      {
+        selector: 'node[status="Creating"]',
+        style: {
+          'color': '#3b82f6'  // blue-500
+        }
+      },
+      {
+        selector: 'node[status="Resuming"]',
+        style: {
+          'color': '#06b6d4'  // cyan-500
+        }
+      },
+      // Preparing states - Orange
+      {
+        selector: 'node[status="Preparing"]',
+        style: {
+          'color': '#f97316'  // orange-500
+        }
+      },
+      {
+        selector: 'node[status="Prepared"]',
+        style: {
+          'color': '#ea580c'  // orange-600
+        }
+      },
+      // Empty state - Gray
+      {
+        selector: 'node[status="Empty"]',
+        style: {
+          'color': '#9ca3af'  // gray-400
+        }
+      },
+      // Suspended states - Amber
       {
         selector: 'node[status="Suspended"]',
         style: {
-          'border-width': 3,
-          'border-color': '#ffc107',
-          'border-style': 'dashed'
+          'color': '#f59e0b'  // amber-500
         }
       },
       {
+        selector: 'node[status="Suspending"]',
+        style: {
+          'color': '#d97706'  // amber-600
+        }
+      },
+      // Rebooting - Purple
+      {
+        selector: 'node[status="Rebooting"]',
+        style: {
+          'color': '#8b5cf6'  // violet-500
+        }
+      },
+      // Terminating/Terminated - Red
+      {
+        selector: 'node[status="Terminating"]',
+        style: {
+          'color': '#ef4444'  // red-500
+        }
+      },
+      {
+        selector: 'node[status="Terminated"]',
+        style: {
+          'color': '#dc2626'  // red-600
+        }
+      },
+      // Failed - Dark red
+      {
         selector: 'node[status="Failed"]',
         style: {
-          'border-width': 3,
-          'border-color': '#dc3545',
-          'border-style': 'dotted'
+          'color': '#b91c1c'  // red-700
+        }
+      },
+      // Undefined - Gray
+      {
+        selector: 'node[status="Undefined"]',
+        style: {
+          'color': '#6b7280'  // gray-500
         }
       },
       // Collapsed node indicator
@@ -584,18 +752,18 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
 function registerGraphEvents() {
   if (!cy) return;
 
-  // Single click - show node info
+  // Single click - focus on neighbors (accumulative selection)
   cy.on('tap', 'node', function(evt) {
     evt.stopPropagation();  // Prevent background click handler
     const node = evt.target;
-    showNodeInfo(node);
+    focusOnNeighbors(node);
   });
 
-  // Double click - focus on neighbors
+  // Double click - show node info popup
   cy.on('dbltap', 'node', function(evt) {
     evt.stopPropagation();  // Prevent background click handler
     const node = evt.target;
-    focusOnNeighbors(node);
+    showNodeInfo(node);
   });
 
   // Right click - context menu
@@ -603,7 +771,11 @@ function registerGraphEvents() {
     evt.preventDefault();
     evt.stopPropagation();  // Prevent background click handler
     const node = evt.target;
-    const position = evt.renderedPosition;
+    // Use browser's mouse position (clientX/clientY) for accurate fixed positioning
+    const position = {
+      x: evt.originalEvent.clientX,
+      y: evt.originalEvent.clientY
+    };
     showContextMenu(node, position);
   });
 
@@ -797,6 +969,7 @@ export function mciDataToGraph(mciList, namespace) {
             id: edgeId,
             source: sourceNodeId,
             target: targetNodeId,
+            type: 'location',  // Mark as location edge for filtering
             relationship: 'hosted-in'
           }
         });
@@ -1693,6 +1866,20 @@ export function mciDataToGraph(mciList, namespace) {
       }
     });
   }
+  
+  // Connect ALL Spec nodes to namespace to keep them near namespace resources
+  // (Spec nodes often have 2+ visible edges, so sibling edges get filtered out)
+  specNodeIds.forEach((specNodeId, idx) => {
+    edges.push({
+      data: {
+        id: `spec-ns-anchor-${idx}`,
+        source: specNodeId,
+        target: nsId,
+        type: 'ns-anchor',
+        invisible: true
+      }
+    });
+  });
 
   // Add invisible edges between Images to keep them grouped
   for (let i = 0; i < imageNodeIds.length - 1; i++) {
@@ -1706,6 +1893,20 @@ export function mciDataToGraph(mciList, namespace) {
       }
     });
   }
+  
+  // Connect ALL Image nodes to namespace to keep them near namespace resources
+  // (Image nodes often have 2+ visible edges, so sibling edges get filtered out)
+  imageNodeIds.forEach((imageNodeId, idx) => {
+    edges.push({
+      data: {
+        id: `image-ns-anchor-${idx}`,
+        source: imageNodeId,
+        target: nsId,
+        type: 'ns-anchor',
+        invisible: true
+      }
+    });
+  });
 
   // Add invisible edges between CSP nodes to keep them grouped
   const cspNodeArray = Array.from(cspNodes);
@@ -1721,7 +1922,175 @@ export function mciDataToGraph(mciList, namespace) {
     });
   }
 
-  return { nodes, edges };
+  // ========== Filter Invisible Sibling Edges ==========
+  // If a node has 2+ visible edges (real relationships), remove its sibling edges
+  // This allows nodes with actual relationships to be positioned by those relationships
+  // while keeping unconnected nodes grouped by type
+  
+  // Count visible edges per node (excluding invisible sibling edges and location edges)
+  const visibleEdgeCount = new Map();
+  const locationEdgeTypes = ['location', 'vm-location', 'vnet-location', 'sg-location', 'sshkey-location', 'disk-location', 'ns-anchor'];
+  
+  edges.forEach(edge => {
+    // Skip invisible edges and location edges (they connect to CSP/Region/Zone which is everywhere)
+    if (edge.data.invisible) return;
+    if (locationEdgeTypes.includes(edge.data.type)) return;
+    
+    const source = edge.data.source;
+    const target = edge.data.target;
+    
+    visibleEdgeCount.set(source, (visibleEdgeCount.get(source) || 0) + 1);
+    visibleEdgeCount.set(target, (visibleEdgeCount.get(target) || 0) + 1);
+  });
+  
+  // Filter out sibling edges for nodes with 2+ visible connections
+  let filteredEdges = edges.filter(edge => {
+    if (!edge.data.invisible) return true;  // Keep all visible edges
+    
+    const source = edge.data.source;
+    const target = edge.data.target;
+    
+    // If either source or target has 2+ visible edges, remove this sibling edge
+    const sourceCount = visibleEdgeCount.get(source) || 0;
+    const targetCount = visibleEdgeCount.get(target) || 0;
+    
+    if (sourceCount >= 2 || targetCount >= 2) {
+      return false;  // Remove this sibling edge
+    }
+    
+    return true;  // Keep sibling edge for nodes with <2 visible connections
+  });
+
+  // ========== Anchor Isolated Groups to Main Cluster ==========
+  // Isolated resource groups (no visible edges) would float away from main cluster.
+  // Connect first node of each isolated group to the most connected node (hub).
+  
+  // Find the hub node (most visible connections, preferring MCI/SubGroup/VM)
+  let hubNodeId = null;
+  let hubConnectionCount = 0;
+  
+  visibleEdgeCount.forEach((count, nodeId) => {
+    if (count > hubConnectionCount) {
+      hubConnectionCount = count;
+      hubNodeId = nodeId;
+    }
+  });
+  
+  // If no hub found (no visible edges at all), use first MCI node as fallback
+  if (!hubNodeId) {
+    const mciNode = nodes.find(n => n.data.type === 'mci');
+    if (mciNode) hubNodeId = mciNode.data.id;
+  }
+  
+  // Resource types that can be isolated
+  const isolatableTypes = ['vnet', 'securityGroup', 'sshKey', 'dataDisk', 'spec', 'image'];
+  
+  if (hubNodeId) {
+    // Group nodes by type and check if they're isolated
+    isolatableTypes.forEach(resType => {
+      const nodesOfType = nodes.filter(n => n.data.type === resType);
+      if (nodesOfType.length === 0) return;
+      
+      // Check if ALL nodes of this type have 0 visible edges (isolated group)
+      const allIsolated = nodesOfType.every(n => (visibleEdgeCount.get(n.data.id) || 0) === 0);
+      
+      if (allIsolated && nodesOfType.length > 0) {
+        // Connect first node of this isolated group to hub with invisible anchor edge
+        const firstNode = nodesOfType[0];
+        filteredEdges.push({
+          data: {
+            id: `anchor-${resType}-to-hub`,
+            source: firstNode.data.id,
+            target: hubNodeId,
+            type: 'anchor',
+            invisible: true
+          }
+        });
+      }
+    });
+  }
+
+  // ========== Group Unused Resources ==========
+  // Find resources not connected to MCI/SubGroup/VM and group them under "Unused Resources"
+  if (nodeTypeVisibility.unusedGroup) {
+    const infraTypes = new Set(['mci', 'subgroup', 'vm']);
+    const resourceTypes = new Set(['vnet', 'subnet', 'securityGroup', 'sshKey', 'dataDisk']);
+    const nodeMap = new Map(nodes.map(n => [n.data.id, n]));
+    
+    // Get all nodes connected to infrastructure via visible, non-location edges
+    const connectedToInfra = new Set();
+    
+    // Helper: recursively collect connected nodes (similar to focusRelated traversal)
+    const collectConnected = (nodeId, visited = new Set()) => {
+      if (visited.has(nodeId)) return;
+      visited.add(nodeId);
+      connectedToInfra.add(nodeId);
+      
+      // Find edges connected to this node
+      filteredEdges.forEach(edge => {
+        if (edge.data.invisible || edge.data.type === 'location') return;
+        
+        let neighborId = null;
+        if (edge.data.source === nodeId) neighborId = edge.data.target;
+        else if (edge.data.target === nodeId) neighborId = edge.data.source;
+        
+        if (neighborId && !visited.has(neighborId)) {
+          const neighborNode = nodeMap.get(neighborId);
+          // Only traverse to resource nodes, not CSP hierarchy
+          if (neighborNode && resourceTypes.has(neighborNode.data.type)) {
+            collectConnected(neighborId, visited);
+          }
+        }
+      });
+      
+      // Also traverse to children (for compound nodes like VNet→Subnet)
+      nodes.forEach(n => {
+        if (n.data.parent === nodeId && !visited.has(n.data.id)) {
+          collectConnected(n.data.id, visited);
+        }
+      });
+    };
+    
+    // Start traversal from all infrastructure nodes
+    nodes.forEach(n => {
+      if (infraTypes.has(n.data.type)) {
+        collectConnected(n.data.id, new Set());
+      }
+    });
+    
+    // Find resource nodes NOT connected to infrastructure (direct children of namespace only)
+    const unusedResources = nodes.filter(n => {
+      if (!resourceTypes.has(n.data.type)) return false;
+      if (connectedToInfra.has(n.data.id)) return false;
+      if (n.data.parent !== nsId) return false;  // Only top-level resources
+      return true;
+    });
+    
+    // Create "Unused Resources" group if there are any
+    if (unusedResources.length > 0) {
+      const unusedGroupId = `unused-resources-${nsId}`;
+      
+      nodes.push({
+        data: {
+          id: unusedGroupId,
+          label: '📦 Unused Resources',
+          parent: nsId,
+          type: 'unusedGroup',
+          color: GRAPH_CONFIG.nodeColors.unusedGroup,
+          originalData: { id: unusedGroupId, type: 'unusedGroup' }
+        }
+      });
+      
+      unusedResources.forEach(n => {
+        n.data.parent = unusedGroupId;
+        n.data.isUnused = true;
+      });
+      
+      console.debug(`[ResourceGraph] Grouped ${unusedResources.length} unused resources`);
+    }
+  }
+
+  return { nodes, edges: filteredEdges };
 }
 
 // ============================================================================
@@ -1736,6 +2105,8 @@ export function mciDataToGraph(mciList, namespace) {
  * @param {Object} centralData - Full central data object for change detection
  */
 export function updateGraph(mciList, namespace, force = false, centralData = null) {
+  console.debug(`[ResourceGraph] updateGraph called: force=${force}, focusedNodeIds=${focusedNodeIds.size}, compact=${isCompactViewActive}`);
+  
   if (!cy) {
     console.warn('[ResourceGraph] Graph not initialized');
     return;
@@ -1760,7 +2131,7 @@ export function updateGraph(mciList, namespace, force = false, centralData = nul
     return;
   }
   
-  console.log(`[ResourceGraph] Data changed (hash: ${lastDataHash?.slice(0,8) || 'null'} -> ${newHash.slice(0,8)}), updating graph...`);
+  console.debug(`[ResourceGraph] Data changed (hash: ${lastDataHash?.slice(0,8) || 'null'} -> ${newHash.slice(0,8)}), updating graph...`);
   lastDataHash = newHash;
 
   currentNamespace = namespace;
@@ -1787,17 +2158,58 @@ export function updateGraph(mciList, namespace, force = false, centralData = nul
     cy.add(validEdges);
   });
 
-  // Run layout
+  // Run layout (will restore focus state after layout completes)
   runLayout();
 
-  console.log(`[ResourceGraph] Updated with ${graphData.nodes.length} nodes, ${validEdges.length} edges (${graphData.edges.length - validEdges.length} skipped)`);
+  console.debug(`[ResourceGraph] Updated with ${graphData.nodes.length} nodes, ${validEdges.length} edges (${graphData.edges.length - validEdges.length} skipped)`);
 }
 
 /**
  * Run the graph layout algorithm
+ * @param {string} layoutName - Layout algorithm name (null for default fcose)
+ * @param {boolean} preserveFocus - Whether to preserve and restore focus state
  */
-export function runLayout(layoutName = null) {
+export function runLayout(layoutName = null, preserveFocus = true) {
   if (!cy) return;
+
+  // Check if we're in focus mode and should preserve it
+  const hasFocusState = preserveFocus && focusedNodeIds.size > 0;
+  const wasCompactView = isCompactViewActive;
+  
+  console.debug(`[ResourceGraph] runLayout called: focusedNodes=${focusedNodeIds.size}, compact=${wasCompactView}, preserve=${preserveFocus}`);
+  
+  // If in focus mode, pre-apply faded/hidden classes BEFORE layout
+  // This prevents the "flash" of full view before focus is restored
+  if (hasFocusState) {
+    // Temporarily store the focus state
+    const savedFocusIds = new Set(focusedNodeIds);
+    
+    console.debug(`[ResourceGraph] Preserving focus for nodes: ${Array.from(savedFocusIds).join(', ')}`);
+    
+    // Re-apply focus immediately (synchronously) to avoid flicker
+    cy.elements().addClass('faded');
+    cy.elements().removeClass('highlighted highlighted-edge');
+    
+    savedFocusIds.forEach(nodeId => {
+      const node = cy.getElementById(nodeId);
+      if (node && node.length > 0) {
+        // Get related elements for this node
+        const related = getRelatedElements(node);
+        related.removeClass('faded');
+        node.addClass('highlighted');
+        console.debug(`[ResourceGraph] Restored focus for ${nodeId}: ${related.length} related elements`);
+      } else {
+        console.debug(`[ResourceGraph] Node ${nodeId} no longer exists`);
+      }
+    });
+    
+    // If compact view was active, hide faded elements before layout
+    if (wasCompactView) {
+      const fadedCount = cy.elements('.faded').length;
+      cy.elements('.faded').addClass('hidden');
+      console.debug(`[ResourceGraph] Applied compact view: ${fadedCount} elements hidden`);
+    }
+  }
 
   let options;
   if (layoutName === 'concentric') {
@@ -1837,11 +2249,19 @@ export function runLayout(layoutName = null) {
     options = { ...GRAPH_CONFIG.layout, name: layoutName };
   }
   
-  const layout = cy.layout(options);
+  // If in compact view, only layout visible elements (exclude hidden and type-hidden)
+  let elementsToLayout = cy.elements().not('.type-hidden');
+  if (wasCompactView) {
+    elementsToLayout = elementsToLayout.not('.hidden');
+  }
+  
+  const layout = elementsToLayout.layout(options);
   
   // Reformat compound node labels after layout completes
   layout.on('layoutstop', () => {
     reformatCompoundNodeLabels();
+    arrangeUnusedResourcesInGrid();
+    // Note: Focus state is pre-applied above, no need to restore again
   });
   
   layout.run();
@@ -1852,25 +2272,32 @@ export function runLayout(layoutName = null) {
 // ============================================================================
 
 /**
- * Focus on a node and highlight its neighbors
+ * Focus on a node and highlight its neighbors (supports accumulative selection)
  * @param {Object} node - Cytoscape node object
+ * @param {boolean} reset - If true, reset previous selection before focusing
  */
-export function focusOnNeighbors(node) {
+export function focusOnNeighbors(node, reset = false) {
   if (!cy) return;
 
-  // If this node is already highlighted, hide faded elements and re-layout
+  // Check if we're in focus mode (some elements are faded)
+  const isInFocusMode = cy.elements('.faded').length > 0;
+  
+  // If this node is already highlighted, remove it from focus (toggle off)
   if (node.hasClass('highlighted')) {
-    // Hide all faded elements (make them invisible)
-    cy.elements('.faded').addClass('hidden');
-    // Re-run layout on visible elements only
-    const visibleElements = cy.elements().not('.hidden');
-    visibleElements.layout({
-      ...GRAPH_CONFIG.layout,
-      fit: true,
-      padding: 50
-    }).run();
+    removeFromFocus(node);
     return;
   }
+  
+  // If reset is requested, clear previous selection first
+  if (reset) {
+    cy.elements().removeClass('faded highlighted highlighted-edge hidden');
+    console.debug('[ResourceGraph] focusedNodeIds.clear() called from focusOnNeighbors(reset=true)');
+    focusedNodeIds.clear();
+  }
+  
+  // Track this node as focused
+  focusedNodeIds.add(node.id());
+  console.debug(`[ResourceGraph] Focus added: ${node.id()}, total focused: ${focusedNodeIds.size}`);
 
   // Helper: Filter out container/hierarchy compound nodes to avoid selecting all children
   // These nodes have many children that shouldn't be auto-included in focus
@@ -1956,33 +2383,75 @@ export function focusOnNeighbors(node) {
     return relatedNodes.contains(source) && relatedNodes.contains(target);
   });
 
-  // Fade all elements first
-  cy.elements().addClass('faded');
-  cy.elements().removeClass('highlighted').removeClass('highlighted-edge');
+  // Check if we're in accumulative mode (already in focus mode, adding more nodes)
+  const accumulativeMode = isInFocusMode && !reset;
   
-  // Highlight related elements
-  related.removeClass('faded');
-  allRelatedEdges.removeClass('faded');
-  node.removeClass('faded').addClass('highlighted');
-  
-  // Highlight edges connected to the selected node, its descendants, and parent (consolidated edges)
-  // Collect parent visible edges for consolidated edge highlighting
-  let parentVisibleEdges = cy.collection();
-  parents.forEach(parent => {
-    parentVisibleEdges = parentVisibleEdges.union(
-      parent.connectedEdges().filter(edge => !edge.data('invisible'))
-    );
-  });
-  
-  // Highlight primary edges (directly connected to selected node or its hierarchy)
-  const highlightEdges = visibleEdges
-    .union(childNeighbors.edges())
-    .union(parentVisibleEdges)
-    .filter(edge => !edge.data('invisible'));
-  highlightEdges.addClass('highlighted-edge');
+  if (accumulativeMode) {
+    // Accumulative mode: keep existing highlighted elements, add new ones
+    // Get currently highlighted nodes to include in fit calculation
+    const previouslyHighlighted = cy.elements('.highlighted').union(cy.elements().not('.faded'));
+    
+    // Highlight new related elements (keep existing highlights)
+    related.removeClass('faded');
+    allRelatedEdges.removeClass('faded');
+    node.removeClass('faded').addClass('highlighted');
+    
+    // Also need to un-fade edges between previously highlighted and newly highlighted nodes
+    const allHighlightedNodes = previouslyHighlighted.nodes().union(relatedNodes);
+    const crossEdges = allHighlightedNodes.connectedEdges().filter(edge => {
+      if (edge.data('invisible')) return false;
+      const source = edge.source();
+      const target = edge.target();
+      return allHighlightedNodes.contains(source) && allHighlightedNodes.contains(target);
+    });
+    crossEdges.removeClass('faded');
+    
+    // Highlight edges for new node
+    let parentVisibleEdges = cy.collection();
+    parents.forEach(parent => {
+      parentVisibleEdges = parentVisibleEdges.union(
+        parent.connectedEdges().filter(edge => !edge.data('invisible'))
+      );
+    });
+    
+    const highlightEdges = visibleEdges
+      .union(childNeighbors.edges())
+      .union(parentVisibleEdges)
+      .filter(edge => !edge.data('invisible'));
+    highlightEdges.addClass('highlighted-edge');
+    
+    // Fit view to all highlighted elements (previous + new)
+    const allVisible = cy.elements().not('.faded');
+    cy.fit(allVisible, 50);
+  } else {
+    // Fresh focus mode: fade all, then highlight selected
+    cy.elements().addClass('faded');
+    cy.elements().removeClass('highlighted').removeClass('highlighted-edge');
+    
+    // Highlight related elements
+    related.removeClass('faded');
+    allRelatedEdges.removeClass('faded');
+    node.removeClass('faded').addClass('highlighted');
+    
+    // Highlight edges connected to the selected node, its descendants, and parent (consolidated edges)
+    // Collect parent visible edges for consolidated edge highlighting
+    let parentVisibleEdges = cy.collection();
+    parents.forEach(parent => {
+      parentVisibleEdges = parentVisibleEdges.union(
+        parent.connectedEdges().filter(edge => !edge.data('invisible'))
+      );
+    });
+    
+    // Highlight primary edges (directly connected to selected node or its hierarchy)
+    const highlightEdges = visibleEdges
+      .union(childNeighbors.edges())
+      .union(parentVisibleEdges)
+      .filter(edge => !edge.data('invisible'));
+    highlightEdges.addClass('highlighted-edge');
 
-  // Fit view to related elements
-  cy.fit(related, 50);
+    // Fit view to related elements
+    cy.fit(related, 50);
+  }
 }
 
 /**
@@ -1991,6 +2460,11 @@ export function focusOnNeighbors(node) {
 export function resetFocus() {
   if (!cy) return;
 
+  // Clear focus tracking
+  console.debug('[ResourceGraph] focusedNodeIds.clear() called from resetFocus()');
+  focusedNodeIds.clear();
+  isCompactViewActive = false;
+
   // Remove all focus-related classes from all elements
   cy.elements().removeClass('faded highlighted highlighted-edge hidden');
   
@@ -1998,6 +2472,234 @@ export function resetFocus() {
   cy.fit(undefined, 30);
   
   console.debug('[ResourceGraph] Focus reset');
+}
+
+/**
+ * Restore focus state after graph update
+ * Re-applies focus to previously focused nodes if they still exist
+ */
+/**
+ * Get all elements related to a node (for focus highlighting)
+ * This is a simplified version of the logic in focusOnNeighbors
+ * @param {Object} node - Cytoscape node object
+ * @returns {Object} - Collection of related elements
+ */
+function getRelatedElements(node) {
+  if (!cy || !node) return cy.collection();
+  
+  // Get neighborhood (connected elements), excluding invisible edges
+  const visibleEdges = node.connectedEdges().filter(edge => !edge.data('invisible'));
+  const visibleNeighborNodes = visibleEdges.connectedNodes();
+  
+  // Include parent and children for compound nodes
+  const parents = node.ancestors();
+  const children = node.descendants();
+  
+  // Get ancestors of all neighbor nodes
+  const neighborAncestors = visibleNeighborNodes.ancestors();
+  
+  // Get neighbors of parent nodes (for consolidated edges)
+  let parentNeighbors = cy.collection();
+  parents.forEach(parent => {
+    const parentVisibleEdges = parent.connectedEdges().filter(edge => !edge.data('invisible'));
+    const parentVisibleNodes = parentVisibleEdges.connectedNodes();
+    parentNeighbors = parentNeighbors.union(parent).union(parentVisibleEdges).union(parentVisibleNodes);
+  });
+  
+  // Get neighbors of child nodes
+  let childNeighbors = cy.collection();
+  children.forEach(child => {
+    const childVisibleEdges = child.connectedEdges().filter(edge => !edge.data('invisible'));
+    const childVisibleNodes = childVisibleEdges.connectedNodes();
+    childNeighbors = childNeighbors.union(childVisibleEdges).union(childVisibleNodes);
+  });
+  
+  // Combine all related elements
+  return node
+    .union(visibleEdges)
+    .union(visibleNeighborNodes)
+    .union(parents)
+    .union(children)
+    .union(neighborAncestors)
+    .union(parentNeighbors)
+    .union(childNeighbors)
+    .union(childNeighbors.nodes().ancestors());
+}
+
+/**
+ * Restore focus state after graph update
+ * Re-applies focus to previously focused nodes if they still exist
+ */
+function restoreFocusState() {
+  if (!cy || focusedNodeIds.size === 0) return;
+  
+  console.debug(`[ResourceGraph] Restoring focus for ${focusedNodeIds.size} nodes`);
+  
+  // Find nodes that still exist in the graph
+  const existingNodes = [];
+  focusedNodeIds.forEach(nodeId => {
+    const node = cy.getElementById(nodeId);
+    if (node && node.length > 0) {
+      existingNodes.push(node);
+    }
+  });
+  
+  // Clear tracking (will be repopulated by focusOnNeighbors)
+  console.debug('[ResourceGraph] focusedNodeIds.clear() called from restoreFocusState()');
+  focusedNodeIds.clear();
+  
+  if (existingNodes.length === 0) {
+    isCompactViewActive = false;
+    return;
+  }
+  
+  // Re-apply focus to existing nodes
+  existingNodes.forEach((node, index) => {
+    focusOnNeighbors(node, index === 0); // Reset on first, accumulate on rest
+  });
+  
+  // Re-apply compact view if it was active
+  if (isCompactViewActive) {
+    const fadedElements = cy.elements('.faded');
+    if (fadedElements.length > 0) {
+      fadedElements.addClass('hidden');
+    }
+  }
+  
+  console.debug(`[ResourceGraph] Focus restored for ${existingNodes.length} nodes`);
+}
+
+/**
+ * Check if focus mode is currently active
+ * @returns {boolean} - True if in focus mode
+ */
+export function isInFocusMode() {
+  return focusedNodeIds.size > 0;
+}
+
+/**
+ * Remove a node from focus (unfocus a highlighted node)
+ * @param {Object} node - Cytoscape node object to remove from focus
+ */
+function removeFromFocus(node) {
+  if (!cy || !node.hasClass('highlighted')) return;
+  
+  // Remove from focus tracking
+  focusedNodeIds.delete(node.id());
+  
+  // Remove highlight from this node
+  node.removeClass('highlighted');
+  
+  // Get all elements that were related to this node
+  const visibleEdges = node.connectedEdges().filter(edge => !edge.data('invisible'));
+  const visibleNeighborNodes = visibleEdges.connectedNodes();
+  const parents = node.ancestors();
+  const children = node.descendants();
+  
+  // Collect all potentially affected elements
+  const affectedElements = node
+    .union(visibleEdges)
+    .union(visibleNeighborNodes)
+    .union(parents)
+    .union(children);
+  
+  // Get remaining highlighted nodes
+  const remainingHighlighted = cy.nodes('.highlighted');
+  
+  // If no highlighted nodes remain, reset focus entirely
+  if (remainingHighlighted.length === 0) {
+    resetFocus();
+    return;
+  }
+  
+  // For each affected element, check if it's still connected to a highlighted node
+  affectedElements.forEach(ele => {
+    if (ele.hasClass('highlighted')) return; // Skip still-highlighted nodes
+    
+    let stillConnected = false;
+    
+    if (ele.isNode()) {
+      // Check if this node is connected to any remaining highlighted node
+      remainingHighlighted.forEach(highlightedNode => {
+        // Direct connection
+        if (ele.edgesWith(highlightedNode).filter(e => !e.data('invisible')).length > 0) {
+          stillConnected = true;
+        }
+        // Is ancestor/descendant of highlighted node
+        if (highlightedNode.ancestors().contains(ele) || highlightedNode.descendants().contains(ele)) {
+          stillConnected = true;
+        }
+        // Is neighbor of highlighted node
+        const highlightedNeighbors = highlightedNode.connectedEdges().filter(e => !e.data('invisible')).connectedNodes();
+        if (highlightedNeighbors.contains(ele)) {
+          stillConnected = true;
+        }
+        // Check ancestors of neighbors
+        if (highlightedNeighbors.ancestors().contains(ele)) {
+          stillConnected = true;
+        }
+      });
+    } else if (ele.isEdge()) {
+      // Edge: check if both source and target are still visible (not faded)
+      const source = ele.source();
+      const target = ele.target();
+      stillConnected = !source.hasClass('faded') && !target.hasClass('faded');
+    }
+    
+    if (!stillConnected) {
+      ele.addClass('faded');
+      ele.removeClass('highlighted-edge');
+    }
+  });
+  
+  // Update edges: fade edges where either endpoint is now faded
+  cy.edges().forEach(edge => {
+    if (edge.data('invisible')) return;
+    const source = edge.source();
+    const target = edge.target();
+    if (source.hasClass('faded') || target.hasClass('faded')) {
+      edge.addClass('faded');
+      edge.removeClass('highlighted-edge');
+    }
+  });
+  
+  // Fit view to remaining visible elements
+  const visibleElements = cy.elements().not('.faded');
+  if (visibleElements.length > 0) {
+    cy.fit(visibleElements, 50);
+  }
+  
+  console.debug('[ResourceGraph] Node removed from focus:', node.id());
+}
+
+/**
+ * Compact view - hide faded elements and re-layout
+ */
+export function compactFocusView() {
+  if (!cy) return;
+  
+  const fadedElements = cy.elements('.faded');
+  if (fadedElements.length === 0) {
+    console.debug('[ResourceGraph] No faded elements to hide');
+    return;
+  }
+  
+  // Mark compact view as active
+  isCompactViewActive = true;
+  console.debug(`[ResourceGraph] Compact view activated. focusedNodeIds: ${focusedNodeIds.size}, faded: ${fadedElements.length}`);
+  
+  // Hide all faded elements
+  fadedElements.addClass('hidden');
+  
+  // Re-run layout on visible elements only (don't trigger focus restore)
+  const visibleElements = cy.elements().not('.hidden');
+  visibleElements.layout({
+    ...GRAPH_CONFIG.layout,
+    fit: true,
+    padding: 50
+  }).run();
+  
+  console.debug('[ResourceGraph] Compact view applied');
 }
 
 // ============================================================================
@@ -2010,13 +2712,16 @@ export function resetFocus() {
  * @param {Object} node - Cytoscape node object
  */
 function showNodeInfo(node) {
+  // Hide tooltip before showing Swal modal
+  hideTooltip();
+  
   try {
     const data = node.data();
     const originalData = data.originalData || {};
     const type = data.type || 'unknown';
     const label = data.label || data.id || 'Unknown';
 
-    console.log('[ResourceGraph] showNodeInfo called for:', type, label);
+    console.debug('[ResourceGraph] showNodeInfo called for:', type, label);
 
     // Build summary content for quick overview
     let summaryContent = buildSummaryContent(type, originalData, data);
@@ -2037,15 +2742,11 @@ function showNodeInfo(node) {
         showDenyButton: hasJsonFormatter && Object.keys(originalData).length > 0,
         denyButtonText: '📋 Full JSON',
         denyButtonColor: '#6c757d',
-        showCancelButton: true,
-        cancelButtonText: '🎯 Focus Related',
+        showCancelButton: false,
         confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#28a745',
         width: '500px'
       }).then((result) => {
-        if (result.dismiss === Swal.DismissReason.cancel) {
-          focusOnNeighbors(node);
-        } else if (result.isDenied) {
+        if (result.isDenied) {
           showFullJsonDetails(type, originalData, data);
         }
       });
@@ -2308,8 +3009,10 @@ function showContextMenu(node, position) {
 
   const menuItems = [
     { label: '🔍 View Details', action: () => showNodeInfo(node) },
-    { label: '🎯 Focus Related', action: () => focusOnNeighbors(node) },
-    { label: '📊 Reset View', action: () => resetFocus() }
+    { label: '🪢 Focus Related', action: () => focusOnNeighbors(node, true) },
+    { label: '🎯 Compact View', action: () => compactFocusView() },
+    { label: '↩️ Reset View', action: () => resetFocus() },
+    { label: '✖️ Cancel', action: () => hideContextMenu() }
   ];
 
   // Type-specific menu items
@@ -2326,8 +3029,8 @@ function showContextMenu(node, position) {
   contextMenuElement.id = 'resource-graph-context-menu';
   contextMenuElement.style.cssText = `
     position: fixed;
-    left: ${position.x}px;
-    top: ${position.y}px;
+    left: -9999px;
+    top: -9999px;
     background: white;
     border: 1px solid #ccc;
     border-radius: 6px;
@@ -2356,6 +3059,31 @@ function showContextMenu(node, position) {
   });
 
   document.body.appendChild(contextMenuElement);
+
+  // Measure menu size and adjust position to stay within viewport
+  const menuRect = contextMenuElement.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  
+  let finalX = position.x + 8;
+  let finalY = position.y;
+  
+  // If menu would overflow right edge, show to the left of cursor
+  if (finalX + menuRect.width > viewportWidth) {
+    finalX = position.x - menuRect.width - 8;
+  }
+  
+  // If menu would overflow bottom edge, show above cursor
+  if (finalY + menuRect.height > viewportHeight) {
+    finalY = viewportHeight - menuRect.height - 8;
+  }
+  
+  // Ensure menu doesn't go off left or top edge
+  if (finalX < 0) finalX = 8;
+  if (finalY < 0) finalY = 8;
+  
+  contextMenuElement.style.left = `${finalX}px`;
+  contextMenuElement.style.top = `${finalY}px`;
 
   // Close menu on outside click (remove any existing listener first)
   document.removeEventListener('click', hideContextMenu);
@@ -2429,6 +3157,11 @@ let tooltipElement = null;
 
 function showTooltip(node, position) {
   hideTooltip();
+
+  // Don't show tooltip if Swal modal is open
+  if (Swal && Swal.isVisible && Swal.isVisible()) {
+    return;
+  }
 
   const data = node.data();
   const type = data.type;
@@ -2509,7 +3242,15 @@ export function showResourceGraph() {
     setTimeout(() => {
       if (cy) {
         cy.resize();
-        cy.fit(undefined, 30);
+        // If in focus/compact mode, fit only visible elements
+        if (focusedNodeIds.size > 0) {
+          const visibleElements = cy.elements().not('.hidden').not('.faded');
+          if (visibleElements.length > 0) {
+            cy.fit(visibleElements, 30);
+          }
+        } else {
+          cy.fit(undefined, 30);
+        }
         // Limit zoom level after fit (prevent over-zoom on few nodes)
         if (cy.zoom() > GRAPH_CONFIG.zoom.postFitMax) {
           cy.zoom(GRAPH_CONFIG.zoom.postFitMax);
@@ -2628,6 +3369,8 @@ export function exportGraphAsJson() {
  * @returns {boolean} - New visibility state
  */
 export function toggleNodeType(nodeType) {
+  console.log(`[ResourceGraph] toggleNodeType called: ${nodeType}, current focusedNodeIds: ${focusedNodeIds.size}, compact: ${isCompactViewActive}`);
+  
   if (!(nodeType in nodeTypeVisibility)) {
     console.warn(`[ResourceGraph] Unknown node type: ${nodeType}`);
     return { state: false, affectedTypes: [] };
@@ -2660,10 +3403,13 @@ export function toggleNodeType(nodeType) {
   
   console.log(`[ResourceGraph] ${nodeType} visibility: ${newState ? 'ON' : 'OFF'}${affectedTypes.length > 1 ? ` (also affected: ${affectedTypes.slice(1).join(', ')})` : ''}`);
   
-  // Force graph refresh with new setting
+  // For visibility toggle, we need to regenerate the graph because:
+  // - When enabling: nodes don't exist yet (filtered out in mciDataToGraph)
+  // - When disabling: we could hide with CSS, but regenerating is simpler and consistent
+  // 
+  // The key is to preserve focus state through the regeneration
   lastDataHash = null;  // Reset hash to force update
   
-  // Trigger update if we have data
   const centralData = window.cloudBaristaCentralData;
   if (centralData && centralData.mciData && currentNamespace) {
     updateGraph(centralData.mciData, currentNamespace, true, centralData);

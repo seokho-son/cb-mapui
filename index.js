@@ -14117,8 +14117,8 @@ function loadK8sClusterData() {
     timeout: 10000,
   }).then((res) => {
     var obj = res.data;
-    console.log('K8s cluster API response:', obj);
-    console.log('K8s cluster API response structure:', JSON.stringify(obj, null, 2));
+    // console.log('K8s cluster API response:', obj);
+    // console.log('K8s cluster API response structure:', JSON.stringify(obj, null, 2));
     
     // Update central data store - handle both response formats
     let k8sClusterData = [];
@@ -14220,11 +14220,11 @@ function loadK8sClusterData() {
       map.render();
     }
     
-    console.log('K8s cluster data loaded successfully:', k8sClusterData.length, 'clusters');
+    // console.log('K8s cluster data loaded successfully:', k8sClusterData.length, 'clusters');
   })
     .catch(function (error) {
-      console.log("k8sCluster API error:", error);
-      console.log("Keeping existing K8s cluster data to preserve user experience");
+      // console.log("k8sCluster API error:", error);
+      // console.log("Keeping existing K8s cluster data to preserve user experience");
       
       // Update API status to error but don't clear existing data
       window.cloudBaristaCentralData.apiStatus.k8sCluster = 'error';
