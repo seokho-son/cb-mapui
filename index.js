@@ -766,6 +766,7 @@ function showMciContextMenu(pixel, mciInfo) {
         <button onclick="getAccessInfo(); Swal.close();" class="btn btn-success btn-context">🔑 Access Info</button>
 
         <button onclick="executeRemoteCmd(); Swal.close();" class="btn btn-warning btn-context">💻 Remote Cmd</button>
+        <button onclick="showTaskManagementModal(); Swal.close();" class="btn btn-warning btn-context">📋 Cmd Status</button>
         <button onclick="transferFileToMci(); Swal.close();" class="btn btn-warning btn-context">📁 File Transfer</button>
         <button onclick="document.querySelector('.save-file').click(); Swal.close();" class="btn btn-warning btn-context">💾 Download Key</button>
 
@@ -775,7 +776,7 @@ function showMciContextMenu(pixel, mciInfo) {
 
         <button onclick="scaleOutMciFromContext('` + mciInfo.name + `'); Swal.close();" class="btn btn-primary btn-context">⬆️ Scale Out</button>
 
-        <button onclick="executeAction('delete'); Swal.close();" class="btn btn-danger btn-context" style="grid-column: span 2;">🗑️ Delete MCI</button>
+        <button onclick="executeAction('delete'); Swal.close();" class="btn btn-danger btn-context">🗑️ Delete MCI</button>
       </div>
     `,
     showConfirmButton: false,
@@ -10765,7 +10766,7 @@ window.loadPredefinedScript = function () {
 };
 
 
-function executeRemoteCmd() {
+async function executeRemoteCmd() {
   var config = getConfig(); var hostname = config.hostname;
   var port = config.port;
   var username = config.username;
@@ -10779,19 +10780,38 @@ function executeRemoteCmd() {
     errorAlert("Please select a namespace first");
     return;
   }
-  if (!mciid) {
-    errorAlert("Please select an MCI first");
+
+  // Fetch MCI list for selector
+  let mciListOptions = [];
+  try {
+    const mciListUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
+    const mciRes = await axios.get(mciListUrl, {
+      auth: { username: username, password: password }
+    });
+    if (mciRes.data.output && mciRes.data.output.length > 0) {
+      mciListOptions = mciRes.data.output;
+    }
+  } catch (err) {
+    console.error("Failed to fetch MCI list:", err);
+  }
+
+  if (mciListOptions.length === 0) {
+    errorAlert("No MCI available. Please create an MCI first.");
     return;
   }
+
+  // Build MCI selector options HTML
+  const mciOptionsHtml = mciListOptions.map(m => 
+    `<option value="${m}" ${m === mciid ? 'selected' : ''}>${m}</option>`
+  ).join('');
 
   let cmdCount = 3; // Initial number of textboxes
   var spinnerId = "";
 
     console.log(
-      "Forward remote ssh command to MCI:" + mciid
+      "Opening remote command dialog (context MCI: " + mciid + ")"
     );
 
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}`;
     var cmd = [];
 
     Swal.fire({
@@ -10799,6 +10819,13 @@ function executeRemoteCmd() {
       width: 900,
       html: `
       <div id="dynamicContainer" style="text-align: left;">
+        <p><font size=4><b>[Select MCI]</b></font></p>
+        <div style="margin-bottom: 15px;">
+          <select id="mciSelector" style="width: 75%; padding: 5px;">
+            ${mciOptionsHtml}
+          </select>
+        </div>
+
         <p><font size=4><b>[Commands]</b></font></p>
         <div id="cmdContainer" style="margin-bottom: 20px;">
           <div id="cmdDiv1" class="cmdRow">
@@ -10848,19 +10875,25 @@ function executeRemoteCmd() {
           </div>
         </div>
 
+        <p><font size=4><b>[Timeout (minutes)]</b></font></p>
+        <div style="margin-bottom: 15px;">
+          <input type="number" id="timeoutMinutes" style="width: 120px; padding: 5px;" value="30" min="1" max="120">
+          <span style="font-size: 0.8em; color: #666; margin-left: 5px;">min: 1, max: 120, default: 30</span>
+        </div>
+
         <p><font size=4><b>[Select target]</b></font></p>
         <div style="display: flex; align-items: center;">
           <div style="margin-right: 10px;">
             <input type="radio" id="mciOption" name="selectOption" value="MCI" checked>
-            <label for="mciOption">MCI: <span style="color:blue;">${mciid}</span></label>
+            <label for="mciOption">MCI (all VMs)</label>
           </div>
           <div style="margin-right: 10px;">
-            <input type="radio" id="subGroupOption" name="selectOption" value="SubGroup">
-            <label for="subGroupOption">SUBGROUP: <span style="color:green;">${subgroupid}</span></label>
+            <input type="radio" id="subGroupOption" name="selectOption" value="SubGroup" ${subgroupid ? '' : 'disabled'}>
+            <label for="subGroupOption">SUBGROUP: <span style="color:green;">${subgroupid || 'N/A'}</span></label>
           </div>
           <div>
-            <input type="radio" id="vmOption" name="selectOption" value="VM">
-            <label for="vmOption">VM: <span style="color:red;">${vmid}</span></label>
+            <input type="radio" id="vmOption" name="selectOption" value="VM" ${vmid ? '' : 'disabled'}>
+            <label for="vmOption">VM: <span style="color:red;">${vmid || 'N/A'}</span></label>
           </div>
         </div>
 
@@ -10870,6 +10903,12 @@ function executeRemoteCmd() {
           <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
             ex: Optional: set targets by the label (ex: role=worker,env=production,sys.id=g1-2)
           </div>
+        </div>
+
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
+          <button type="button" onclick="showTaskManagementModal()" style="background-color: #6c757d; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">
+            📋 View Running Tasks
+          </button>
         </div>
 
       </div>`,
@@ -10912,24 +10951,30 @@ function executeRemoteCmd() {
             commands.push(cmd);
           }
         }
-        return commands;
+        const selectedMci = document.getElementById("mciSelector").value;
+        const timeout = parseInt(document.getElementById("timeoutMinutes").value) || 30;
+        return { commands, selectedMci, timeout };
       },
     }).then((result) => {
       // result.value is false if result.isDenied or another key such as result.isDismissed
-      if (result.value) {
+      if (result.value && result.value.commands && result.value.commands.length > 0) {
+        const selectedMciId = result.value.selectedMci;
+        // Validate timeout is within allowed range (1-120 minutes)
+        const timeoutMinutes = Math.max(1, Math.min(120, parseInt(result.value.timeout, 10) || 30));
+        
         // Handle radio button value
         const radioValue = Swal.getPopup().querySelector(
           'input[name="selectOption"]:checked'
         ).value;
         if (radioValue === "MCI") {
-          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}`;
-          console.log("Performing tasks for MCI");
+          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${selectedMciId}`;
+          console.log("Performing remote command for MCI:", selectedMciId);
         } else if (radioValue === "SubGroup") {
-          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}?subGroupId=${subgroupid}`;
-          console.log("Performing tasks for SubGroup");
+          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${selectedMciId}?subGroupId=${encodeURIComponent(subgroupid)}`;
+          console.log("Performing remote command for SubGroup:", subgroupid, "in MCI:", selectedMciId);
         } else if (radioValue === "VM") {
-          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}?vmId=${vmid}`;
-          console.log("Performing tasks for VM");
+          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${selectedMciId}?vmId=${encodeURIComponent(vmid)}`;
+          console.log("Performing remote command for VM:", vmid, "in MCI:", selectedMciId);
         }
 
         // Get label selector value and add to URL if provided
@@ -10939,18 +10984,19 @@ function executeRemoteCmd() {
           console.log("Added labelSelector:", labelSelector);
         }
 
-        cmd = result.value;
+        cmd = result.value.commands;
         console.log(cmd.join(", "));
 
         var commandReqTmp = {
           command: cmd,
+          timeoutMinutes: timeoutMinutes,
         };
 
         var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
 
-        spinnerId = addSpinnerTask("Remote command to " + mciid);
+        spinnerId = addSpinnerTask("Remote command to " + selectedMciId);
 
-        var requestId = generateRandomRequestId("cmd-" + mciid + "-", 10);
+        var requestId = generateRandomRequestId("cmd-" + selectedMciId + "-", 10);
         addRequestIdToSelect(requestId);
 
         axios({
@@ -11018,7 +11064,7 @@ function executeRemoteCmd() {
 window.executeRemoteCmd = executeRemoteCmd;
 
 // Function for transferFileToMci by remoteCmd button item
-function transferFileToMci() {
+async function transferFileToMci() {
   var config = getConfig(); var hostname = config.hostname;
   var port = config.port;
   var username = config.username;
@@ -11032,12 +11078,32 @@ function transferFileToMci() {
     errorAlert("Please select a namespace first");
     return;
   }
-  if (!mciid) {
-    errorAlert("Please select an MCI first");
+
+  // Fetch MCI list for selector
+  let mciListOptions = [];
+  try {
+    const mciListUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
+    const mciRes = await axios.get(mciListUrl, {
+      auth: { username: username, password: password }
+    });
+    if (mciRes.data.output && mciRes.data.output.length > 0) {
+      mciListOptions = mciRes.data.output;
+    }
+  } catch (err) {
+    console.error("Failed to fetch MCI list:", err);
+  }
+
+  if (mciListOptions.length === 0) {
+    errorAlert("No MCI available. Please create an MCI first.");
     return;
   }
 
-  console.log("[Transfer file to MCI:" + mciid + "]\n");
+  // Build MCI selector options HTML
+  const mciOptionsHtml = mciListOptions.map(m => 
+    `<option value="${m}" ${m === mciid ? 'selected' : ''}>${m}</option>`
+  ).join('');
+
+  console.log("Opening file transfer dialog (context MCI: " + mciid + ")");
 
     // Swal popup for selecting file and target path
     Swal.fire({
@@ -11045,6 +11111,13 @@ function transferFileToMci() {
       width: 900,
       html:
         `<div style="text-align: left; padding: 10px;">
+        <p><font size=4><b>Select MCI</b></font></p>
+        <div style="display: flex; justify-content: flex-start; margin-bottom: 20px;">
+            <select id="mciSelector" style="width: 75%; padding: 5px;">
+              ${mciOptionsHtml}
+            </select>
+        </div>
+
         <p><font size=4><b>Select File to Transfer</b></font></p>
         <div style="display: flex; justify-content: flex-start; margin-bottom: 20px;">
             <input type="file" id="fileInput" style="width: 300px; padding: 5px;" />
@@ -11059,15 +11132,15 @@ function transferFileToMci() {
         <div style="display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 20px; margin-bottom: 10px;">
             <div>
                 <input type="radio" id="mciOption" name="selectOption" value="MCI" checked>
-                <label for="mciOption">MCI: <span style="color:blue;">${mciid}</span></label>
+                <label for="mciOption">MCI (all VMs)</label>
             </div>
             <div>
-                <input type="radio" id="subGroupOption" name="selectOption" value="SubGroup">
-                <label for="subGroupOption">SUBGROUP: <span style="color:green;">${subgroupid}</span></label>
+                <input type="radio" id="subGroupOption" name="selectOption" value="SubGroup" ${subgroupid ? '' : 'disabled'}>
+                <label for="subGroupOption">SUBGROUP: <span style="color:green;">${subgroupid || 'N/A'}</span></label>
             </div>
             <div>
-                <input type="radio" id="vmOption" name="selectOption" value="VM">
-                <label for="vmOption">VM: <span style="color:red;">${vmid}</span></label>
+                <input type="radio" id="vmOption" name="selectOption" value="VM" ${vmid ? '' : 'disabled'}>
+                <label for="vmOption">VM: <span style="color:red;">${vmid || 'N/A'}</span></label>
             </div>
         </div>
         </div>`,
@@ -11082,6 +11155,7 @@ function transferFileToMci() {
         // Get the file and target path from the input fields
         const fileInput = document.getElementById("fileInput");
         const targetPath = document.getElementById("targetPathInput").value;
+        const selectedMci = document.getElementById("mciSelector").value;
 
         // Check if a file is selected
         if (!fileInput.files[0]) {
@@ -11093,20 +11167,26 @@ function transferFileToMci() {
         return {
           file: fileInput.files[0],
           targetPath: targetPath,
+          selectedMci: selectedMci,
         };
       },
     }).then((result) => {
       if (result.value) {
         const file = result.value.file;
         const targetPath = result.value.targetPath;
+        const selectedMciId = result.value.selectedMci;
 
         // Handle radio button value
         const radioValue = Swal.getPopup().querySelector('input[name="selectOption"]:checked').value;
-        let url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/transferFile/mci/${mciid}`;
+        let url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/transferFile/mci/${selectedMciId}`;
         if (radioValue === "SubGroup") {
-          url += `?subGroupId=${subgroupid}`;
+          url += `?subGroupId=${encodeURIComponent(subgroupid)}`;
+          console.log("Transferring file to SubGroup:", subgroupid, "in MCI:", selectedMciId);
         } else if (radioValue === "VM") {
-          url += `?vmId=${vmid}`;
+          url += `?vmId=${encodeURIComponent(vmid)}`;
+          console.log("Transferring file to VM:", vmid, "in MCI:", selectedMciId);
+        } else {
+          console.log("Transferring file to MCI:", selectedMciId);
         }
 
         // Prepare the formData to transfer the file
@@ -11140,7 +11220,7 @@ function transferFileToMci() {
               title: 'File transferred',
               text: `The file "${file.name}" was transferred successfully.`,
             });
-            console.log(`[Complete: File transfer to MCI ${mciid}]\n`);
+            console.log(`[Complete: File transfer to MCI ${selectedMciId}]\n`);
             displayJsonData(res.data, typeInfo);
           })
           .catch((error) => {
@@ -14968,3 +15048,483 @@ window.createVmSnapshotFromModal = createVmSnapshotFromModal;
 window.loadCustomImagesInModal = loadCustomImagesInModal;
 window.viewCustomImageDetails = viewCustomImageDetails;
 window.deleteCustomImageFromModal = deleteCustomImageFromModal;
+
+// ==========================================
+// Task Management Functions
+// ==========================================
+
+// Global variables for task auto-refresh
+window.taskAutoRefreshEnabled = false;
+window.taskAutoRefreshInterval = null;
+window.taskLastData = null; // Store last task data to prevent unnecessary re-renders
+
+// Load task list and update the modal content
+async function loadTaskListInModal(namespace, mciid) {
+  var config = getConfig();
+  var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
+
+  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}/task`;
+
+  try {
+    const res = await axios.get(url, {
+      auth: { username: username, password: password }
+    });
+
+    const tasks = res.data.tasks || [];
+    
+    // Check if data has changed (to avoid unnecessary re-render)
+    const currentDataStr = JSON.stringify(tasks);
+    if (window.taskLastData === currentDataStr) {
+      // Only update the last refresh time
+      const lastRefreshEl = document.getElementById('taskLastRefreshTime');
+      if (lastRefreshEl) {
+        lastRefreshEl.textContent = `Last refresh: ${new Date().toLocaleTimeString('en-US', { hour12: false })}`;
+      }
+      return;
+    }
+    window.taskLastData = currentDataStr;
+    
+    // Sort tasks: active tasks first (Handling, Queued), then by startedAt descending
+    const sortedTasks = [...tasks].sort((a, b) => {
+      const aActive = ['handling', 'queued'].includes((a.status || '').toLowerCase());
+      const bActive = ['handling', 'queued'].includes((b.status || '').toLowerCase());
+      if (aActive && !bActive) return -1;
+      if (!aActive && bActive) return 1;
+      // Both same priority, sort by startedAt descending (newest first)
+      return new Date(b.startedAt || 0) - new Date(a.startedAt || 0);
+    });
+
+    let tasksHtml = '';
+    if (sortedTasks.length === 0) {
+      tasksHtml = '<p style="text-align: center; color: #666;">No command execution history</p>';
+    } else {
+      tasksHtml = `
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          <thead>
+            <tr style="background-color: #f2f2f2;">
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Command</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">MCI / VM</th>
+              <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd;">Status</th>
+              <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd;">Started At</th>
+              <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd;">Duration</th>
+              <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      
+      sortedTasks.forEach(task => {
+        // Status uses CommandExecutionStatus: Queued, Handling, Completed, Failed, Timeout, Cancelled, Interrupted
+        const statusLower = (task.status || '').toLowerCase();
+        let statusColor, statusIcon;
+        switch (statusLower) {
+          case 'handling':
+            statusColor = '#28a745'; // Green
+            statusIcon = '⏳';
+            break;
+          case 'queued':
+            statusColor = '#6c757d'; // Gray
+            statusIcon = '⏸️';
+            break;
+          case 'completed':
+            statusColor = '#17a2b8'; // Cyan
+            statusIcon = '✅';
+            break;
+          case 'cancelled':
+            statusColor = '#ffc107'; // Yellow
+            statusIcon = '⚠️';
+            break;
+          case 'interrupted':
+            statusColor = '#fd7e14'; // Orange
+            statusIcon = '🔄';
+            break;
+          case 'failed':
+            statusColor = '#dc3545'; // Red
+            statusIcon = '❌';
+            break;
+          case 'timeout':
+            statusColor = '#dc3545'; // Red
+            statusIcon = '⏰';
+            break;
+          default:
+            statusColor = '#6c757d'; // Gray
+            statusIcon = '❓';
+            break;
+        }
+        
+        // Format command - show truncated command with tooltip
+        const cmdArray = task.command || [];
+        const cmdText = Array.isArray(cmdArray) ? cmdArray.join(' ') : String(cmdArray);
+        const cmdTruncated = cmdText.length > 40 ? cmdText.substring(0, 40) + '...' : cmdText;
+        const cmdEscaped = cmdText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        // Also escape cmdTruncated for HTML content
+        const cmdTruncatedEscaped = cmdTruncated.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        
+        // Format target - show VM info
+        let targetText = task.vmId || 'N/A';
+        if (task.mciId && task.vmId) {
+          targetText = `${task.mciId} / ${task.vmId}`;
+        } else if (task.mciId) {
+          targetText = task.mciId;
+        }
+        // Escape for HTML content
+        const targetTextEscaped = targetText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        
+        // Started At: format the start time for display
+        let startedAtText = '-';
+        let startedAtFull = '';
+        if (task.startedAt) {
+          const startDate = new Date(task.startedAt);
+          if (!isNaN(startDate.getTime())) {
+            // Short format for table (HH:MM:SS) - use en-US locale for consistency
+            startedAtText = startDate.toLocaleTimeString('en-US', { hour12: false });
+            // Full format for tooltip
+            startedAtFull = startDate.toLocaleString('en-US');
+          }
+        }
+        
+        // Duration: show elapsed time or calculate from start time for running tasks
+        let durationText = '-';
+        let durationTooltip = '';
+        if (task.elapsedSeconds && task.elapsedSeconds > 0) {
+          // Use provided elapsed time (for completed tasks)
+          const totalSecs = task.elapsedSeconds;
+          const mins = Math.floor(totalSecs / 60);
+          const secs = totalSecs % 60;
+          durationText = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+          durationTooltip = `Elapsed: ${totalSecs} seconds`;
+        } else if (task.startedAt && (statusLower === 'handling' || statusLower === 'queued')) {
+          // Calculate elapsed time for running tasks
+          const startDate = new Date(task.startedAt);
+          if (!isNaN(startDate.getTime())) {
+            const now = new Date();
+            const elapsedMs = now - startDate;
+            const totalSecs = Math.floor(elapsedMs / 1000);
+            const mins = Math.floor(totalSecs / 60);
+            const secs = totalSecs % 60;
+            durationText = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+            durationTooltip = `Running since ${startedAtFull}`;
+          }
+        }
+        
+        // End time for tooltip
+        const endTime = task.completedAt ? new Date(task.completedAt).toLocaleString('en-US') : '';
+        if (endTime) {
+          durationTooltip = `Started: ${startedAtFull}\nEnded: ${endTime}`;
+        }
+        
+        // Can cancel if task is actively running (Handling or Queued)
+        const canCancel = statusLower === 'handling' || statusLower === 'queued';
+        
+        // Escape taskId, nsId, mciId for safe use in data attributes
+        const taskIdEscaped = (task.taskId || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+        const nsIdEscaped = (task.nsId || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+        const mciIdEscaped = (task.mciId || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+        const statusEscaped = (task.status || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        
+        tasksHtml += `
+          <tr style="border-bottom: 1px solid #eee; ${canCancel ? 'background-color: #f8fff8;' : ''}">
+            <td style="padding: 8px; max-width: 200px;" title="${cmdEscaped}">
+              <code style="font-size: 12px; background: #f4f4f4; padding: 2px 5px; border-radius: 3px;">${cmdTruncatedEscaped}</code>
+            </td>
+            <td style="padding: 8px; font-size: 12px;">${targetTextEscaped}</td>
+            <td style="padding: 8px; text-align: center;">
+              <span title="${statusEscaped}" style="font-size: 16px;">${statusIcon}</span>
+              <div style="font-size: 10px; color: ${statusColor}; font-weight: bold;">${statusEscaped}</div>
+            </td>
+            <td style="padding: 8px; text-align: center;" title="${startedAtFull}">
+              <span style="font-size: 11px; color: #666;">${startedAtText}</span>
+            </td>
+            <td style="padding: 8px; text-align: center;" title="${durationTooltip}">
+              <span style="font-size: 12px;">${durationText}</span>
+            </td>
+            <td style="padding: 8px; text-align: center;">
+              ${canCancel ? 
+                `<button class="task-cancel-btn" data-task-id="${taskIdEscaped}" data-ns-id="${nsIdEscaped}" data-mci-id="${mciIdEscaped}"
+                  style="background-color: #dc3545; color: white; border: none; padding: 4px 12px; border-radius: 3px; cursor: pointer; font-size: 12px;">
+                  Cancel
+                </button>` : 
+                '<span style="color: #ccc; font-size: 11px;">-</span>'
+              }
+            </td>
+          </tr>
+        `;
+      });
+      
+      tasksHtml += '</tbody></table>';
+    }
+
+    // Update the container
+    const container = document.getElementById('taskListContainer');
+    if (container) {
+      container.innerHTML = tasksHtml;
+      
+      // Attach event listeners to cancel buttons (safer than inline onclick with interpolated values)
+      container.querySelectorAll('.task-cancel-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const taskId = this.dataset.taskId;
+          const nsId = this.dataset.nsId;
+          const mciId = this.dataset.mciId;
+          cancelTaskFromModal(taskId, nsId, mciId);
+        });
+      });
+    }
+
+    // Update active task count in title
+    const activeTasks = sortedTasks.filter(t => ['handling', 'queued'].includes((t.status || '').toLowerCase()));
+    const activeCountEl = document.getElementById('taskActiveCount');
+    if (activeCountEl) {
+      activeCountEl.innerHTML = activeTasks.length > 0 
+        ? `<span style="font-size: 14px; color: #28a745;">(${activeTasks.length} active)</span>`
+        : '';
+    }
+
+    // Update last refresh time
+    const lastRefreshEl = document.getElementById('taskLastRefreshTime');
+    if (lastRefreshEl) {
+      lastRefreshEl.textContent = `Last refresh: ${new Date().toLocaleTimeString('en-US', { hour12: false })}`;
+    }
+
+  } catch (error) {
+    console.error("Failed to fetch tasks:", error);
+    const container = document.getElementById('taskListContainer');
+    if (container) {
+      container.innerHTML = `<p style="text-align: center; color: #dc3545;">Failed to load tasks: ${error.message}</p>`;
+    }
+  }
+}
+
+// Show Task Management Modal
+async function showTaskManagementModal() {
+  var config = getConfig();
+  var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
+  var namespace = namespaceElement.value;
+  var mciid = getSelectedMciId();
+
+  if (!namespace) {
+    Swal.fire({
+      icon: 'info',
+      title: 'Select Namespace',
+      text: 'Please select a namespace first.',
+      confirmButtonColor: '#3085d6'
+    });
+    return;
+  }
+
+  // Fetch MCI list for selector
+  let mciListOptions = [];
+  try {
+    const mciListUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
+    const mciRes = await axios.get(mciListUrl, {
+      auth: { username: username, password: password }
+    });
+    if (mciRes.data.output && mciRes.data.output.length > 0) {
+      mciListOptions = mciRes.data.output;
+    }
+  } catch (err) {
+    console.error("Failed to fetch MCI list:", err);
+  }
+
+  if (mciListOptions.length === 0) {
+    Swal.fire({
+      icon: 'info',
+      title: 'No MCI Available',
+      text: 'No MCI available in this namespace. Please create an MCI first.',
+      confirmButtonColor: '#3085d6'
+    });
+    return;
+  }
+
+  // If no MCI selected, use the first one from the list
+  if (!mciid) {
+    mciid = mciListOptions[0];
+  }
+
+  // Build MCI selector options HTML
+  const mciOptionsHtml = mciListOptions.map(m => 
+    `<option value="${m}" ${m === mciid ? 'selected' : ''}>${m}</option>`
+  ).join('');
+
+  Swal.fire({
+    title: `<span>📋 Command Execution History</span> <span id="taskActiveCount"></span>`,
+    html: `
+      <div style="text-align: left;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <label style="font-weight: bold; margin: 0;">MCI:</label>
+            <select id="taskMciSelector" style="padding: 5px; min-width: 200px;">
+              ${mciOptionsHtml}
+            </select>
+          </div>
+          <div>
+            <button id="taskRefreshNowBtn" class="btn btn-info btn-sm" style="margin-right: 5px;">🔄 Refresh Now</button>
+            <button id="taskToggleAutoRefreshBtn" class="btn btn-success btn-sm">⏸️ Pause Auto-refresh</button>
+          </div>
+        </div>
+        <div style="font-size: 11px; color: #6c757d; margin-bottom: 8px;">
+          <span id="taskAutoRefreshStatus">🟢 Auto-refreshing every 3 seconds</span> | 
+          <span id="taskLastRefreshTime">Last refresh: -</span>
+        </div>
+        <div id="taskListContainer" style="max-height: 400px; overflow-y: auto;">
+          <p class="text-muted" style="text-align: center;">Loading tasks...</p>
+        </div>
+      </div>
+    `,
+    width: '1000px',
+    showCancelButton: false,
+    confirmButtonText: '❌ Close',
+    didOpen: async () => {
+      // Store context for access from modal functions
+      window.currentTaskNamespace = namespace;
+      window.currentTaskMciId = mciid;
+      
+      // Auto-refresh setup
+      window.taskAutoRefreshEnabled = true;
+      window.taskAutoRefreshInterval = null;
+      window.taskLastData = null; // Reset cached data
+      
+      // MCI selector change handler
+      const mciSelector = document.getElementById('taskMciSelector');
+      if (mciSelector) {
+        mciSelector.addEventListener('change', function() {
+          window.currentTaskMciId = this.value;
+          window.taskLastData = null; // Force refresh on MCI change
+          loadTaskListInModal(window.currentTaskNamespace, window.currentTaskMciId);
+        });
+      }
+      
+      // Setup refresh now button event listener
+      const refreshNowBtn = document.getElementById('taskRefreshNowBtn');
+      if (refreshNowBtn) {
+        refreshNowBtn.addEventListener('click', function() {
+          window.taskLastData = null; // Force refresh
+          loadTaskListInModal(window.currentTaskNamespace, window.currentTaskMciId);
+        });
+      }
+      
+      // Setup toggle button event listener
+      const toggleBtn = document.getElementById('taskToggleAutoRefreshBtn');
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', function() {
+          window.taskAutoRefreshEnabled = !window.taskAutoRefreshEnabled;
+          
+          const status = document.getElementById('taskAutoRefreshStatus');
+          
+          if (window.taskAutoRefreshEnabled) {
+            this.innerHTML = '⏸️ Pause Auto-refresh';
+            this.className = 'btn btn-success btn-sm';
+            if (status) status.innerHTML = '🟢 Auto-refreshing every 3 seconds';
+          } else {
+            this.innerHTML = '▶️ Resume Auto-refresh';
+            this.className = 'btn btn-warning btn-sm';
+            if (status) status.innerHTML = '🔴 Auto-refresh paused';
+          }
+        });
+      }
+      
+      // Initial load with slight delay to ensure DOM is ready
+      setTimeout(() => {
+        loadTaskListInModal(window.currentTaskNamespace, window.currentTaskMciId);
+      }, 100);
+      
+      // Clear any existing interval before creating a new one (prevent memory leaks)
+      if (window.taskAutoRefreshInterval) {
+        clearInterval(window.taskAutoRefreshInterval);
+      }
+      
+      // Start auto-refresh timer (3 seconds for tasks - faster than snapshots)
+      window.taskAutoRefreshInterval = setInterval(() => {
+        if (window.taskAutoRefreshEnabled) {
+          loadTaskListInModal(window.currentTaskNamespace, window.currentTaskMciId);
+        }
+      }, 3000); // 3 seconds
+    },
+    willClose: () => {
+      // Cleanup: clear auto-refresh timer when modal closes
+      if (window.taskAutoRefreshInterval) {
+        clearInterval(window.taskAutoRefreshInterval);
+        window.taskAutoRefreshInterval = null;
+      }
+      window.taskAutoRefreshEnabled = false;
+      window.taskLastData = null;
+    }
+  });
+}
+window.showTaskManagementModal = showTaskManagementModal;
+
+// Cancel a specific task from the modal
+async function cancelTaskFromModal(taskId, nsId, mciId) {
+  var config = getConfig();
+  var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
+
+  // nsId and mciId are required (passed from task data)
+  if (!nsId || !mciId || nsId === 'undefined' || mciId === 'undefined') {
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'Missing namespace or MCI information for this task.',
+      confirmButtonColor: '#3085d6'
+    });
+    return;
+  }
+
+  const url = `http://${hostname}:${port}/tumblebug/ns/${nsId}/cmd/mci/${mciId}/task/${taskId}/cancel`;
+
+  const result = await Swal.fire({
+    title: 'Cancel Task?',
+    text: `Are you sure you want to cancel task "${taskId.substring(0, 20)}..."?`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#dc3545',
+    cancelButtonColor: '#6c757d',
+    confirmButtonText: 'Yes, cancel it!',
+    cancelButtonText: 'No'
+  });
+
+  if (!result.isConfirmed) return;
+
+  try {
+    await axios.post(url, {}, {
+      auth: { username: username, password: password }
+    });
+
+    // Show brief success toast
+    Swal.fire({
+      icon: 'success',
+      title: 'Task Cancelled',
+      text: 'The task has been cancelled successfully.',
+      timer: 1500,
+      showConfirmButton: false,
+      toast: true,
+      position: 'top-end'
+    });
+    
+    // Force refresh the task list immediately
+    window.taskLastData = null;
+    if (window.currentTaskNamespace && window.currentTaskMciId) {
+      loadTaskListInModal(window.currentTaskNamespace, window.currentTaskMciId);
+    }
+
+  } catch (error) {
+    console.error("Failed to cancel task:", error);
+    Swal.fire({
+      icon: 'error',
+      title: 'Failed to Cancel',
+      text: error.response?.data?.message || error.message,
+      toast: true,
+      position: 'top-end',
+      timer: 3000,
+      showConfirmButton: false
+    });
+  }
+}
+window.cancelTaskFromModal = cancelTaskFromModal;
