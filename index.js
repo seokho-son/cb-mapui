@@ -8779,6 +8779,10 @@ async function showScheduleJobManagement() {
   const username = config.username;
   const password = config.password;
 
+  // Generate random MCI name prefix (reg-xxxx)
+  const randomSuffix = Math.random().toString(36).substring(2, 6).toLowerCase();
+  const defaultMciPrefix = `reg-${randomSuffix}`;
+
   // Load namespace and connection lists
   let namespaces = [];
   let connections = [];
@@ -8807,8 +8811,32 @@ async function showScheduleJobManagement() {
     return `<option value="${nsId}">${nsId}</option>`;
   }).join('');
 
-  const connOptions = '<option value="">All Connections</option>' + 
-    connections.map(conn => 
+  // Build provider/region/zone hierarchy
+  const providerMap = {};
+  connections.forEach(conn => {
+    const provider = conn.providerName;
+    const region = conn.regionZoneInfo?.assignedRegion || '';
+    const zone = conn.regionZoneInfo?.assignedZone || '';
+
+    if (!providerMap[provider]) {
+      providerMap[provider] = { regions: {} };
+    }
+    if (region && !providerMap[provider].regions[region]) {
+      providerMap[provider].regions[region] = { zones: [] };
+    }
+    if (zone && !providerMap[provider].regions[region].zones.includes(zone)) {
+      providerMap[provider].regions[region].zones.push(zone);
+    }
+  });
+
+  // Build provider options
+  const providerOptions = '<option value="">All Providers</option>' +
+    Object.keys(providerMap).sort().map(provider =>
+      `<option value="${provider}">${provider}</option>`
+    ).join('');
+
+  const connOptions = '<option value="">All Connections</option>' +
+    connections.map(conn =>
       `<option value="${conn.configName}">${conn.configName} (${conn.providerName})</option>`
     ).join('');
 
@@ -8844,6 +8872,11 @@ async function showScheduleJobManagement() {
         .job-card-body { font-size: 12px; }
         .job-card-footer { margin-top: 8px; display: flex; gap: 5px; flex-wrap: wrap; }
         .job-card-footer .btn { margin: 0; font-size: 11px; padding: 2px 8px; }
+        .filter-mode-tabs { display: flex; gap: 5px; margin-bottom: 10px; }
+        .filter-mode-tab { flex: 1; padding: 6px; border: 1px solid #dee2e6; border-radius: 4px; text-align: center; cursor: pointer; font-size: 12px; background: #fff; }
+        .filter-mode-tab.active { background: #007bff; color: white; border-color: #007bff; }
+        .filter-mode-content { display: none; }
+        .filter-mode-content.active { display: block; }
       </style>
       <div class="schedule-compact-form">
         <h5>➕ Create New Schedule Job</h5>
@@ -8854,12 +8887,54 @@ async function showScheduleJobManagement() {
               ${nsOptions}
             </select>
           </div>
-          <div class="form-col">
-            <label>Connection Name</label>
-            <select id="sched-connection" class="form-control form-control-sm">
-              ${connOptions}
-            </select>
-            <small>Leave empty for all connections</small>
+        </div>
+
+        <div class="filter-mode-tabs">
+          <div class="filter-mode-tab active" data-mode="hierarchy">
+            🌐 Provider/Region/Zone (Recommended)
+          </div>
+          <div class="filter-mode-tab" data-mode="connection">
+            🔗 Connection Name (Legacy)
+          </div>
+        </div>
+
+        <div id="filter-hierarchy" class="filter-mode-content active">
+          <div class="form-row">
+            <div class="form-col">
+              <label>Provider</label>
+              <select id="sched-provider" class="form-control form-control-sm">
+                ${providerOptions}
+              </select>
+              <small>Leave empty for all providers</small>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-col">
+              <label>Region</label>
+              <select id="sched-region" class="form-control form-control-sm" disabled>
+                <option value="">All Regions</option>
+              </select>
+              <small>Select provider first</small>
+            </div>
+            <div class="form-col">
+              <label>Zone</label>
+              <select id="sched-zone" class="form-control form-control-sm" disabled>
+                <option value="">All Zones</option>
+              </select>
+              <small>Select region first</small>
+            </div>
+          </div>
+        </div>
+
+        <div id="filter-connection" class="filter-mode-content">
+          <div class="form-row">
+            <div class="form-col">
+              <label>Connection Name</label>
+              <select id="sched-connection" class="form-control form-control-sm">
+                ${connOptions}
+              </select>
+              <small>Leave empty for all connections</small>
+            </div>
           </div>
         </div>
         <div class="form-row">
@@ -8870,7 +8945,8 @@ async function showScheduleJobManagement() {
           </div>
           <div class="form-col">
             <label>MCI Name Prefix</label>
-            <input type="text" id="sched-mciPrefix" class="form-control form-control-sm" value="scheduled-mci">
+            <input type="text" id="sched-mciPrefix" class="form-control form-control-sm" value="${defaultMciPrefix}" placeholder="e.g., reg-a3f9">
+            <small>Auto-generated: reg-xxxx</small>
           </div>
         </div>
         <div class="form-row">
@@ -8957,9 +9033,79 @@ async function showScheduleJobManagement() {
     showCancelButton: true,
     cancelButtonText: '❌ Close',
     didOpen: () => {
+      // Store providerMap for later use
+      window.scheduleProviderMap = providerMap;
+
       // Enable auto-refresh
       window.scheduleJobAutoRefreshEnabled = true;
-      
+
+      // Setup filter mode tabs
+      const filterModeTabs = document.querySelectorAll('.filter-mode-tab');
+      const filterModeContents = document.querySelectorAll('.filter-mode-content');
+
+      filterModeTabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+          const mode = this.getAttribute('data-mode');
+
+          // Update tabs
+          filterModeTabs.forEach(t => t.classList.remove('active'));
+          this.classList.add('active');
+
+          // Update content
+          filterModeContents.forEach(content => {
+            content.classList.remove('active');
+          });
+          document.getElementById(`filter-${mode}`).classList.add('active');
+        });
+      });
+
+      // Setup provider/region/zone cascading selects
+      const providerSelect = document.getElementById('sched-provider');
+      const regionSelect = document.getElementById('sched-region');
+      const zoneSelect = document.getElementById('sched-zone');
+
+      if (providerSelect && regionSelect && zoneSelect) {
+        providerSelect.addEventListener('change', function() {
+          const selectedProvider = this.value;
+
+          // Reset and disable region/zone
+          regionSelect.innerHTML = '<option value="">All Regions</option>';
+          regionSelect.disabled = !selectedProvider;
+          zoneSelect.innerHTML = '<option value="">All Zones</option>';
+          zoneSelect.disabled = true;
+
+          if (selectedProvider && providerMap[selectedProvider]) {
+            const regions = Object.keys(providerMap[selectedProvider].regions).sort();
+            regions.forEach(region => {
+              const option = document.createElement('option');
+              option.value = region;
+              option.textContent = region;
+              regionSelect.appendChild(option);
+            });
+          }
+        });
+
+        regionSelect.addEventListener('change', function() {
+          const selectedProvider = providerSelect.value;
+          const selectedRegion = this.value;
+
+          // Reset and disable zone
+          zoneSelect.innerHTML = '<option value="">All Zones</option>';
+          zoneSelect.disabled = !selectedRegion;
+
+          if (selectedProvider && selectedRegion &&
+              providerMap[selectedProvider]?.regions[selectedRegion]) {
+            const zones = providerMap[selectedProvider].regions[selectedRegion].zones.sort();
+            zones.forEach(zone => {
+              const option = document.createElement('option');
+              option.value = zone;
+              option.textContent = zone;
+              zoneSelect.appendChild(option);
+            });
+          }
+        });
+      }
+
       // Setup dropdown toggle
       const dropdownBtn = document.getElementById('sched-option-btn');
       const dropdownMenu = document.getElementById('sched-option-menu');
@@ -9153,7 +9299,15 @@ async function loadScheduleJobsInModal() {
           </div>
           <div class="job-card-body" style="padding: 8px 12px;">
             <div style="font-size: 0.9em; line-height: 1.6;">
-              <strong>NS:</strong> ${job.nsId} | <strong>Conn:</strong> ${job.connectionName || 'All'} | <strong>Interval:</strong> ${job.intervalSeconds}s (${Math.round(job.intervalSeconds/60)}m) | <strong>MCI Prefix:</strong> ${job.mciNamePrefix} | <strong>Stats:</strong> Exec: ${job.executionCount}, Success: <span class="text-success">${job.successCount}</span>, Fail: <span class="text-danger">${job.failureCount}</span> (Consecutive: ${job.consecutiveFailures}) | <strong>Next:</strong> ${new Date(job.nextExecutionAt).toLocaleString()}${job.lastExecutionAt ? ` | <strong>Last:</strong> ${new Date(job.lastExecutionAt).toLocaleString()}` : ''}
+              <strong>NS:</strong> ${job.nsId} |
+              ${job.provider || job.region || job.zone ?
+                `<strong>Filter:</strong> ${job.provider || 'All'}${job.region ? `/${job.region}` : ''}${job.zone ? `/${job.zone}` : ''} | ` :
+                `<strong>Conn:</strong> ${job.connectionName || 'All'} | `
+              }
+              <strong>Interval:</strong> ${job.intervalSeconds}s (${Math.round(job.intervalSeconds/60)}m) |
+              <strong>MCI Prefix:</strong> ${job.mciNamePrefix || '-'} |
+              <strong>Stats:</strong> Exec: ${job.executionCount}, Success: <span class="text-success">${job.successCount}</span>, Fail: <span class="text-danger">${job.failureCount}</span> (Consecutive: ${job.consecutiveFailures}) |
+              <strong>Next:</strong> ${new Date(job.nextExecutionAt).toLocaleString()}${job.lastExecutionAt ? ` | <strong>Last:</strong> ${new Date(job.lastExecutionAt).toLocaleString()}` : ''}
             </div>
           </div>
           <div class="job-card-footer">
@@ -9180,9 +9334,26 @@ async function createScheduleJobFromModal() {
   const config = getConfig();
   const nsId = document.getElementById('sched-nsId').value;
   const intervalSeconds = parseInt(document.getElementById('sched-interval').value);
-  const connectionName = document.getElementById('sched-connection').value;
   const mciNamePrefix = document.getElementById('sched-mciPrefix').value;
-  
+
+  // Determine active filter mode
+  const activeFilterMode = document.querySelector('.filter-mode-tab.active')?.getAttribute('data-mode') || 'hierarchy';
+
+  // Get filter values based on mode
+  let connectionName = '';
+  let provider = '';
+  let region = '';
+  let zone = '';
+
+  if (activeFilterMode === 'connection') {
+    connectionName = document.getElementById('sched-connection')?.value || '';
+  } else {
+    // hierarchy mode
+    provider = document.getElementById('sched-provider')?.value || '';
+    region = document.getElementById('sched-region')?.value || '';
+    zone = document.getElementById('sched-zone')?.value || '';
+  }
+
   // Get selected options from checkboxes
   const allCheckbox = document.getElementById('sched-option-all');
   let option = '';
@@ -9205,26 +9376,34 @@ async function createScheduleJobFromModal() {
     });
     option = selectedOptions.join(',');
   }
-  
+
   const mciFlag = document.getElementById('sched-mciFlag').value;
-  
+
   if (!nsId || !intervalSeconds || intervalSeconds < 10) {
     Swal.fire('❌ Error', 'Please fill required fields correctly (interval min: 10s)', 'error');
     return;
   }
-  
+
   const spinnerId = addSpinnerTask("Creating schedule job");
-  
+
   try {
     const requestBody = {
       jobType: "registerCspResources",
       nsId,
       intervalSeconds,
-      connectionName,
       mciNamePrefix,
       option,
       mciFlag
     };
+
+    // Add filter fields based on mode
+    if (activeFilterMode === 'connection') {
+      if (connectionName) requestBody.connectionName = connectionName;
+    } else {
+      if (provider) requestBody.provider = provider;
+      if (region) requestBody.region = region;
+      if (zone) requestBody.zone = zone;
+    }
     
     const response = await axios.post(
       `http://${config.hostname}:${config.port}/tumblebug/registerCspResources/schedule`,
@@ -9281,8 +9460,15 @@ async function viewJobDetails(jobId) {
           <tr><th style="width: 40%; background-color: #f8f9fa;">Job ID</th><td style="font-family: monospace; font-size: 11px;">${job.jobId}</td></tr>
           <tr><th style="background-color: #f8f9fa;">Job Type</th><td>${job.jobType}</td></tr>
           <tr><th style="background-color: #f8f9fa;">Namespace</th><td><span class="badge badge-info">${job.nsId}</span></td></tr>
-          <tr><th style="background-color: #f8f9fa;">Connection</th><td>${job.connectionName || '<span class="badge badge-secondary">All Connections</span>'}</td></tr>
-          <tr><th style="background-color: #f8f9fa;">MCI Prefix</th><td>${job.mciNamePrefix}</td></tr>
+          ${job.provider || job.region || job.zone ?
+            `<tr><th style="background-color: #f8f9fa;">Target Filter</th><td>
+              <strong>Provider:</strong> ${job.provider || 'All'}<br>
+              <strong>Region:</strong> ${job.region || 'All'}<br>
+              <strong>Zone:</strong> ${job.zone || 'All'}
+            </td></tr>` :
+            `<tr><th style="background-color: #f8f9fa;">Connection</th><td>${job.connectionName || '<span class="badge badge-secondary">All Connections</span>'}</td></tr>`
+          }
+          <tr><th style="background-color: #f8f9fa;">MCI Prefix</th><td>${job.mciNamePrefix || '-'}</td></tr>
           <tr><th style="background-color: #f8f9fa;">Option</th><td>${job.option || 'All Resources'}</td></tr>
           <tr><th style="background-color: #f8f9fa;">MCI Flag</th><td>${job.mciFlag === 'y' ? 'Single MCI' : 'Separate per VM'}</td></tr>
           <tr><th style="background-color: #f8f9fa;">Interval</th><td><strong>${job.intervalSeconds}</strong> seconds (${Math.round(job.intervalSeconds/60)} minutes)</td></tr>
