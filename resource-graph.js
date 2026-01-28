@@ -36,11 +36,13 @@ const GRAPH_CONFIG = {
     mci: '#007bff',
     subgroup: '#6610f2',   // Indigo - distinct from subnet
     vm: '#28a745',         // Green - VM nodes
+    gpu: '#ff6b6b',        // Coral red - GPU/Accelerator (AI workload emphasis)
     vnet: '#e6a700',       // Dark Gold - parent network
     subnet: '#ffc107',     // Yellow/Gold - child of vnet
     securityGroup: '#dc3545',
     sshKey: '#6f42c1',
     dataDisk: '#20c997',
+    customImage: '#9c27b0',  // Purple - custom/snapshot images
     spec: '#e83e8c',
     image: '#795548',
     // CSP hierarchy colors
@@ -57,11 +59,13 @@ const GRAPH_CONFIG = {
     mci: 'round-rectangle',
     subgroup: 'round-rectangle',
     vm: 'ellipse',
+    gpu: 'rhomboid',        // Parallelogram shape - distinct for GPU
     vnet: 'diamond',
     subnet: 'diamond',
     securityGroup: 'hexagon',
     sshKey: 'pentagon',
     dataDisk: 'barrel',
+    customImage: 'octagon',  // Distinct shape for custom images
     spec: 'rectangle',
     image: 'rectangle',
     // CSP hierarchy shapes
@@ -122,11 +126,13 @@ const GRAPH_CONFIG = {
         mci: 4,
         subgroup: 3,
         vm: 2,
+        gpu: 2,   // Same level as VM (attached to VM)
         vnet: 2,
         subnet: 1,
         securityGroup: 1,
         sshKey: 1,
         dataDisk: 1,
+        customImage: 1,
         spec: 0,
         image: 0
       };
@@ -162,12 +168,14 @@ const nodeTypeVisibility = {
   mci: true,
   subgroup: true,
   vm: true,
+  gpu: true,  // GPU nodes attached to VMs (enabled by default for AI workload visibility)
   // Network resources
   vnet: true,
   subnet: false,  // Disabled by default (child of VNet)
   securityGroup: true,
   sshKey: true,
   dataDisk: false,  // Disabled by default
+  customImage: true,  // Custom/snapshot images
   // CSP/Location hierarchy (disabled by default)
   cspRoot: false,
   csp: false,
@@ -189,7 +197,8 @@ const nodeTypeDependencies = {
   csp: ['cspRoot'],
   // Network hierarchy: subnet -> vnet
   subnet: ['vnet'],
-  // Infrastructure hierarchy: vm -> subgroup -> mci
+  // Infrastructure hierarchy: gpu -> vm -> subgroup -> mci
+  gpu: ['vm', 'subgroup', 'mci'],
   vm: ['subgroup', 'mci'],
   subgroup: ['mci']
 };
@@ -201,8 +210,9 @@ const nodeTypeChildren = {
   csp: ['region', 'zone'],
   region: ['zone'],
   vnet: ['subnet'],
-  mci: ['subgroup', 'vm'],
-  subgroup: ['vm']
+  mci: ['subgroup', 'vm', 'gpu'],
+  subgroup: ['vm', 'gpu'],
+  vm: ['gpu']
 };
 
 /**
@@ -224,12 +234,15 @@ function getNodeMaxWidth(type) {
     case 'vm':
     case 'zone':
       return 130;
+    case 'gpu':
+      return 120;  // Compact for GPU info
     case 'vnet':
     case 'subnet':
       return 150;
     case 'securityGroup':
     case 'sshKey':
     case 'dataDisk':
+    case 'customImage':
       return 130;
     case 'spec':
     case 'image':
@@ -1208,6 +1221,58 @@ export function mciDataToGraph(mciList, namespace) {
     });
   }
 
+  // Create CustomImage nodes (bound to namespace)
+  // CustomImage is a user-created snapshot image, different from public CSP images
+  const customImageList = centralData.customImage || [];
+  const customImageNodeIds = [];  // Track for sibling edges
+  
+  // Debug: Log namespace-level customImage list
+  if (customImageList.length > 0) {
+    console.debug(`[ResourceGraph] Namespace has ${customImageList.length} CustomImages:`, customImageList.map(img => img.id));
+  }
+  
+  // Build lookup map for customImage
+  const customImageMap = new Map();
+  customImageList.forEach(img => customImageMap.set(img.id, img));
+  
+  if (nodeTypeVisibility.customImage) {
+    customImageList.forEach(img => {
+      if (resourceSet.has(`customimg-${img.id}`)) return;
+      resourceSet.add(`customimg-${img.id}`);
+      customImageNodeIds.push(`customimg-${img.id}`);  // Track for sibling edges
+      
+      nodes.push({
+        data: {
+          id: `customimg-${img.id}`,
+          label: formatLabel('📷', img.id, getMaxCharsPerLine('customImage')),
+          parent: nsId,
+          type: 'customImage',
+          color: GRAPH_CONFIG.nodeColors.customImage,
+          fullId: img.id,
+          sourceVmId: img.sourceVmId || '',
+          status: img.status || '',
+          originalData: img
+        }
+      });
+      
+      // Create edge to CSP/Region/Zone if location info exists
+      createLocationEdge(`customimg-${img.id}`, img, locationEdgeSet);
+    });
+  }
+
+  // Add invisible edges between CustomImages to keep them grouped
+  for (let i = 0; i < customImageNodeIds.length - 1; i++) {
+    edges.push({
+      data: {
+        id: `customimg-link-${i}`,
+        source: customImageNodeIds[i],
+        target: customImageNodeIds[i + 1],
+        type: 'customImage-sibling',
+        invisible: true
+      }
+    });
+  }
+
   // Return early if no MCI data (but we still show resources)
   if (!mciList || mciList.length === 0) {
     return { nodes, edges };
@@ -1315,20 +1380,73 @@ export function mciDataToGraph(mciList, namespace) {
           
           // VM node - parent is subgroup if visible, otherwise MCI
           const vmParent = nodeTypeVisibility.subgroup ? subGroupNodeId : mciId;
+
+          // Determine VM icon based on GPU/accelerator availability
+          // Note: spec/image fields contain summary info (not specSummary/imageSummary)
+          const vmSpec = vm.spec || vm.specSummary || {};
+          const hasGpu = vmSpec.acceleratorType?.toLowerCase() === 'gpu' ||
+                        vmSpec.acceleratorModel ||
+                        vmSpec.acceleratorCount > 0;
+
+          // VM label: "💻 vm-name" (GPU indicator removed - separate GPU node exists)
+          const vmName = vm.name || vm.id;
+          const vmLabelText = vmName;
+
           nodes.push({
             data: {
               id: vmNodeId,
-              label: formatLabel('💻', vm.name || vm.id, getMaxCharsPerLine('vm')),
+              label: formatLabel('💻', vmLabelText, getMaxCharsPerLine('vm')),
               parent: vmParent,
               type: 'vm',
               status: vm.status,
               color: GRAPH_CONFIG.nodeColors.vm,
               publicIP: vm.publicIP,
               privateIP: vm.privateIP,
+              hasGpu: hasGpu,
               originalData: vm
             }
           });
-          
+
+          // Create GPU node if VM has GPU and gpu visibility is enabled
+          if (hasGpu && nodeTypeVisibility.gpu) {
+            const gpuNodeId = `gpu-${mci.id}-${vm.id}`;
+
+            // GPU label: model name only (details available in View Details)
+            const gpuLabel = vmSpec.acceleratorModel || 'GPU';
+
+            nodes.push({
+              data: {
+                id: gpuNodeId,
+                label: gpuLabel,  // No icon, model + details on separate lines
+                parent: vmParent,  // Same parent as VM (subgroup or MCI)
+                type: 'gpu',
+                color: GRAPH_CONFIG.nodeColors.gpu,
+                acceleratorModel: vmSpec.acceleratorModel,
+                acceleratorCount: vmSpec.acceleratorCount,
+                acceleratorMemoryGB: vmSpec.acceleratorMemoryGB,
+                acceleratorType: vmSpec.acceleratorType,
+                originalData: {
+                  id: gpuNodeId,
+                  type: 'gpu',
+                  vmId: vm.id,
+                  vmName: vm.name,
+                  ...vmSpec
+                }
+              }
+            });
+
+            // Create edge from VM to GPU (tight coupling)
+            edges.push({
+              data: {
+                id: `edge-${vmNodeId}-${gpuNodeId}`,
+                source: vmNodeId,
+                target: gpuNodeId,
+                relationship: 'has-gpu',
+                type: 'gpu-link'  // Mark for special styling if needed
+              }
+            });
+          }
+
           // Create edge to CSP/Region/Zone if location info exists
           createLocationEdge(vmNodeId, vm, locationEdgeSet);
 
@@ -1447,7 +1565,7 @@ export function mciDataToGraph(mciList, namespace) {
           if (vm.specId && nodeTypeVisibility.spec) {
             const isUnknown = vm.specId === 'unknown';
             const specNodeId = `spec-${vm.specId}`;  // Shared node for unknown
-            
+
             if (!resourceSet.has(specNodeId)) {
               resourceSet.add(specNodeId);
               if (!isUnknown) specNodeIds.push(specNodeId);  // Track for sibling edges (not for unknown)
@@ -1455,47 +1573,111 @@ export function mciDataToGraph(mciList, namespace) {
                 ? 'Spec (unknown)'
                 : (() => {
                     const specParts = vm.specId.split('+');
-                    return specParts.length === 3 
-                      ? `${specParts[0]}/${specParts[2]}` 
+                    return specParts.length === 3
+                      ? `${specParts[0]}/${specParts[2]}`
                       : vm.specId;
                   })();
+
+              // Determine icon based on GPU availability
+              // Note: spec field contains summary info (not specSummary)
+              const specData = vm.spec || vm.specSummary || {};
+              const specHasGpu = specData.acceleratorType?.toLowerCase() === 'gpu' ||
+                                specData.acceleratorModel ||
+                                specData.acceleratorCount > 0;
+              const specIcon = specHasGpu ? '📐🧮' : '📐';
+
               nodes.push({
                 data: {
                   id: specNodeId,
-                  label: formatLabel('📐', specText, getMaxCharsPerLine('spec')),
+                  label: formatLabel(specIcon, specText, getMaxCharsPerLine('spec')),
                   type: 'spec',
                   color: GRAPH_CONFIG.nodeColors.spec,
                   fullId: vm.specId,
                   isUnknown: isUnknown,
-                  originalData: { id: vm.specId, type: 'spec' }
+                  hasGpu: specHasGpu,
+                  // Include spec data for detailed view
+                  originalData: {
+                    id: vm.specId,
+                    type: 'spec',
+                    ...specData
+                  }
                 }
               });
             }
             subGroupEdges.specs.add(specNodeId);
           }
 
-          // Collect Image connections for consolidation (only if image visibility enabled)
-          if (vm.imageId && nodeTypeVisibility.image) {
+          // Collect Image connections for consolidation
+          // Note: resourceType can be "image" (public) or "customImage" (user snapshot)
+          if (vm.imageId) {
             const isUnknown = vm.imageId === 'unknown';
-            const imageNodeId = `image-${vm.imageId}`;  // Shared node for unknown
-            
-            if (!resourceSet.has(imageNodeId)) {
-              resourceSet.add(imageNodeId);
-              if (!isUnknown) imageNodeIds.push(imageNodeId);  // Track for sibling edges (not for unknown)
-              const imageText = isUnknown ? 'Image (unknown)' : vm.imageId;
-              nodes.push({
-                data: {
-                  id: imageNodeId,
-                  label: formatLabel('🖼️', imageText, getMaxCharsPerLine('image')),
-                  type: 'image',
-                  color: GRAPH_CONFIG.nodeColors.image,
-                  fullId: vm.imageId,
-                  isUnknown: isUnknown,
-                  originalData: { id: vm.imageId, type: 'image' }
-                }
-              });
+            const imageData = vm.image || vm.imageSummary || {};
+            const isCustomImage = imageData.resourceType === 'customImage';
+
+            // Determine which node type to connect based on resourceType
+            // customImage nodes use 'customimg-' prefix, image nodes use 'image-' prefix
+            if (isCustomImage && nodeTypeVisibility.customImage) {
+              // Connect to customImage node
+              const customImageNodeId = `customimg-${vm.imageId}`;
+
+              // Create customImage node if it doesn't exist (VM references unknown customImage)
+              if (!resourceSet.has(customImageNodeId)) {
+                resourceSet.add(customImageNodeId);
+                customImageNodeIds.push(customImageNodeId);
+
+                const imageLabel = isUnknown
+                  ? 'CustomImage (unknown)'
+                  : (imageData.osDistribution || imageData.osType || vm.imageId);
+
+                nodes.push({
+                  data: {
+                    id: customImageNodeId,
+                    label: formatLabel('📷', imageLabel, getMaxCharsPerLine('customImage')),
+                    parent: nsId,
+                    type: 'customImage',
+                    color: GRAPH_CONFIG.nodeColors.customImage,
+                    fullId: vm.imageId,
+                    isUnknown: isUnknown,
+                    originalData: {
+                      id: vm.imageId,
+                      type: 'customImage',
+                      ...imageData
+                    }
+                  }
+                });
+              }
+              subGroupEdges.images.add(customImageNodeId);
+
+            } else if (nodeTypeVisibility.image) {
+              // Connect to regular image node (public CSP image)
+              const imageNodeId = `image-${vm.imageId}`;
+
+              if (!resourceSet.has(imageNodeId)) {
+                resourceSet.add(imageNodeId);
+                if (!isUnknown) imageNodeIds.push(imageNodeId);
+
+                const imageLabel = isUnknown
+                  ? 'Image (unknown)'
+                  : (imageData.osDistribution || imageData.osType || vm.imageId);
+
+                nodes.push({
+                  data: {
+                    id: imageNodeId,
+                    label: formatLabel('🖼️', imageLabel, getMaxCharsPerLine('image')),
+                    type: 'image',
+                    color: GRAPH_CONFIG.nodeColors.image,
+                    fullId: vm.imageId,
+                    isUnknown: isUnknown,
+                    originalData: {
+                      id: vm.imageId,
+                      type: 'image',
+                      ...imageData
+                    }
+                  }
+                });
+              }
+              subGroupEdges.images.add(imageNodeId);
             }
-            subGroupEdges.images.add(imageNodeId);
           }
 
           // DataDisk connections - always individual (each VM has its own disks)
@@ -1748,14 +1930,29 @@ export function mciDataToGraph(mciList, namespace) {
           vms.forEach(vm => {
             if (vm.imageId && vm.imageId !== 'unknown') {
               const vmNodeId = `vm-${mci.id}-${vm.id}`;
-              edges.push({
-                data: {
-                  id: `edge-${vmNodeId}-image-${vm.imageId}`,
-                  source: vmNodeId,
-                  target: `image-${vm.imageId}`,
-                  relationship: 'based-on'
-                }
-              });
+              const vmImageData = vm.image || vm.imageSummary || {};
+              const isCustomImage = vmImageData.resourceType === 'customImage';
+
+              // Determine target node based on resourceType
+              const targetNodeId = isCustomImage
+                ? `customimg-${vm.imageId}`
+                : `image-${vm.imageId}`;
+
+              // Only create edge if target visibility is enabled
+              const shouldCreateEdge = isCustomImage
+                ? nodeTypeVisibility.customImage
+                : nodeTypeVisibility.image;
+
+              if (shouldCreateEdge) {
+                edges.push({
+                  data: {
+                    id: `edge-${vmNodeId}-${isCustomImage ? 'customimg' : 'image'}-${vm.imageId}`,
+                    source: vmNodeId,
+                    target: targetNodeId,
+                    relationship: 'based-on'
+                  }
+                });
+              }
             }
           });
         }
@@ -2765,6 +2962,46 @@ function showNodeInfo(node) {
 function buildSummaryContent(type, originalData, data) {
   switch (type) {
     case 'vm':
+      // Build Spec Summary section
+      // Note: VM data uses 'spec' field (not 'specSummary')
+      const specInfo = originalData.spec || originalData.specSummary || {};
+      const hasGpuSpec = specInfo.acceleratorType?.toLowerCase() === 'gpu' ||
+                         specInfo.acceleratorModel ||
+                         specInfo.acceleratorCount > 0;
+
+      let specSection = '';
+      if (specInfo.cspSpecName || specInfo.vCPU || specInfo.memoryGiB) {
+        specSection = `
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2);">
+            <p style="margin-bottom: 5px; color: #e83e8c;"><strong>━━━ Spec ━━━</strong></p>
+            ${specInfo.cspSpecName ? `<p>🖥️ <strong>Type:</strong> ${specInfo.cspSpecName}</p>` : ''}
+            ${specInfo.vCPU ? `<p>💻 <strong>vCPU:</strong> ${specInfo.vCPU}</p>` : ''}
+            ${specInfo.memoryGiB ? `<p>🧠 <strong>Memory:</strong> ${specInfo.memoryGiB} GiB</p>` : ''}
+            ${hasGpuSpec ? `
+              <p>🧮 <strong>GPU:</strong> <span style="color: #ff6b6b; font-weight: bold;">${specInfo.acceleratorModel || specInfo.acceleratorType?.toUpperCase() || 'GPU'}</span>
+              ${specInfo.acceleratorCount ? ` (${specInfo.acceleratorCount}x` : ''}${specInfo.acceleratorMemoryGB ? `, ${specInfo.acceleratorMemoryGB}GB)` : specInfo.acceleratorCount ? ')' : ''}</p>
+            ` : ''}
+            ${specInfo.costPerHour ? `<p>💰 <strong>Cost:</strong> $${specInfo.costPerHour}/hr</p>` : ''}
+          </div>
+        `;
+      }
+
+      // Build Image Summary section
+      // Note: VM data uses 'image' field (not 'imageSummary')
+      const imageInfo = originalData.image || originalData.imageSummary || {};
+      let imageSection = '';
+      if (imageInfo.osType || imageInfo.osDistribution || imageInfo.cspImageName) {
+        imageSection = `
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2);">
+            <p style="margin-bottom: 5px; color: #795548;"><strong>━━━ Image ━━━</strong></p>
+            ${imageInfo.osDistribution ? `<p>🖼️ <strong>OS:</strong> ${imageInfo.osDistribution}</p>` :
+              imageInfo.osType ? `<p>🖼️ <strong>OS:</strong> ${imageInfo.osType}</p>` : ''}
+            ${imageInfo.osArchitecture ? `<p>🏗️ <strong>Arch:</strong> ${imageInfo.osArchitecture}</p>` : ''}
+            ${imageInfo.resourceType ? `<p>📦 <strong>Type:</strong> ${imageInfo.resourceType}</p>` : ''}
+          </div>
+        `;
+      }
+
       return `
         <div style="text-align: left;">
           <p><strong>Name:</strong> ${originalData.name || 'N/A'}</p>
@@ -2774,8 +3011,9 @@ function buildSummaryContent(type, originalData, data) {
           <p><strong>Private IP:</strong> ${originalData.privateIP || 'N/A'}</p>
           <p><strong>Region:</strong> ${originalData.region?.Region || 'N/A'}</p>
           <p><strong>Zone:</strong> ${originalData.region?.Zone || 'N/A'}</p>
-          <p><strong>Spec:</strong> ${originalData.cspSpecName || originalData.specId || 'N/A'}</p>
           <p><strong>Connection:</strong> ${originalData.connectionName || 'N/A'}</p>
+          ${specSection}
+          ${imageSection}
         </div>
       `;
 
@@ -2848,6 +3086,73 @@ function buildSummaryContent(type, originalData, data) {
           <p><strong>Type:</strong> ${originalData.diskType || 'N/A'}</p>
           <p><strong>Status:</strong> ${originalData.status || 'N/A'}</p>
           <p><strong>Connection:</strong> ${originalData.connectionName || 'N/A'}</p>
+        </div>
+      `;
+
+    case 'customImage':
+      return `
+        <div style="text-align: left;">
+          <p><strong>ID:</strong> ${originalData.id || 'N/A'}</p>
+          <p>📷 <strong>Type:</strong> Custom Image (VM Snapshot)</p>
+          ${originalData.osDistribution ? `<p>🖼️ <strong>OS:</strong> ${originalData.osDistribution}</p>` :
+            originalData.osType ? `<p>🖼️ <strong>OS:</strong> ${originalData.osType}</p>` : ''}
+          ${originalData.osArchitecture ? `<p>🏗️ <strong>Architecture:</strong> ${originalData.osArchitecture}</p>` : ''}
+          ${originalData.cspImageName ? `<p>☁️ <strong>CSP Image:</strong> ${originalData.cspImageName}</p>` : ''}
+          ${originalData.sourceVmId ? `<p>💻 <strong>Source VM:</strong> ${originalData.sourceVmId}</p>` : ''}
+          ${originalData.status ? `<p>📊 <strong>Status:</strong> ${originalData.status}</p>` : ''}
+          ${originalData.connectionName ? `<p>🔗 <strong>Connection:</strong> ${originalData.connectionName}</p>` : ''}
+        </div>
+      `;
+
+    case 'gpu':
+      return `
+        <div style="text-align: left;">
+          <div style="padding: 10px; background: rgba(255,107,107,0.15); border-radius: 6px; border-left: 4px solid #ff6b6b;">
+            <p style="margin: 0 0 8px 0; color: #ff6b6b; font-size: 1.1em;"><strong>🧮 GPU/Accelerator</strong></p>
+            ${originalData.acceleratorModel ? `<p style="margin: 4px 0;"><strong>Model:</strong> <span style="color: #ff6b6b; font-weight: bold;">${originalData.acceleratorModel}</span></p>` : ''}
+            ${originalData.acceleratorType ? `<p style="margin: 4px 0;"><strong>Type:</strong> ${originalData.acceleratorType.toUpperCase()}</p>` : ''}
+            ${originalData.acceleratorCount ? `<p style="margin: 4px 0;"><strong>Count:</strong> ${originalData.acceleratorCount}</p>` : ''}
+            ${originalData.acceleratorMemoryGB ? `<p style="margin: 4px 0;"><strong>Memory:</strong> ${originalData.acceleratorMemoryGB} GB</p>` : ''}
+          </div>
+          ${originalData.vmName ? `<p style="margin-top: 10px;">💻 <strong>Attached to VM:</strong> ${originalData.vmName}</p>` : ''}
+          ${originalData.cspSpecName ? `<p>🖥️ <strong>Spec:</strong> ${originalData.cspSpecName}</p>` : ''}
+          ${originalData.costPerHour ? `<p>💰 <strong>Cost:</strong> $${originalData.costPerHour}/hr</p>` : ''}
+        </div>
+      `;
+
+    case 'spec':
+      // Check for GPU with case-insensitive comparison
+      const specHasGpuInfo = originalData.acceleratorType?.toLowerCase() === 'gpu' ||
+                             originalData.acceleratorModel ||
+                             originalData.acceleratorCount > 0;
+      return `
+        <div style="text-align: left;">
+          <p><strong>ID:</strong> ${originalData.id || 'N/A'}</p>
+          ${originalData.cspSpecName ? `<p>🖥️ <strong>CSP Spec:</strong> ${originalData.cspSpecName}</p>` : ''}
+          ${originalData.vCPU ? `<p>💻 <strong>vCPU:</strong> ${originalData.vCPU}</p>` : ''}
+          ${originalData.memoryGiB ? `<p>🧠 <strong>Memory:</strong> ${originalData.memoryGiB} GiB</p>` : ''}
+          ${specHasGpuInfo ? `
+            <div style="margin-top: 8px; padding: 8px; background: rgba(255,107,107,0.1); border-radius: 4px; border-left: 3px solid #ff6b6b;">
+              <p style="margin: 0 0 5px 0; color: #ff6b6b;"><strong>🧮 GPU/Accelerator</strong></p>
+              ${originalData.acceleratorModel ? `<p style="margin: 2px 0;">Model: <strong>${originalData.acceleratorModel}</strong></p>` : ''}
+              ${originalData.acceleratorType ? `<p style="margin: 2px 0;">Type: ${originalData.acceleratorType.toUpperCase()}</p>` : ''}
+              ${originalData.acceleratorCount ? `<p style="margin: 2px 0;">Count: ${originalData.acceleratorCount}</p>` : ''}
+              ${originalData.acceleratorMemoryGB ? `<p style="margin: 2px 0;">Memory: ${originalData.acceleratorMemoryGB} GB</p>` : ''}
+            </div>
+          ` : ''}
+          ${originalData.costPerHour ? `<p>💰 <strong>Cost:</strong> $${originalData.costPerHour}/hr</p>` : ''}
+        </div>
+      `;
+
+    case 'image':
+      return `
+        <div style="text-align: left;">
+          <p><strong>ID:</strong> ${originalData.id || 'N/A'}</p>
+          ${originalData.osDistribution ? `<p>🖼️ <strong>OS:</strong> ${originalData.osDistribution}</p>` :
+            originalData.osType ? `<p>🖼️ <strong>OS:</strong> ${originalData.osType}</p>` : ''}
+          ${originalData.osArchitecture ? `<p>🏗️ <strong>Architecture:</strong> ${originalData.osArchitecture}</p>` : ''}
+          ${originalData.resourceType ? `<p>📦 <strong>Resource Type:</strong> ${originalData.resourceType}</p>` : ''}
+          ${originalData.cspImageName ? `<p>☁️ <strong>CSP Image:</strong> ${originalData.cspImageName}</p>` : ''}
         </div>
       `;
 
@@ -2983,11 +3288,13 @@ function getTypeEmoji(type) {
     mci: '🖥️',
     subgroup: '📦',
     vm: '💻',
+    gpu: '🧮',
     vnet: '🌐',
     subnet: '🔀',
     securityGroup: '🛡️',
     sshKey: '🔑',
     dataDisk: '💾',
+    customImage: '📷',
     spec: '📐',
     image: '🖼️'
   };
@@ -3168,12 +3475,29 @@ function showTooltip(node, position) {
   const status = data.status || '';
   const originalData = data.originalData || {};
 
-  let tooltipText = data.label.replace(/^[^\s]+\s/, '');
+  // Remove emoji icon prefix from label (but GPU nodes have no icon)
+  let tooltipText = type === 'gpu'
+    ? data.label
+    : data.label.replace(/^[^\s]+\s/, '');
+
   if (status) {
     tooltipText += ` (${status})`;
   }
   if (type === 'vm' && originalData.publicIP) {
     tooltipText += `\n${originalData.publicIP}`;
+  }
+  // GPU node: show accelerator details in tooltip
+  if (type === 'gpu') {
+    const details = [];
+    if (originalData.acceleratorCount) {
+      details.push(`${originalData.acceleratorCount}x`);
+    }
+    if (originalData.acceleratorMemoryGB) {
+      details.push(`${originalData.acceleratorMemoryGB}GB`);
+    }
+    if (details.length > 0) {
+      tooltipText += `\n(${details.join(', ')})`;
+    }
   }
 
   const container = document.getElementById('resource-graph-container');
