@@ -12731,7 +12731,7 @@ function addNewRuleToSg(sgId, sgName) {
       });
 
       var config = getConfig(); var hostname = config.hostname;
-      var portVal = portElement.value;
+      var portVal = config.port;
       var username = config.username;
       var password = config.password;
       var nsId = namespaceElement.value;
