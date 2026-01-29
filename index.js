@@ -1176,6 +1176,10 @@ function getVmStatusColor(status) {
   else if (status === "Creating" || statusStr.includes("creating")) {
     fillColor = "#3b82f6"; // blue-500 - bright blue for creation progress
   }
+  // Registering state - Teal (registering existing CSP VM)
+  else if (status === "Registering" || statusStr.includes("registering")) {
+    fillColor = "#14b8a6"; // teal-500 - teal for registration progress
+  }
   else if (status === "Resuming" || statusStr.includes("resuming")) {
     fillColor = "#06b6d4"; // cyan-500 - cyan for resuming
   }

@@ -644,6 +644,13 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
           'color': '#3b82f6'  // blue-500
         }
       },
+      // Registering state - Teal (registering existing CSP VM)
+      {
+        selector: 'node[status="Registering"]',
+        style: {
+          'color': '#14b8a6'  // teal-500
+        }
+      },
       {
         selector: 'node[status="Resuming"]',
         style: {
