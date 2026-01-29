@@ -728,6 +728,7 @@ function initializeCharts() {
     // Fallback colors if parent function not available
     const fallbackColors = {
       'Preparing': type === 'mci' ? 'rgba(247, 147, 26, 0.8)' : 'rgba(247, 147, 26, 0.6)',
+      'Registering': type === 'mci' ? 'rgba(20, 184, 166, 0.8)' : 'rgba(20, 184, 166, 0.6)',  // teal-500
       'Creating': type === 'mci' ? 'rgba(59, 130, 246, 0.8)' : 'rgba(59, 130, 246, 0.6)',
       'Running': type === 'mci' ? 'rgba(16, 185, 129, 0.8)' : 'rgba(16, 185, 129, 0.6)',
       'Suspended': type === 'mci' ? 'rgba(245, 158, 11, 0.8)' : 'rgba(245, 158, 11, 0.6)',
@@ -739,8 +740,8 @@ function initializeCharts() {
     return fallbackColors[status] || fallbackColors['Other'];
   }
   
-  const statusLabels = ['Preparing', 'Creating', 'Running', 'Suspended', 'Terminating', 'Terminated', 'Failed', 'Other'];
-  
+  const statusLabels = ['Preparing', 'Registering', 'Creating', 'Running', 'Suspended', 'Terminating', 'Terminated', 'Failed', 'Other'];
+
   charts.combinedStatus = new Chart(combinedStatusCtx, {
     type: 'bar',
     data: {
@@ -748,14 +749,14 @@ function initializeCharts() {
       datasets: [
         {
           label: 'MCI Count',
-          data: [0, 0, 0, 0, 0, 0, 0, 0],
+          data: [0, 0, 0, 0, 0, 0, 0, 0, 0],
           backgroundColor: statusLabels.map(status => getChartColors(status, 'mci')),
           borderColor: 'rgba(52, 58, 64, 1)',        // Dark gray for legend
           legendColor: 'rgba(52, 58, 64, 0.8)',      // Dark gray for legend icon
         },
         {
           label: 'VM Count',
-          data: [0, 0, 0, 0, 0, 0, 0, 0],
+          data: [0, 0, 0, 0, 0, 0, 0, 0, 0],
           backgroundColor: statusLabels.map(status => getChartColors(status, 'vm')),
           // Use fixed color for legend (will be overridden during updates)
           borderColor: 'rgba(108, 117, 125, 1)',     // Light gray for legend
@@ -1542,6 +1543,7 @@ function updateCharts() {
 function updateCombinedStatusChart() {
   const mciStatusCounts = {
     'Running': 0,
+    'Registering': 0,
     'Creating': 0,
     'Preparing': 0,
     'Suspended': 0,
@@ -1553,6 +1555,7 @@ function updateCombinedStatusChart() {
   
   const vmStatusCounts = {
     'Running': 0,
+    'Registering': 0,
     'Creating': 0,
     'Preparing': 0,
     'Suspended': 0,
@@ -1583,7 +1586,7 @@ function updateCombinedStatusChart() {
   });
   
   // Prepare data for combined chart
-  const statusLabels = ['Preparing', 'Creating', 'Running', 'Suspended', 'Terminating', 'Terminated', 'Failed', 'Other'];
+  const statusLabels = ['Preparing', 'Registering', 'Creating', 'Running', 'Suspended', 'Terminating', 'Terminated', 'Failed', 'Other'];
   const mciDataArray = statusLabels.map(label => mciStatusCounts[label] || 0);
   const vmDataArray = statusLabels.map(label => vmStatusCounts[label] || 0);
   
@@ -1849,10 +1852,11 @@ function updateProviderRegionChart() {
 // Helper function to categorize status consistently
 function categorizeStatus(status) {
   if (!status) return 'Other';
-  
+
   const statusStr = status.toString().toLowerCase();
-  
+
   if (statusStr.includes('running')) return 'Running';
+  if (statusStr.includes('registering')) return 'Registering';
   if (statusStr.includes('creating')) return 'Creating';
   if (statusStr.includes('preparing')) return 'Preparing';
   if (statusStr.includes('empty')) return 'Empty';
@@ -1860,7 +1864,7 @@ function categorizeStatus(status) {
   if (statusStr.includes('failed') || statusStr.includes('partial-failed')) return 'Failed';
   if (statusStr.includes('terminating')) return 'Terminating';
   if (statusStr.includes('terminated')) return 'Terminated';
-  
+
   return 'Other';
 }
 
