@@ -3410,52 +3410,57 @@ function showFinalMciConfirmation(createMciReq, url, totalCost, totalNodeScale, 
           width: 900,
           html: `
             <div id="dynamicContainer" style="text-align: left;">
-              <p><font size=4><b>[Commands]</b></font></p>
+              <p><font size=4><b>[Commands]</b></font> <button onclick="resetCommands()" style="font-size: 12px; padding: 2px 8px; margin-left: 10px;">Reset</button></p>
               <div id="cmdContainer" style="margin-bottom: 20px;">
                 <div id="cmdDiv1" class="cmdRow">
-                  Command 1: <input type="text" id="cmd1" style="width: 75%" value="${defaultRemoteCommand[0]}">
-                  <button onclick="document.getElementById('cmd1').value = ''">Clear</button>
+                  Command 1: <textarea id="cmd1" rows="1" style="width: 75%; resize: vertical; vertical-align: top; overflow: hidden;" oninput="autoResizeTextarea(this)">${defaultRemoteCommand[0]}</textarea>
+                  <button onclick="document.getElementById('cmd1').value = ''; autoResizeTextarea(document.getElementById('cmd1'));" style="vertical-align: top;">Clear</button>
                 </div>
                 <div id="cmdDiv2" class="cmdRow">
-                  Command 2: <input type="text" id="cmd2" style="width: 75%" value="${defaultRemoteCommand[1]}">
-                  <button onclick="document.getElementById('cmd2').value = ''">Clear</button>
+                  Command 2: <textarea id="cmd2" rows="1" style="width: 75%; resize: vertical; vertical-align: top; overflow: hidden;" oninput="autoResizeTextarea(this)">${defaultRemoteCommand[1]}</textarea>
+                  <button onclick="document.getElementById('cmd2').value = ''; autoResizeTextarea(document.getElementById('cmd2'));" style="vertical-align: top;">Clear</button>
                 </div>
                 <div id="cmdDiv3" class="cmdRow">
-                  Command 3: <input type="text" id="cmd3" style="width: 75%" value="${defaultRemoteCommand[2]}">
-                  <button onclick="document.getElementById('cmd3').value = ''">Clear</button>
+                  Command 3: <textarea id="cmd3" rows="1" style="width: 75%; resize: vertical; vertical-align: top; overflow: hidden;" oninput="autoResizeTextarea(this)">${defaultRemoteCommand[2]}</textarea>
+                  <button onclick="document.getElementById('cmd3').value = ''; autoResizeTextarea(document.getElementById('cmd3'));" style="vertical-align: top;">Clear</button>
                 </div>
                 <button id="addCmd" onclick="addCmd()" style="margin-left: 1px;"> + </button>
               </div>
 
               <p><font size=4><b>[Predefined Scripts]</b></font></p>
               <div style="margin-bottom: 15px;">
-                <select id="predefinedScripts" style="width: 75%; padding: 5px;" onchange="loadPredefinedScript()">
-                  <option value="">-- Select a predefined script --</option>
-                  <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
-                  <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
-                  <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
-                  <option value="vLLM">[LLM vLLM] vLLM Install</option>
-                  <option value="vLLMServe">[LLM vLLM] vLLM Model Serve</option>
-                  <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
-                  <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
-                  <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
-                  <option value="OpenWebUI-vLLM">[LLM WebUI] Open WebUI for vLLM</option>
-                  <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
-                  <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
-                  <option value="Netdata">[Observability] Netdata Monitor</option>
-                  <option value="Netdata-Status">[Observability] Check Netdata Status</option>
-                  <option value="WeaveScope">[Observability] Weave Scope</option>
-                  <option value="ELK">[Observability] ELK Stack</option>
-                  <option value="Jitsi">[Video Conference] Jitsi Meet</option>
-                  <option value="Xonotic">[Game:FPS] Xonotic Game Server</option>
-                  <option value="Westward">[Game:MMORPG] Westward Game</option>
-                  <option value="Nginx">[Web:Server] Nginx Web Server</option>
-                  <option value="Stress">[Web:Stress] Stress Test</option>
-                </select>
-                <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
-                  Select a predefined script to auto-fill the command fields
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                  <select id="predefinedScripts" style="width: 60%; padding: 5px;" onchange="loadPredefinedScript()">
+                    <option value="">-- Select a predefined script --</option>
+                    <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
+                    <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
+                    <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
+                    <option value="vLLM">[LLM vLLM] vLLM Install</option>
+                    <option value="vLLMServe">[LLM vLLM] vLLM Model Serve</option>
+                    <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
+                    <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
+                    <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
+                    <option value="OpenWebUI-vLLM">[LLM WebUI] Open WebUI for vLLM</option>
+                    <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
+                    <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
+                    <option value="Netdata">[Observability] Netdata Monitor</option>
+                    <option value="Netdata-Status">[Observability] Check Netdata Status</option>
+                    <option value="WeaveScope">[Observability] Weave Scope</option>
+                    <option value="ELK">[Observability] ELK Stack</option>
+                    <option value="Jitsi">[Video Conference] Jitsi Meet</option>
+                    <option value="Xonotic">[Game:FPS] Xonotic Game Server</option>
+                    <option value="Westward">[Game:MMORPG] Westward Game</option>
+                    <option value="Nginx">[Web:Server] Nginx Web Server</option>
+                    <option value="Stress">[Web:Stress] Stress Test</option>
+                  </select>
+                  <label style="display: flex; align-items: center; gap: 5px; font-size: 0.9em; white-space: nowrap;">
+                    <input type="checkbox" id="scriptAppendMode"> Append mode
+                  </label>
                 </div>
-              </div>        
+                <div style="font-size: 0.8em; color: #666;">
+                  Select a script to add commands. Check "Append mode" to add after existing commands.
+                </div>
+              </div>
 
               <p><font size=4><b>[Label Selector]</b></font></p>
               <div style="margin-bottom: 15px;">
@@ -3480,8 +3485,8 @@ function showFinalMciConfirmation(createMciReq, url, totalCost, totalNodeScale, 
               newCmdDiv.id = `cmdDiv${cmdCount}`;
               newCmdDiv.className = 'cmdRow';
               newCmdDiv.innerHTML = `
-                Command ${cmdCount}: <input type="text" id="cmd${cmdCount}" style="width: 75%">
-                <button onclick="document.getElementById('cmd${cmdCount}').value = ''">Clear</button>
+                Command ${cmdCount}: <textarea id="cmd${cmdCount}" rows="1" style="width: 75%; resize: vertical; vertical-align: top; overflow: hidden;" oninput="autoResizeTextarea(this)"></textarea>
+                <button onclick="document.getElementById('cmd${cmdCount}').value = ''; autoResizeTextarea(document.getElementById('cmd${cmdCount}'));" style="vertical-align: top;">Clear</button>
               `;
               cmdContainer.appendChild(newCmdDiv);
             };
@@ -3779,53 +3784,58 @@ function showPostCommandDialog(createMciReq, mciCreationUrl, username, password,
             </p>
           </div>
         ` : ''}
-        
-        <p><font size=4><b>[Commands]</b></font></p>
+
+        <p><font size=4><b>[Commands]</b></font> <button onclick="resetCommands()" style="font-size: 12px; padding: 2px 8px; margin-left: 10px;">Reset</button></p>
         <div id="cmdContainer" style="margin-bottom: 20px;">
           <div id="cmdDiv1" class="cmdRow">
-            Command 1: <input type="text" id="cmd1" style="width: 75%" value="${defaultRemoteCommand[0]}">
-            <button onclick="document.getElementById('cmd1').value = ''">Clear</button>
+            Command 1: <textarea id="cmd1" rows="1" style="width: 75%; resize: vertical; vertical-align: top; overflow: hidden;" oninput="autoResizeTextarea(this)">${defaultRemoteCommand[0]}</textarea>
+            <button onclick="document.getElementById('cmd1').value = ''; autoResizeTextarea(document.getElementById('cmd1'));" style="vertical-align: top;">Clear</button>
           </div>
           <div id="cmdDiv2" class="cmdRow">
-            Command 2: <input type="text" id="cmd2" style="width: 75%" value="${defaultRemoteCommand[1]}">
-            <button onclick="document.getElementById('cmd2').value = ''">Clear</button>
+            Command 2: <textarea id="cmd2" rows="1" style="width: 75%; resize: vertical; vertical-align: top; overflow: hidden;" oninput="autoResizeTextarea(this)">${defaultRemoteCommand[1]}</textarea>
+            <button onclick="document.getElementById('cmd2').value = ''; autoResizeTextarea(document.getElementById('cmd2'));" style="vertical-align: top;">Clear</button>
           </div>
           <div id="cmdDiv3" class="cmdRow">
-            Command 3: <input type="text" id="cmd3" style="width: 75%" value="${defaultRemoteCommand[2]}">
-            <button onclick="document.getElementById('cmd3').value = ''">Clear</button>
+            Command 3: <textarea id="cmd3" rows="1" style="width: 75%; resize: vertical; vertical-align: top; overflow: hidden;" oninput="autoResizeTextarea(this)">${defaultRemoteCommand[2]}</textarea>
+            <button onclick="document.getElementById('cmd3').value = ''; autoResizeTextarea(document.getElementById('cmd3'));" style="vertical-align: top;">Clear</button>
           </div>
           <button id="addCmd" onclick="addCmd()" style="margin-left: 1px;"> + </button>
         </div>
 
         <p><font size=4><b>[Predefined Scripts]</b></font></p>
         <div style="margin-bottom: 15px;">
-          <select id="predefinedScripts" style="width: 75%; padding: 5px;" onchange="loadPredefinedScript()">
-            <option value="">-- Select a predefined script --</option>
-            <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
-            <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
-            <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
-            <option value="vLLM">[LLM vLLM] vLLM Install</option>
-            <option value="vLLMServe">[LLM vLLM] vLLM Model Serve</option>
-            <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
-            <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
-            <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
-            <option value="OpenWebUI-vLLM">[LLM WebUI] Open WebUI for vLLM</option>
-            <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
-            <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
-            <option value="Netdata">[Observability] Netdata Monitor</option>
-            <option value="Netdata-Status">[Observability] Check Netdata Status</option>
-            <option value="WeaveScope">[Observability] Weave Scope</option>
-            <option value="ELK">[Observability] ELK Stack</option>
-            <option value="Jitsi">[Video Conference] Jitsi Meet</option>
-            <option value="Xonotic">[Game:FPS] Xonotic Game Server</option>
-            <option value="Westward">[Game:MMORPG] Westward Game</option>
-            <option value="Nginx">[Web:Server] Nginx Web Server</option>
-            <option value="Stress">[Web:Stress] Stress Test</option>
-          </select>
-          <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
-            Select a predefined script to auto-fill the command fields
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+            <select id="predefinedScripts" style="width: 60%; padding: 5px;" onchange="loadPredefinedScript()">
+              <option value="">-- Select a predefined script --</option>
+              <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
+              <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
+              <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
+              <option value="vLLM">[LLM vLLM] vLLM Install</option>
+              <option value="vLLMServe">[LLM vLLM] vLLM Model Serve</option>
+              <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
+              <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
+              <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
+              <option value="OpenWebUI-vLLM">[LLM WebUI] Open WebUI for vLLM</option>
+              <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
+              <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
+              <option value="Netdata">[Observability] Netdata Monitor</option>
+              <option value="Netdata-Status">[Observability] Check Netdata Status</option>
+              <option value="WeaveScope">[Observability] Weave Scope</option>
+              <option value="ELK">[Observability] ELK Stack</option>
+              <option value="Jitsi">[Video Conference] Jitsi Meet</option>
+              <option value="Xonotic">[Game:FPS] Xonotic Game Server</option>
+              <option value="Westward">[Game:MMORPG] Westward Game</option>
+              <option value="Nginx">[Web:Server] Nginx Web Server</option>
+              <option value="Stress">[Web:Stress] Stress Test</option>
+            </select>
+            <label style="display: flex; align-items: center; gap: 5px; font-size: 0.9em; white-space: nowrap;">
+              <input type="checkbox" id="scriptAppendMode"> Append mode
+            </label>
           </div>
-        </div>        
+          <div style="font-size: 0.8em; color: #666;">
+            Select a script to add commands. Check "Append mode" to add after existing commands.
+          </div>
+        </div>
 
         <p><font size=4><b>[Label Selector]</b></font></p>
         <div style="margin-bottom: 15px;">
@@ -3834,7 +3844,7 @@ function showPostCommandDialog(createMciReq, mciCreationUrl, username, password,
             ex: Optional: set targets by the label (ex: role=worker,env=production,sys.id=g1-2)
           </div>
         </div>
-        
+
         ${buildAgnosticImage ? `
           <hr style="margin: 20px 0;">
           <p><font size=4><b>[Custom Image Settings]</b></font></p>
@@ -3883,8 +3893,8 @@ function showPostCommandDialog(createMciReq, mciCreationUrl, username, password,
         newCmdDiv.id = `cmdDiv${cmdCount}`;
         newCmdDiv.className = 'cmdRow';
         newCmdDiv.innerHTML = `
-          Command ${cmdCount}: <input type="text" id="cmd${cmdCount}" style="width: 75%">
-          <button onclick="document.getElementById('cmd${cmdCount}').value = ''">Clear</button>
+          Command ${cmdCount}: <textarea id="cmd${cmdCount}" rows="1" style="width: 75%; resize: vertical; vertical-align: top; overflow: hidden;" oninput="autoResizeTextarea(this)"></textarea>
+          <button onclick="document.getElementById('cmd${cmdCount}').value = ''; autoResizeTextarea(document.getElementById('cmd${cmdCount}'));" style="vertical-align: top;">Clear</button>
         `;
         cmdContainer.appendChild(newCmdDiv);
       };
@@ -11178,6 +11188,9 @@ defaultRemoteCommand.push("");
  * @returns {void} - Modifies the defaultRemoteCommand array directly
  */
 function setDefaultRemoteCommandsByApp(appName) {
+  // Reset array to ensure clean state (prevent leftover elements from previous selections)
+  defaultRemoteCommand.length = 0;
+
   switch (appName) {
     case "Xonotic":
       defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh; chmod +x ~/startServer.sh";
@@ -11462,27 +11475,148 @@ function statusApp() {
 }
 window.statusApp = statusApp;
 
+// Auto-resize textarea based on content
+window.autoResizeTextarea = function (textarea) {
+  if (!textarea) return;
+  textarea.style.height = 'auto';
+  textarea.style.height = Math.max(textarea.scrollHeight, 24) + 'px'; // minimum 24px (approx 1 line)
+};
+
+// Reset commands to initial state (3 empty fields)
+window.resetCommands = function () {
+  const cmdContainer = document.getElementById('cmdContainer');
+  if (!cmdContainer) return;
+
+  // Remove all cmdDiv elements except the button
+  const cmdDivs = cmdContainer.querySelectorAll('[id^="cmdDiv"]');
+  cmdDivs.forEach(div => div.remove());
+
+  // Recreate 3 empty command fields
+  const addCmdBtn = cmdContainer.querySelector('#addCmd');
+  for (let i = 1; i <= 3; i++) {
+    const newCmdDiv = document.createElement('div');
+    newCmdDiv.id = `cmdDiv${i}`;
+    newCmdDiv.className = 'cmdRow';
+    newCmdDiv.innerHTML = `
+      Command ${i}: <textarea id="cmd${i}" rows="1" style="width: 75%; resize: vertical; vertical-align: top; overflow: hidden;" oninput="autoResizeTextarea(this)"></textarea>
+      <button onclick="document.getElementById('cmd${i}').value = ''; autoResizeTextarea(document.getElementById('cmd${i}'));" style="vertical-align: top;">Clear</button>
+    `;
+    if (addCmdBtn) {
+      cmdContainer.insertBefore(newCmdDiv, addCmdBtn);
+    } else {
+      cmdContainer.appendChild(newCmdDiv);
+    }
+  }
+
+  // Reset predefined script dropdown
+  const scriptSelect = document.getElementById('predefinedScripts');
+  if (scriptSelect) {
+    scriptSelect.selectedIndex = 0;
+  }
+
+  console.log('Commands reset to 3 empty fields');
+};
+
 // loadPredefinedScript function for loading predefined script
+// Supports two modes: Replace (default) and Append
 window.loadPredefinedScript = function () {
   const scriptTypeSelect = document.getElementById("predefinedScripts");
   if (!scriptTypeSelect) return;
 
   const scriptType = scriptTypeSelect.value;
-  console.log("Loading predefined script:", scriptType);
+  if (!scriptType) return;
 
-  if (scriptType) {
-    setDefaultRemoteCommandsByApp(scriptType);
-    console.log("Updated defaultRemoteCommand:", defaultRemoteCommand);
+  // Check if append mode is enabled
+  const appendModeCheckbox = document.getElementById("scriptAppendMode");
+  const isAppendMode = appendModeCheckbox && appendModeCheckbox.checked;
 
-    // update the command fields
-    for (let i = 0; i < defaultRemoteCommand.length; i++) {
+  console.log("Loading predefined script:", scriptType, "| Mode:", isAppendMode ? "Append" : "Replace");
+
+  // Get the new commands from predefined script
+  setDefaultRemoteCommandsByApp(scriptType);
+  // Filter out empty strings to avoid appending blank commands
+  const newCommands = [...defaultRemoteCommand].filter(cmd => cmd && cmd.trim());
+  console.log("New commands from script:", newCommands);
+
+  if (isAppendMode) {
+    // Append mode: compact existing commands (remove empty gaps), then append new commands
+    // Step 1: Collect all existing non-empty commands
+    const existingCommands = [];
+    let maxCmdIndex = 0;
+
+    for (let i = 1; i <= 20; i++) {
+      const cmdField = document.getElementById(`cmd${i}`);
+      if (!cmdField) break;
+      maxCmdIndex = i;
+      if (cmdField.value && cmdField.value.trim()) {
+        existingCommands.push(cmdField.value.trim());
+      }
+    }
+    console.log("Existing commands:", existingCommands.length, "New commands:", newCommands.length);
+
+    // Step 2: Combine existing + new commands
+    const allCommands = [...existingCommands, ...newCommands];
+
+    // Step 3: Fill cmd fields from cmd1 (compact)
+    for (let i = 0; i < allCommands.length; i++) {
+      const targetIndex = i + 1;
+      let cmdField = document.getElementById(`cmd${targetIndex}`);
+
+      // If field doesn't exist, create it
+      if (!cmdField && window.addCmd) {
+        window.addCmd();
+        cmdField = document.getElementById(`cmd${targetIndex}`);
+      }
+
+      if (cmdField) {
+        cmdField.value = allCommands[i];
+        autoResizeTextarea(cmdField);
+        console.log(`Set cmd${targetIndex}:`, cmdField.value);
+      }
+    }
+
+    // Step 4: Remove extra empty cmd fields (keep minimum 3)
+    const minCmdCount = 3;
+    const targetCmdCount = Math.max(allCommands.length, minCmdCount);
+
+    for (let i = maxCmdIndex; i > targetCmdCount; i--) {
+      const cmdDiv = document.getElementById(`cmdDiv${i}`);
+      if (cmdDiv) {
+        cmdDiv.remove();
+        console.log(`Removed cmdDiv${i}`);
+      }
+    }
+
+    // Clear any remaining fields beyond allCommands.length but within targetCmdCount
+    for (let i = allCommands.length + 1; i <= targetCmdCount; i++) {
+      const cmdField = document.getElementById(`cmd${i}`);
+      if (cmdField) {
+        cmdField.value = "";
+        autoResizeTextarea(cmdField);
+      }
+    }
+  } else {
+    // Replace mode: clear and set new commands
+    for (let i = 0; i < newCommands.length; i++) {
       const cmdField = document.getElementById(`cmd${i + 1}`);
       if (cmdField) {
-        cmdField.value = defaultRemoteCommand[i] || "";
+        cmdField.value = newCommands[i] || "";
+        autoResizeTextarea(cmdField);
         console.log(`Set cmd${i + 1} to:`, cmdField.value);
       }
     }
+    // Clear remaining fields
+    for (let i = newCommands.length + 1; i <= 10; i++) {
+      const cmdField = document.getElementById(`cmd${i}`);
+      if (cmdField) {
+        cmdField.value = "";
+        autoResizeTextarea(cmdField);
+      }
+    }
   }
+
+  // Reset the select to allow selecting the same script again
+  scriptTypeSelect.selectedIndex = 0;
 };
 
 
@@ -11546,52 +11680,57 @@ async function executeRemoteCmd() {
           </select>
         </div>
 
-        <p><font size=4><b>[Commands]</b></font></p>
+        <p><font size=4><b>[Commands]</b></font> <button onclick="resetCommands()" style="font-size: 12px; padding: 2px 8px; margin-left: 10px;">Reset</button></p>
         <div id="cmdContainer" style="margin-bottom: 20px;">
           <div id="cmdDiv1" class="cmdRow">
-            Command 1: <input type="text" id="cmd1" style="width: 75%" value="${defaultRemoteCommand[0]}">
-            <button onclick="document.getElementById('cmd1').value = ''">Clear</button>
+            Command 1: <textarea id="cmd1" rows="1" style="width: 75%; resize: vertical; vertical-align: top; overflow: hidden;" oninput="autoResizeTextarea(this)">${defaultRemoteCommand[0]}</textarea>
+            <button onclick="document.getElementById('cmd1').value = ''; autoResizeTextarea(document.getElementById('cmd1'));" style="vertical-align: top;">Clear</button>
           </div>
           <div id="cmdDiv2" class="cmdRow">
-            Command 2: <input type="text" id="cmd2" style="width: 75%" value="${defaultRemoteCommand[1]}">
-            <button onclick="document.getElementById('cmd2').value = ''">Clear</button>
+            Command 2: <textarea id="cmd2" rows="1" style="width: 75%; resize: vertical; vertical-align: top; overflow: hidden;" oninput="autoResizeTextarea(this)">${defaultRemoteCommand[1]}</textarea>
+            <button onclick="document.getElementById('cmd2').value = ''; autoResizeTextarea(document.getElementById('cmd2'));" style="vertical-align: top;">Clear</button>
           </div>
           <div id="cmdDiv3" class="cmdRow">
-            Command 3: <input type="text" id="cmd3" style="width: 75%" value="${defaultRemoteCommand[2]}">
-            <button onclick="document.getElementById('cmd3').value = ''">Clear</button>
+            Command 3: <textarea id="cmd3" rows="1" style="width: 75%; resize: vertical; vertical-align: top; overflow: hidden;" oninput="autoResizeTextarea(this)">${defaultRemoteCommand[2]}</textarea>
+            <button onclick="document.getElementById('cmd3').value = ''; autoResizeTextarea(document.getElementById('cmd3'));" style="vertical-align: top;">Clear</button>
           </div>
           <button id="addCmd" onclick="addCmd()" style="margin-left: 1px;"> + </button>
         </div>
 
         <p><font size=4><b>[Predefined Scripts]</b></font></p>
         <div style="margin-bottom: 15px;">
-          <select id="predefinedScripts" style="width: 75%; padding: 5px;" onchange="loadPredefinedScript()">
-            <option value="">-- Select a predefined script --</option>
-            <option value="CB-TB-Deploy">[Platform] Deploy CB-Tumblebug</option>
-            <option value="M-CMP-Deploy">[Platform] Deploy M-CMP (CB-TB, MC-Admin-CLI)</option>
-            <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
-            <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
-            <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
-            <option value="vLLM">[LLM vLLM] vLLM Install</option>
-            <option value="vLLMServe">[LLM vLLM] vLLM Model Serve</option>
-            <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
-            <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
-            <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
-            <option value="OpenWebUI-vLLM">[LLM WebUI] Open WebUI for vLLM</option>
-            <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
-            <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
-            <option value="Netdata">[Observability] Netdata Monitor</option>
-            <option value="Netdata-Status">[Observability] Check Netdata Status</option>
-            <option value="WeaveScope">[Observability] Weave Scope</option>
-            <option value="ELK">[Observability] ELK Stack</option>
-            <option value="Jitsi">[Video Conference] Jitsi Meet</option>
-            <option value="Xonotic">[Game:FPS] Xonotic Game Server</option>
-            <option value="Westward">[Game:MMORPG] Westward Game</option>
-            <option value="Nginx">[Web:Server] Nginx Web Server</option>
-            <option value="Stress">[Web:Stress] Stress Test</option>
-          </select>
-          <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
-            Select a predefined script to auto-fill the command fields
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+            <select id="predefinedScripts" style="width: 60%; padding: 5px;" onchange="loadPredefinedScript()">
+              <option value="">-- Select a predefined script --</option>
+              <option value="CB-TB-Deploy">[Platform] Deploy CB-Tumblebug</option>
+              <option value="M-CMP-Deploy">[Platform] Deploy M-CMP (CB-TB, MC-Admin-CLI)</option>
+              <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
+              <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
+              <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
+              <option value="vLLM">[LLM vLLM] vLLM Install</option>
+              <option value="vLLMServe">[LLM vLLM] vLLM Model Serve</option>
+              <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
+              <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
+              <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
+              <option value="OpenWebUI-vLLM">[LLM WebUI] Open WebUI for vLLM</option>
+              <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
+              <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
+              <option value="Netdata">[Observability] Netdata Monitor</option>
+              <option value="Netdata-Status">[Observability] Check Netdata Status</option>
+              <option value="WeaveScope">[Observability] Weave Scope</option>
+              <option value="ELK">[Observability] ELK Stack</option>
+              <option value="Jitsi">[Video Conference] Jitsi Meet</option>
+              <option value="Xonotic">[Game:FPS] Xonotic Game Server</option>
+              <option value="Westward">[Game:MMORPG] Westward Game</option>
+              <option value="Nginx">[Web:Server] Nginx Web Server</option>
+              <option value="Stress">[Web:Stress] Stress Test</option>
+            </select>
+            <label style="display: flex; align-items: center; gap: 5px; font-size: 0.9em; white-space: nowrap;">
+              <input type="checkbox" id="scriptAppendMode"> Append mode
+            </label>
+          </div>
+          <div style="font-size: 0.8em; color: #666;">
+            Select a script to add commands. Check "Append mode" to add after existing commands.
           </div>
         </div>
 
@@ -11641,8 +11780,8 @@ async function executeRemoteCmd() {
           const newCmd = document.createElement("div");
           newCmd.id = `cmdDiv${cmdCount}`;
           newCmd.className = "cmdRow"; // class for each command row
-          newCmd.innerHTML = `Command ${cmdCount}: <input type="text" id="cmd${cmdCount}" style="width: 75%">
-                              <button onclick="document.getElementById('cmd${cmdCount}').value = ''">Clear</button>`;
+          newCmd.innerHTML = `Command ${cmdCount}: <textarea id="cmd${cmdCount}" rows="1" style="width: 75%; resize: vertical; vertical-align: top; overflow: hidden;" oninput="autoResizeTextarea(this)"></textarea>
+                              <button onclick="document.getElementById('cmd${cmdCount}').value = ''; autoResizeTextarea(document.getElementById('cmd${cmdCount}'));" style="vertical-align: top;">Clear</button>`;
           document.getElementById("cmdContainer").appendChild(newCmd);
 
           // Move the addCmd button to be next to the last command's Clear button
