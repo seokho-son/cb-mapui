@@ -11045,9 +11045,16 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "";
       break;
     case "Setup-CrossNAT":
-      defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setup-cross-cloud-nat.sh";
-      defaultRemoteCommand[1] = "chmod +x ~/setup-cross-cloud-nat.sh";
-      defaultRemoteCommand[2] = "~/setup-cross-cloud-nat.sh pub=$$Func(GetPublicIPs(target=this)) priv=$$Func(GetPrivateIPs(target=this))";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setup-cross-cloud-nat.sh -o ~/setup-cross-cloud-nat.sh && chmod +x ~/setup-cross-cloud-nat.sh";
+      defaultRemoteCommand[1] = "sudo ~/setup-cross-cloud-nat.sh pub=$$Func(GetPublicIPs(separator=,)) priv=$$Func(GetPrivateIPs(separator=,))";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "Setup-WireGuard":
+      // WireGuard mesh VPN setup - run on all nodes with same parameters
+      // Format: public_ip:wireguard_ip pairs (e.g., 54.1.1.1:10.200.0.1,35.2.2.2:10.200.0.2)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/k8s/setup-wireguard-mesh.sh -o ~/setup-wireguard-mesh.sh && chmod +x ~/setup-wireguard-mesh.sh";
+      defaultRemoteCommand[1] = "sudo ~/setup-wireguard-mesh.sh --nodes \"<PUBLIC_IP1:WG_IP1,PUBLIC_IP2:WG_IP2,...>\"";
+      defaultRemoteCommand[2] = "";
       break;
     case "Ollama":
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOllama.sh | sh";
@@ -11078,6 +11085,42 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/ray/ray-worker-setup.sh";
       defaultRemoteCommand[1] = "chmod +x ~/ray-worker-setup.sh";
       defaultRemoteCommand[2] = "~/ray-worker-setup.sh -i $$Func(GetPublicIP(target=this)) -h $$Func(GetPublicIP(target=mc-ray.g1-1))";
+      break;
+    case "K8sControlPlane-Deploy":
+      // Deploys K8s control plane with auto-detected IPs
+      // Output includes: [K8S_JOIN_COMMAND], [K8S_KUBECONFIG_BASE64] for easy parsing
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/k8s/k8s-control-plane-setup.sh | bash";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "K8sWorker-Deploy":
+      // Deploys K8s worker node
+      // IMPORTANT: Replace <JOIN_COMMAND> with actual join command from control plane
+      // Get join command: [K8S_JOIN_COMMAND] section in control plane output
+      // Example: kubeadm join 10.0.0.1:6443 --token abc.123 --discovery-token-ca-cert-hash sha256:xyz
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/k8s/k8s-worker-setup.sh | bash -s -- -j \"<PASTE_JOIN_COMMAND_HERE>\"";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "K8sGetKubeconfig":
+      // Get kubeconfig from control plane for external kubectl access
+      // Output: [K8S_KUBECONFIG_BASE64] section contains base64-encoded kubeconfig
+      defaultRemoteCommand[0] = "echo '[K8S_KUBECONFIG_BASE64]' && base64 -w 0 ~/kubeconfig-external.yaml && echo ''";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "K8sClusterStatus":
+      // Check K8s cluster status (run on control plane)
+      defaultRemoteCommand[0] = "echo '=== Nodes ===' && kubectl get nodes -o wide && echo '' && echo '=== Pods ===' && kubectl get pods -A";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "K8sGetJoinCommand":
+      // Get join command for adding new workers (run on control plane)
+      // Useful when original token expired (tokens expire after 24h)
+      defaultRemoteCommand[0] = "echo '[K8S_JOIN_COMMAND]' && sudo kubeadm token create --print-join-command";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
       break;
     case "Westward":
       defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh";
@@ -11368,7 +11411,8 @@ window.generatePredefinedScriptsHtml = function (includeDeployOptions = false) {
   options += `
       <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
       <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
-      <option value="Setup-CrossNAT">[Network Config] Setup Cross NAT</option>
+      <option value="Setup-CrossNAT">[Network Config] Setup Cross-Cloud NAT</option>
+      <option value="Setup-WireGuard">[Network Config] Setup WireGuard Mesh VPN</option>
       <option value="vLLM">[LLM vLLM] vLLM Install</option>
       <option value="vLLMServe">[LLM vLLM] vLLM Model Serve</option>
       <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
@@ -11377,6 +11421,11 @@ window.generatePredefinedScriptsHtml = function (includeDeployOptions = false) {
       <option value="OpenWebUI-vLLM">[LLM WebUI] Open WebUI for vLLM</option>
       <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
       <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
+      <option value="K8sControlPlane-Deploy">[K8s Cluster] Deploy Control Plane</option>
+      <option value="K8sWorker-Deploy">[K8s Cluster] Deploy Worker</option>
+      <option value="K8sClusterStatus">[K8s Cluster] Check Cluster Status</option>
+      <option value="K8sGetJoinCommand">[K8s Cluster] Get Join Command</option>
+      <option value="K8sGetKubeconfig">[K8s Cluster] Get Kubeconfig (Base64)</option>
       <option value="Netdata">[Monitoring] Netdata Monitoring</option>
       <option value="Netdata-Status">[Monitoring] Check Netdata Status</option>
       <option value="Nginx">[Web Server] Nginx Web Server</option>
