@@ -11021,9 +11021,8 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "";
       break;
     case "vLLMServe":
-      defaultRemoteCommand[0] = "source ~/venv_vllm/bin/activate && nohup python -m vllm.entrypoints.openai.api_server --model $$Func(AssignTask(task='Qwen/Qwen2.5-1.5B-Instruct, meta-llama/Llama-3.2-3B-Instruct, mistralai/Mistral-7B-Instruct-v0.3, deepseek-ai/DeepSeek-R1-Distill-Qwen-7B')) --host 0.0.0.0 --port 8000 --trust-remote-code > ~/vllm-serve.log 2>&1 &";
-      defaultRemoteCommand[1] = "sleep 5 && echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:8000/v1))'";
-      defaultRemoteCommand[2] = "tail -n 20 ~/vllm-serve.log";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/servevLLM.sh | bash -s -- $$Func(AssignTask(task='Qwen/Qwen2.5-1.5B-Instruct, meta-llama/Llama-3.2-3B-Instruct, mistralai/Mistral-7B-Instruct-v0.3, deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'))";
+      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:8000/v1))'";
       break;
     case "Nvidia":
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/installCudaDriver.sh | sh";
