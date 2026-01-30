@@ -7908,9 +7908,29 @@ function getRecommendedSpec(idx, latitude, longitude) {
   }).catch(function (error) {
     // Close loading popup on error
     Swal.close();
-    
+
     console.log(error);
-    errorAlert("Cannot recommend a spec (Check log for details)");
+
+    // Check if it's a connection error (network issue or server down)
+    if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK' ||
+        error.message?.includes('Network Error') || !error.response) {
+      // Connection error - re-check CB-Tumblebug connection status
+      Swal.fire({
+        icon: 'error',
+        title: 'Cannot recommend a spec',
+        html: 'Connection to CB-Tumblebug server may have been lost.<br>Would you like to check the connection status?',
+        showCancelButton: true,
+        confirmButtonText: 'Check Connection',
+        cancelButtonText: 'Close'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          checkConnectionWithRetry();
+        }
+      });
+    } else {
+      errorAlert("Cannot recommend a spec (Check log for details)");
+    }
+
     if (error.response && error.response.data) {
       displayJsonData(error.response.data, typeError);
     }
