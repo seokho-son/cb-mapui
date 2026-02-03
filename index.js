@@ -11738,7 +11738,7 @@ async function executeRemoteCmd() {
     </div>`;
 
   Swal.fire({
-    title: "<font size=5><b>Put multiple commands to forward</b></font>",
+    title: "<font size=5><b>Remote Command Execution (SSH)</b></font>",
     width: 900,
     html: `
     <div id="dynamicContainer" style="text-align: left;">
