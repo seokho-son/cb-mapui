@@ -11025,7 +11025,15 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:8000/v1))'";
       break;
     case "Nvidia":
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/installCudaDriver.sh | sh";
+      // Install NVIDIA CUDA driver with Container Toolkit
+      // Note: System will automatically reboot after installation
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/installCudaDriver.sh | bash";
+      defaultRemoteCommand[1] = "echo '[INFO] GPU driver installation started. System will reboot automatically in ~5 seconds after completion.'";
+      defaultRemoteCommand[2] = "echo '[INFO] After reboot, verify with: nvidia-smi'";
+      break;
+    case "RebootVM":
+      // Reboot VM - useful after GPU driver installation
+      defaultRemoteCommand[0] = "sudo reboot";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
@@ -11129,14 +11137,7 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
-    case "K8sGpuWorkerSetup":
-      // Setup GPU worker: Install NVIDIA driver first, then join cluster
-      // Step 1: Install CUDA driver (requires reboot)
-      // Step 2: After reboot, run K8sWorker-Deploy with join command
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/installCudaDriver.sh | bash -s -- --no-reboot";
-      defaultRemoteCommand[1] = "echo 'GPU driver installed. Reboot required before joining K8s cluster.'";
-      defaultRemoteCommand[2] = "echo 'After reboot, run K8sWorker-Deploy with the join command from control plane.'";
-      break;
+
     case "LlmdDeploy":
       // Deploy llm-d on K8s cluster (run on control plane)
       // Prerequisites: K8s with --llm-d mode, GPU workers joined
@@ -11445,73 +11446,737 @@ window.generateCommandsHtml = function (defaultCommands = ['', '', '']) {
 };
 
 // Generate Predefined Scripts section HTML
-window.generatePredefinedScriptsHtml = function (includeDeployOptions = false) {
-  let options = `<option value="">-- Select a predefined script --</option>`;
-
-  if (includeDeployOptions) {
-    options += `
-      <option value="CB-TB-Deploy">[Platform] Deploy CB-Tumblebug</option>
-      <option value="M-CMP-Deploy">[Platform] Deploy M-CMP (CB-TB, MC-Admin-CLI)</option>`;
+// Predefined scripts organized by category
+window.predefinedScriptCategories = {
+  'llm-ollama': {
+    label: '🤖 LLM (Ollama)',
+    description: 'Ollama-based LLM service deployment',
+    scripts: [
+      { value: 'Nvidia', label: '1. Install GPU Driver', step: 1 },
+      { value: 'RebootVM', label: '2. Reboot VM', step: 2 },
+      { value: 'Nvidia-Status', label: '3. Check GPU Driver', step: 3 },
+      { value: 'Ollama', label: '4. Install Ollama', step: 4 },
+      { value: 'OllamaPull', label: '5. Pull LLM Model', step: 5 },
+      { value: 'Netdata', label: '6. Install Monitoring', step: 6, optional: true },
+      { value: 'OpenWebUI', label: '7. Install Open WebUI', step: 7 }
+    ]
+  },
+  'llm-vllm': {
+    label: '🤖 LLM (vLLM)',
+    description: 'vLLM-based high-performance LLM service',
+    scripts: [
+      { value: 'Nvidia', label: '1. Install GPU Driver', step: 1 },
+      { value: 'RebootVM', label: '2. Reboot VM', step: 2 },
+      { value: 'Nvidia-Status', label: '3. Check GPU Driver', step: 3 },
+      { value: 'vLLM', label: '4. Install vLLM', step: 4 },
+      { value: 'vLLMServe', label: '5. Serve LLM Model', step: 5 },
+      { value: 'Netdata', label: '6. Install Monitoring', step: 6, optional: true },
+      { value: 'OpenWebUI-vLLM', label: '7. Install Open WebUI (vLLM)', step: 7 }
+    ]
+  },
+  'k8s-general': {
+    label: '☸️ K8s (General)',
+    description: 'General Kubernetes cluster deployment',
+    scripts: [
+      { value: 'Setup-WireGuard', label: '0. Setup WireGuard VPN', step: 0, optional: true },
+      { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane', step: 1 },
+      { value: 'K8sGetJoinCommand', label: '2. Get Join Command', step: 2 },
+      { value: 'K8sGetKubeconfig', label: '3. Get Kubeconfig (Base64)', step: 3 },
+      { value: 'Nvidia', label: '4. Install GPU Driver', step: 4, optional: true },
+      { value: 'RebootVM', label: '5. Reboot VM', step: 5, optional: true },
+      { value: 'Nvidia-Status', label: '6. Check GPU Driver', step: 6, optional: true },
+      { value: 'K8sWorker-Deploy', label: '7. Deploy Worker', step: 7 },
+      { value: 'K8sClusterStatus', label: '8. Check Cluster Status', step: 8 },
+      { value: 'K8sGpuStatus', label: '9. Check GPU Status', step: 9, optional: true }
+    ]
+  },
+  'k8s-llmd': {
+    label: '☸️ K8s (llm-d)',
+    description: 'Kubernetes with llm-d for distributed LLM inference',
+    scripts: [
+      { value: 'Setup-WireGuard', label: '0. Setup WireGuard VPN', step: 0, optional: true },
+      { value: 'K8sLlmdControlPlane', label: '1. Deploy Control Plane (llm-d)', step: 1 },
+      { value: 'K8sGetJoinCommand', label: '2. Get Join Command', step: 2 },
+      { value: 'K8sGetKubeconfig', label: '3. Get Kubeconfig (Base64)', step: 3 },
+      { value: 'Nvidia', label: '4. Install GPU Driver', step: 4 },
+      { value: 'RebootVM', label: '5. Reboot VM', step: 5 },
+      { value: 'Nvidia-Status', label: '6. Check GPU Driver', step: 6 },
+      { value: 'K8sWorker-Deploy', label: '7. Deploy Worker', step: 7 },
+      { value: 'K8sClusterStatus', label: '8. Check Cluster Status', step: 8 },
+      { value: 'LlmdCheck', label: '9. Check llm-d Prerequisites', step: 9 },
+      { value: 'LlmdDeployWithModel', label: '10. Deploy llm-d with Model', step: 10 },
+      { value: 'LlmdStatus', label: '11. Check llm-d Status', step: 11 }
+    ]
+  },
+  'ml-ray': {
+    label: '🔬 ML (Ray)',
+    description: 'Ray distributed computing cluster',
+    scripts: [
+      { value: 'RayHead-Deploy', label: '1. Deploy Ray Head', step: 1 },
+      { value: 'RayWorker-Deploy', label: '2. Deploy Ray Worker', step: 2 }
+    ]
+  },
+  'game': {
+    label: '🎮 Game',
+    description: 'Game server deployment',
+    scripts: [
+      { value: 'Xonotic', label: 'Xonotic (FPS Game)', step: 1 },
+      { value: 'Westward', label: 'Westward (Strategy)', step: 2 }
+    ]
+  },
+  'platform': {
+    label: '🏗️ Platform',
+    description: 'Cloud-Barista platform deployment',
+    scripts: [
+      { value: 'CB-TB-Deploy', label: 'Deploy CB-Tumblebug', step: 1 },
+      { value: 'M-CMP-Deploy', label: 'Deploy M-CMP', step: 2 }
+    ]
+  },
+  'monitoring': {
+    label: '📊 Monitoring',
+    description: 'Monitoring and observability tools',
+    scripts: [
+      { value: 'Netdata', label: 'Install Netdata', step: 1 },
+      { value: 'Netdata-Status', label: 'Check Netdata Status', step: 2 },
+      { value: 'WeaveScope', label: 'Install WeaveScope', step: 3 }
+    ]
+  },
+  'network': {
+    label: '🌐 Network',
+    description: 'Network configuration tools',
+    scripts: [
+      { value: 'Setup-CrossNAT', label: 'Setup Cross-Cloud NAT', step: 1 },
+      { value: 'Setup-WireGuard', label: 'Setup WireGuard Mesh VPN', step: 2 }
+    ]
+  },
+  'utility': {
+    label: '🔧 Utility',
+    description: 'Utility scripts and tools',
+    scripts: [
+      { value: 'RebootVM', label: 'Reboot VM', step: 1 },
+      { value: 'Nginx', label: 'Install Nginx Web Server', step: 2 },
+      { value: 'Jitsi', label: 'Install Jitsi (Video Conf)', step: 3 },
+      { value: 'Stress', label: 'CPU Stress Test', step: 4 }
+    ]
+  },
+  'all': {
+    label: '📋 All Scripts',
+    description: 'View all available scripts',
+    scripts: [] // Will be populated dynamically
   }
+};
 
-  options += `
-      <option value="Nvidia">[GPU Driver] Nvidia CUDA Driver</option>
-      <option value="Nvidia-Status">[GPU Driver] Check Nvidia CUDA Driver</option>
-      <option value="Setup-CrossNAT">[Network Config] Setup Cross-Cloud NAT</option>
-      <option value="Setup-WireGuard">[Network Config] Setup WireGuard Mesh VPN</option>
-      <option value="vLLM">[LLM vLLM] vLLM Install</option>
-      <option value="vLLMServe">[LLM vLLM] vLLM Model Serve</option>
-      <option value="Ollama">[LLM Ollama] Ollama LLM Server</option>
-      <option value="OllamaPull">[LLM Model] Ollama Model Pull</option>
-      <option value="OpenWebUI">[LLM WebUI] Open WebUI for Ollama</option>
-      <option value="OpenWebUI-vLLM">[LLM WebUI] Open WebUI for vLLM</option>
-      <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
-      <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
-      <option value="K8sControlPlane-Deploy">[K8s Cluster] Deploy Control Plane</option>
-      <option value="K8sLlmdControlPlane">[K8s Cluster] Deploy Control Plane (llm-d)</option>
-      <option value="K8sWorker-Deploy">[K8s Cluster] Deploy Worker</option>
-      <option value="K8sGpuWorkerSetup">[K8s Cluster] Setup GPU Worker (Driver)</option>
-      <option value="K8sClusterStatus">[K8s Cluster] Check Cluster Status</option>
-      <option value="K8sGpuStatus">[K8s Cluster] Check GPU Status</option>
-      <option value="K8sGetJoinCommand">[K8s Cluster] Get Join Command</option>
-      <option value="K8sGetKubeconfig">[K8s Cluster] Get Kubeconfig (Base64)</option>
-      <option value="LlmdCheck">[K8s llm-d] Check Prerequisites</option>
-      <option value="LlmdDeploy">[K8s llm-d] Deploy llm-d</option>
-      <option value="LlmdDeployWithModel">[K8s llm-d] Deploy llm-d with Model</option>
-      <option value="LlmdStatus">[K8s llm-d] Check llm-d Status</option>
-      <option value="Netdata">[Monitoring] Netdata Monitoring</option>
-      <option value="Netdata-Status">[Monitoring] Check Netdata Status</option>
-      <option value="Nginx">[Web Server] Nginx Web Server</option>
-      <option value="Xonotic">[Game Server] Xonotic (FPS)</option>
-      <option value="Westward">[Game] Westward</option>
-      <option value="WeaveScope">[Monitoring] WeaveScope</option>
-      <option value="Jitsi">[Video Conf.] Jitsi</option>
-      <option value="Stress">[Stress Test] CPU Stress Test</option>`;
+// Build the "All Scripts" category from all other categories
+// Using plain object instead of Map for better compatibility
+(function() {
+  const allScriptsArray = [];
+  const categories = window.predefinedScriptCategories;
+  const catKeys = Object.keys(categories);
+  const seenScripts = {};
+  
+  // Iterate through categories in order to group by category
+  for (let i = 0; i < catKeys.length; i++) {
+    const catKey = catKeys[i];
+    if (catKey === 'all') continue;
+    
+    const cat = categories[catKey];
+    const scripts = cat.scripts || [];
+    
+    for (let j = 0; j < scripts.length; j++) {
+      const script = scripts[j];
+      // Only add if not already seen (avoid duplicates)
+      if (!seenScripts[script.value]) {
+        seenScripts[script.value] = true;
+        allScriptsArray.push({
+          value: script.value,
+          label: script.label,
+          step: script.step,
+          optional: script.optional,
+          category: cat.label
+        });
+      }
+    }
+  }
+  
+  // Sort by category first, then by label within category
+  allScriptsArray.sort(function(a, b) {
+    // First sort by category
+    const catCompare = a.category.localeCompare(b.category);
+    if (catCompare !== 0) return catCompare;
+    // Then sort by label within same category
+    return a.label.localeCompare(b.label);
+  });
+  
+  window.predefinedScriptCategories.all.scripts = allScriptsArray;
+})();
+
+window.generatePredefinedScriptsHtml = function (includeDeployOptions = false) {
+  const categories = window.predefinedScriptCategories;
+  
+  // Generate category tabs
+  let categoryTabs = '';
+  const defaultCategory = 'llm-ollama';
+  
+  Object.entries(categories).forEach(([key, cat]) => {
+    // Skip platform category if not includeDeployOptions
+    if (key === 'platform' && !includeDeployOptions) return;
+    
+    const isActive = key === defaultCategory ? 'active' : '';
+    const bgColor = key === defaultCategory ? '#007bff' : '#e9ecef';
+    const textColor = key === defaultCategory ? 'white' : '#495057';
+    
+    categoryTabs += `<button type="button" 
+      class="script-category-tab ${isActive}" 
+      data-category="${key}"
+      onclick="switchScriptCategory('${key}')"
+      style="padding: 6px 12px; margin: 2px; border: none; border-radius: 15px; 
+             background: ${bgColor}; color: ${textColor}; font-size: 11px; 
+             cursor: pointer; white-space: nowrap; transition: all 0.2s;"
+      onmouseover="if(!this.classList.contains('active')) { this.style.background='#dee2e6'; }"
+      onmouseout="if(!this.classList.contains('active')) { this.style.background='#e9ecef'; }">
+      ${cat.label}
+    </button>`;
+  });
+
+  // Generate initial script list for default category
+  const defaultCat = categories[defaultCategory];
+  let scriptOptions = window.generateScriptOptionsHtml(defaultCat.scripts);
 
   return `
     <p><font size=4><b>[Predefined Scripts]</b></font></p>
     <div style="margin-bottom: 15px;">
+      <div id="scriptCategoryTabs" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; padding: 8px; background: #f8f9fa; border-radius: 8px;">
+        ${categoryTabs}
+      </div>
+      <div id="categoryDescription" style="font-size: 11px; color: #666; margin-bottom: 8px; padding: 5px 10px; background: #fff3cd; border-radius: 4px;">
+        📝 ${defaultCat.description}
+      </div>
       <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-        <select id="predefinedScripts" style="width: 60%; padding: 5px;" onchange="loadPredefinedScript()">
-          ${options}
+        <select id="predefinedScripts" style="width: 60%; padding: 8px; border-radius: 4px; border: 1px solid #ced4da;" onchange="loadPredefinedScript()">
+          ${scriptOptions}
         </select>
-        <label style="display: flex; align-items: center; gap: 5px; font-size: 13px;">
-          <input type="checkbox" id="scriptAppendMode"> Append mode
+        <label style="display: flex; align-items: center; gap: 5px; font-size: 12px;">
+          <input type="checkbox" id="scriptAppendMode"> Append
         </label>
       </div>
-      <p style="margin: 0; font-size: 12px; color: #666;">Select a script to add commands</p>
     </div>`;
 };
 
-// Generate Label Selector section HTML
-window.generateLabelSelectorHtml = function (isOptional = false) {
+// Generate script category tabs HTML only (for inline use)
+window.generateScriptCategoryTabsHtml = function(includeDeployOptions = false) {
+  const categories = window.predefinedScriptCategories;
+  const defaultCategory = 'llm-ollama';
+  let html = '';
+  
+  Object.entries(categories).forEach(([key, cat]) => {
+    if (key === 'platform' && !includeDeployOptions) return;
+    
+    const isActive = key === defaultCategory;
+    const bgColor = isActive ? '#007bff' : '#e9ecef';
+    const textColor = isActive ? 'white' : '#495057';
+    
+    html += `<button type="button" 
+      class="script-category-tab ${isActive ? 'active' : ''}" 
+      data-category="${key}"
+      onclick="switchScriptCategory('${key}')"
+      style="padding: 4px 10px; margin: 1px; border: none; border-radius: 12px; 
+             background: ${bgColor}; color: ${textColor}; font-size: 0.7rem; 
+             cursor: pointer; white-space: nowrap; transition: all 0.2s;"
+      onmouseover="if(!this.classList.contains('active')) { this.style.background='#dee2e6'; }"
+      onmouseout="if(!this.classList.contains('active')) { this.style.background='#e9ecef'; }">
+      ${cat.label}
+    </button>`;
+  });
+  
+  return html;
+};
+
+// Generate script options HTML for a category
+window.generateScriptOptionsHtml = function(scripts) {
+  let options = `<option value="">-- Select a script --</option>`;
+  scripts.forEach(script => {
+    const optionalTag = script.optional ? ' [Optional]' : '';
+    const categoryTag = script.category ? ` [${script.category}]` : '';
+    options += `<option value="${script.value}">${script.label}${optionalTag}${categoryTag}</option>`;
+  });
+  return options;
+};
+
+// Switch script category
+window.switchScriptCategory = function(categoryKey) {
+  const categories = window.predefinedScriptCategories;
+  const category = categories[categoryKey];
+  if (!category) return;
+  
+  // Update active tab styling
+  document.querySelectorAll('.script-category-tab').forEach(tab => {
+    if (tab.dataset.category === categoryKey) {
+      tab.classList.add('active');
+      tab.style.background = '#007bff';
+      tab.style.color = 'white';
+    } else {
+      tab.classList.remove('active');
+      tab.style.background = '#e9ecef';
+      tab.style.color = '#495057';
+    }
+  });
+  
+  // Update description
+  const descDiv = document.getElementById('categoryDescription');
+  if (descDiv) {
+    descDiv.innerHTML = `📝 ${category.description}`;
+  }
+  
+  // Update script dropdown
+  const scriptSelect = document.getElementById('predefinedScripts');
+  if (scriptSelect) {
+    scriptSelect.innerHTML = window.generateScriptOptionsHtml(category.scripts);
+  }
+  
+  // Store current category
+  window._currentScriptCategory = categoryKey;
+};
+
+// Generate Label Selector section HTML with clickable label chips
+// usePopupStyle: true for new POPUP_STYLES, false for legacy style
+window.generateLabelSelectorHtml = function (isOptional = false, usePopupStyle = false) {
+  if (usePopupStyle) {
+    const hintText = isOptional ? '<span class="popup-hint">(Optional - filter VMs by labels)</span>' : '';
+    return `
+      <div class="popup-section">
+        <div class="popup-section-title">🏷️ Label Selector ${hintText}</div>
+        <div id="selectedLabelsDisplay" style="min-height: 28px; padding: 4px 8px; border: 1px solid #ced4da; border-radius: 4px; 
+             background: white; margin-bottom: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;">
+          <span id="labelPlaceholder" style="color: #999; font-size: 0.75rem;">Click labels below to select...</span>
+        </div>
+        <input type="hidden" id="labelSelector" value="">
+        <div class="popup-inline" style="margin-bottom: 6px;">
+          <button type="button" id="clearLabelSelector" 
+            style="padding: 3px 8px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">
+            Clear All
+          </button>
+        </div>
+        <div style="font-size: 0.7rem; color: #666; margin-bottom: 4px;"><strong>Available Labels</strong> (click to add/remove)</div>
+        <div id="availableLabelsContainer" style="padding: 8px; background: #f8f9fa; border-radius: 4px; min-height: 36px;">
+          <span style="color: #999; font-size: 0.75rem;">Select an MCI to see available labels...</span>
+        </div>
+        <div id="labelMatchPreview" style="margin-top: 6px; padding: 6px; background: #e7f3ff; border-radius: 4px; display: none;">
+          <span style="font-size: 0.75rem; color: #0066cc;">
+            <strong>Matching VMs:</strong> <span id="matchingVmCount">0</span> / <span id="totalVmCount">0</span>
+          </span>
+          <div id="matchingVmList" style="margin-top: 4px; font-size: 0.7rem; color: #666; max-height: 50px; overflow-y: auto;"></div>
+        </div>
+      </div>`;
+  }
+  
+  // Legacy style (for backward compatibility)
   const optionalText = isOptional ? ' (optional)' : '';
   return `
     <p><font size=4><b>[Label Selector]${optionalText}</b></font></p>
     <div style="margin-bottom: 15px;">
-      <input type="text" id="labelSelector" style="width: 75%; padding: 5px;" placeholder="ex: role=worker,env=production">
-      <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">Filter VMs by labels</p>
+      <div id="selectedLabelsDisplay" style="min-height: 32px; padding: 5px; border: 1px solid #ced4da; border-radius: 4px; 
+           background: white; margin-bottom: 5px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;">
+        <span id="labelPlaceholder" style="color: #999; font-size: 12px;">Click labels below to select...</span>
+      </div>
+      <input type="hidden" id="labelSelector" value="">
+      <button type="button" id="clearLabelSelector" 
+        style="padding: 5px 10px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
+        Clear All
+      </button>
+      <p style="margin: 8px 0 5px 0; font-size: 12px; color: #666;"><strong>Available Labels</strong> (click to add/remove)</p>
+      <div id="availableLabelsContainer" style="padding: 10px; background: #f8f9fa; border-radius: 5px; min-height: 40px;">
+        <span style="color: #999; font-size: 12px;">Select an MCI to see available labels...</span>
+      </div>
+      <div id="labelMatchPreview" style="margin-top: 8px; padding: 8px; background: #e7f3ff; border-radius: 5px; display: none;">
+        <span style="font-size: 12px; color: #0066cc;">
+          <strong>Matching VMs:</strong> <span id="matchingVmCount">0</span> / <span id="totalVmCount">0</span>
+        </span>
+        <div id="matchingVmList" style="margin-top: 5px; font-size: 11px; color: #666; max-height: 60px; overflow-y: auto;"></div>
+      </div>
     </div>`;
+};
+
+// Clear label selector input
+window.clearLabelSelector = function() {
+  const labelInput = document.getElementById('labelSelector');
+  if (labelInput) {
+    labelInput.value = '';
+    updateSelectedLabelsDisplay();
+    updateLabelMatchPreview();
+    updateAvailableLabelChipStyles();
+  }
+};
+
+// Setup Clear All button listener (avoiding inline onclick for XSS safety)
+window.setupClearLabelButtonListener = function() {
+  const clearBtn = document.getElementById('clearLabelSelector');
+  if (clearBtn && !clearBtn._listenerAttached) {
+    clearBtn.addEventListener('click', window.clearLabelSelector);
+    clearBtn._listenerAttached = true;
+  }
+};
+
+// Extract unique labels from MCI VMs
+window.extractLabelsFromMci = function(mciId) {
+  const mciData = window.cloudBaristaCentralData?.mciData || [];
+  const mci = mciData.find(m => m.id === mciId || m.name === mciId);
+  
+  if (!mci || !mci.vm || mci.vm.length === 0) {
+    return { labels: {}, vmCount: 0, vms: [] };
+  }
+  
+  const labelMap = {}; // key -> Set of values
+  const vms = [];
+  
+  mci.vm.forEach(vm => {
+    vms.push({
+      id: vm.id,
+      name: vm.name || vm.id,
+      label: vm.label || {}
+    });
+    
+    if (vm.label && typeof vm.label === 'object') {
+      Object.entries(vm.label).forEach(([key, value]) => {
+        if (!labelMap[key]) {
+          labelMap[key] = new Set();
+        }
+        labelMap[key].add(value);
+      });
+    }
+  });
+  
+  // Convert Sets to arrays for easier handling
+  const labels = {};
+  Object.entries(labelMap).forEach(([key, valueSet]) => {
+    labels[key] = Array.from(valueSet);
+  });
+  
+  return { labels, vmCount: mci.vm.length, vms };
+};
+
+// Update available labels display when MCI is selected
+window.updateAvailableLabels = function(mciId) {
+  const container = document.getElementById('availableLabelsContainer');
+  if (!container) return;
+  
+  const { labels, vmCount, vms } = extractLabelsFromMci(mciId);
+  
+  // Store vms data for preview
+  window._currentMciVms = vms;
+  window._currentMciLabels = labels;
+  
+  if (Object.keys(labels).length === 0) {
+    container.innerHTML = '<span style="color: #999; font-size: 12px;">No labels found in this MCI\'s VMs</span>';
+    return;
+  }
+  
+  const labelEntries = Object.entries(labels);
+  const maxVisibleKeys = 2;
+  const hasMore = labelEntries.length > maxVisibleKeys;
+  
+  let html = '<div id="labelGroupsContainer">';
+  
+  // Group by label key
+  labelEntries.forEach(([key, values], index) => {
+    const isHidden = index >= maxVisibleKeys;
+    html += `<div class="label-group" style="margin-bottom: 10px; display: flex; align-items: flex-start; gap: 8px; ${isHidden ? 'display: none;' : ''}" data-label-group="${index}">
+      <span style="display: inline-block; padding: 3px 10px; background: #6c757d; color: white; 
+             border-radius: 12px; font-size: 11px; font-weight: bold; white-space: nowrap;">
+        ${window.escapeHtml(key)}
+      </span>
+      <div style="display: flex; flex-wrap: wrap; gap: 4px;">`;
+    
+    values.forEach(value => {
+      const labelPair = `${key}=${value}`;
+      html += `<button type="button" class="label-value-chip" 
+        data-label="${window.escapeHtml(labelPair)}"
+        style="display: inline-block; padding: 3px 10px; background: #007bff; color: white; 
+               border-radius: 12px; font-size: 11px; cursor: pointer; transition: all 0.2s; border: none;"
+        title="Click to add: ${window.escapeHtml(labelPair)}">
+        ${window.escapeHtml(value)}
+      </button>`;
+    });
+    
+    html += '</div></div>';
+  });
+  
+  html += '</div>';
+  
+  // Add "Show more" / "Show less" toggle if needed
+  if (hasMore) {
+    const hiddenCount = labelEntries.length - maxVisibleKeys;
+    html += `<div style="margin-top: 8px; text-align: center;">
+      <button type="button" id="toggleLabelsBtn" onclick="toggleLabelGroups()" 
+        style="padding: 4px 12px; background: #e9ecef; color: #495057; border: 1px solid #ced4da; 
+               border-radius: 15px; font-size: 11px; cursor: pointer;">
+        Show ${hiddenCount} more label${hiddenCount > 1 ? 's' : ''} ▼
+      </button>
+    </div>`;
+  }
+  
+  html += `<p style="margin: 10px 0 0 0; font-size: 11px; color: #666;">Total: ${Object.keys(labels).length} label keys, ${vmCount} VMs</p>`;
+  
+  container.innerHTML = html;
+  
+  // Setup delegated event listeners for label chips (XSS-safe)
+  setupLabelChipEventListeners(container);
+  
+  // Update chip styles based on current selection
+  updateAvailableLabelChipStyles();
+  updateLabelMatchPreview();
+};
+
+// Setup delegated event listeners for label value chips (avoids XSS from inline onclick)
+window.setupLabelChipEventListeners = function(container) {
+  if (!container) return;
+  
+  // Delegated click handler for label-value-chip buttons
+  container.addEventListener('click', function(event) {
+    const chip = event.target.closest('.label-value-chip');
+    if (chip && chip.dataset.label) {
+      window.addLabelToSelector(chip.dataset.label);
+    }
+  });
+  
+  // Hover effects for chips
+  container.addEventListener('mouseover', function(event) {
+    const chip = event.target.closest('.label-value-chip');
+    if (chip && !chip.classList.contains('selected')) {
+      chip.style.background = '#0056b3';
+    }
+  });
+  
+  container.addEventListener('mouseout', function(event) {
+    const chip = event.target.closest('.label-value-chip');
+    if (chip && !chip.classList.contains('selected')) {
+      chip.style.background = '#007bff';
+    }
+  });
+};
+
+// Setup delegated event listener for selected labels display (remove buttons)
+window.setupSelectedLabelsEventListeners = function() {
+  const displayDiv = document.getElementById('selectedLabelsDisplay');
+  if (!displayDiv || displayDiv._labelListenerAttached) return;
+  
+  displayDiv.addEventListener('click', function(event) {
+    const removeBtn = event.target.closest('.remove-label-btn');
+    if (removeBtn && removeBtn.dataset.label) {
+      window.removeLabelFromSelector(removeBtn.dataset.label);
+    }
+  });
+  
+  displayDiv._labelListenerAttached = true;
+};
+
+// Toggle visibility of additional label groups
+window.toggleLabelGroups = function() {
+  const groups = document.querySelectorAll('.label-group[data-label-group]');
+  const toggleBtn = document.getElementById('toggleLabelsBtn');
+  if (!toggleBtn) return;
+  
+  const isExpanded = toggleBtn.dataset.expanded === 'true';
+  
+  groups.forEach((group, index) => {
+    if (index >= 2) {
+      group.style.display = isExpanded ? 'none' : 'flex';
+    }
+  });
+  
+  if (isExpanded) {
+    const hiddenCount = groups.length - 2;
+    toggleBtn.innerHTML = `Show ${hiddenCount} more label${hiddenCount > 1 ? 's' : ''} ▼`;
+    toggleBtn.dataset.expanded = 'false';
+  } else {
+    toggleBtn.innerHTML = 'Show less ▲';
+    toggleBtn.dataset.expanded = 'true';
+  }
+};
+
+// Update the selected labels display (chip-style in input area)
+window.updateSelectedLabelsDisplay = function() {
+  const displayDiv = document.getElementById('selectedLabelsDisplay');
+  const placeholder = document.getElementById('labelPlaceholder');
+  const labelInput = document.getElementById('labelSelector');
+  
+  if (!displayDiv || !labelInput) return;
+  
+  const labelValue = labelInput.value.trim();
+  const labels = labelValue.split(',').map(l => l.trim()).filter(l => l && l.includes('='));
+  
+  if (labels.length === 0) {
+    displayDiv.innerHTML = '<span id="labelPlaceholder" style="color: #999; font-size: 12px;">Click labels below to select...</span>';
+    return;
+  }
+  
+  let html = '';
+  labels.forEach(label => {
+    const [key, value] = label.split('=');
+    html += `<span class="selected-label-chip" style="display: inline-flex; align-items: center; padding: 2px 4px 2px 8px; 
+             background: #e7f3ff; border: 1px solid #007bff; border-radius: 12px; font-size: 11px; gap: 4px;">
+      <span style="color: #6c757d; font-weight: bold;">${window.escapeHtml(key)}</span>
+      <span style="color: #333;">=</span>
+      <span style="color: #007bff; font-weight: bold;">${window.escapeHtml(value)}</span>
+      <button type="button" class="remove-label-btn" data-label="${window.escapeHtml(label)}"
+        style="cursor: pointer; color: #dc3545; font-weight: bold; padding: 0 4px; margin-left: 2px; background: none; border: none;"
+        title="Remove this label" aria-label="Remove label ${window.escapeHtml(label)}">×</button>
+    </span>`;
+  });
+  
+  displayDiv.innerHTML = html;
+  
+  // Setup delegated event listeners for remove buttons (XSS-safe)
+  window.setupSelectedLabelsEventListeners();
+};
+
+// Remove a specific label from selector
+window.removeLabelFromSelector = function(labelPair) {
+  const labelInput = document.getElementById('labelSelector');
+  if (!labelInput) return;
+  
+  const currentLabels = labelInput.value.split(',').map(l => l.trim()).filter(l => l);
+  const newLabels = currentLabels.filter(l => l !== labelPair);
+  labelInput.value = newLabels.join(',');
+  
+  updateSelectedLabelsDisplay();
+  updateLabelMatchPreview();
+  updateAvailableLabelChipStyles();
+};
+
+// Update available label chip styles based on selection
+window.updateAvailableLabelChipStyles = function() {
+  const labelInput = document.getElementById('labelSelector');
+  if (!labelInput) return;
+  
+  const selectedLabels = labelInput.value.split(',').map(l => l.trim()).filter(l => l);
+  const chips = document.querySelectorAll('.label-value-chip');
+  
+  chips.forEach(chip => {
+    const labelPair = chip.dataset.label;
+    if (selectedLabels.includes(labelPair)) {
+      chip.classList.add('selected');
+      chip.style.background = '#28a745';
+      chip.style.boxShadow = '0 0 0 2px #28a74566';
+    } else {
+      chip.classList.remove('selected');
+      chip.style.background = '#007bff';
+      chip.style.boxShadow = 'none';
+    }
+  });
+};
+
+// Add label to selector input
+window.addLabelToSelector = function(labelPair) {
+  const labelInput = document.getElementById('labelSelector');
+  if (!labelInput) return;
+  
+  const currentValue = labelInput.value.trim();
+  
+  // Check if label already exists
+  const existingLabels = currentValue.split(',').map(l => l.trim()).filter(l => l);
+  if (existingLabels.includes(labelPair)) {
+    // Remove if already exists (toggle behavior)
+    const newLabels = existingLabels.filter(l => l !== labelPair);
+    labelInput.value = newLabels.join(',');
+  } else {
+    // Add new label
+    if (currentValue) {
+      labelInput.value = currentValue + ',' + labelPair;
+    } else {
+      labelInput.value = labelPair;
+    }
+  }
+  
+  updateSelectedLabelsDisplay();
+  updateLabelMatchPreview();
+  updateAvailableLabelChipStyles();
+};
+
+// Update preview of matching VMs
+window.updateLabelMatchPreview = function() {
+  const previewDiv = document.getElementById('labelMatchPreview');
+  const matchingCountSpan = document.getElementById('matchingVmCount');
+  const totalCountSpan = document.getElementById('totalVmCount');
+  const matchingListDiv = document.getElementById('matchingVmList');
+  const labelInput = document.getElementById('labelSelector');
+  
+  if (!previewDiv || !labelInput || !window._currentMciVms) return;
+  
+  const vms = window._currentMciVms;
+  const labelSelector = labelInput.value.trim();
+  
+  totalCountSpan.textContent = vms.length;
+  
+  if (!labelSelector) {
+    previewDiv.style.display = 'none';
+    return;
+  }
+  
+  // Parse label selector into array of {key, value} pairs
+  // Each pair must be satisfied (AND condition)
+  const requiredLabelPairs = [];
+  labelSelector.split(',').forEach(pair => {
+    const [key, value] = pair.split('=').map(s => s.trim());
+    if (key && value) {
+      requiredLabelPairs.push({ key, value });
+    }
+  });
+  
+  // Find matching VMs - ALL label pairs must match (AND condition)
+  const matchingVms = vms.filter(vm => {
+    if (!vm.label || requiredLabelPairs.length === 0) return false;
+    
+    // Every required label pair must exist in VM's labels
+    return requiredLabelPairs.every(({ key, value }) => {
+      return vm.label[key] === value;
+    });
+  });
+  
+  matchingCountSpan.textContent = matchingVms.length;
+  
+  if (matchingVms.length > 0) {
+    matchingListDiv.innerHTML = matchingVms.map(vm => 
+      `<span style="display: inline-block; padding: 2px 6px; margin: 2px; background: #d4edda; border-radius: 3px;">${escapeHtml(vm.name)}</span>`
+    ).join('');
+    previewDiv.style.background = '#d4edda';
+  } else {
+    matchingListDiv.innerHTML = '<span style="color: #dc3545;">No VMs match the current selector</span>';
+    previewDiv.style.background = '#f8d7da';
+  }
+  
+  previewDiv.style.display = 'block';
+};
+
+// Helper function to escape HTML
+window.escapeHtml = function(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+};
+
+// Setup MCI selector change handler for label updates
+window.setupMciSelectorForLabels = function() {
+  const mciSelector = document.getElementById('mciSelector');
+  if (!mciSelector) return;
+  
+  // Update labels when MCI selection changes
+  mciSelector.addEventListener('change', function() {
+    // Clear previous selection when changing MCI
+    const labelInput = document.getElementById('labelSelector');
+    if (labelInput) {
+      labelInput.value = '';
+      updateSelectedLabelsDisplay();
+    }
+    updateAvailableLabels(this.value);
+  });
+  
+  // Note: Label input is now hidden, so no need for direct input listener
+  // Interaction happens through chip clicks which call addLabelToSelector()
+  
+  // Initialize with current selection
+  if (mciSelector.value) {
+    updateAvailableLabels(mciSelector.value);
+  }
 };
 
 // Setup Commands popup (call in didOpen)
@@ -11531,16 +12196,32 @@ window.setupCommandsPopup = function (maxCommands = 10) {
     const newCmdDiv = document.createElement('div');
     newCmdDiv.id = `cmdDiv${cmdCount}`;
     newCmdDiv.className = 'cmdRow';
+    newCmdDiv.style.marginBottom = '6px';
     newCmdDiv.innerHTML = `
-      Command ${cmdCount}: <textarea id="cmd${cmdCount}" rows="1" style="width: 75%; resize: vertical; vertical-align: top; overflow: hidden;" oninput="autoResizeTextarea(this)"></textarea>
-      <button onclick="document.getElementById('cmd${cmdCount}').value = ''; autoResizeTextarea(document.getElementById('cmd${cmdCount}'));" style="vertical-align: top;">Clear</button>
+      <div class="popup-field">
+        <div class="popup-inline" style="justify-content: space-between;">
+          <label class="popup-label">Command ${cmdCount}</label>
+          <button type="button" onclick="document.getElementById('cmd${cmdCount}').value = ''; autoResizeTextarea(document.getElementById('cmd${cmdCount}'));" 
+            style="font-size: 10px; padding: 1px 6px; border: 1px solid #ccc; border-radius: 3px; background: #f8f9fa; cursor: pointer;">Clear</button>
+        </div>
+        <textarea id="cmd${cmdCount}" rows="1" class="popup-input" style="resize: vertical; overflow: hidden; min-height: 32px;" 
+          oninput="autoResizeTextarea(this)"></textarea>
+      </div>
     `;
 
+    // Insert before the buttons row (find by #addCmd button's parent)
     const addCmdBtn = cmdContainer.querySelector('#addCmd');
-    if (addCmdBtn) {
-      cmdContainer.insertBefore(newCmdDiv, addCmdBtn);
+    const buttonsRow = addCmdBtn ? addCmdBtn.parentElement : null;
+    if (buttonsRow && buttonsRow.parentElement === cmdContainer) {
+      cmdContainer.insertBefore(newCmdDiv, buttonsRow);
     } else {
-      cmdContainer.appendChild(newCmdDiv);
+      // Fallback: append before the last child if it's the buttons row
+      const lastChild = cmdContainer.lastElementChild;
+      if (lastChild && lastChild.querySelector('#addCmd')) {
+        cmdContainer.insertBefore(newCmdDiv, lastChild);
+      } else {
+        cmdContainer.appendChild(newCmdDiv);
+      }
     }
   };
 
@@ -11738,38 +12419,153 @@ async function executeRemoteCmd() {
     </div>`;
 
   Swal.fire({
-    title: "<font size=5><b>Remote Command Execution (SSH)</b></font>",
-    width: 900,
+    title: "🖥️ Remote Command Execution",
+    width: 750,
     html: `
-    <div id="dynamicContainer" style="text-align: left;">
-      <p><font size=4><b>[Select MCI]</b></font></p>
-      <div style="margin-bottom: 15px;">
-        <select id="mciSelector" style="width: 75%; padding: 5px;">
-          ${mciOptionsHtml}
-        </select>
+    ${POPUP_STYLES}
+    <div class="popup-container">
+      <!-- MCI & Target Selection Section (Combined) -->
+      <div class="popup-section">
+        <div class="popup-section-title">🎯 Target Selection</div>
+        <div class="popup-row">
+          <div class="popup-col" style="flex: 1;">
+            <div class="popup-field">
+              <label class="popup-label">MCI</label>
+              <select id="mciSelector" class="popup-select">
+                ${mciOptionsHtml}
+              </select>
+            </div>
+          </div>
+          <div class="popup-col" style="flex: 2;">
+            <div class="popup-field">
+              <label class="popup-label">Scope</label>
+              <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; min-height: 32px;">
+                <label class="popup-inline" style="cursor: pointer;">
+                  <input type="radio" id="mciOption" name="selectOption" value="MCI" checked>
+                  <span class="popup-badge" style="background: #0d6efd; color: white;">All VMs</span>
+                </label>
+                <label class="popup-inline" style="cursor: pointer; ${subgroupid ? '' : 'opacity: 0.5;'}">
+                  <input type="radio" id="subGroupOption" name="selectOption" value="SubGroup" ${subgroupid ? '' : 'disabled'}>
+                  <span class="popup-badge" style="background: #28a745; color: white;">SubGroup</span>
+                  <span style="font-size: 0.75rem; color: #666;">${subgroupid || 'N/A'}</span>
+                </label>
+                <label class="popup-inline" style="cursor: pointer; ${vmid ? '' : 'opacity: 0.5;'}">
+                  <input type="radio" id="vmOption" name="selectOption" value="VM" ${vmid ? '' : 'disabled'}>
+                  <span class="popup-badge" style="background: #dc3545; color: white;">VM</span>
+                  <span style="font-size: 0.75rem; color: #666;">${vmid || 'N/A'}</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="popup-col" style="flex: 0 0 auto;">
+            <div class="popup-field">
+              <label class="popup-label">Timeout</label>
+              <div class="popup-inline">
+                <input type="number" id="timeoutMinutes" class="popup-input" style="width: 60px;" value="30" min="1" max="120">
+                <span style="font-size: 0.75rem; color: #666;">min</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      ${generateCommandsHtml(defaultRemoteCommand)}
-      ${generatePredefinedScriptsHtml(true)}
-
-      <p><font size=4><b>[Timeout (minutes)]</b></font></p>
-      <div style="margin-bottom: 15px;">
-        <input type="number" id="timeoutMinutes" style="width: 120px; padding: 5px;" value="30" min="1" max="120">
-        <span style="font-size: 0.8em; color: #666; margin-left: 5px;">min: 1, max: 120, default: 30</span>
+      <!-- Commands Section -->
+      <div class="popup-section">
+        <div class="popup-section-title">⌨️ Commands</div>
+        <div id="cmdContainer">
+          <div id="cmdDiv1" class="cmdRow" style="margin-bottom: 6px;">
+            <div class="popup-field">
+              <div class="popup-inline" style="justify-content: space-between;">
+                <label class="popup-label">Command 1</label>
+                <button type="button" onclick="document.getElementById('cmd1').value = ''; autoResizeTextarea(document.getElementById('cmd1'));" 
+                  style="font-size: 10px; padding: 1px 6px; border: 1px solid #ccc; border-radius: 3px; background: #f8f9fa; cursor: pointer;">Clear</button>
+              </div>
+              <textarea id="cmd1" rows="1" class="popup-input" style="resize: vertical; overflow: hidden; min-height: 32px;" 
+                oninput="autoResizeTextarea(this)">${defaultRemoteCommand[0] || ''}</textarea>
+            </div>
+          </div>
+          <div id="cmdDiv2" class="cmdRow" style="margin-bottom: 6px;">
+            <div class="popup-field">
+              <div class="popup-inline" style="justify-content: space-between;">
+                <label class="popup-label">Command 2</label>
+                <button type="button" onclick="document.getElementById('cmd2').value = ''; autoResizeTextarea(document.getElementById('cmd2'));" 
+                  style="font-size: 10px; padding: 1px 6px; border: 1px solid #ccc; border-radius: 3px; background: #f8f9fa; cursor: pointer;">Clear</button>
+              </div>
+              <textarea id="cmd2" rows="1" class="popup-input" style="resize: vertical; overflow: hidden; min-height: 32px;" 
+                oninput="autoResizeTextarea(this)">${defaultRemoteCommand[1] || ''}</textarea>
+            </div>
+          </div>
+          <div id="cmdDiv3" class="cmdRow" style="margin-bottom: 6px;">
+            <div class="popup-field">
+              <div class="popup-inline" style="justify-content: space-between;">
+                <label class="popup-label">Command 3</label>
+                <button type="button" onclick="document.getElementById('cmd3').value = ''; autoResizeTextarea(document.getElementById('cmd3'));" 
+                  style="font-size: 10px; padding: 1px 6px; border: 1px solid #ccc; border-radius: 3px; background: #f8f9fa; cursor: pointer;">Clear</button>
+              </div>
+              <textarea id="cmd3" rows="1" class="popup-input" style="resize: vertical; overflow: hidden; min-height: 32px;" 
+                oninput="autoResizeTextarea(this)">${defaultRemoteCommand[2] || ''}</textarea>
+            </div>
+          </div>
+          <div class="popup-inline" style="gap: 8px; margin-top: 8px;">
+            <button id="addCmd" type="button" onclick="addCmd()" 
+              style="padding: 4px 12px; border: 1px solid #28a745; border-radius: 4px; background: #28a745; color: white; cursor: pointer; font-size: 12px;">
+              + Add Command
+            </button>
+            <button type="button" onclick="resetCommands()" 
+              style="padding: 4px 12px; border: 1px solid #6c757d; border-radius: 4px; background: #f8f9fa; color: #333; cursor: pointer; font-size: 12px;">
+              Reset
+            </button>
+          </div>
+        </div>
       </div>
 
-      ${targetSelectionHtml}
-      ${generateLabelSelectorHtml(true)}
+      <!-- Predefined Scripts Section -->
+      <div class="popup-section">
+        <div class="popup-section-title">📜 Predefined Scripts</div>
+        <div id="scriptCategoryTabs" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
+          ${window.generateScriptCategoryTabsHtml(true)}
+        </div>
+        <div id="categoryDescription" style="font-size: 0.7rem; color: #666; margin-bottom: 6px; padding: 4px 8px; background: #fff3cd; border-radius: 4px;">
+          📝 Ollama-based LLM service deployment
+        </div>
+        <div class="popup-row">
+          <div class="popup-col" style="flex: 3;">
+            <div class="popup-field">
+              <select id="predefinedScripts" class="popup-select">
+                ${window.generateScriptOptionsHtml(window.predefinedScriptCategories['llm-ollama'].scripts)}
+              </select>
+            </div>
+          </div>
+          <div class="popup-col" style="flex: 1;">
+            <div class="popup-field">
+              <label class="popup-inline" style="font-size: 0.8rem;">
+                <input type="checkbox" id="scriptAppendMode"> Append
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
 
-      <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
-        <button type="button" onclick="showTaskManagementModal()" style="background-color: #6c757d; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">
+      <!-- Label Selector Section (generated by helper function) -->
+      ${window.generateLabelSelectorHtml(true, true)}
+
+      <!-- Task Management -->
+      <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee; text-align: right;">
+        <button type="button" onclick="showTaskManagementModal()" 
+          style="background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">
           📋 View Running Tasks
         </button>
       </div>
     </div>`,
     showCancelButton: true,
     confirmButtonText: "Execute",
-    didOpen: () => setupCommandsPopup(0), // 0 means no limit
+    didOpen: () => {
+      setupCommandsPopup(0); // 0 means no limit
+      setupMciSelectorForLabels(); // Setup MCI selector for label updates
+      setupClearLabelButtonListener(); // Setup Clear All button listener
+      // Auto-resize textareas on open
+      document.querySelectorAll('#cmdContainer textarea').forEach(ta => autoResizeTextarea(ta));
+    },
     preConfirm: () => {
       const commands = collectCommands();
       const selectedMci = document.getElementById("mciSelector").value;
