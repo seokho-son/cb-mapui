@@ -11122,6 +11122,52 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
+    case "K8sLlmdControlPlane":
+      // Deploy K8s control plane with llm-d components (Gateway API, LeaderWorkerSet, GPU Operator)
+      // For distributed LLM inference with llm-d
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/k8s/k8s-control-plane-setup.sh | bash -s -- --llm-d";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "K8sGpuWorkerSetup":
+      // Setup GPU worker: Install NVIDIA driver first, then join cluster
+      // Step 1: Install CUDA driver (requires reboot)
+      // Step 2: After reboot, run K8sWorker-Deploy with join command
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/installCudaDriver.sh | bash -s -- --no-reboot";
+      defaultRemoteCommand[1] = "echo 'GPU driver installed. Reboot required before joining K8s cluster.'";
+      defaultRemoteCommand[2] = "echo 'After reboot, run K8sWorker-Deploy with the join command from control plane.'";
+      break;
+    case "LlmdDeploy":
+      // Deploy llm-d on K8s cluster (run on control plane)
+      // Prerequisites: K8s with --llm-d mode, GPU workers joined
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deploy-llm-d.sh | bash";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "LlmdDeployWithModel":
+      // Deploy llm-d with specific model
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deploy-llm-d.sh | bash -s -- --model $$Func(AssignTask(task='meta-llama/Llama-3.1-8B-Instruct, Qwen/Qwen2.5-7B-Instruct, mistralai/Mistral-7B-Instruct-v0.3'))";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "LlmdCheck":
+      // Check llm-d prerequisites (run on control plane)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deploy-llm-d.sh | bash -s -- --check";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "LlmdStatus":
+      // Check llm-d deployment status (run on control plane)
+      defaultRemoteCommand[0] = "echo '=== llm-d Pods ===' && kubectl get pods -n llm-d -o wide && echo '' && echo '=== llm-d Services ===' && kubectl get svc -n llm-d && echo '' && echo '=== GPU Resources ===' && kubectl describe nodes | grep -A5 'Allocatable:' | grep nvidia";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "K8sGpuStatus":
+      // Check GPU status on K8s cluster (run on control plane)
+      defaultRemoteCommand[0] = "echo '=== GPU Operator Pods ===' && kubectl get pods -n gpu-operator && echo '' && echo '=== GPU Resources per Node ===' && kubectl get nodes -o custom-columns='NAME:.metadata.name,GPU:.status.allocatable.nvidia\\.com/gpu'";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
     case "Westward":
       defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh";
       defaultRemoteCommand[1] = "chmod +x ~/setgame.sh; sudo ~/setgame.sh";
@@ -11422,10 +11468,17 @@ window.generatePredefinedScriptsHtml = function (includeDeployOptions = false) {
       <option value="RayHead-Deploy">[ML Ray] Deploy Ray Cluster (Head)</option>
       <option value="RayWorker-Deploy">[ML Ray] Deploy Ray Cluster (Worker)</option>
       <option value="K8sControlPlane-Deploy">[K8s Cluster] Deploy Control Plane</option>
+      <option value="K8sLlmdControlPlane">[K8s Cluster] Deploy Control Plane (llm-d)</option>
       <option value="K8sWorker-Deploy">[K8s Cluster] Deploy Worker</option>
+      <option value="K8sGpuWorkerSetup">[K8s Cluster] Setup GPU Worker (Driver)</option>
       <option value="K8sClusterStatus">[K8s Cluster] Check Cluster Status</option>
+      <option value="K8sGpuStatus">[K8s Cluster] Check GPU Status</option>
       <option value="K8sGetJoinCommand">[K8s Cluster] Get Join Command</option>
       <option value="K8sGetKubeconfig">[K8s Cluster] Get Kubeconfig (Base64)</option>
+      <option value="LlmdCheck">[K8s llm-d] Check Prerequisites</option>
+      <option value="LlmdDeploy">[K8s llm-d] Deploy llm-d</option>
+      <option value="LlmdDeployWithModel">[K8s llm-d] Deploy llm-d with Model</option>
+      <option value="LlmdStatus">[K8s llm-d] Check llm-d Status</option>
       <option value="Netdata">[Monitoring] Netdata Monitoring</option>
       <option value="Netdata-Status">[Monitoring] Check Netdata Status</option>
       <option value="Nginx">[Web Server] Nginx Web Server</option>
