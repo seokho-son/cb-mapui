@@ -1067,15 +1067,15 @@ var iconStyleCircle = new Style({
 
 // CSP location icon styles
 const cspIconImg = {
-  azure: "img/ht-azure.png",
-  aws: "img/ht-aws.png",
-  gcp: "img/ht-gcp.png",
-  alibaba: "img/ht-alibaba.png",
-  ibm: "img/ibm.png",
-  tencent: "img/tencent.png",
-  ncp: "img/ncp.png",
-  kt: "img/kt.png",
-  nhn: "img/nhn.png",
+  azure: new URL("img/ht-azure.png", import.meta.url).href,
+  aws: new URL("img/ht-aws.png", import.meta.url).href,
+  gcp: new URL("img/ht-gcp.png", import.meta.url).href,
+  alibaba: new URL("img/ht-alibaba.png", import.meta.url).href,
+  ibm: new URL("img/ibm.png", import.meta.url).href,
+  tencent: new URL("img/tencent.png", import.meta.url).href,
+  ncp: new URL("img/ncp.png", import.meta.url).href,
+  kt: new URL("img/kt.png", import.meta.url).href,
+  nhn: new URL("img/nhn.png", import.meta.url).href,
 
   // Add more CSP icons here
 };
