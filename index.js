@@ -546,6 +546,229 @@ var latLonInputPairIdx = 0;
 var vmSubGroupReqeustFromSpecList = new Array();
 var recommendedSpecList = new Array();
 
+// ========== LABEL RECOMMENDATION SYSTEM ==========
+// Predefined common labels for SubGroup configuration
+const PREDEFINED_LABELS = [
+  { key: 'role', value: 'control', description: 'Control plane node' },
+  { key: 'role', value: 'node', description: 'General node' },
+  { key: 'role', value: 'head', description: 'Head node (cluster manager)' },
+  { key: 'role', value: 'worker', description: 'Worker node' },
+  { key: 'role', value: 'model', description: 'LLM model serving node' },
+  { key: 'role', value: 'gui', description: 'GUI/Dashboard node' },
+  { key: 'accelerator', value: 'gpu', description: 'GPU-enabled node' }
+];
+
+// Recently used labels (in-memory storage)
+window._recentlyUsedLabels = [];
+const MAX_RECENT_LABELS = 10;
+
+// Add label to recently used list
+window.addToRecentLabels = function(labelPair) {
+  if (!labelPair || !labelPair.includes('=')) return;
+  
+  // Remove if already exists
+  window._recentlyUsedLabels = window._recentlyUsedLabels.filter(l => l !== labelPair);
+  
+  // Add to front
+  window._recentlyUsedLabels.unshift(labelPair);
+  
+  // Keep only recent N
+  if (window._recentlyUsedLabels.length > MAX_RECENT_LABELS) {
+    window._recentlyUsedLabels = window._recentlyUsedLabels.slice(0, MAX_RECENT_LABELS);
+  }
+};
+
+// Add suggested label to input field
+window.addSuggestedLabel = function(labelPair, inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  
+  const currentValue = input.value.trim();
+  const existingLabels = currentValue ? currentValue.split(',').map(l => l.trim()).filter(l => l) : [];
+  
+  // Check if label already exists
+  if (existingLabels.includes(labelPair)) {
+    console.log('Label already exists:', labelPair);
+    return;
+  }
+  
+  // Add the new label
+  existingLabels.push(labelPair);
+  input.value = existingLabels.join(', ');
+  
+  // Update chip styling
+  updateLabelSuggestionChipStyle(labelPair, inputId, true);
+  
+  // Add to recently used
+  window.addToRecentLabels(labelPair);
+};
+
+// Remove suggested label from input field
+window.removeSuggestedLabel = function(labelPair, inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  
+  const currentValue = input.value.trim();
+  const existingLabels = currentValue ? currentValue.split(',').map(l => l.trim()).filter(l => l) : [];
+  
+  // Remove the label
+  const newLabels = existingLabels.filter(l => l !== labelPair);
+  input.value = newLabels.join(', ');
+  
+  // Update chip styling
+  updateLabelSuggestionChipStyle(labelPair, inputId, false);
+};
+
+// Toggle label in input field
+window.toggleSuggestedLabel = function(labelPair, inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  
+  const currentValue = input.value.trim();
+  const existingLabels = currentValue ? currentValue.split(',').map(l => l.trim()).filter(l => l) : [];
+  
+  if (existingLabels.includes(labelPair)) {
+    window.removeSuggestedLabel(labelPair, inputId);
+  } else {
+    window.addSuggestedLabel(labelPair, inputId);
+  }
+};
+
+// Update chip style based on selection state
+window.updateLabelSuggestionChipStyle = function(labelPair, inputId, isSelected) {
+  const container = document.getElementById(`${inputId}-suggestions`);
+  if (!container) return;
+  
+  const chips = container.querySelectorAll('.label-suggestion-chip');
+  chips.forEach(chip => {
+    if (chip.dataset.label === labelPair) {
+      if (isSelected) {
+        chip.classList.add('selected');
+        chip.style.background = '#28a745';
+        chip.style.borderColor = '#28a745';
+      } else {
+        chip.classList.remove('selected');
+        chip.style.background = '#e9ecef';
+        chip.style.borderColor = '#ced4da';
+      }
+    }
+  });
+};
+
+// Sync all chip styles with current input value
+window.syncLabelSuggestionChips = function(inputId) {
+  const input = document.getElementById(inputId);
+  const container = document.getElementById(`${inputId}-suggestions`);
+  if (!input || !container) return;
+  
+  const currentLabels = input.value.trim().split(',').map(l => l.trim()).filter(l => l);
+  const chips = container.querySelectorAll('.label-suggestion-chip');
+  
+  chips.forEach(chip => {
+    const labelPair = chip.dataset.label;
+    const isSelected = currentLabels.includes(labelPair);
+    
+    if (isSelected) {
+      chip.classList.add('selected');
+      chip.style.background = '#28a745';
+      chip.style.borderColor = '#28a745';
+      chip.style.color = 'white';
+    } else {
+      chip.classList.remove('selected');
+      chip.style.background = '#e9ecef';
+      chip.style.borderColor = '#ced4da';
+      chip.style.color = '#495057';
+    }
+  });
+};
+
+// Generate label suggestion chips HTML
+window.generateLabelSuggestionChipsHtml = function(inputId, hasGpu = false, currentLabels = '') {
+  const existingLabels = currentLabels ? currentLabels.split(',').map(l => l.trim()).filter(l => l) : [];
+  
+  let html = `<div id="${inputId}-suggestions" style="margin-top: 6px;">`;
+  html += '<div style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">';
+  
+  // Get unique labels to show (predefined + recent, avoiding duplicates)
+  const labelsToShow = [];
+  const addedLabels = new Set();
+  
+  // Add predefined labels
+  PREDEFINED_LABELS.forEach(label => {
+    const labelPair = `${label.key}=${label.value}`;
+    if (!addedLabels.has(labelPair)) {
+      labelsToShow.push({ ...label, labelPair, isRecent: false });
+      addedLabels.add(labelPair);
+    }
+  });
+  
+  // Add recent labels (that are not in predefined)
+  window._recentlyUsedLabels.forEach(labelPair => {
+    if (!addedLabels.has(labelPair)) {
+      const [key, value] = labelPair.split('=');
+      labelsToShow.push({ key, value, labelPair, isRecent: true, description: 'Recently used' });
+      addedLabels.add(labelPair);
+    }
+  });
+  
+  // Generate chips
+  labelsToShow.forEach(label => {
+    const isSelected = existingLabels.includes(label.labelPair);
+    const isGpuLabel = label.labelPair === 'accelerator=gpu';
+    const chipStyle = isSelected 
+      ? 'background: #28a745; border-color: #28a745; color: white;'
+      : 'background: #e9ecef; border-color: #ced4da; color: #495057;';
+    const recentBadge = label.isRecent ? '<span style="font-size: 8px; margin-left: 2px;">⏱</span>' : '';
+    const gpuBadge = isGpuLabel && hasGpu ? '<span style="font-size: 8px; margin-left: 2px;">🎮</span>' : '';
+    
+    html += `<button type="button" class="label-suggestion-chip ${isSelected ? 'selected' : ''}" 
+      data-label="${label.labelPair}"
+      onclick="toggleSuggestedLabel('${label.labelPair}', '${inputId}')"
+      style="padding: 2px 8px; border: 1px solid #ced4da; border-radius: 12px; 
+             font-size: 0.7rem; cursor: pointer; transition: all 0.2s; ${chipStyle}"
+      title="${label.description || label.labelPair}">
+      ${label.value}${recentBadge}${gpuBadge}
+    </button>`;
+  });
+  
+  html += '</div></div>';
+  return html;
+};
+
+// Auto-add GPU label if spec has GPU
+window.autoAddGpuLabel = function(hasGpu, inputId) {
+  if (!hasGpu) return;
+  
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  
+  const gpuLabel = 'accelerator=gpu';
+  const currentValue = input.value.trim();
+  const existingLabels = currentValue ? currentValue.split(',').map(l => l.trim()).filter(l => l) : [];
+  
+  // Only auto-add if not already present
+  if (!existingLabels.includes(gpuLabel)) {
+    existingLabels.push(gpuLabel);
+    input.value = existingLabels.join(', ');
+    
+    // Sync chips after auto-add
+    setTimeout(() => window.syncLabelSuggestionChips(inputId), 100);
+  }
+};
+
+// Setup input listener for label suggestions sync
+window.setupLabelInputListener = function(inputId) {
+  const input = document.getElementById(inputId);
+  if (!input || input._labelListenerAttached) return;
+  
+  input.addEventListener('input', function() {
+    window.syncLabelSuggestionChips(inputId);
+  });
+  
+  input._labelListenerAttached = true;
+};
+// ========== END LABEL RECOMMENDATION SYSTEM ==========
+
 map.on("singleclick", function (event) {
   const coord = event.coordinate;
   // document.getElementById('latitude').value = coord[1];
@@ -7521,6 +7744,15 @@ function getRecommendedSpec(idx, latitude, longitude) {
               // Add input validation feedback for labels
               const labelsInput = document.getElementById('vmLabels');
               if (labelsInput) {
+                // Setup label input listener for chip sync
+                window.setupLabelInputListener('vmLabels');
+                
+                // Auto-add GPU label if spec has GPU
+                const hasGpu = selectedSpec.acceleratorType === "gpu" || selectedSpec.acceleratorModel;
+                if (hasGpu) {
+                  window.autoAddGpuLabel(true, 'vmLabels');
+                }
+                
                 labelsInput.addEventListener('input', function() {
                   const value = this.value.trim();
                   // Basic validation for key=value,key=value format
@@ -7533,6 +7765,9 @@ function getRecommendedSpec(idx, latitude, longitude) {
                     this.style.borderColor = '#ffc107';
                     this.style.backgroundColor = '#fffef5';
                   }
+                  
+                  // Sync label suggestion chips with input
+                  window.syncLabelSuggestionChips('vmLabels');
                 });
               }
             },
@@ -7629,6 +7864,11 @@ function getRecommendedSpec(idx, latitude, longitude) {
               const labels = parseLabelsString(vmLabelsInput);
               if (Object.keys(labels).length > 0) {
                 createMciReqVm.label = labels;
+                
+                // Add used labels to recently used list
+                Object.entries(labels).forEach(([key, value]) => {
+                  window.addToRecentLabels(`${key}=${value}`);
+                });
               }
 
 
@@ -8126,6 +8366,9 @@ function buildSpecConfigPopupHtml(spec, vm, options = {}) {
   `;
   
   // 🏷️ Configuration Section (Disk Type, Disk Size, Labels, VM Count)
+  const labelsInputId = isEdit ? 'editVmLabels' : 'vmLabels';
+  const currentLabelsValue = options.currentLabels || '';
+  
   html += `
     <div class="popup-section">
       <div class="popup-section-title">🏷️ Configuration</div>
@@ -8145,8 +8388,9 @@ function buildSpecConfigPopupHtml(spec, vm, options = {}) {
         <div class="popup-col popup-col-2">
           <div class="popup-field">
             <label class="popup-label">Labels <span class="popup-hint">(key=value, comma separated)</span></label>
-            <input type="text" id="${isEdit ? 'editVmLabels' : 'vmLabels'}" class="popup-input" 
-                   value="${options.currentLabels || ''}" placeholder="role=worker, env=prod">
+            <input type="text" id="${labelsInputId}" class="popup-input" 
+                   value="${currentLabelsValue}" placeholder="role=worker, env=prod">
+            ${window.generateLabelSuggestionChipsHtml(labelsInputId, hasGpu, currentLabelsValue)}
           </div>
         </div>
       </div>
@@ -8504,6 +8748,12 @@ function editSubGroup(index) {
       // Use common helpers for dropdown population
       populateRootDiskTypeSelect('editRootDiskTypeSelect', spec.providerName, vm.rootDiskType || 'default');
       populateZoneSelect('editZoneSelect', 'editZoneLoadingSpinner', spec.id, currentZone, null);
+      
+      // Setup label input listener for chip sync
+      window.setupLabelInputListener('editVmLabels');
+      
+      // Sync initial chip states
+      window.syncLabelSuggestionChips('editVmLabels');
     },
     showCancelButton: true,
     confirmButtonText: '💾 Save Changes',
@@ -8545,6 +8795,11 @@ function editSubGroup(index) {
       
       if (Object.keys(result.value.labels).length > 0) {
         vmSubGroupReqeustFromSpecList[index].label = result.value.labels;
+        
+        // Add used labels to recently used list
+        Object.entries(result.value.labels).forEach(([key, value]) => {
+          window.addToRecentLabels(`${key}=${value}`);
+        });
       } else {
         delete vmSubGroupReqeustFromSpecList[index].label;
       }
