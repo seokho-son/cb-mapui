@@ -13308,6 +13308,31 @@ function _tailLines(text, n) {
 }
 
 /**
+ * Escapes HTML then converts URLs and bare IP:port patterns into clickable links.
+ * Handles: http(s)://..., and standalone IP:port like 52.14.140.219:8081
+ */
+function _escAndLinkify(text) {
+  let safe = window.escapeHtml(text);
+  const linkStyle = 'color:#64b5f6; text-decoration:underline;';
+  // 1) http(s):// URLs  (greedy up to whitespace/angle-bracket)
+  safe = safe.replace(/(https?:\/\/[^\s<&'")\]]+)/g, (url) =>
+    `<a href="${url}" target="_blank" rel="noopener" style="${linkStyle}">${url}</a>`
+  );
+  // 2) Bare IP(:port)(/path) not already linked — e.g. 52.14.140.219:8081
+  //    Use a two-pass approach: split by existing <a...>...</a>, linkify only outside.
+  const parts = safe.split(/(<a\s[^>]*>.*?<\/a>)/g);
+  for (let i = 0; i < parts.length; i++) {
+    // Even indices are plain text; odd indices are <a> tags (leave untouched)
+    if (i % 2 === 0) {
+      parts[i] = parts[i].replace(/\b((?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?(?:\/[^\s<&'"]*)?)\b/g, (m) =>
+        `<a href="http://${m}" target="_blank" rel="noopener" style="${linkStyle}">${m}</a>`
+      );
+    }
+  }
+  return parts.join('');
+}
+
+/**
  * Shows formatted remote command execution results in a SweetAlert window. 
  * Groups output by VM → Command for readability.
  * @param {Object} data - The API response with data.results[]
@@ -13358,17 +13383,17 @@ function showRemoteCmdResult(data) {
             <div id="${blockId}-wrapper" style="position: relative;">
               ${stdoutInfo.truncated ? `
                 <div id="${blockId}-full" style="display: none;">
-                  <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;">${window.escapeHtml(stdoutInfo.fullText)}</pre>
+                  <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;">${_escAndLinkify(stdoutInfo.fullText)}</pre>
                 </div>
                 <div id="${blockId}-tail">
                   <div style="text-align: center; padding: 3px; background: #f5f5f5; cursor: pointer; font-size: 10px; color: #1976d2;" 
                        onclick="document.getElementById('${blockId}-full').style.display='block'; document.getElementById('${blockId}-tail').style.display='none';">
                     ▲ Show all ${stdoutInfo.totalLines} lines (${stdoutInfo.totalLines - TAIL_LINES} more above)
                   </div>
-                  <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${window.escapeHtml(stdoutInfo.visible.join('\n'))}</pre>
+                  <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${_escAndLinkify(stdoutInfo.visible.join('\n'))}</pre>
                 </div>
               ` : `
-                <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${window.escapeHtml(stdoutInfo.fullText)}</pre>
+                <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${_escAndLinkify(stdoutInfo.fullText)}</pre>
               `}
             </div>
           </div>`;
@@ -13386,17 +13411,17 @@ function showRemoteCmdResult(data) {
             <div id="${blockId}-wrapper" style="position: relative;">
               ${stderrInfo.truncated ? `
                 <div id="${blockId}-full" style="display: none;">
-                  <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;">${window.escapeHtml(stderrInfo.fullText)}</pre>
+                  <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;">${_escAndLinkify(stderrInfo.fullText)}</pre>
                 </div>
                 <div id="${blockId}-tail">
                   <div style="text-align: center; padding: 3px; background: #fff8f0; cursor: pointer; font-size: 10px; color: #e65100;"
                        onclick="document.getElementById('${blockId}-full').style.display='block'; document.getElementById('${blockId}-tail').style.display='none';">
                     ▲ Show all ${stderrInfo.totalLines} lines (${stderrInfo.totalLines - TAIL_LINES} more above)
                   </div>
-                  <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${window.escapeHtml(stderrInfo.visible.join('\n'))}</pre>
+                  <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${_escAndLinkify(stderrInfo.visible.join('\n'))}</pre>
                 </div>
               ` : `
-                <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${window.escapeHtml(stderrInfo.fullText)}</pre>
+                <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${_escAndLinkify(stderrInfo.fullText)}</pre>
               `}
             </div>
           </div>`;
