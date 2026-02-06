@@ -558,6 +558,64 @@ const PREDEFINED_LABELS = [
   { key: 'accelerator', value: 'gpu', description: 'GPU-enabled node' }
 ];
 
+// ========== SHARED HELPER FUNCTIONS ==========
+
+// Helper: recursively extract all string values from JSON object
+window.extractStringValuesFromJson = function(obj, path = '', results = []) {
+  if (typeof obj === 'string') {
+    results.push({ path, value: obj });
+  } else if (Array.isArray(obj)) {
+    obj.forEach((item, idx) => window.extractStringValuesFromJson(item, `${path}[${idx}]`, results));
+  } else if (obj && typeof obj === 'object') {
+    Object.keys(obj).forEach(key => {
+      const newPath = path ? `${path}.${key}` : key;
+      window.extractStringValuesFromJson(obj[key], newPath, results);
+    });
+  }
+  return results;
+};
+
+// Helper: collect likely Base64 strings from string values (using Set for O(1) dedup)
+window.collectBase64FromStringValues = function(stringValues) {
+  const foundSet = new Set();
+  
+  stringValues.forEach(({ path, value }) => {
+    // Split by newlines and whitespace boundaries to find base64 segments
+    const segments = value.split(/[\r\n\s]+/);
+    
+    segments.forEach(segment => {
+      const trimmed = segment.trim();
+      if (trimmed.length < 40) return; // Skip short segments
+      if (!/^[A-Za-z0-9+/=]+$/.test(trimmed)) return; // Only valid chars
+      if (trimmed.toLowerCase().includes('http')) return; // Skip URLs
+      
+      try {
+        const testDecode = atob(trimmed);
+        if (testDecode.length > 0) {
+          foundSet.add(trimmed);
+        }
+      } catch (e) {
+        // Not valid base64
+      }
+    });
+    
+    // Also check for inline base64 (entire string is base64 with whitespace)
+    if (value.length >= 40 && /^[A-Za-z0-9+/=\s]+$/.test(value)) {
+      const cleaned = value.replace(/\s/g, '');
+      if (cleaned.length >= 40) {
+        try {
+          atob(cleaned);
+          foundSet.add(cleaned);
+        } catch (e) {}
+      }
+    }
+  });
+  
+  return Array.from(foundSet);
+};
+
+// ========== END SHARED HELPER FUNCTIONS ==========
+
 // Recently used labels (in-memory storage)
 window._recentlyUsedLabels = [];
 const MAX_RECENT_LABELS = 10;
@@ -711,7 +769,7 @@ window.generateLabelSuggestionChipsHtml = function(inputId, hasGpu = false, curr
     }
   });
   
-  // Generate chips
+  // Generate chips (with XSS protection)
   labelsToShow.forEach(label => {
     const isSelected = existingLabels.includes(label.labelPair);
     const isGpuLabel = label.labelPair === 'accelerator=gpu';
@@ -721,13 +779,19 @@ window.generateLabelSuggestionChipsHtml = function(inputId, hasGpu = false, curr
     const recentBadge = label.isRecent ? '<span style="font-size: 8px; margin-left: 2px;">⏱</span>' : '';
     const gpuBadge = isGpuLabel && hasGpu ? '<span style="font-size: 8px; margin-left: 2px;">🎮</span>' : '';
     
+    // Escape values to prevent XSS
+    const escapedLabelPair = (label.labelPair || '').replace(/'/g, "&#39;").replace(/"/g, '&quot;');
+    const escapedInputId = (inputId || '').replace(/'/g, "&#39;").replace(/"/g, '&quot;');
+    const escapedValue = (label.value || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const escapedDescription = (label.description || label.labelPair || '').replace(/"/g, '&quot;');
+    
     html += `<button type="button" class="label-suggestion-chip ${isSelected ? 'selected' : ''}" 
-      data-label="${label.labelPair}"
-      onclick="toggleSuggestedLabel('${label.labelPair}', '${inputId}')"
+      data-label="${escapedLabelPair}"
+      onclick="toggleSuggestedLabel('${escapedLabelPair}', '${escapedInputId}')"
       style="padding: 2px 8px; border: 1px solid #ced4da; border-radius: 12px; 
              font-size: 0.7rem; cursor: pointer; transition: all 0.2s; ${chipStyle}"
-      title="${label.description || label.labelPair}">
-      ${label.value}${recentBadge}${gpuBadge}
+      title="${escapedDescription}">
+      ${escapedValue}${recentBadge}${gpuBadge}
     </button>`;
   });
   
@@ -2310,70 +2374,9 @@ window.autoFindBase64InJson = function() {
   
   if (!chipsContainer || !input || !output) return;
   
-  // Helper: recursively extract all string values from JSON object
-  function extractStringValues(obj, path = '', results = []) {
-    if (typeof obj === 'string') {
-      results.push({ path, value: obj });
-    } else if (Array.isArray(obj)) {
-      obj.forEach((item, idx) => extractStringValues(item, `${path}[${idx}]`, results));
-    } else if (obj && typeof obj === 'object') {
-      Object.keys(obj).forEach(key => {
-        const newPath = path ? `${path}.${key}` : key;
-        extractStringValues(obj[key], newPath, results);
-      });
-    }
-    return results;
-  }
-  
-  // Extract all string values from JSON
-  const stringValues = extractStringValues(jsonData);
-  
-  // Look for base64 patterns in each string value
-  const likelyBase64 = [];
-  const base64Regex = /[A-Za-z0-9+/=]{40,}/g;
-  
-  stringValues.forEach(({ path, value }) => {
-    // Split by newlines and whitespace boundaries to find base64 segments
-    const segments = value.split(/[\r\n\s]+/);
-    
-    segments.forEach(segment => {
-      const trimmed = segment.trim();
-      if (trimmed.length < 40) return; // Skip short segments
-      
-      // Check if it looks like base64 (only valid chars)
-      if (!/^[A-Za-z0-9+/=]+$/.test(trimmed)) return;
-      
-      // Skip if it looks like a URL or common non-base64 pattern
-      if (trimmed.toLowerCase().includes('http')) return;
-      
-      // Validate with atob
-      try {
-        const testDecode = atob(trimmed);
-        // Additional check: decoded should have reasonable chars (not all control chars)
-        if (testDecode.length > 0) {
-          // Check for duplicates
-          if (!likelyBase64.some(existing => existing === trimmed)) {
-            likelyBase64.push(trimmed);
-          }
-        }
-      } catch (e) {
-        // Not valid base64
-      }
-    });
-    
-    // Also check for inline base64 (e.g., "data: LS0tLS1..." or entire string is base64)
-    if (value.length >= 40 && /^[A-Za-z0-9+/=\s]+$/.test(value)) {
-      const cleaned = value.replace(/\s/g, '');
-      if (cleaned.length >= 40) {
-        try {
-          atob(cleaned);
-          if (!likelyBase64.some(existing => existing === cleaned)) {
-            likelyBase64.push(cleaned);
-          }
-        } catch (e) {}
-      }
-    }
-  });
+  // Use shared helper functions
+  const stringValues = window.extractStringValuesFromJson(jsonData);
+  const likelyBase64 = window.collectBase64FromStringValues(stringValues);
   
   if (likelyBase64.length === 0) {
     output.value = 'No Base64 strings found in JSON.';
@@ -2521,8 +2524,6 @@ window.saveBase64Result = function() {
 
 // Open Base64 Decoder window (legacy - kept for backward compatibility)
 window.openBase64DecoderWindow = function() {
-  const jsonString = window._currentJsonString;
-  
   Swal.fire({
     title: '🔓 Base64 Decoder',
     width: 700,
@@ -2654,58 +2655,9 @@ window.findAndDecodeBase64InJson = function() {
   const foundItems = document.getElementById('base64FoundItems');
   const output = document.getElementById('base64Output');
   
-  // Helper: recursively extract all string values from JSON object
-  function extractStringValues(obj, path = '', results = []) {
-    if (typeof obj === 'string') {
-      results.push({ path, value: obj });
-    } else if (Array.isArray(obj)) {
-      obj.forEach((item, idx) => extractStringValues(item, `${path}[${idx}]`, results));
-    } else if (obj && typeof obj === 'object') {
-      Object.keys(obj).forEach(key => {
-        const newPath = path ? `${path}.${key}` : key;
-        extractStringValues(obj[key], newPath, results);
-      });
-    }
-    return results;
-  }
-  
-  // Extract all string values from JSON
-  const stringValues = extractStringValues(jsonData);
-  
-  // Look for base64 patterns in each string value
-  const likelyBase64 = [];
-  
-  stringValues.forEach(({ path, value }) => {
-    // Split by newlines and whitespace boundaries to find base64 segments
-    const segments = value.split(/[\r\n\s]+/);
-    
-    segments.forEach(segment => {
-      const trimmed = segment.trim();
-      if (trimmed.length < 40) return;
-      if (!/^[A-Za-z0-9+/=]+$/.test(trimmed)) return;
-      if (trimmed.toLowerCase().includes('http')) return;
-      
-      try {
-        const testDecode = atob(trimmed);
-        if (testDecode.length > 0 && !likelyBase64.some(existing => existing === trimmed)) {
-          likelyBase64.push(trimmed);
-        }
-      } catch (e) {}
-    });
-    
-    // Also check if entire string (cleaned) is base64
-    if (value.length >= 40 && /^[A-Za-z0-9+/=\s]+$/.test(value)) {
-      const cleaned = value.replace(/\s/g, '');
-      if (cleaned.length >= 40) {
-        try {
-          atob(cleaned);
-          if (!likelyBase64.some(existing => existing === cleaned)) {
-            likelyBase64.push(cleaned);
-          }
-        } catch (e) {}
-      }
-    }
-  });
+  // Use shared helper functions
+  const stringValues = window.extractStringValuesFromJson(jsonData);
+  const likelyBase64 = window.collectBase64FromStringValues(stringValues);
   
   if (likelyBase64.length === 0) {
     output.value = 'No Base64 encoded strings found in the JSON response.';
