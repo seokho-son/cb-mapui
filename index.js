@@ -12354,15 +12354,15 @@ window.predefinedScriptCategories = {
     description: 'General Kubernetes cluster deployment',
     scripts: [
       { value: 'Setup-WireGuard', label: '0. Setup WireGuard VPN', step: 0, optional: true },
-      { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane', step: 1 },
-      { value: 'K8sGetJoinCommand', label: '2. Get Join Command', step: 2 },
-      { value: 'K8sGetKubeconfig', label: '3. Get Kubeconfig (Base64)', step: 3 },
-      { value: 'Nvidia', label: '4. Install GPU Driver', step: 4, optional: true },
-      { value: 'RebootVM', label: '5. Reboot VM', step: 5, optional: true },
-      { value: 'Nvidia-Status', label: '6. Check GPU Driver', step: 6, optional: true },
-      { value: 'K8sWorker-Deploy', label: '7. Deploy Worker', step: 7 },
-      { value: 'K8sClusterStatus', label: '8. Check Cluster Status', step: 8 },
-      { value: 'K8sGpuStatus', label: '9. Check GPU Status', step: 9, optional: true }
+      { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane', step: 1, targetLabel: 'role=control' },
+      { value: 'K8sGetJoinCommand', label: '2. Get Join Command', step: 2, targetLabel: 'role=control' },
+      { value: 'K8sGetKubeconfig', label: '3. Get Kubeconfig (Base64)', step: 3, targetLabel: 'role=control' },
+      { value: 'Nvidia', label: '4. Install GPU Driver', step: 4, optional: true, targetLabel: 'accelerator=gpu' },
+      { value: 'RebootVM', label: '5. Reboot VM', step: 5, optional: true, targetLabel: 'role=node' },
+      { value: 'Nvidia-Status', label: '6. Check GPU Driver', step: 6, optional: true, targetLabel: 'accelerator=gpu' },
+      { value: 'K8sWorker-Deploy', label: '7. Deploy Worker', step: 7, targetLabel: 'role=node' },
+      { value: 'K8sClusterStatus', label: '8. Check Cluster Status', step: 8, targetLabel: 'role=control' },
+      { value: 'K8sGpuStatus', label: '9. Check GPU Status', step: 9, optional: true, targetLabel: 'accelerator=gpu' }
     ]
   },
   'k8s-llmd': {
@@ -12370,25 +12370,25 @@ window.predefinedScriptCategories = {
     description: 'Kubernetes with llm-d for distributed LLM inference',
     scripts: [
       { value: 'Setup-WireGuard', label: '0. Setup WireGuard VPN', step: 0, optional: true },
-      { value: 'K8sLlmdControlPlane', label: '1. Deploy Control Plane (llm-d)', step: 1 },
-      { value: 'K8sGetJoinCommand', label: '2. Get Join Command', step: 2 },
-      { value: 'K8sGetKubeconfig', label: '3. Get Kubeconfig (Base64)', step: 3 },
-      { value: 'Nvidia', label: '4. Install GPU Driver', step: 4 },
-      { value: 'RebootVM', label: '5. Reboot VM', step: 5 },
-      { value: 'Nvidia-Status', label: '6. Check GPU Driver', step: 6 },
-      { value: 'K8sWorker-Deploy', label: '7. Deploy Worker', step: 7 },
-      { value: 'K8sClusterStatus', label: '8. Check Cluster Status', step: 8 },
-      { value: 'LlmdCheck', label: '9. Check llm-d Prerequisites', step: 9 },
-      { value: 'LlmdDeployWithModel', label: '10. Deploy llm-d with Model', step: 10 },
-      { value: 'LlmdStatus', label: '11. Check llm-d Status', step: 11 }
+      { value: 'K8sLlmdControlPlane', label: '1. Deploy Control Plane (llm-d)', step: 1, targetLabel: 'role=control' },
+      { value: 'K8sGetJoinCommand', label: '2. Get Join Command', step: 2, targetLabel: 'role=control' },
+      { value: 'K8sGetKubeconfig', label: '3. Get Kubeconfig (Base64)', step: 3, targetLabel: 'role=control' },
+      { value: 'Nvidia', label: '4. Install GPU Driver', step: 4, targetLabel: 'accelerator=gpu' },
+      { value: 'RebootVM', label: '5. Reboot VM', step: 5, targetLabel: 'role=node' },
+      { value: 'Nvidia-Status', label: '6. Check GPU Driver', step: 6, targetLabel: 'accelerator=gpu' },
+      { value: 'K8sWorker-Deploy', label: '7. Deploy Worker', step: 7, targetLabel: 'role=node' },
+      { value: 'K8sClusterStatus', label: '8. Check Cluster Status', step: 8, targetLabel: 'role=control' },
+      { value: 'LlmdCheck', label: '9. Check llm-d Prerequisites', step: 9, targetLabel: 'role=control' },
+      { value: 'LlmdDeployWithModel', label: '10. Deploy llm-d with Model', step: 10, targetLabel: 'role=control' },
+      { value: 'LlmdStatus', label: '11. Check llm-d Status', step: 11, targetLabel: 'role=control' }
     ]
   },
   'ml-ray': {
     label: '🔬 ML (Ray)',
     description: 'Ray distributed computing cluster',
     scripts: [
-      { value: 'RayHead-Deploy', label: '1. Deploy Ray Head', step: 1 },
-      { value: 'RayWorker-Deploy', label: '2. Deploy Ray Worker', step: 2 }
+      { value: 'RayHead-Deploy', label: '1. Deploy Ray Head', step: 1, targetLabel: 'role=head' },
+      { value: 'RayWorker-Deploy', label: '2. Deploy Ray Worker', step: 2, targetLabel: 'role=worker' }
     ]
   },
   'game': {
@@ -13227,6 +13227,63 @@ window.loadPredefinedScript = function () {
 
   // Reset the select to allow selecting the same script again
   scriptTypeSelect.selectedIndex = 0;
+
+  // Auto-set label selector based on script's targetLabel (if available)
+  window.applyScriptTargetLabel(scriptType);
+};
+
+// Apply targetLabel from predefined script to Label Selector
+// Only sets the label if:
+// 1. The script has a targetLabel defined
+// 2. The target label is available in the current MCI's VMs
+window.applyScriptTargetLabel = function(scriptValue) {
+  if (!scriptValue) return;
+  
+  // Find the script definition with targetLabel
+  const currentCategory = window._currentScriptCategory;
+  let targetLabel = null;
+  
+  // Search in current category first, then all categories
+  const categoriesToSearch = currentCategory 
+    ? [currentCategory, ...Object.keys(window.predefinedScriptCategories).filter(k => k !== currentCategory)]
+    : Object.keys(window.predefinedScriptCategories);
+  
+  for (const catKey of categoriesToSearch) {
+    const cat = window.predefinedScriptCategories[catKey];
+    if (!cat || !cat.scripts) continue;
+    const script = cat.scripts.find(s => s.value === scriptValue);
+    if (script && script.targetLabel) {
+      targetLabel = script.targetLabel;
+      break;
+    }
+  }
+  
+  if (!targetLabel) return; // No targetLabel for this script
+  
+  // Check if the target label is available in current MCI's VMs
+  const availableLabels = window._currentMciLabels;
+  if (!availableLabels || Object.keys(availableLabels).length === 0) return;
+  
+  const [targetKey, targetValue] = targetLabel.split('=');
+  if (!targetKey || !targetValue) return;
+  
+  // Check if this label key=value pair exists in the MCI
+  const availableValues = availableLabels[targetKey];
+  if (!availableValues || !availableValues.includes(targetValue)) return;
+  
+  // Set the label in the selector
+  const labelInput = document.getElementById('labelSelector');
+  if (!labelInput) return;
+  
+  // Replace current label (don't append - the script target is specific)
+  labelInput.value = targetLabel;
+  
+  // Update UI
+  if (window.updateSelectedLabelsDisplay) window.updateSelectedLabelsDisplay();
+  if (window.updateLabelMatchPreview) window.updateLabelMatchPreview();
+  if (window.updateAvailableLabelChipStyles) window.updateAvailableLabelChipStyles();
+  
+  console.log(`Auto-set label selector: ${targetLabel} (from script: ${scriptValue})`);
 };
 
 
