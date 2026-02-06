@@ -13324,7 +13324,7 @@ function _escAndLinkify(text) {
   for (let i = 0; i < parts.length; i++) {
     // Even indices are plain text; odd indices are <a> tags (leave untouched)
     if (i % 2 === 0) {
-      parts[i] = parts[i].replace(/\b((?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?(?:\/[^\s<&'"]*)?)\b/g, (m) =>
+      parts[i] = parts[i].replace(/\b((?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?::\d{1,5})?(?:\/[^\s<&'"]*)?)\b/g, (m) =>
         `<a href="http://${m}" target="_blank" rel="noopener" style="${linkStyle}">${m}</a>`
       );
     }
@@ -13338,7 +13338,7 @@ function _escAndLinkify(text) {
  * @param {Object} data - The API response with data.results[]
  */
 function showRemoteCmdResult(data) {
-  if (!data || !data.results || data.results.length === 0) {
+  if (!data || !Array.isArray(data.results) || data.results.length === 0) {
     displayJsonData(data, typeInfo);
     return;
   }
@@ -13346,6 +13346,7 @@ function showRemoteCmdResult(data) {
   const results = data.results;
   const vmCount = results.length;
   const TAIL_LINES = 10;
+  const MAX_CMD_DISPLAY = 120; // Max chars for command preview in header
 
   // --- Build per-VM tab content ---
   const vmTabs = results.map((vm, vmIdx) => {
@@ -13362,7 +13363,7 @@ function showRemoteCmdResult(data) {
       const cmdIdx = Number(key) + 1;
 
       // Truncated command display (long curl commands, etc.)
-      const cmdShort = cmdText.length > 120 ? cmdText.substring(0, 117) + '...' : cmdText;
+      const cmdShort = cmdText.length > MAX_CMD_DISPLAY ? cmdText.substring(0, MAX_CMD_DISPLAY - 3) + '...' : cmdText;
 
       let html = `
         <div style="margin-bottom: 12px; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden;">
@@ -13386,10 +13387,10 @@ function showRemoteCmdResult(data) {
                   <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;">${_escAndLinkify(stdoutInfo.fullText)}</pre>
                 </div>
                 <div id="${blockId}-tail">
-                  <div style="text-align: center; padding: 3px; background: #f5f5f5; cursor: pointer; font-size: 10px; color: #1976d2;" 
+                  <button type="button" style="display: block; width: 100%; text-align: center; padding: 3px; background: #f5f5f5; cursor: pointer; font-size: 10px; color: #1976d2; border: none;" 
                        onclick="document.getElementById('${blockId}-full').style.display='block'; document.getElementById('${blockId}-tail').style.display='none';">
                     ▲ Show all ${stdoutInfo.totalLines} lines (${stdoutInfo.totalLines - TAIL_LINES} more above)
-                  </div>
+                  </button>
                   <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${_escAndLinkify(stdoutInfo.visible.join('\n'))}</pre>
                 </div>
               ` : `
@@ -13414,10 +13415,10 @@ function showRemoteCmdResult(data) {
                   <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;">${_escAndLinkify(stderrInfo.fullText)}</pre>
                 </div>
                 <div id="${blockId}-tail">
-                  <div style="text-align: center; padding: 3px; background: #fff8f0; cursor: pointer; font-size: 10px; color: #e65100;"
+                  <button type="button" style="display: block; width: 100%; text-align: center; padding: 3px; background: #fff8f0; cursor: pointer; font-size: 10px; color: #e65100; border: none;"
                        onclick="document.getElementById('${blockId}-full').style.display='block'; document.getElementById('${blockId}-tail').style.display='none';">
                     ▲ Show all ${stderrInfo.totalLines} lines (${stderrInfo.totalLines - TAIL_LINES} more above)
-                  </div>
+                  </button>
                   <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${_escAndLinkify(stderrInfo.visible.join('\n'))}</pre>
                 </div>
               ` : `
