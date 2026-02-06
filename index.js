@@ -11914,7 +11914,8 @@ function setDefaultRemoteCommandsByApp(appName) {
       break;
     case "Nvidia-Status":
       defaultRemoteCommand[0] = "nvidia-smi";
-      defaultRemoteCommand[1] = "";
+      // Show Fabric Manager status on multi-GPU NVSwitch systems (A100/H100/H200 SXM)
+      defaultRemoteCommand[1] = "GPU_COUNT=$(nvidia-smi -L 2>/dev/null | grep -c '^GPU') || GPU_COUNT=0; if [ \"$GPU_COUNT\" -ge 4 ]; then echo '=== Fabric Manager (required for NVSwitch multi-GPU) ==='; systemctl is-active nvidia-fabricmanager 2>/dev/null && echo 'Status: RUNNING' || echo 'Status: NOT RUNNING (multi-GPU may not work!)'; echo '=== nvidia-persistenced ==='; systemctl is-active nvidia-persistenced 2>/dev/null && echo 'Status: RUNNING' || echo 'Status: not running'; fi";
       defaultRemoteCommand[2] = "";
       break;
     case "Netdata":
