@@ -13286,6 +13286,243 @@ window.applyScriptTargetLabel = function(scriptValue) {
   console.log(`Auto-set label selector: ${targetLabel} (from script: ${scriptValue})`);
 };
 
+// ============================================================
+// Remote Command Result Viewer
+// ============================================================
+// Shows a formatted, human-readable view of remote command execution results.
+// Groups output by VM and command index for easy readability.
+// Provides a "View Raw JSON" button to see the original JSON output.
+
+/**
+ * Truncates text to last N lines and returns { truncated, visible, fullText, totalLines }
+ */
+function _tailLines(text, n) {
+  if (!text || !text.trim()) return null;
+  const lines = text.split('\n');
+  // Remove trailing empty line (common from shell output)
+  while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
+  if (lines.length === 0) return null;
+  const totalLines = lines.length;
+  const visible = lines.slice(-n);
+  return { truncated: totalLines > n, visible, fullText: lines.join('\n'), totalLines };
+}
+
+/**
+ * Shows formatted remote command execution results in a SweetAlert window. 
+ * Groups output by VM → Command for readability.
+ * @param {Object} data - The API response with data.results[]
+ */
+function showRemoteCmdResult(data) {
+  if (!data || !data.results || data.results.length === 0) {
+    displayJsonData(data, typeInfo);
+    return;
+  }
+
+  const results = data.results;
+  const vmCount = results.length;
+  const TAIL_LINES = 10;
+
+  // --- Build per-VM tab content ---
+  const vmTabs = results.map((vm, vmIdx) => {
+    const vmLabel = vm.vmId || `vm-${vmIdx}`;
+    const vmIp = vm.vmIp || '';
+    const hasError = vm.error && vm.error.trim();
+    const cmdKeys = Object.keys(vm.command || {}).sort((a, b) => Number(a) - Number(b));
+
+    // Build command groups
+    const cmdGroupsHtml = cmdKeys.map((key) => {
+      const cmdText = (vm.command[key] || '').trim();
+      const stdoutInfo = _tailLines(vm.stdout?.[key] || '', TAIL_LINES);
+      const stderrInfo = _tailLines(vm.stderr?.[key] || '', TAIL_LINES);
+      const cmdIdx = Number(key) + 1;
+
+      // Truncated command display (long curl commands, etc.)
+      const cmdShort = cmdText.length > 120 ? cmdText.substring(0, 117) + '...' : cmdText;
+
+      let html = `
+        <div style="margin-bottom: 12px; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden;">
+          <div style="background: #f1f3f5; padding: 6px 10px; font-size: 12px; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; gap: 6px;">
+            <span style="background: #495057; color: #fff; padding: 1px 7px; border-radius: 3px; font-size: 11px; font-weight: 600;">CMD ${cmdIdx}</span>
+            <code style="font-size: 11px; color: #333; word-break: break-all;" title="${window.escapeHtml(cmdText)}">${window.escapeHtml(cmdShort)}</code>
+          </div>`;
+
+      // stdout block
+      if (stdoutInfo) {
+        const blockId = `stdout-${vmIdx}-${key}`;
+        html += `
+          <div style="padding: 0;">
+            <div style="background: #e8f5e9; padding: 3px 10px; font-size: 11px; color: #2e7d32; font-weight: 600; display: flex; justify-content: space-between; align-items: center;">
+              <span>stdout</span>
+              <span style="font-weight: normal; color: #666; font-size: 10px;">${stdoutInfo.totalLines} line${stdoutInfo.totalLines > 1 ? 's' : ''}</span>
+            </div>
+            <div id="${blockId}-wrapper" style="position: relative;">
+              ${stdoutInfo.truncated ? `
+                <div id="${blockId}-full" style="display: none;">
+                  <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;">${window.escapeHtml(stdoutInfo.fullText)}</pre>
+                </div>
+                <div id="${blockId}-tail">
+                  <div style="text-align: center; padding: 3px; background: #f5f5f5; cursor: pointer; font-size: 10px; color: #1976d2;" 
+                       onclick="document.getElementById('${blockId}-full').style.display='block'; document.getElementById('${blockId}-tail').style.display='none';">
+                    ▲ Show all ${stdoutInfo.totalLines} lines (${stdoutInfo.totalLines - TAIL_LINES} more above)
+                  </div>
+                  <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${window.escapeHtml(stdoutInfo.visible.join('\n'))}</pre>
+                </div>
+              ` : `
+                <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${window.escapeHtml(stdoutInfo.fullText)}</pre>
+              `}
+            </div>
+          </div>`;
+      }
+
+      // stderr block (only if non-empty)
+      if (stderrInfo) {
+        const blockId = `stderr-${vmIdx}-${key}`;
+        html += `
+          <div style="padding: 0;">
+            <div style="background: #fff3e0; padding: 3px 10px; font-size: 11px; color: #e65100; font-weight: 600; display: flex; justify-content: space-between; align-items: center;">
+              <span>stderr</span>
+              <span style="font-weight: normal; color: #666; font-size: 10px;">${stderrInfo.totalLines} line${stderrInfo.totalLines > 1 ? 's' : ''}</span>
+            </div>
+            <div id="${blockId}-wrapper" style="position: relative;">
+              ${stderrInfo.truncated ? `
+                <div id="${blockId}-full" style="display: none;">
+                  <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;">${window.escapeHtml(stderrInfo.fullText)}</pre>
+                </div>
+                <div id="${blockId}-tail">
+                  <div style="text-align: center; padding: 3px; background: #fff8f0; cursor: pointer; font-size: 10px; color: #e65100;"
+                       onclick="document.getElementById('${blockId}-full').style.display='block'; document.getElementById('${blockId}-tail').style.display='none';">
+                    ▲ Show all ${stderrInfo.totalLines} lines (${stderrInfo.totalLines - TAIL_LINES} more above)
+                  </div>
+                  <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${window.escapeHtml(stderrInfo.visible.join('\n'))}</pre>
+                </div>
+              ` : `
+                <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${window.escapeHtml(stderrInfo.fullText)}</pre>
+              `}
+            </div>
+          </div>`;
+      }
+
+      html += `</div>`; // end cmd group border
+      return html;
+    }).join('');
+
+    // VM-level error
+    const vmErrorHtml = hasError ? `
+      <div style="margin-bottom: 8px; padding: 6px 10px; background: #ffebee; border-left: 4px solid #d32f2f; border-radius: 4px; font-size: 12px; color: #c62828;">
+        <b>Error:</b> ${window.escapeHtml(vm.error)}
+      </div>` : '';
+
+    return { vmLabel, vmIp, vmIdx, cmdGroupsHtml, vmErrorHtml, cmdCount: cmdKeys.length };
+  });
+
+  // --- Determine if we need VM tabs or single VM view ---
+  const buildVmContent = (vm) => `
+    <div style="margin-bottom: 4px; font-size: 12px; color: #666;">
+      <span style="font-weight: 600; color: #333;">${window.escapeHtml(vm.vmLabel)}</span>
+      ${vm.vmIp ? `<span style="margin-left: 6px; color: #888;">(${window.escapeHtml(vm.vmIp)})</span>` : ''}
+      <span style="margin-left: 6px; color: #999;">${vm.cmdCount} command${vm.cmdCount > 1 ? 's' : ''}</span>
+    </div>
+    ${vm.vmErrorHtml}
+    ${vm.cmdGroupsHtml}`;
+
+  let bodyHtml;
+  if (vmCount === 1) {
+    bodyHtml = buildVmContent(vmTabs[0]);
+  } else {
+    // VM tab buttons
+    const tabBtns = vmTabs.map((vm, i) => `
+      <button type="button" class="rcr-tab-btn${i === 0 ? ' rcr-tab-active' : ''}" data-idx="${i}"
+        style="padding: 4px 10px; font-size: 11px; border: 1px solid #dee2e6; border-bottom: none; border-radius: 5px 5px 0 0; 
+               cursor: pointer; background: ${i === 0 ? '#fff' : '#f1f3f5'}; color: ${i === 0 ? '#333' : '#888'}; font-weight: ${i === 0 ? '600' : '400'};">
+        ${window.escapeHtml(vm.vmLabel)} <span style="font-size: 10px; color: #999;">${window.escapeHtml(vm.vmIp)}</span>
+      </button>`).join('');
+
+    const tabPanels = vmTabs.map((vm, i) => `
+      <div class="rcr-tab-panel" data-idx="${i}" style="display: ${i === 0 ? 'block' : 'none'}; padding: 10px 0 0 0;">
+        ${buildVmContent(vm)}
+      </div>`).join('');
+
+    bodyHtml = `
+      <div style="display: flex; gap: 2px; border-bottom: 2px solid #dee2e6; margin-bottom: 0;">
+        ${tabBtns}
+      </div>
+      ${tabPanels}`;
+  }
+
+  // --- Summary bar ---
+  const totalCmds = results.reduce((s, vm) => s + Object.keys(vm.command || {}).length, 0);
+  const hasAnyError = results.some(vm => (vm.error && vm.error.trim()));
+  const hasAnyStderr = results.some(vm => {
+    const keys = Object.keys(vm.stderr || {});
+    return keys.some(k => vm.stderr[k] && vm.stderr[k].trim());
+  });
+  const statusIcon = hasAnyError ? '⚠️' : (hasAnyStderr ? '⚡' : '✅');
+  const statusColor = hasAnyError ? '#d32f2f' : (hasAnyStderr ? '#e65100' : '#2e7d32');
+  const statusText = hasAnyError ? 'Error' : (hasAnyStderr ? 'Completed (with stderr)' : 'Success');
+
+  const summaryHtml = `
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 10px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 18px;">${statusIcon}</span>
+        <span style="font-weight: 600; font-size: 13px; color: ${statusColor};">${statusText}</span>
+        <span style="font-size: 11px; color: #888;">${vmCount} VM${vmCount > 1 ? 's' : ''} · ${totalCmds} command${totalCmds > 1 ? 's' : ''}</span>
+      </div>
+      <button type="button" id="rcr-raw-json-btn"
+        style="padding: 4px 10px; font-size: 11px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+        { } Raw JSON
+      </button>
+    </div>`;
+
+  // --- Show SweetAlert ---
+  Swal.fire({
+    title: '🖥️ Remote Command Result',
+    width: 750,
+    html: `
+      <div style="text-align: left; max-height: 65vh; overflow-y: auto;">
+        ${summaryHtml}
+        ${bodyHtml}
+      </div>`,
+    showConfirmButton: true,
+    confirmButtonText: 'Close',
+    didOpen: () => {
+      // Tab switching logic
+      const popup = Swal.getPopup();
+      popup.querySelectorAll('.rcr-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = btn.dataset.idx;
+          popup.querySelectorAll('.rcr-tab-btn').forEach(b => {
+            b.classList.remove('rcr-tab-active');
+            b.style.background = '#f1f3f5';
+            b.style.color = '#888';
+            b.style.fontWeight = '400';
+          });
+          btn.classList.add('rcr-tab-active');
+          btn.style.background = '#fff';
+          btn.style.color = '#333';
+          btn.style.fontWeight = '600';
+          popup.querySelectorAll('.rcr-tab-panel').forEach(p => {
+            p.style.display = p.dataset.idx === idx ? 'block' : 'none';
+          });
+        });
+      });
+
+      // "Raw JSON" button → show original JSON viewer
+      const rawBtn = popup.querySelector('#rcr-raw-json-btn');
+      if (rawBtn) {
+        rawBtn.addEventListener('click', () => {
+          displayJsonData(data, typeInfo);
+        });
+      }
+
+      // Scroll all stdout/stderr tail blocks to bottom
+      popup.querySelectorAll('pre').forEach(pre => {
+        pre.scrollTop = pre.scrollHeight;
+      });
+    }
+  });
+}
+window.showRemoteCmdResult = showRemoteCmdResult;
+
 
 async function executeRemoteCmd() {
   var config = getConfig(); var hostname = config.hostname;
@@ -13559,28 +13796,7 @@ async function executeRemoteCmd() {
           },
         }).then((res) => {
           console.log(res); // for debug
-          displayJsonData(res.data, typeInfo);
-          let formattedOutput = "[Complete: remote ssh command to MCI]\n\n";
-
-          res.data.results.forEach((result) => {
-            formattedOutput += `### MCI ID: ${result.mciId} | IP: ${result.vmId} | IP: ${result.vmIp} ###\n`;
-
-            Object.keys(result.command).forEach((key) => {
-              formattedOutput += `\nCommand: ${result.command[key]}`;
-
-              if (result.stdout[key].trim()) {
-                formattedOutput += `\nOutput:\n${result.stdout[key]}`;
-              }
-
-              if (result.stderr[key].trim()) {
-                formattedOutput += `\nError:\n${result.stderr[key]}`;
-              }
-            });
-
-            formattedOutput += "\n--------------------------------------\n";
-          });
-
-          console.log(formattedOutput);
+          showRemoteCmdResult(res.data);
         })
           .catch(function (error) {
             if (error.response) {
