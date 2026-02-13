@@ -4204,8 +4204,8 @@ var createMciReqVmTmplt = {
   specId: "",
   description: "mapui",
   rootDiskType: "default",
-  rootDiskSize: "default",
-  subGroupSize: "",
+  rootDiskSize: 0,
+  subGroupSize: 1,
   name: "",
 };
 
@@ -4750,7 +4750,7 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             index: index + 1,
             name: vmReview.vmName || `VM-${index + 1}`,
             subGroupName: vmReview.subGroupName || vmReview.vmName || `VM-${index + 1}`,
-            subGroupSize: vmReview.subGroupSize || "1",
+            subGroupSize: vmReview.subGroupSize || 1,
             status: vmReview.status || "Unknown",
             message: vmReview.message || "",
             canCreate: vmReview.canCreate || false,
@@ -5334,10 +5334,10 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
                 }
                 
                 // Add RootDisk information if available
-                if (vm.vmConfig.rootDiskSize && vm.vmConfig.rootDiskSize !== 'default') {
+                if (vm.vmConfig.rootDiskSize && vm.vmConfig.rootDiskSize > 0) {
                   specs.push(`💽 <strong>Root Disk:</strong> ${vm.vmConfig.rootDiskSize} GB`);
                 } else {
-                  // Show default if explicitly specified
+                  // Show default if 0 or not specified
                   specs.push(`💽 <strong>Root Disk:</strong> Default`);
                 }
                 
@@ -5934,7 +5934,7 @@ function createMci() {
       totalNodeScale += parseInt(createMciReq.subGroups[i].subGroupSize);
       let costPerHour = recommendedSpecList[i].costPerHour;
       let subTotalCost = "unknown";
-      if (costPerHour == "-1" || costPerHour == "") {
+      if (costPerHour < 0 || !costPerHour) {
         costPerHour = "unknown";
         costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($" + costPerHour + " * " + createMciReq.subGroups[i].subGroupSize + ")" + "</span></b></td></tr>";
       } else {
@@ -5960,7 +5960,7 @@ function createMci() {
         "<tr><th style='width: 50%;'>vCPU</th><td><b>" + recommendedSpecList[i].vCPU + "</b></td></tr>" +
         "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + recommendedSpecList[i].memoryGiB + "</b></td></tr>" +
         acceleratorType +
-        "<tr><th style='width: 50%;'>RootDisk(GB)</th><td><b>" + createMciReq.subGroups[i].rootDiskSize + " (type: " + createMciReq.subGroups[i].rootDiskType + ")</b></td></tr>" +
+        "<tr><th style='width: 50%;'>RootDisk(GB)</th><td><b>" + (createMciReq.subGroups[i].rootDiskSize > 0 ? createMciReq.subGroups[i].rootDiskSize : 'Default') + " (type: " + createMciReq.subGroups[i].rootDiskType + ")</b></td></tr>" +
         "<tr><th style='width: 50%;'>Selected Image</th><td><b><span style='color: green; '>" + createMciReq.subGroups[i].imageId + "</span></b></td></tr>" +
 
         ((createMciReq.subGroups[i].label && Object.keys(createMciReq.subGroups[i].label).length > 0) ?
@@ -7341,25 +7341,25 @@ function getRecommendedSpec(idx, latitude, longitude) {
     "location": {
       metric: "location",
       parameter: [{ key: "coordinateClose", val: [`${latitude}/${longitude}`] }],
-      weight: "1.0"
+      weight: 1.0
     },
     "cost": {
       metric: "cost",
-      weight: "1.0"
+      weight: 1.0
     },
     "performance": {
       metric: "performance",
-      weight: "1.0"
+      weight: 1.0
     },
     "random": {
       metric: "random",
-      weight: "1.0"
+      weight: 1.0
     }
   };
 
   var struct = {
     filter: { policy: policies },
-    limit: "200",
+    limit: 200,
     priority: { policy: [priorities[recommendationPolicy]] }
   };
 
@@ -7424,7 +7424,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
         </thead>
         <tbody>
           ${res.data.map((spec, index) => {
-        let costPerHour = spec.costPerHour === "-1" || spec.costPerHour === ""
+        let costPerHour = spec.costPerHour < 0 || !spec.costPerHour
           ? "unknown"
           : `$${spec.costPerHour}`;
 
@@ -7518,7 +7518,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
         // Update spec details function
         function updateSpecDetails(index) {
           const spec = res.data[index];
-          let costPerHour = spec.costPerHour === "-1" || spec.costPerHour === "" ? "unknown" : `$${spec.costPerHour}`;
+          let costPerHour = spec.costPerHour < 0 || !spec.costPerHour ? "unknown" : `$${spec.costPerHour}`;
 
           // Basic spec information - styled to match image details
           const specInfoHTML = `
@@ -8198,17 +8198,13 @@ function getRecommendedSpec(idx, latitude, longitude) {
               createMciReqVm.imageId = selectedImageId; // Use selected image ID (from list or custom input)
               createMciReqVm.rootDiskType = selectedSpec.rootDiskType;
 
-              var diskSizeInput = diskSize.value;
-              if (isNaN(diskSizeInput) || diskSizeInput == "") {
-                diskSizeInput = "default";
+              var diskSizeInput = parseInt(diskSize.value, 10);
+              if (isNaN(diskSizeInput) || diskSizeInput <= 0) {
+                diskSizeInput = 0; // 0 means use CSP default
               }
               createMciReqVm.rootDiskSize = diskSizeInput;
-              if (diskSizeInput == "default" && selectedSpec.rootDiskSize != "default" && selectedSpec.rootDiskSize != "-1" && selectedSpec.rootDiskSize != "0") {
-                //createMciReqVm.rootDiskSize = selectedSpec.rootDiskSize
-                // keep "default". selectedSpec.rootDiskSize does not work correctly yet
-                createMciReqVm.rootDiskSize = diskSizeInput; 
-                // need to validate requested disk size >= default disk size given by vm spec
-              }
+              // Note: 0 means use CSP default, positive values specify exact size
+              // selectedSpec.rootDiskSize is now an integer from the API
 
               // Create image display for the confirmation popup (full width available)
               let imageSelectHTML = `
@@ -8221,7 +8217,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
               `;
 
               let costPerHour = selectedSpec.costPerHour;
-          if (costPerHour == "-1" || costPerHour == "") {
+          if (costPerHour < 0 || !costPerHour) {
             costPerHour = "unknown";
           }
           
@@ -8422,12 +8418,10 @@ function getRecommendedSpec(idx, latitude, longitude) {
               // rootDiskSize input validation (actual value is retrieved after confirmation below)
               const rootDiskSizeInput = document.getElementById('rootDiskSizeCustom');
               let rootDiskSizeValue = rootDiskSizeInput.value.trim();
-              if (rootDiskSizeValue === "-1") {
-                rootDiskSizeValue = "";
-              }
-              if (rootDiskSizeValue !== "default" && rootDiskSizeValue !== "") {
+              // Empty or 0 means use CSP default
+              if (rootDiskSizeValue !== "" && rootDiskSizeValue !== "0") {
                 if (!/^\d+$/.test(rootDiskSizeValue)) {
-                  Swal.showValidationMessage('Disk size must be "default", empty, or a number');
+                  Swal.showValidationMessage('Disk size must be empty (default) or a positive number');
                   return false;
                 }
               }
@@ -8450,12 +8444,9 @@ function getRecommendedSpec(idx, latitude, longitude) {
             // result.value is false if result.isDenied or another key such as result.isDismissed
             if (result.value) {
 
-              createMciReqVm.subGroupSize = String(result.value);
-              if (
-                isNaN(parseFloat(createMciReqVm.subGroupSize)) ||
-                parseFloat(createMciReqVm.subGroupSize) <= 0
-              ) {
-                createMciReqVm.subGroupSize = "1";
+              createMciReqVm.subGroupSize = parseInt(result.value, 10) || 1;
+              if (createMciReqVm.subGroupSize <= 0) {
+                createMciReqVm.subGroupSize = 1;
               }
 
               const rootDiskTypeSelect = document.getElementById('rootDiskTypeSelect');
@@ -8466,9 +8457,9 @@ function getRecommendedSpec(idx, latitude, longitude) {
               const rootDiskSizeInput = document.getElementById('rootDiskSizeCustom').value.trim();
               if (rootDiskSizeInput) {
                 console.log("RootDiskSize:", rootDiskSizeInput);
-                createMciReqVm.rootDiskSize = rootDiskSizeInput;
+                createMciReqVm.rootDiskSize = parseInt(rootDiskSizeInput, 10) || 0;
               } else {
-                createMciReqVm.rootDiskSize = "default";
+                createMciReqVm.rootDiskSize = 0;
               }
 
               // Get selected zone (optional)
@@ -9002,7 +8993,7 @@ function buildSpecConfigPopupHtml(spec, vm, options = {}) {
         <div class="popup-col">
           <div class="popup-field">
             <label class="popup-label">Disk Size (GB)</label>
-            <input type="text" id="${isEdit ? 'editRootDiskSize' : 'rootDiskSizeCustom'}" class="popup-input" value="${vm.rootDiskSize || 'default'}">
+            <input type="text" id="${isEdit ? 'editRootDiskSize' : 'rootDiskSizeCustom'}" class="popup-input" value="${vm.rootDiskSize > 0 ? vm.rootDiskSize : ''}" placeholder="Default">
           </div>
         </div>
         <div class="popup-col popup-col-2">
@@ -9395,7 +9386,7 @@ function editSubGroup(index) {
       // Use common helper for label parsing
       const labels = parseLabelsString(labelsText);
       
-      return { name, count, diskType, diskSize: diskSize || 'default', zone, labels };
+      return { name, count, diskType, diskSize: parseInt(diskSize, 10) || 0, zone, labels };
     }
   }).then((result) => {
     window.editingSubGroupIndex = -1; // Reset editing mode
@@ -9403,7 +9394,7 @@ function editSubGroup(index) {
     if (result.isConfirmed) {
       // Update the VM configuration
       vmSubGroupReqeustFromSpecList[index].name = result.value.name;
-      vmSubGroupReqeustFromSpecList[index].subGroupSize = result.value.count.toString();
+      vmSubGroupReqeustFromSpecList[index].subGroupSize = result.value.count;
       vmSubGroupReqeustFromSpecList[index].rootDiskType = result.value.diskType;
       vmSubGroupReqeustFromSpecList[index].rootDiskSize = result.value.diskSize;
       
@@ -16183,7 +16174,7 @@ function showMciScaleOutReview(selectedMciId, subGroupName, vmCountPerLocation, 
   // Build the review request using the template
   var reviewReq = {
     name: subGroupName,
-    subGroupSize: vmCountPerLocation.toString(),
+    subGroupSize: vmCountPerLocation,
     specId: vmTemplate.specId,
     imageId: vmTemplate.imageId,
     description: "Dynamically added via CB-MapUI Scale Out MCI",
@@ -16405,7 +16396,7 @@ function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, 
   // Build the request body using current map configuration
   var subGroupDynamicReq = {
     name: subGroupName,
-    subGroupSize: vmCountPerLocation.toString(),
+    subGroupSize: vmCountPerLocation,
     description: "Dynamically added via CB-MapUI Scale Out MCI",
     label: {
       "created-by": "cb-mapui",
