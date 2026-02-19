@@ -13935,11 +13935,21 @@ function showStreamingSessionList() {
 }
 window.showStreamingSessionList = showStreamingSessionList;
 
+/**
+ * Safely clean up all resources for a streaming session (timers, abort controller, spinner).
+ */
+function cleanupStreamingSession(session) {
+  if (!session) return;
+  if (session._waitingTimer) clearInterval(session._waitingTimer);
+  if (session.cleanupTimer) clearTimeout(session.cleanupTimer);
+  session.abortController.abort();
+  removeSpinnerTask(session.spinnerId);
+}
+
 function abortStreamingSession(xRequestId) {
   const session = window._cmdStreamSessions[xRequestId];
   if (session) {
-    session.abortController.abort();
-    removeSpinnerTask(session.spinnerId);
+    cleanupStreamingSession(session);
     delete window._cmdStreamSessions[xRequestId];
     updateStreamingBadge();
   }
@@ -13954,8 +13964,7 @@ window.abortStreamingSession = abortStreamingSession;
 function dismissStreamingSession(xRequestId) {
   const session = window._cmdStreamSessions[xRequestId];
   if (session) {
-    if (session.cleanupTimer) clearTimeout(session.cleanupTimer);
-    session.abortController.abort();
+    cleanupStreamingSession(session);
     delete window._cmdStreamSessions[xRequestId];
     updateStreamingBadge();
   }
