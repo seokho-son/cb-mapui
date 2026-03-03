@@ -11917,16 +11917,40 @@ function setDefaultRemoteCommandsByApp(appName) {
       break;
     case "TelemetryMonitor":
       // Setup central monitoring (Prometheus + Grafana) on a monitoring VM
-      // Requires GPU VM IPs as arguments to scrape via Telegraf gateway
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/setup_monitoring.sh | bash -s -- <TELEMETRY_GPU_VM_IPS>";
+      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU VM IPs
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/setup_monitoring.sh | bash -s -- $$Func(GetPublicIPs(separator=' ', label='accelerator=gpu'))";
       defaultRemoteCommand[1] = "echo 'Prometheus: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:9090/targets))'";
       defaultRemoteCommand[2] = "echo 'Grafana: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
       break;
     case "TelemetryExport":
-      // Export Prometheus metrics to CSV (runs on monitoring VM)
-      // Supports: --minutes, --ips, --metrics options
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/export_metrics.sh | bash -s -- --minutes <EXPORT_MINUTES> --ips <TELEMETRY_GPU_VM_IPS_CSV>";
+    case "BenchmarkTelemetryExport":
+      // Export Prometheus metrics to CSV (run on the VM that hosts Prometheus, e.g., monitoring VM or benchmark manager)
+      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU VM IPs
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/export_metrics.sh | bash -s -- --minutes <EXPORT_MINUTES> --ips \"$$Func(GetPublicIPs(separator=',', label='accelerator=gpu'))\"";
       defaultRemoteCommand[1] = "ls -la ./metrics_export/";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "BenchmarkTarget":
+      // All-in-one setup for benchmark target GPU VMs: vLLM + Model Serving + Telemetry Sensor
+      // Uses per-VM model assignment via $$Func(AssignTask(...)) from a predefined model list
+      // Assumes GPU driver is already installed (use 'Install GPU Driver' step first)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/setupBenchmarkTarget.sh | bash -s -- $$Func(AssignTask(task='Qwen/Qwen2.5-1.5B-Instruct, meta-llama/Llama-3.2-3B-Instruct, mistralai/Mistral-7B-Instruct-v0.3, deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'))";
+      defaultRemoteCommand[1] = "echo 'API: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:8000/v1))'";
+      defaultRemoteCommand[2] = "echo 'Metrics: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:9101/metrics))'";
+      break;
+    case "BenchmarkManager":
+      // All-in-one setup for benchmark manager VM: Prometheus + Grafana + GuideLLM + Export Tools
+      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU VM IPs
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/setupBenchmarkManager.sh | bash -s -- $$Func(GetPublicIPs(separator=' ', label='accelerator=gpu'))";
+      defaultRemoteCommand[1] = "echo 'Prometheus: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:9090/targets))'";
+      defaultRemoteCommand[2] = "echo 'Grafana: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
+      break;
+    case "RunBenchmark":
+      // Run GuideLLM benchmark against target GPU VMs (runs on benchmark manager VM)
+      // run_guidellm.sh supports multiple IPs natively: --ip <IP1> <IP2> ...
+      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU VM IPs
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/run_guidellm.sh | bash -s -- --ip $$Func(GetPublicIPs(separator=' ', label='accelerator=gpu')) --seconds 60";
+      defaultRemoteCommand[1] = "ls -la ~/guidellm_bench/bench_*";
       defaultRemoteCommand[2] = "";
       break;
     case "RayHead-Deploy":
@@ -12518,6 +12542,20 @@ window.predefinedScriptCategories = {
       { value: 'TelemetrySensor', label: '8. Setup GPU Telemetry Sensor', step: 8, experimental: true, targetLabel: 'accelerator=gpu' },
       { value: 'TelemetryMonitor', label: '9. Setup Monitoring Server', step: 9, experimental: true, targetLabel: 'role=observability' },
       { value: 'TelemetryExport', label: '10. Export Metrics to CSV', step: 10, experimental: true, targetLabel: 'role=observability' }
+    ]
+  },
+  'llm-benchmark': {
+    label: '📊 LLM Benchmark',
+    description: 'LLM benchmark environment (vLLM + GuideLLM + Monitoring)',
+    scripts: [
+      { value: 'Nvidia', label: '1. Install GPU Driver', step: 1, targetLabel: 'accelerator=gpu' },
+      { value: 'NvidiaVgpu', label: '1-alt. Install GPU Driver (vGPU)', step: 1, optional: true, targetLabel: 'accelerator=gpu' },
+      { value: 'RebootVM', label: '2. Reboot VM', step: 2, targetLabel: 'accelerator=gpu' },
+      { value: 'Nvidia-Status', label: '3. Check GPU Driver', step: 3, targetLabel: 'accelerator=gpu' },
+      { value: 'BenchmarkTarget', label: '4. Setup Benchmark Target (vLLM+Model+Telemetry)', step: 4, targetLabel: 'accelerator=gpu' },
+      { value: 'BenchmarkManager', label: '5. Setup Benchmark Manager (Monitoring+Tools)', step: 5, targetLabel: 'role=benchmark' },
+      { value: 'RunBenchmark', label: '6. Run Benchmark', step: 6, targetLabel: 'role=benchmark' },
+      { value: 'BenchmarkTelemetryExport', label: '7. Export Metrics to CSV', step: 7, optional: true, targetLabel: 'role=benchmark' }
     ]
   },
   'k8s-general': {
