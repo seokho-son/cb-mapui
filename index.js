@@ -544,6 +544,7 @@ const PREDEFINED_LABELS = [
   { key: 'role', value: 'worker', description: 'Worker node' },
   { key: 'role', value: 'model', description: 'LLM model serving node' },
   { key: 'role', value: 'gui', description: 'GUI/Dashboard node' },
+  { key: 'role', value: 'benchmark', description: 'Benchmark manager node' },
   { key: 'role', value: 'observability', description: 'Monitoring/telemetry node' },
   { key: 'accelerator', value: 'gpu', description: 'GPU-enabled node' }
 ];
@@ -12553,9 +12554,9 @@ window.predefinedScriptCategories = {
       { value: 'RebootVM', label: '2. Reboot VM', step: 2, targetLabel: 'accelerator=gpu' },
       { value: 'Nvidia-Status', label: '3. Check GPU Driver', step: 3, targetLabel: 'accelerator=gpu' },
       { value: 'BenchmarkTarget', label: '4. Setup Benchmark Target (vLLM+Model+Telemetry)', step: 4, targetLabel: 'accelerator=gpu' },
-      { value: 'BenchmarkManager', label: '5. Setup Benchmark Manager (Monitoring+Tools)', step: 5, targetLabel: 'role=benchmark' },
-      { value: 'RunBenchmark', label: '6. Run Benchmark', step: 6, targetLabel: 'role=benchmark' },
-      { value: 'BenchmarkTelemetryExport', label: '7. Export Metrics to CSV', step: 7, optional: true, targetLabel: 'role=benchmark' }
+      { value: 'BenchmarkManager', label: '5. Setup Benchmark Manager (Monitoring+Tools)', step: 5, targetLabel: 'role=benchmark', targetLabels: ['role=benchmark', 'role=observability'] },
+      { value: 'RunBenchmark', label: '6. Run Benchmark', step: 6, targetLabel: 'role=benchmark', targetLabels: ['role=benchmark', 'role=observability'] },
+      { value: 'BenchmarkTelemetryExport', label: '7. Export Metrics to CSV', step: 7, optional: true, targetLabel: 'role=benchmark', targetLabels: ['role=benchmark', 'role=observability'] }
     ]
   },
   'k8s-general': {
@@ -13491,9 +13492,10 @@ window.loadPredefinedScript = function () {
 window.applyScriptTargetLabel = function(scriptValue) {
   if (!scriptValue) return;
   
-  // Find the script definition with targetLabel
+  // Find the script definition with targetLabel / targetLabels
   const currentCategory = window._currentScriptCategory;
   let targetLabel = null;
+  let targetLabels = null;
   
   // Search in current category first, then all categories
   const categoriesToSearch = currentCategory 
@@ -13504,38 +13506,47 @@ window.applyScriptTargetLabel = function(scriptValue) {
     const cat = window.predefinedScriptCategories[catKey];
     if (!cat || !cat.scripts) continue;
     const script = cat.scripts.find(s => s.value === scriptValue);
-    if (script && script.targetLabel) {
+    if (script && (script.targetLabel || script.targetLabels)) {
       targetLabel = script.targetLabel;
+      targetLabels = script.targetLabels || null;
       break;
     }
   }
   
-  if (!targetLabel) return; // No targetLabel for this script
+  // Build ordered list of labels to try (targetLabels array first, then single targetLabel as fallback)
+  const labelsToTry = targetLabels ? [...targetLabels] : (targetLabel ? [targetLabel] : []);
+  if (labelsToTry.length === 0) return; // No targetLabel for this script
   
-  // Check if the target label is available in current MCI's VMs
+  // Check if any target label is available in current MCI's VMs
   const availableLabels = window._currentMciLabels;
   if (!availableLabels || Object.keys(availableLabels).length === 0) return;
   
-  const [targetKey, targetValue] = targetLabel.split('=');
-  if (!targetKey || !targetValue) return;
+  let matchedLabel = null;
+  for (const candidate of labelsToTry) {
+    const [candKey, candValue] = candidate.split('=');
+    if (!candKey || !candValue) continue;
+    const availableValues = availableLabels[candKey];
+    if (availableValues && availableValues.includes(candValue)) {
+      matchedLabel = candidate;
+      break;
+    }
+  }
   
-  // Check if this label key=value pair exists in the MCI
-  const availableValues = availableLabels[targetKey];
-  if (!availableValues || !availableValues.includes(targetValue)) return;
+  if (!matchedLabel) return; // None of the target labels are available in the MCI
   
   // Set the label in the selector
   const labelInput = document.getElementById('labelSelector');
   if (!labelInput) return;
   
   // Replace current label (don't append - the script target is specific)
-  labelInput.value = targetLabel;
+  labelInput.value = matchedLabel;
   
   // Update UI
   if (window.updateSelectedLabelsDisplay) window.updateSelectedLabelsDisplay();
   if (window.updateLabelMatchPreview) window.updateLabelMatchPreview();
   if (window.updateAvailableLabelChipStyles) window.updateAvailableLabelChipStyles();
   
-  console.log(`Auto-set label selector: ${targetLabel} (from script: ${scriptValue})`);
+  console.log(`Auto-set label selector: ${matchedLabel} (from script: ${scriptValue})`);
 };
 
 // Auto-toggle sync mode checkbox based on script's syncMode property
@@ -14771,147 +14782,401 @@ async function transferFileToMci() {
   }
 
   // Build MCI selector options HTML
-  const mciOptionsHtml = mciListOptions.map(m => 
-    `<option value="${m}" ${m === mciid ? 'selected' : ''}>${m}</option>`
+  const mciOptionsHtml = mciListOptions.map(m =>
+    `<option value="${window.escapeHtml(m)}" ${m === mciid ? 'selected' : ''}>${window.escapeHtml(m)}</option>`
   ).join('');
+
+  // Fetch VM list for the selected MCI (for download target)
+  let vmListOptions = [];
+  const fetchVmList = async (targetMciId) => {
+    try {
+      const vmListUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${targetMciId}`;
+      const vmRes = await axios.get(vmListUrl, {
+        auth: { username: username, password: password }
+      });
+      if (vmRes.data && vmRes.data.vm) {
+        return vmRes.data.vm.map(vm => ({
+          id: vm.id,
+          subGroupId: vm.subGroupId || 'default',
+          publicIP: vm.publicIP || ''
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to fetch VM list:", err);
+    }
+    return [];
+  };
+
+  vmListOptions = await fetchVmList(mciid || mciListOptions[0]);
+
+  const buildVmOptionsHtml = (vms) => {
+    if (vms.length === 0) return '<option value="">No VMs available</option>';
+    return vms.map(vm =>
+      `<option value="${window.escapeHtml(vm.id)}" ${vm.id === vmid ? 'selected' : ''}>${window.escapeHtml(vm.id)} (${window.escapeHtml(vm.subGroupId)}) ${vm.publicIP ? '- ' + window.escapeHtml(vm.publicIP) : ''}</option>`
+    ).join('');
+  };
 
   console.log("Opening file transfer dialog (context MCI: " + mciid + ")");
 
-    // Swal popup for selecting file and target path
-    Swal.fire({
-      title: "<font size=5><b>Transfer File to MCI</b></font>",
-      width: 900,
-      html:
-        `<div style="text-align: left; padding: 10px;">
-        <p><font size=4><b>Select MCI</b></font></p>
-        <div style="display: flex; justify-content: flex-start; margin-bottom: 20px;">
-            <select id="mciSelector" style="width: 75%; padding: 5px;">
-              ${mciOptionsHtml}
-            </select>
-        </div>
-
-        <p><font size=4><b>Select File to Transfer</b></font></p>
-        <div style="display: flex; justify-content: flex-start; margin-bottom: 20px;">
-            <input type="file" id="fileInput" style="width: 300px; padding: 5px;" />
-        </div>
-
-        <p><font size=4><b>File Path on VM (existing path only)</b></font></p>
-        <div style="display: flex; justify-content: flex-start; margin-bottom: 20px;">
-            <input type="text" id="targetPathInput" style="width: 80%; padding: 5px;" value="/home/cb-user/" placeholder="/home/cb-user/">
-        </div>
-
-        <p style="text-align: left;"><font size=4><b>Select Target Group</b></font></p>
-        <div style="display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 20px; margin-bottom: 10px;">
-            <div>
-                <input type="radio" id="mciOption" name="selectOption" value="MCI" checked>
-                <label for="mciOption">MCI (all VMs)</label>
+  Swal.fire({
+    title: "📁 File Transfer",
+    width: 800,
+    html: `
+    ${POPUP_STYLES}
+    <div class="popup-container">
+      <!-- Mode Toggle -->
+      <div class="popup-section">
+        <div class="popup-section-title">📂 Transfer Mode</div>
+        <div class="popup-row">
+          <div class="popup-col" style="flex: 1;">
+            <div style="display: flex; gap: 8px;">
+              <button type="button" id="uploadModeBtn" class="popup-badge" onclick="switchFileTransferMode('upload')"
+                style="padding: 8px 20px; font-size: 0.9rem; cursor: pointer; border: 2px solid #28a745; background: #28a745; color: white; border-radius: 6px; flex: 1; text-align: center;">
+                ⬆️ Upload to VM
+              </button>
+              <button type="button" id="downloadModeBtn" class="popup-badge" onclick="switchFileTransferMode('download')"
+                style="padding: 8px 20px; font-size: 0.9rem; cursor: pointer; border: 2px solid #0d6efd; background: #f8f9fa; color: #333; border-radius: 6px; flex: 1; text-align: center;">
+                ⬇️ Download from VM
+              </button>
             </div>
-            <div>
-                <input type="radio" id="subGroupOption" name="selectOption" value="SubGroup" ${subgroupid ? '' : 'disabled'}>
-                <label for="subGroupOption">SUBGROUP: <span style="color:green;">${subgroupid || 'N/A'}</span></label>
-            </div>
-            <div>
-                <input type="radio" id="vmOption" name="selectOption" value="VM" ${vmid ? '' : 'disabled'}>
-                <label for="vmOption">VM: <span style="color:red;">${vmid || 'N/A'}</span></label>
-            </div>
+          </div>
         </div>
-        </div>`,
-      showCancelButton: true,
-      confirmButtonText: "Transfer",
-      didOpen: () => {
-        document.getElementById("fileInput").addEventListener("change", function (e) {
-          console.log("File selected:", e.target.files[0]);
-        });
-      },
-      preConfirm: () => {
-        // Get the file and target path from the input fields
-        const fileInput = document.getElementById("fileInput");
-        const targetPath = document.getElementById("targetPathInput").value;
-        const selectedMci = document.getElementById("mciSelector").value;
+      </div>
 
-        // Check if a file is selected
+      <!-- Target Selection -->
+      <div class="popup-section">
+        <div class="popup-section-title">🎯 Target Selection</div>
+        <div class="popup-row">
+          <div class="popup-col" style="flex: 1;">
+            <div class="popup-field">
+              <label class="popup-label">MCI</label>
+              <select id="mciSelector" class="popup-select">
+                ${mciOptionsHtml}
+              </select>
+            </div>
+          </div>
+          <!-- Upload: scope selection -->
+          <div id="uploadTargetScope" class="popup-col" style="flex: 2;">
+            <div class="popup-field">
+              <label class="popup-label">Scope</label>
+              <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; min-height: 32px;">
+                <label class="popup-inline" style="cursor: pointer;">
+                  <input type="radio" id="mciOption" name="selectOption" value="MCI" checked>
+                  <span class="popup-badge" style="background: #0d6efd; color: white;">All VMs</span>
+                </label>
+                <label class="popup-inline" style="cursor: pointer; ${subgroupid ? '' : 'opacity: 0.5;'}">
+                  <input type="radio" id="subGroupOption" name="selectOption" value="SubGroup" ${subgroupid ? '' : 'disabled'}>
+                  <span class="popup-badge" style="background: #28a745; color: white;">SubGroup</span>
+                  <span style="font-size: 0.75rem; color: #666;">${subgroupid || 'N/A'}</span>
+                </label>
+                <label class="popup-inline" style="cursor: pointer; ${vmid ? '' : 'opacity: 0.5;'}">
+                  <input type="radio" id="vmOption" name="selectOption" value="VM" ${vmid ? '' : 'disabled'}>
+                  <span class="popup-badge" style="background: #dc3545; color: white;">VM</span>
+                  <span style="font-size: 0.75rem; color: #666;">${vmid || 'N/A'}</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <!-- Download: VM selector -->
+          <div id="downloadTargetVm" class="popup-col" style="flex: 2; display: none;">
+            <div class="popup-field">
+              <label class="popup-label">VM</label>
+              <select id="downloadVmSelector" class="popup-select">
+                ${buildVmOptionsHtml(vmListOptions)}
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upload Section -->
+      <div id="uploadSection">
+        <div class="popup-section">
+          <div class="popup-section-title">⬆️ Upload Settings</div>
+          <div class="popup-row">
+            <div class="popup-col" style="flex: 1;">
+              <div class="popup-field">
+                <label class="popup-label">File (max 50MB)</label>
+                <input type="file" id="fileInput" class="popup-input" style="padding: 4px;" />
+              </div>
+            </div>
+          </div>
+          <div class="popup-row">
+            <div class="popup-col" style="flex: 1;">
+              <div class="popup-field">
+                <label class="popup-label">Target Path on VM</label>
+                <input type="text" id="targetPathInput" class="popup-input" value="/home/cb-user/" placeholder="/home/cb-user/">
+              </div>
+            </div>
+          </div>
+          <div style="font-size: 0.7rem; color: #666; padding: 4px 8px; background: #fff3cd; border-radius: 4px;">
+            📝 The file will be uploaded to the specified path on all targeted VMs via SCP through bastion hosts.
+          </div>
+        </div>
+      </div>
+
+      <!-- Download Section -->
+      <div id="downloadSection" style="display: none;">
+        <div class="popup-section">
+          <div class="popup-section-title">⬇️ Download Settings</div>
+          <div class="popup-row">
+            <div class="popup-col" style="flex: 1;">
+              <div class="popup-field">
+                <label class="popup-label">Source Path on VM (full file path)</label>
+                <input type="text" id="sourcePathInput" class="popup-input" value="" placeholder="/home/cb-user/result.json">
+              </div>
+            </div>
+          </div>
+          <div style="font-size: 0.7rem; color: #666; padding: 4px 8px; background: #d1ecf1; border-radius: 4px;">
+            📝 The file will be downloaded from the selected VM via SCP through bastion host. Max file size: 200MB.
+          </div>
+        </div>
+      </div>
+    </div>`,
+    showCancelButton: true,
+    confirmButtonText: "⬆️ Upload",
+    cancelButtonText: "Close",
+    didOpen: () => {
+      // Make mode switch function available
+      window.switchFileTransferMode = (mode) => {
+        const uploadBtn = document.getElementById('uploadModeBtn');
+        const downloadBtn = document.getElementById('downloadModeBtn');
+        const uploadSection = document.getElementById('uploadSection');
+        const downloadSection = document.getElementById('downloadSection');
+        const uploadTargetScope = document.getElementById('uploadTargetScope');
+        const downloadTargetVm = document.getElementById('downloadTargetVm');
+        const confirmBtn = Swal.getConfirmButton();
+
+        if (mode === 'upload') {
+          uploadBtn.style.background = '#28a745';
+          uploadBtn.style.color = 'white';
+          uploadBtn.style.borderColor = '#28a745';
+          downloadBtn.style.background = '#f8f9fa';
+          downloadBtn.style.color = '#333';
+          downloadBtn.style.borderColor = '#0d6efd';
+          uploadSection.style.display = '';
+          downloadSection.style.display = 'none';
+          uploadTargetScope.style.display = '';
+          downloadTargetVm.style.display = 'none';
+          confirmBtn.textContent = '⬆️ Upload';
+          confirmBtn.style.background = '#28a745';
+          confirmBtn.classList.remove('swal2-styled-download');
+          document.getElementById('fileTransferMode').value = 'upload';
+        } else {
+          downloadBtn.style.background = '#0d6efd';
+          downloadBtn.style.color = 'white';
+          downloadBtn.style.borderColor = '#0d6efd';
+          uploadBtn.style.background = '#f8f9fa';
+          uploadBtn.style.color = '#333';
+          uploadBtn.style.borderColor = '#28a745';
+          uploadSection.style.display = 'none';
+          downloadSection.style.display = '';
+          uploadTargetScope.style.display = 'none';
+          downloadTargetVm.style.display = '';
+          confirmBtn.textContent = '⬇️ Download';
+          confirmBtn.style.background = '#0d6efd';
+          document.getElementById('fileTransferMode').value = 'download';
+        }
+      };
+
+      // Add hidden input to track mode
+      const hiddenInput = document.createElement('input');
+      hiddenInput.type = 'hidden';
+      hiddenInput.id = 'fileTransferMode';
+      hiddenInput.value = 'upload';
+      Swal.getPopup().appendChild(hiddenInput);
+
+      // Update VM list when MCI selector changes
+      document.getElementById('mciSelector').addEventListener('change', async (e) => {
+        const selectedMci = e.target.value;
+        const newVmList = await fetchVmList(selectedMci);
+        const vmSelector = document.getElementById('downloadVmSelector');
+        vmSelector.innerHTML = buildVmOptionsHtml(newVmList);
+      });
+    },
+    preConfirm: () => {
+      const mode = document.getElementById('fileTransferMode').value;
+      const selectedMci = document.getElementById('mciSelector').value;
+
+      if (mode === 'upload') {
+        const fileInput = document.getElementById('fileInput');
+        const targetPath = document.getElementById('targetPathInput').value;
         if (!fileInput.files[0]) {
-          Swal.showValidationMessage("Please select a file to transfer.");
+          Swal.showValidationMessage('Please select a file to upload.');
           return false;
         }
+        const fileSizeLimit = 50 * 1024 * 1024; // 50MB
+        if (fileInput.files[0].size > fileSizeLimit) {
+          Swal.showValidationMessage('File too large. Maximum upload size is 50MB.');
+          return false;
+        }
+        if (!targetPath) {
+          Swal.showValidationMessage('Please specify the target path.');
+          return false;
+        }
+        return { mode, selectedMci, file: fileInput.files[0], targetPath };
+      } else {
+        const selectedVm = document.getElementById('downloadVmSelector').value;
+        const sourcePath = document.getElementById('sourcePathInput').value;
+        if (!selectedVm) {
+          Swal.showValidationMessage('Please select a VM.');
+          return false;
+        }
+        if (!sourcePath) {
+          Swal.showValidationMessage('Please specify the source file path on the VM.');
+          return false;
+        }
+        return { mode, selectedMci, selectedVm, sourcePath };
+      }
+    },
+  }).then((result) => {
+    if (result.value) {
+      const { mode, selectedMci } = result.value;
 
-        // Return the file and targetPath
-        return {
-          file: fileInput.files[0],
-          targetPath: targetPath,
-          selectedMci: selectedMci,
-        };
-      },
-    }).then((result) => {
-      if (result.value) {
-        const file = result.value.file;
-        const targetPath = result.value.targetPath;
-        const selectedMciId = result.value.selectedMci;
-
-        // Handle radio button value
+      if (mode === 'upload') {
+        // === UPLOAD ===
+        const { file, targetPath } = result.value;
         const radioValue = Swal.getPopup().querySelector('input[name="selectOption"]:checked').value;
-        let url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/transferFile/mci/${selectedMciId}`;
-        if (radioValue === "SubGroup") {
+        let url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/transferFile/mci/${selectedMci}`;
+        if (radioValue === 'SubGroup') {
           url += `?subGroupId=${encodeURIComponent(subgroupid)}`;
-          console.log("Transferring file to SubGroup:", subgroupid, "in MCI:", selectedMciId);
-        } else if (radioValue === "VM") {
+        } else if (radioValue === 'VM') {
           url += `?vmId=${encodeURIComponent(vmid)}`;
-          console.log("Transferring file to VM:", vmid, "in MCI:", selectedMciId);
-        } else {
-          console.log("Transferring file to MCI:", selectedMciId);
         }
 
-        // Prepare the formData to transfer the file
         var formData = new FormData();
-        formData.append("file", file);
-        formData.append("path", targetPath);
+        formData.append('file', file);
+        formData.append('path', targetPath);
 
-        // Show loading spinner
         Swal.fire({
-          title: 'Transferring...',
-          html: `Transferring ${file.name} to ${targetPath}...`,
+          title: '⬆️ Uploading...',
+          html: `<div style="text-align: left; padding: 10px;">
+            <p><b>File:</b> ${window.escapeHtml(file.name)} (${(file.size / 1024).toFixed(1)} KB)</p>
+            <p><b>Target:</b> ${window.escapeHtml(targetPath)}</p>
+            <p><b>Scope:</b> ${window.escapeHtml(radioValue)} ${window.escapeHtml(radioValue === 'SubGroup' ? subgroupid : radioValue === 'VM' ? vmid : selectedMci)}</p>
+          </div>`,
           allowOutsideClick: false,
-          didOpen: () => {
-            Swal.showLoading();
-          },
+          didOpen: () => { Swal.showLoading(); },
         });
 
         axios({
-          method: "post",
+          method: 'post',
           url: url,
           headers: {
-            "Authorization": `Basic ${btoa(`${username}:${password}`)}`, // Basic Auth
-            "Content-Type": "multipart/form-data",
+            'Authorization': `Basic ${btoa(`${username}:${password}`)}`,
+            'Content-Type': 'multipart/form-data',
           },
           data: formData,
         })
           .then((res) => {
-            // Success message
-            Swal.fire({
-              icon: 'success',
-              title: 'File transferred',
-              text: `The file "${file.name}" was transferred successfully.`,
+            const results = res.data.results || [];
+            const successCount = results.filter(r => !r.error).length;
+            const failCount = results.filter(r => r.error).length;
+
+            let resultHtml = `<div style="text-align: left; padding: 10px; max-height: 400px; overflow-y: auto;">`;
+            resultHtml += `<p style="font-size: 1.1rem; margin-bottom: 12px;">✅ <b>${successCount}</b> succeeded, ❌ <b>${failCount}</b> failed</p>`;
+            results.forEach(r => {
+              const isSuccess = !r.error;
+              const safeVmId = window.escapeHtml(r.vmId || '');
+              const safeVmIp = window.escapeHtml(r.vmIp || 'N/A');
+              const safeDetail = isSuccess
+                ? '✅ ' + window.escapeHtml(r.stdout && r.stdout['0'] || 'OK')
+                : '❌ ' + window.escapeHtml(r.error || r.stderr && r.stderr['0'] || 'Failed');
+              resultHtml += `<div style="padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; background: ${isSuccess ? '#d4edda' : '#f8d7da'}; font-size: 0.8rem;">
+                <b>${safeVmId}</b> (${safeVmIp}) — ${safeDetail}
+              </div>`;
             });
-            console.log(`[Complete: File transfer to MCI ${selectedMciId}]\n`);
+            resultHtml += `</div>`;
+
+            Swal.fire({
+              icon: failCount === 0 ? 'success' : 'warning',
+              title: `Upload ${failCount === 0 ? 'Complete' : 'Partial'}`,
+              html: resultHtml,
+              width: 700,
+            });
             displayJsonData(res.data, typeInfo);
           })
           .catch((error) => {
-            // Error message
-            console.error("File transfer error:", error);
-            errorAlert(
-              JSON.stringify(error.response.data, null, 2).replace(
-                /['",]+/g,
-                ""
-              )
-            );
-          })
-          .finally(() => {
-            Swal.hideLoading();
+            console.error('Upload error:', error);
+            errorAlert(error.response?.data ? JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, '') : error.message);
           });
+
       } else {
-        console.log("File transfer was canceled.");
+        // === DOWNLOAD ===
+        const { selectedVm, sourcePath } = result.value;
+        const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/downloadFile/mci/${selectedMci}/vm/${selectedVm}`;
+
+        Swal.fire({
+          title: '⬇️ Downloading...',
+          html: `<div style="text-align: left; padding: 10px;">
+            <p><b>File:</b> ${window.escapeHtml(sourcePath)}</p>
+            <p><b>From:</b> ${window.escapeHtml(selectedVm)} in ${window.escapeHtml(selectedMci)}</p>
+          </div>`,
+          allowOutsideClick: false,
+          didOpen: () => { Swal.showLoading(); },
+        });
+
+        axios({
+          method: 'post',
+          url: url,
+          headers: {
+            'Authorization': `Basic ${btoa(`${username}:${password}`)}`,
+            'Content-Type': 'application/json',
+          },
+          data: JSON.stringify({ sourcePath: sourcePath }),
+          responseType: 'blob',
+        })
+          .then((res) => {
+            // Extract filename from Content-Disposition header or use source path
+            let downloadFileName = sourcePath.split('/').pop() || 'downloaded_file';
+            const contentDisposition = res.headers['content-disposition'];
+            if (contentDisposition) {
+              const match = contentDisposition.match(/filename="?([^";\n]+)"?/);
+              if (match) downloadFileName = match[1];
+            }
+
+            // Create download link
+            const blob = new Blob([res.data]);
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = downloadFileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(downloadUrl);
+
+            Swal.fire({
+              icon: 'success',
+              title: 'Download Complete',
+              html: `<div style="text-align: left; padding: 10px;">
+                <p>✅ File <b>${window.escapeHtml(downloadFileName)}</b> (${(blob.size / 1024).toFixed(1)} KB) downloaded successfully.</p>
+                <p style="font-size: 0.8rem; color: #666;">Source: ${window.escapeHtml(selectedVm)} in ${window.escapeHtml(selectedMci)}</p>
+              </div>`,
+            });
+          })
+          .catch(async (error) => {
+            console.error('Download error:', error);
+            // For blob responseType, error response data needs special handling
+            let errMsg = error.message || 'Unknown error';
+            if (error.response?.data instanceof Blob) {
+              try {
+                const text = await error.response.data.text();
+                const parsed = JSON.parse(text);
+                errMsg = parsed.message || JSON.stringify(parsed, null, 2);
+              } catch (e) {
+                errMsg = 'Download failed. Check if the file path is correct and the VM is running.';
+              }
+            } else if (error.response?.data) {
+              errMsg = JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, '');
+            }
+            errorAlert(errMsg);
+          });
       }
-    });
+    } else {
+      console.log('File transfer was canceled.');
+    }
+  });
 }
 window.transferFileToMci = transferFileToMci;
 
