@@ -1045,6 +1045,7 @@ function showMciContextMenu(pixel, mciInfo) {
         <button onclick="updateFirewallRules(); Swal.close();" class="btn btn-info btn-context">🔥 Firewall</button>
 
         <button onclick="scaleOutMciFromContext('` + mciInfo.name + `'); Swal.close();" class="btn btn-primary btn-context">⬆️ Scale Out</button>
+        <button onclick="copyMciConfig('` + mciInfo.name + `'); Swal.close();" class="btn btn-primary btn-context">📋 Copy Config</button>
 
         <button onclick="executeAction('delete'); Swal.close();" class="btn btn-danger btn-context">🗑️ Delete MCI</button>
       </div>
@@ -9115,6 +9116,7 @@ function createSubGroupItem(vm, spec, index) {
           <div style="margin-bottom: 2px;"><strong>Spec:</strong> ${spec?.cspSpecName || vm.specId}</div>
           <div style="margin-bottom: 2px;"><strong>Image:</strong> ${vm.imageId}</div>
           <div><strong>vCPU:</strong> ${spec?.vCPU || 'N/A'} | <strong>Memory:</strong> ${spec?.memoryGiB || 'N/A'}GB | <strong>Cost:</strong> $${spec?.costPerHour || 'N/A'}/h</div>
+          ${(spec?.acceleratorModel && spec.acceleratorModel !== '' && spec.acceleratorModel !== 'N/A') ? `<div style="margin-top: 2px;"><span style="color: #e74c3c; font-weight: bold;">⚡GPU: ${spec.acceleratorModel} (${spec.acceleratorCount || 'N/A'}, ${spec.acceleratorMemoryGB || 'N/A'}GB)</span></div>` : ''}
         </div>
       </div>
       <div class="d-flex flex-column ml-2" style="gap: 2px;">
@@ -16686,6 +16688,133 @@ function scaleOutMciFromContext(mciId) {
   showSubGroupSelectionForScaleOut(mciId, namespace, hostname, port, username, password);
 }
 window.scaleOutMciFromContext = scaleOutMciFromContext;
+
+// Copy MCI Configuration - extract MCI config and populate left panel for re-creation
+function copyMciConfig(mciId) {
+  var config = getConfig();
+  var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
+  var namespace = namespaceElement.value;
+
+  if (!namespace) {
+    errorAlert("Please select a namespace first");
+    return;
+  }
+
+  if (!mciId) {
+    errorAlert("MCI ID is required");
+    return;
+  }
+
+  var spinnerId = addSpinnerTask("Copying MCI configuration");
+
+  // Fetch both configCopy and MCI info in parallel
+  var configCopyUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciId}/configCopy`;
+  var mciInfoUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciId}`;
+  var authConfig = { username: username, password: password };
+
+  Promise.all([
+    axios({ method: "get", url: configCopyUrl, auth: authConfig }),
+    axios({ method: "get", url: mciInfoUrl, auth: authConfig })
+  ]).then(function([configRes, infoRes]) {
+    removeSpinnerTask(spinnerId);
+
+    var mciReq = configRes.data;
+    var mciInfo = infoRes.data;
+
+    if (!mciReq || !mciReq.subGroups || mciReq.subGroups.length === 0) {
+      errorAlert("No SubGroup configuration found in MCI: " + mciId);
+      return;
+    }
+
+    // Clear existing configuration
+    clearCircle('');
+
+    // Group VMs from MCI info by subGroupId for spec metadata extraction
+    var vmBySubGroup = {};
+    if (mciInfo && mciInfo.vm) {
+      mciInfo.vm.forEach(function(vm) {
+        var sgId = vm.subGroupId || vm.id;
+        if (!vmBySubGroup[sgId]) {
+          vmBySubGroup[sgId] = vm;
+        }
+      });
+    }
+
+    // Populate vmSubGroupReqeustFromSpecList and recommendedSpecList
+    mciReq.subGroups.forEach(function(sg) {
+      var vmConfig = $.extend({}, createMciReqVmTmplt);
+      vmConfig.name = sg.name || ("g" + (vmSubGroupReqeustFromSpecList.length + 1));
+      vmConfig.specId = sg.specId || "";
+      vmConfig.imageId = sg.imageId || "ubuntu22.04";
+      vmConfig.rootDiskType = sg.rootDiskType || "default";
+      vmConfig.rootDiskSize = sg.rootDiskSize || 0;
+      vmConfig.subGroupSize = sg.subGroupSize || 1;
+      vmConfig.description = sg.description || "mapui";
+      vmConfig.connectionName = sg.connectionName || "";
+      vmConfig.zone = sg.zone || "";
+      if (sg.label && Object.keys(sg.label).length > 0) {
+        vmConfig.label = sg.label;
+      }
+
+      vmSubGroupReqeustFromSpecList.push(vmConfig);
+
+      // Build recommendedSpec from MCI VM info for display in the review panel
+      // Look up by sg.name first (matches subGroupId), then try specId-based fallback
+      var repVm = vmBySubGroup[sg.name] || vmBySubGroup[vmConfig.name];
+      var specInfo = {
+        id: sg.specId || "",
+        providerName: repVm?.connectionConfig?.providerName || extractProviderFromSpecId(sg.specId),
+        regionName: repVm?.region?.region || extractRegionFromSpecId(sg.specId),
+        cspSpecName: repVm?.spec?.cspSpecName || repVm?.cspSpecName || sg.specId,
+        vCPU: repVm?.spec?.vCPU || "N/A",
+        memoryGiB: repVm?.spec?.memoryGiB || "N/A",
+        costPerHour: repVm?.spec?.costPerHour || 0,
+        acceleratorType: repVm?.spec?.acceleratorType || "",
+        acceleratorModel: repVm?.spec?.acceleratorModel || "",
+        acceleratorCount: repVm?.spec?.acceleratorCount || 0,
+        acceleratorMemoryGB: repVm?.spec?.acceleratorMemoryGB || "",
+        connectionName: sg.connectionName || "",
+        rootDiskType: sg.rootDiskType || "default"
+      };
+      recommendedSpecList.push(specInfo);
+    });
+
+    // Update the left panel SubGroup review
+    updateSubGroupReview();
+
+    // Switch to Provision tab to show the configuration
+    var provisionTab = document.getElementById('provision-tab');
+    if (provisionTab) {
+      provisionTab.click();
+    }
+
+    // Show the configCopy response in the standard JSON viewer
+    outputAlert(mciReq, "success");
+
+  }).catch(function(err) {
+    removeSpinnerTask(spinnerId);
+    console.error("Failed to copy MCI config:", err);
+    errorAlert("Failed to copy MCI configuration: " + (err.response?.data?.message || err.message));
+  });
+}
+window.copyMciConfig = copyMciConfig;
+
+// Helper: extract provider name from specId (e.g., "aws+ap-southeast-1+t3.medium" -> "aws")
+function extractProviderFromSpecId(specId) {
+  if (!specId) return "Unknown";
+  var parts = specId.split("+");
+  return parts.length > 0 ? parts[0] : "Unknown";
+}
+
+// Helper: extract region from specId (e.g., "aws+ap-southeast-1+t3.medium" -> "ap-southeast-1")
+function extractRegionFromSpecId(specId) {
+  if (!specId) return "Unknown";
+  var parts = specId.split("+");
+  return parts.length > 1 ? parts[1] : "Unknown";
+}
 
 // Step 2: Show SubGroup selection dialog
 function showSubGroupSelectionForScaleOut(selectedMciId, namespace, hostname, port, username, password) {
