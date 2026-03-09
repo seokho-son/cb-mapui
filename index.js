@@ -1046,6 +1046,7 @@ function showMciContextMenu(pixel, mciInfo) {
 
         <button onclick="scaleOutMciFromContext('` + mciInfo.name + `'); Swal.close();" class="btn btn-primary btn-context">⬆️ Scale Out</button>
         <button onclick="copyMciConfig('` + mciInfo.name + `'); Swal.close();" class="btn btn-primary btn-context">📋 Copy Config</button>
+        <button onclick="saveMciAsTemplate('` + mciInfo.name + `'); Swal.close();" class="btn btn-primary btn-context">📄 Save Template</button>
 
         <button onclick="executeAction('delete'); Swal.close();" class="btn btn-danger btn-context">🗑️ Delete MCI</button>
       </div>
@@ -16794,6 +16795,27 @@ function copyMciConfig(mciId) {
     // Show the configCopy response in the standard JSON viewer
     outputAlert(mciReq, "success");
 
+    // Offer to save as template with a toast notification
+    Swal.fire({
+      toast: true,
+      position: 'bottom-end',
+      icon: 'success',
+      title: 'Config copied to Provision panel',
+      html: '<button id="saveAsTemplateToast" class="btn btn-sm btn-primary mt-2" style="font-size:12px;">📄 Save as Template</button>',
+      showConfirmButton: false,
+      timer: 6000,
+      timerProgressBar: true,
+      didOpen: (toast) => {
+        var btn = document.getElementById('saveAsTemplateToast');
+        if (btn) {
+          btn.addEventListener('click', function() {
+            Swal.close();
+            saveConfigAsTemplate(namespace, mciId, mciReq);
+          });
+        }
+      }
+    });
+
   }).catch(function(err) {
     removeSpinnerTask(spinnerId);
     console.error("Failed to copy MCI config:", err);
@@ -16815,6 +16837,42 @@ function extractRegionFromSpecId(specId) {
   var parts = specId.split("+");
   return parts.length > 1 ? parts[1] : "Unknown";
 }
+
+// Save MCI config as template directly (context menu shortcut)
+function saveMciAsTemplate(mciId) {
+  var config = getConfig();
+  var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
+  var namespace = namespaceElement.value;
+
+  if (!namespace) {
+    errorAlert("Please select a namespace first");
+    return;
+  }
+
+  var spinnerId = addSpinnerTask("Extracting MCI configuration");
+  var configCopyUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciId}/configCopy`;
+
+  axios({
+    method: "get",
+    url: configCopyUrl,
+    auth: { username: username, password: password }
+  }).then(function(res) {
+    removeSpinnerTask(spinnerId);
+    var mciReq = res.data;
+    if (!mciReq || !mciReq.subGroups || mciReq.subGroups.length === 0) {
+      errorAlert("No SubGroup configuration found in MCI: " + mciId);
+      return;
+    }
+    saveConfigAsTemplate(namespace, mciId, mciReq);
+  }).catch(function(err) {
+    removeSpinnerTask(spinnerId);
+    errorAlert("Failed to extract MCI configuration: " + (err.response?.data?.message || err.message));
+  });
+}
+window.saveMciAsTemplate = saveMciAsTemplate;
 
 // Step 2: Show SubGroup selection dialog
 function showSubGroupSelectionForScaleOut(selectedMciId, namespace, hostname, port, username, password) {
@@ -19587,3 +19645,722 @@ async function cancelTaskFromModal(taskId, nsId, mciId) {
   }
 }
 window.cancelTaskFromModal = cancelTaskFromModal;
+
+// ==================== Template Management Functions ====================
+
+// Template type registry — add new types here for extensibility
+const TEMPLATE_TYPES = [
+  {
+    key: 'mci',
+    label: 'MCI',
+    icon: '🚀',
+    badgeClass: 'badge-primary',
+    bodyFieldName: 'mciDynamicReq',
+    applyUrlFn: (baseUrl, templateId) => `${baseUrl}/mci/template/${templateId}`,
+    directCreateUrlFn: (baseUrl) => `${baseUrl}/mciDynamic`,
+    placeholder: `{
+  "name": "my-mci",
+  "installMonAgent": "no",
+  "description": "My MCI",
+  "subGroups": [
+    {
+      "name": "web",
+      "subGroupSize": 1,
+      "specId": "aws+ap-northeast-2+t3.small"
+    }
+  ]
+}`
+  },
+  {
+    key: 'vNet',
+    label: 'vNet',
+    icon: '🌐',
+    badgeClass: 'badge-success',
+    bodyFieldName: 'vNetReq',
+    applyUrlFn: (baseUrl, templateId) => `${baseUrl}/resources/vNet/template/${templateId}`,
+    directCreateUrlFn: (baseUrl) => `${baseUrl}/resources/vNet`,
+    placeholder: `{
+  "name": "my-vnet",
+  "connectionName": "aws-ap-northeast-2",
+  "cidrBlock": "10.0.0.0/16",
+  "subnetInfoList": [
+    {
+      "name": "subnet-1",
+      "ipv4_CIDR": "10.0.1.0/24"
+    }
+  ]
+}`
+  },
+  {
+    key: 'securityGroup',
+    label: 'SecurityGroup',
+    icon: '🛡️',
+    badgeClass: 'badge-warning',
+    bodyFieldName: 'securityGroupReq',
+    applyUrlFn: (baseUrl, templateId) => `${baseUrl}/resources/securityGroup/template/${templateId}`,
+    directCreateUrlFn: (baseUrl) => `${baseUrl}/resources/securityGroup`,
+    placeholder: `{
+  "connectionName": "aws-ap-northeast-2",
+  "vNetId": "my-vnet",
+  "firewallRules": [
+    {
+      "ports": "22",
+      "protocol": "TCP",
+      "direction": "inbound",
+      "cidr": "0.0.0.0/0"
+    },
+    {
+      "ports": "80",
+      "protocol": "TCP",
+      "direction": "inbound",
+      "cidr": "0.0.0.0/0"
+    }
+  ]
+}`
+  }
+];
+
+function getTemplateTypeMeta(typeKey) {
+  return TEMPLATE_TYPES.find(t => t.key === typeKey) || { key: typeKey, label: typeKey, icon: '📦', badgeClass: 'badge-secondary', bodyFieldName: typeKey + 'Req' };
+}
+
+// Show the main Template Management modal
+async function showTemplateManagement(overrideNs) {
+  const config = getConfig();
+  const { hostname, port, username, password } = config;
+  const authConfig = { username, password };
+
+  // Determine initial namespace
+  const currentNs = overrideNs || document.getElementById('namespace')?.value || '';
+
+  // Load namespace list
+  let namespaces = [];
+  try {
+    const nsRes = await axios.get(`http://${hostname}:${port}/tumblebug/ns?option=id`, { auth: authConfig });
+    namespaces = nsRes.data.output || nsRes.data.ns || [];
+  } catch (e) {
+    console.error('Error loading namespaces:', e);
+  }
+
+  if (namespaces.length === 0) {
+    Swal.fire('Warning', 'No namespaces found. Please create a namespace first.', 'warning');
+    return;
+  }
+
+  // Build namespace dropdown options
+  const nsOptionsHtml = namespaces.map(ns => {
+    const nsId = typeof ns === 'string' ? ns : (ns.id || ns.name || '');
+    const selected = nsId === currentNs ? 'selected' : '';
+    return `<option value="${nsId}" ${selected}>${nsId}</option>`;
+  }).join('');
+
+  // Build type tab buttons
+  const typeTabsHtml = [
+    `<button class="tmpl-tab active" data-filter="all" onclick="tmplFilterByTab(this)">All</button>`,
+    ...TEMPLATE_TYPES.map(t =>
+      `<button class="tmpl-tab" data-filter="${t.key}" onclick="tmplFilterByTab(this)">${t.icon} ${t.label}</button>`
+    )
+  ].join('');
+
+  // Determine selected namespace (use first if currentNs not in list)
+  const selectedNs = namespaces.some(ns => (typeof ns === 'string' ? ns : ns.id) === currentNs)
+    ? currentNs
+    : (typeof namespaces[0] === 'string' ? namespaces[0] : namespaces[0].id);
+
+  // Store state for internal reload
+  window._tmplMgmtNs = selectedNs;
+
+  Swal.fire({
+    title: '📄 Template Management',
+    html: `
+      <style>
+        .tmpl-modal { text-align: left; }
+        .tmpl-toolbar { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; flex-wrap: wrap; }
+        .tmpl-toolbar select { height: 32px; font-size: 13px; padding: 4px 8px; border: 1px solid #ced4da; border-radius: 4px; min-width: 160px; }
+        .tmpl-toolbar .btn { font-size: 12px; white-space: nowrap; }
+        .tmpl-tabs { display: flex; gap: 0; margin-bottom: 10px; border-bottom: 2px solid #dee2e6; }
+        .tmpl-tab { background: none; border: none; padding: 7px 14px; font-size: 13px; cursor: pointer; color: #555; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; }
+        .tmpl-tab:hover { color: #007bff; }
+        .tmpl-tab.active { color: #007bff; border-bottom-color: #007bff; font-weight: 600; }
+        .tmpl-search-row { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }
+        .tmpl-search-row input { flex: 1; height: 32px; font-size: 13px; padding: 4px 10px; border: 1px solid #ced4da; border-radius: 4px; }
+        .tmpl-card { border: 1px solid #dee2e6; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; background: #f8f9fa; transition: all 0.15s; }
+        .tmpl-card:hover { border-color: #007bff; box-shadow: 0 2px 6px rgba(0,123,255,0.1); }
+        .tmpl-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .tmpl-card-title { font-weight: 600; font-size: 14px; margin-right: 6px; }
+        .tmpl-card-actions { display: flex; gap: 4px; }
+        .tmpl-card-actions .btn { padding: 2px 6px; font-size: 12px; }
+        .tmpl-card-body { font-size: 12px; }
+        .tmpl-list-container { max-height: 380px; overflow-y: auto; }
+        .tmpl-status-bar { margin-top: 8px; font-size: 11px; color: #888; text-align: right; }
+      </style>
+      <div class="tmpl-modal">
+        <div class="tmpl-toolbar">
+          <label style="font-size:13px;font-weight:500;margin:0;">Namespace:</label>
+          <select id="tmplNsSelect" onchange="tmplChangeNamespace(this.value)">
+            ${nsOptionsHtml}
+          </select>
+          <button onclick="tmplCreateNew()" class="btn btn-primary btn-sm">➕ New Template</button>
+          <button onclick="tmplRefresh()" class="btn btn-outline-secondary btn-sm">🔄 Refresh</button>
+        </div>
+        <div class="tmpl-tabs" id="tmplTabs">
+          ${typeTabsHtml}
+        </div>
+        <div class="tmpl-search-row">
+          <input type="text" id="tmplFilterSearch" placeholder="🔍 Search templates by name or description..." oninput="filterTemplateCards()">
+        </div>
+        <div class="tmpl-list-container" id="tmplListContainer">
+          <div style="text-align:center;padding:30px;color:#999;"><i>Loading templates...</i></div>
+        </div>
+        <div class="tmpl-status-bar" id="tmplStatusBar"></div>
+      </div>
+    `,
+    showConfirmButton: false,
+    showCancelButton: true,
+    cancelButtonText: '❌ Close',
+    width: '780px',
+    customClass: { popup: 'swal2-template-mgmt' },
+    didOpen: () => {
+      // Load templates for the selected namespace
+      tmplLoadTemplates(selectedNs);
+    }
+  });
+}
+window.showTemplateManagement = showTemplateManagement;
+
+// Load templates for a given namespace and render them into the modal
+async function tmplLoadTemplates(namespace) {
+  const config = getConfig();
+  const { hostname, port, username, password } = config;
+  const authConfig = { username, password };
+  const baseUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}`;
+  const container = document.getElementById('tmplListContainer');
+  const statusBar = document.getElementById('tmplStatusBar');
+
+  if (!container) return;
+  container.innerHTML = '<div style="text-align:center;padding:20px;color:#999;"><i>Loading...</i></div>';
+
+  // Load all template types in parallel
+  const templatesByType = {};
+  try {
+    const results = await Promise.all(
+      TEMPLATE_TYPES.map(t =>
+        axios.get(`${baseUrl}/template/${t.key}`, { auth: authConfig })
+          .then(res => ({ key: t.key, templates: res.data.templates || [] }))
+          .catch(() => ({ key: t.key, templates: [] }))
+      )
+    );
+    results.forEach(r => { templatesByType[r.key] = r.templates; });
+  } catch (e) {
+    console.error('Error loading templates:', e);
+  }
+
+  // Store for filtering
+  window._tmplData = templatesByType;
+  window._tmplMgmtNs = namespace;
+
+  // Render cards
+  const allCards = [];
+  TEMPLATE_TYPES.forEach(typeMeta => {
+    const templates = templatesByType[typeMeta.key] || [];
+    templates.forEach(t => {
+      allCards.push(renderTemplateCard(t, typeMeta, namespace));
+    });
+  });
+
+  if (allCards.length > 0) {
+    container.innerHTML = allCards.join('');
+  } else {
+    container.innerHTML = '<div style="text-align:center;padding:30px;color:#999;"><i>No templates found in this namespace.</i></div>';
+  }
+
+  // Status bar
+  if (statusBar) {
+    const counts = TEMPLATE_TYPES.map(t => `${(templatesByType[t.key] || []).length} ${t.label}`).join(' + ');
+    statusBar.innerHTML = `Total: ${counts} templates in <b>${namespace}</b>`;
+  }
+
+  // Re-apply current filter
+  filterTemplateCards();
+}
+window.tmplLoadTemplates = tmplLoadTemplates;
+
+// Render a single template card
+function renderTemplateCard(t, typeMeta, namespace) {
+  const typeBadge = `<span class="badge ${typeMeta.badgeClass}" style="font-size:11px;">${typeMeta.icon} ${typeMeta.label}</span>`;
+  const source = t.source || 'user';
+  const createdAt = t.createdAt ? new Date(t.createdAt).toLocaleString() : '-';
+
+  // Escape single quotes in IDs for onclick handlers
+  const safeNs = namespace.replace(/'/g, "\\'");
+  const safeId = (t.id || '').replace(/'/g, "\\'");
+  const safeType = typeMeta.key.replace(/'/g, "\\'");
+
+  return `
+    <div class="tmpl-card" data-type="${typeMeta.key}" data-id="${t.id}" data-name="${(t.name || t.id || '').toLowerCase()}">
+      <div class="tmpl-card-header">
+        <div>
+          <span class="tmpl-card-title">${t.name || t.id}</span>
+          ${typeBadge}
+          <span class="badge badge-secondary" style="font-size:10px;">${source}</span>
+        </div>
+        <div class="tmpl-card-actions">
+          <button onclick="viewTemplateDetail('${safeNs}', '${safeType}', '${safeId}')" class="btn btn-sm btn-outline-info" title="View">👁️</button>
+          <button onclick="applyTemplate('${safeNs}', '${safeType}', '${safeId}')" class="btn btn-sm btn-outline-success" title="Apply">▶️</button>
+          <button onclick="deleteTemplate('${safeNs}', '${safeType}', '${safeId}')" class="btn btn-sm btn-outline-danger" title="Delete">🗑️</button>
+        </div>
+      </div>
+      <div class="tmpl-card-body">
+        <div style="margin-bottom:4px;color:#555;font-size:12px;">${t.description || '<i>No description</i>'}</div>
+        <div style="font-size:11px;color:#888;">Created: ${createdAt}</div>
+      </div>
+    </div>
+  `;
+}
+
+// Tab-based type filtering
+function tmplFilterByTab(btn) {
+  // Update active tab
+  document.querySelectorAll('.tmpl-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  filterTemplateCards();
+}
+window.tmplFilterByTab = tmplFilterByTab;
+
+// Filter template cards by active tab and search text
+function filterTemplateCards() {
+  const activeTab = document.querySelector('.tmpl-tab.active');
+  const typeFilter = activeTab ? activeTab.getAttribute('data-filter') : 'all';
+  const searchFilter = (document.getElementById('tmplFilterSearch')?.value || '').toLowerCase();
+  const cards = document.querySelectorAll('.tmpl-card');
+  let visibleCount = 0;
+  cards.forEach(card => {
+    const type = card.getAttribute('data-type');
+    const text = (card.textContent || '').toLowerCase();
+    const name = card.getAttribute('data-name') || '';
+    const typeMatch = typeFilter === 'all' || type === typeFilter;
+    const searchMatch = !searchFilter || name.includes(searchFilter) || text.includes(searchFilter);
+    const visible = typeMatch && searchMatch;
+    card.style.display = visible ? '' : 'none';
+    if (visible) visibleCount++;
+  });
+}
+window.filterTemplateCards = filterTemplateCards;
+
+// Namespace change handler within the modal
+function tmplChangeNamespace(ns) {
+  window._tmplMgmtNs = ns;
+  // Reset search and tabs
+  const searchInput = document.getElementById('tmplFilterSearch');
+  if (searchInput) searchInput.value = '';
+  document.querySelectorAll('.tmpl-tab').forEach(t => {
+    t.classList.toggle('active', t.getAttribute('data-filter') === 'all');
+  });
+  tmplLoadTemplates(ns);
+}
+window.tmplChangeNamespace = tmplChangeNamespace;
+
+// Refresh templates for current namespace
+function tmplRefresh() {
+  const ns = window._tmplMgmtNs || document.getElementById('tmplNsSelect')?.value;
+  if (ns) tmplLoadTemplates(ns);
+}
+window.tmplRefresh = tmplRefresh;
+
+// Unified "New Template" — shows a type picker first
+async function tmplCreateNew() {
+  const ns = window._tmplMgmtNs || document.getElementById('tmplNsSelect')?.value;
+  if (!ns) {
+    Swal.fire('Warning', 'No namespace selected', 'warning');
+    return;
+  }
+
+  // Build type picker buttons
+  const typeButtons = TEMPLATE_TYPES.map(t =>
+    `<button onclick="createTemplateDialog('${ns.replace(/'/g, "\\'")}', '${t.key}'); Swal.close();" 
+      class="btn btn-outline-primary" 
+      style="display:flex;flex-direction:column;align-items:center;padding:20px 16px;font-size:14px;min-width:140px;">
+      <span style="font-size:28px;margin-bottom:6px;">${t.icon}</span>
+      <span>${t.label}</span>
+    </button>`
+  ).join('');
+
+  Swal.fire({
+    title: '➕ Create New Template',
+    html: `
+      <p style="font-size:13px;color:#555;margin-bottom:16px;">Select the template type to create in namespace <b>${ns}</b>:</p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        ${typeButtons}
+      </div>
+    `,
+    showConfirmButton: false,
+    showCancelButton: true,
+    cancelButtonText: '⬅️ Back',
+    width: '500px'
+  });
+}
+window.tmplCreateNew = tmplCreateNew;
+
+// View a single template's full JSON detail
+async function viewTemplateDetail(namespace, type, templateId) {
+  const config = getConfig();
+  const { hostname, port, username, password } = config;
+  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/template/${type}/${templateId}`;
+  const typeMeta = getTemplateTypeMeta(type);
+
+  try {
+    const res = await axios.get(url, { auth: { username, password } });
+    const data = res.data;
+
+    Swal.fire({
+      title: `📄 Template: ${templateId}`,
+      html: `
+        <div style="text-align:left;">
+          <div style="margin-bottom:8px;">
+            <span class="badge ${typeMeta.badgeClass}">${typeMeta.icon} ${typeMeta.label}</span>
+            <span class="badge badge-secondary">${data.source || 'user'}</span>
+            <span style="font-size:11px;color:#888;margin-left:8px;">Created: ${data.createdAt ? new Date(data.createdAt).toLocaleString() : '-'}</span>
+          </div>
+          <div id="tmplDetailJson" style="background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;max-height:450px;overflow:auto;font-family:monospace;font-size:12px;white-space:pre-wrap;">${JSON.stringify(data, null, 2)}</div>
+          <div style="margin-top:10px;display:flex;gap:8px;">
+            <button onclick="applyTemplate('${namespace}', '${type}', '${templateId}')" class="btn btn-success btn-sm">▶️ Apply This Template</button>
+            <button onclick="copyTemplateJson()" class="btn btn-outline-secondary btn-sm">📋 Copy JSON</button>
+            <button onclick="showTemplateManagement('${namespace}')" class="btn btn-outline-primary btn-sm">⬅️ Back to List</button>
+          </div>
+        </div>
+      `,
+      showConfirmButton: false,
+      showCancelButton: true,
+      cancelButtonText: '❌ Close',
+      width: '750px'
+    });
+
+    // Store JSON for copy
+    window._lastTemplateJson = JSON.stringify(data, null, 2);
+  } catch (err) {
+    Swal.fire('❌ Error', `Failed to load template: ${err.response?.data?.message || err.message}`, 'error');
+  }
+}
+window.viewTemplateDetail = viewTemplateDetail;
+
+// Copy template JSON to clipboard
+function copyTemplateJson() {
+  if (window._lastTemplateJson) {
+    navigator.clipboard.writeText(window._lastTemplateJson).then(() => {
+      Swal.fire({ icon: 'success', title: 'Copied to clipboard', timer: 1200, showConfirmButton: false, toast: true, position: 'top-end' });
+    }).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = window._lastTemplateJson;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      Swal.fire({ icon: 'success', title: 'Copied to clipboard', timer: 1200, showConfirmButton: false, toast: true, position: 'top-end' });
+    });
+  }
+}
+window.copyTemplateJson = copyTemplateJson;
+
+// Apply a template (create resource from template)
+// sourceNs: namespace where the template is stored
+async function applyTemplate(sourceNs, type, templateId) {
+  const typeMeta = getTemplateTypeMeta(type);
+  const config = getConfig();
+  const { hostname, port, username, password } = config;
+  const authConfig = { username, password };
+
+  // Load namespace list for target namespace selection
+  let namespaces = [];
+  try {
+    const nsRes = await axios.get(`http://${hostname}:${port}/tumblebug/ns?option=id`, { auth: authConfig });
+    namespaces = nsRes.data.output || nsRes.data.ns || [];
+  } catch (e) {
+    console.error('Error loading namespaces:', e);
+  }
+
+  // Default target namespace: use the main panel's namespace (not the template source ns)
+  const mainNs = document.getElementById('namespace')?.value || sourceNs;
+  const nsOptionsHtml = namespaces.map(ns => {
+    const nsId = typeof ns === 'string' ? ns : (ns.id || ns.name || '');
+    // Default to the main panel's namespace, not the template source
+    const selected = nsId === mainNs ? 'selected' : '';
+    return `<option value="${nsId}" ${selected}>${nsId}</option>`;
+  }).join('');
+
+  const crossNsHint = sourceNs !== mainNs
+    ? `<div style="font-size:12px;color:#856404;background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:6px 10px;margin-bottom:10px;">💡 Template is from namespace <b>${sourceNs}</b>. You can select a different target namespace to create the resource in.</div>`
+    : '';
+
+  const { value: formValues } = await Swal.fire({
+    title: `▶️ Apply ${typeMeta.label} Template`,
+    html: `
+      <div style="text-align:left;">
+        <p style="font-size:13px;color:#555;margin-bottom:8px;">Create a new <b>${typeMeta.label}</b> from template <code style="background:#e9ecef;padding:2px 6px;border-radius:3px;">${templateId}</code></p>
+        ${crossNsHint}
+        <div style="margin-bottom:10px;">
+          <label style="font-size:13px;font-weight:500;">Target Namespace <span style="color:red;">*</span></label>
+          <select id="tmplApplyTargetNs" class="swal2-input" style="margin:4px 0;width:100%;font-size:14px;height:38px;">
+            ${nsOptionsHtml}
+          </select>
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:13px;font-weight:500;">Name <span style="color:red;">*</span></label>
+          <input id="tmplApplyName" class="swal2-input" placeholder="my-new-resource" style="margin:4px 0;width:100%;font-size:14px;">
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:13px;font-weight:500;">Description (optional)</label>
+          <input id="tmplApplyDesc" class="swal2-input" placeholder="Created from template ${templateId}" style="margin:4px 0;width:100%;font-size:14px;">
+        </div>
+      </div>
+    `,
+    focusConfirm: false,
+    showCancelButton: true,
+    confirmButtonText: `▶️ Create ${typeMeta.label}`,
+    confirmButtonColor: '#28a745',
+    width: '580px',
+    preConfirm: () => {
+      const targetNs = document.getElementById('tmplApplyTargetNs')?.value?.trim();
+      const name = document.getElementById('tmplApplyName')?.value?.trim();
+      if (!targetNs) {
+        Swal.showValidationMessage('Target namespace is required');
+        return false;
+      }
+      if (!name) {
+        Swal.showValidationMessage('Name is required');
+        return false;
+      }
+      return {
+        targetNs: targetNs,
+        name: name,
+        description: document.getElementById('tmplApplyDesc')?.value?.trim() || ''
+      };
+    }
+  });
+
+  if (!formValues) return;
+
+  const targetNs = formValues.targetNs;
+  const targetBaseUrl = `http://${hostname}:${port}/tumblebug/ns/${targetNs}`;
+
+  const spinnerId = addSpinnerTask(`Creating ${typeMeta.label} from template`);
+  try {
+    let res;
+
+    if (targetNs === sourceNs) {
+      // Same namespace: use the template apply shortcut endpoint
+      let url;
+      if (typeMeta.applyUrlFn) {
+        url = typeMeta.applyUrlFn(targetBaseUrl, templateId);
+      } else {
+        url = `${targetBaseUrl}/resources/${type}/template/${templateId}`;
+      }
+      res = await axios.post(url, { name: formValues.name, description: formValues.description }, { auth: authConfig });
+    } else {
+      // Cross-namespace: GET template from source ns, then directly create in target ns
+      const templateUrl = `http://${hostname}:${port}/tumblebug/ns/${sourceNs}/template/${type}/${templateId}`;
+      const tmplRes = await axios.get(templateUrl, { auth: authConfig });
+      const tmplData = tmplRes.data;
+
+      // Extract the request body from template
+      const reqBody = tmplData[typeMeta.bodyFieldName];
+      if (!reqBody) {
+        throw new Error(`Template does not contain '${typeMeta.bodyFieldName}' field`);
+      }
+
+      // Apply name and description overrides
+      reqBody.name = formValues.name;
+      if (formValues.description) {
+        reqBody.description = formValues.description;
+      }
+
+      // POST to the target namespace's direct creation endpoint
+      let createUrl;
+      if (typeMeta.directCreateUrlFn) {
+        createUrl = typeMeta.directCreateUrlFn(targetBaseUrl);
+      } else {
+        createUrl = `${targetBaseUrl}/resources/${type}`;
+      }
+      res = await axios.post(createUrl, reqBody, { auth: authConfig });
+    }
+
+    removeSpinnerTask(spinnerId);
+    const nsNote = targetNs !== sourceNs ? ` in namespace "${targetNs}"` : '';
+    Swal.fire({
+      icon: 'success',
+      title: `${typeMeta.label} Created!`,
+      text: `Successfully created from template "${templateId}"${nsNote}`,
+      timer: 3000,
+      showConfirmButton: false
+    });
+    outputAlert(res.data, "success");
+  } catch (err) {
+    removeSpinnerTask(spinnerId);
+    Swal.fire('❌ Creation Failed', err.response?.data?.message || err.message, 'error');
+  }
+}
+window.applyTemplate = applyTemplate;
+
+// Delete a template
+async function deleteTemplate(namespace, type, templateId) {
+  const typeMeta = getTemplateTypeMeta(type);
+  const result = await Swal.fire({
+    title: '🗑️ Delete Template?',
+    text: `Are you sure you want to delete ${typeMeta.label} template "${templateId}"?`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: '🗑️ Delete',
+    confirmButtonColor: '#dc3545',
+    cancelButtonText: 'Cancel'
+  });
+  if (!result.isConfirmed) return;
+
+  const config = getConfig();
+  const { hostname, port, username, password } = config;
+  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/template/${type}/${templateId}`;
+
+  try {
+    await axios.delete(url, { auth: { username, password } });
+    Swal.fire({ icon: 'success', title: 'Template Deleted', timer: 1500, showConfirmButton: false, toast: true, position: 'top-end' });
+    showTemplateManagement(namespace);
+  } catch (err) {
+    Swal.fire('❌ Error', `Failed to delete template: ${err.response?.data?.message || err.message}`, 'error');
+  }
+}
+window.deleteTemplate = deleteTemplate;
+
+// Create a new template dialog (called from type picker)
+async function createTemplateDialog(namespace, type) {
+  const typeMeta = getTemplateTypeMeta(type);
+
+  const { value: formValues } = await Swal.fire({
+    title: `➕ Create ${typeMeta.label} Template`,
+    html: `
+      <div style="text-align:left;">
+        <div style="margin-bottom:8px;">
+          <label style="font-size:13px;font-weight:500;">Template Name <span style="color:red;">*</span></label>
+          <input id="newTmplName" class="swal2-input" placeholder="my-template" style="margin:4px 0;width:100%;font-size:14px;">
+        </div>
+        <div style="margin-bottom:8px;">
+          <label style="font-size:13px;font-weight:500;">Description</label>
+          <input id="newTmplDesc" class="swal2-input" placeholder="Template description" style="margin:4px 0;width:100%;font-size:14px;">
+        </div>
+        <div style="margin-bottom:8px;">
+          <label style="font-size:13px;font-weight:500;">${typeMeta.label} Request Body (JSON) <span style="color:red;">*</span></label>
+          <textarea id="newTmplBody" class="swal2-textarea" rows="12" 
+            style="margin:4px 0;width:100%;font-size:12px;font-family:monospace;min-height:200px;resize:vertical;"
+            placeholder='${(typeMeta.placeholder || '{}').replace(/'/g, "&#39;")}'></textarea>
+        </div>
+      </div>
+    `,
+    focusConfirm: false,
+    showCancelButton: true,
+    confirmButtonText: '➕ Create Template',
+    confirmButtonColor: '#007bff',
+    width: '650px',
+    preConfirm: () => {
+      const name = document.getElementById('newTmplName')?.value?.trim();
+      const desc = document.getElementById('newTmplDesc')?.value?.trim() || '';
+      const bodyStr = document.getElementById('newTmplBody')?.value?.trim();
+      if (!name) {
+        Swal.showValidationMessage('Template name is required');
+        return false;
+      }
+      if (!bodyStr) {
+        Swal.showValidationMessage('Request body JSON is required');
+        return false;
+      }
+      let bodyJson;
+      try {
+        bodyJson = JSON.parse(bodyStr);
+      } catch (e) {
+        Swal.showValidationMessage('Invalid JSON: ' + e.message);
+        return false;
+      }
+      const reqPayload = { name: name, description: desc };
+      reqPayload[typeMeta.bodyFieldName] = bodyJson;
+      return reqPayload;
+    }
+  });
+
+  if (!formValues) return;
+
+  const config = getConfig();
+  const { hostname, port, username, password } = config;
+  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/template/${type}`;
+
+  const spinnerId = addSpinnerTask('Creating template');
+  try {
+    await axios.post(url, formValues, { auth: { username, password } });
+    removeSpinnerTask(spinnerId);
+    Swal.fire({ icon: 'success', title: 'Template Created!', text: `Template "${formValues.name}" created successfully.`, timer: 2000, showConfirmButton: false });
+    setTimeout(() => showTemplateManagement(namespace), 500);
+  } catch (err) {
+    removeSpinnerTask(spinnerId);
+    Swal.fire('❌ Error', `Failed to create template: ${err.response?.data?.message || err.message}`, 'error');
+  }
+}
+window.createTemplateDialog = createTemplateDialog;
+
+// Save MCI config as template - called from copyMciConfig flow
+async function saveConfigAsTemplate(namespace, mciId, mciReq) {
+  const { value: formValues } = await Swal.fire({
+    title: '📄 Save as MCI Template',
+    html: `
+      <div style="text-align:left;">
+        <p style="font-size:13px;color:#555;">Save the extracted MCI configuration from <b>${mciId}</b> as a reusable template.</p>
+        <div style="margin-bottom:8px;">
+          <label style="font-size:13px;font-weight:500;">Template Name <span style="color:red;">*</span></label>
+          <input id="saveTmplName" class="swal2-input" value="${mciId}-template" style="margin:4px 0;width:100%;font-size:14px;">
+        </div>
+        <div style="margin-bottom:8px;">
+          <label style="font-size:13px;font-weight:500;">Description</label>
+          <input id="saveTmplDesc" class="swal2-input" value="Template extracted from MCI: ${mciId}" style="margin:4px 0;width:100%;font-size:14px;">
+        </div>
+        <div style="margin-bottom:8px;">
+          <label style="font-size:13px;font-weight:500;">Configuration Preview</label>
+          <div style="background:#1e1e1e;color:#d4d4d4;padding:10px;border-radius:6px;max-height:250px;overflow:auto;font-family:monospace;font-size:11px;white-space:pre-wrap;">${JSON.stringify(mciReq, null, 2)}</div>
+        </div>
+      </div>
+    `,
+    focusConfirm: false,
+    showCancelButton: true,
+    confirmButtonText: '💾 Save as Template',
+    confirmButtonColor: '#007bff',
+    width: '650px',
+    preConfirm: () => {
+      const name = document.getElementById('saveTmplName')?.value?.trim();
+      if (!name) {
+        Swal.showValidationMessage('Template name is required');
+        return false;
+      }
+      return {
+        name: name,
+        description: document.getElementById('saveTmplDesc')?.value?.trim() || '',
+        mciDynamicReq: mciReq
+      };
+    }
+  });
+
+  if (!formValues) return;
+
+  const config = getConfig();
+  const { hostname, port, username, password } = config;
+  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/template/mci`;
+
+  const spinnerId = addSpinnerTask('Saving template');
+  try {
+    await axios.post(url, formValues, { auth: { username, password } });
+    removeSpinnerTask(spinnerId);
+    Swal.fire({
+      icon: 'success',
+      title: 'Template Saved!',
+      text: `Template "${formValues.name}" has been saved. You can find it in Template Management.`,
+      timer: 2500,
+      showConfirmButton: false
+    });
+  } catch (err) {
+    removeSpinnerTask(spinnerId);
+    Swal.fire('❌ Error', `Failed to save template: ${err.response?.data?.message || err.message}`, 'error');
+  }
+}
+window.saveConfigAsTemplate = saveConfigAsTemplate;
