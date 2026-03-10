@@ -16801,12 +16801,12 @@ function copyMciConfig(mciId) {
       position: 'bottom-end',
       icon: 'success',
       title: 'Config copied to Provision panel',
-      html: '<button id="saveAsTemplateToast" class="btn btn-sm btn-primary mt-2" style="font-size:12px;">📄 Save as Template</button>',
+      html: '<button class="btn btn-sm btn-primary mt-2 save-as-template-btn" style="font-size:12px;">📄 Save as Template</button>',
       showConfirmButton: false,
       timer: 6000,
       timerProgressBar: true,
       didOpen: (toast) => {
-        var btn = document.getElementById('saveAsTemplateToast');
+        var btn = toast.querySelector('.save-as-template-btn');
         if (btn) {
           btn.addEventListener('click', function() {
             Swal.close();
@@ -19750,8 +19750,9 @@ async function showTemplateManagement(overrideNs) {
   // Build namespace dropdown options
   const nsOptionsHtml = namespaces.map(ns => {
     const nsId = typeof ns === 'string' ? ns : (ns.id || ns.name || '');
+    const safeNsId = window.escapeHtml(nsId);
     const selected = nsId === currentNs ? 'selected' : '';
-    return `<option value="${nsId}" ${selected}>${nsId}</option>`;
+    return `<option value="${safeNsId}" ${selected}>${safeNsId}</option>`;
   }).join('');
 
   // Build type tab buttons
@@ -19896,13 +19897,18 @@ function renderTemplateCard(t, typeMeta, namespace) {
   const safeId = (t.id || '').replace(/'/g, "\\'");
   const safeType = typeMeta.key.replace(/'/g, "\\'");
 
+  const safeName = window.escapeHtml(t.name || t.id || '');
+  const safeDescription = t.description ? window.escapeHtml(t.description) : '<i>No description</i>';
+  const safeDataId = window.escapeHtml(t.id || '');
+  const safeDataName = window.escapeHtml((t.name || t.id || '').toLowerCase());
+
   return `
-    <div class="tmpl-card" data-type="${typeMeta.key}" data-id="${t.id}" data-name="${(t.name || t.id || '').toLowerCase()}">
+    <div class="tmpl-card" data-type="${typeMeta.key}" data-id="${safeDataId}" data-name="${safeDataName}">
       <div class="tmpl-card-header">
         <div>
-          <span class="tmpl-card-title">${t.name || t.id}</span>
+          <span class="tmpl-card-title">${safeName}</span>
           ${typeBadge}
-          <span class="badge badge-secondary" style="font-size:10px;">${source}</span>
+          <span class="badge badge-secondary" style="font-size:10px;">${window.escapeHtml(source)}</span>
         </div>
         <div class="tmpl-card-actions">
           <button onclick="viewTemplateDetail('${safeNs}', '${safeType}', '${safeId}')" class="btn btn-sm btn-outline-info" title="View">👁️</button>
@@ -19911,7 +19917,7 @@ function renderTemplateCard(t, typeMeta, namespace) {
         </div>
       </div>
       <div class="tmpl-card-body">
-        <div style="margin-bottom:4px;color:#555;font-size:12px;">${t.description || '<i>No description</i>'}</div>
+        <div style="margin-bottom:4px;color:#555;font-size:12px;">${safeDescription}</div>
         <div style="font-size:11px;color:#888;">Created: ${createdAt}</div>
       </div>
     </div>
@@ -20012,31 +20018,41 @@ async function viewTemplateDetail(namespace, type, templateId) {
     const res = await axios.get(url, { auth: { username, password } });
     const data = res.data;
 
+    const safeTemplateId = window.escapeHtml(templateId);
+    const safeSource = window.escapeHtml(data.source || 'user');
+    const createdAtStr = data.createdAt ? new Date(data.createdAt).toLocaleString() : '-';
+
     Swal.fire({
-      title: `📄 Template: ${templateId}`,
+      title: `📄 Template: ${safeTemplateId}`,
       html: `
         <div style="text-align:left;">
           <div style="margin-bottom:8px;">
             <span class="badge ${typeMeta.badgeClass}">${typeMeta.icon} ${typeMeta.label}</span>
-            <span class="badge badge-secondary">${data.source || 'user'}</span>
-            <span style="font-size:11px;color:#888;margin-left:8px;">Created: ${data.createdAt ? new Date(data.createdAt).toLocaleString() : '-'}</span>
+            <span class="badge badge-secondary">${safeSource}</span>
+            <span style="font-size:11px;color:#888;margin-left:8px;">Created: ${window.escapeHtml(createdAtStr)}</span>
           </div>
-          <div id="tmplDetailJson" style="background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;max-height:450px;overflow:auto;font-family:monospace;font-size:12px;white-space:pre-wrap;">${JSON.stringify(data, null, 2)}</div>
+          <pre id="tmplDetailJson" style="background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;max-height:450px;overflow:auto;font-family:monospace;font-size:12px;white-space:pre-wrap;"></pre>
           <div style="margin-top:10px;display:flex;gap:8px;">
-            <button onclick="applyTemplate('${namespace}', '${type}', '${templateId}')" class="btn btn-success btn-sm">▶️ Apply This Template</button>
-            <button onclick="copyTemplateJson()" class="btn btn-outline-secondary btn-sm">📋 Copy JSON</button>
-            <button onclick="showTemplateManagement('${namespace}')" class="btn btn-outline-primary btn-sm">⬅️ Back to List</button>
+            <button class="btn btn-success btn-sm tmpl-detail-apply">▶️ Apply This Template</button>
+            <button class="btn btn-outline-secondary btn-sm tmpl-detail-copy">📋 Copy JSON</button>
+            <button class="btn btn-outline-primary btn-sm tmpl-detail-back">⬅️ Back to List</button>
           </div>
         </div>
       `,
       showConfirmButton: false,
       showCancelButton: true,
       cancelButtonText: '❌ Close',
-      width: '750px'
+      width: '750px',
+      didOpen: (popup) => {
+        const jsonText = JSON.stringify(data, null, 2);
+        const jsonEl = popup.querySelector('#tmplDetailJson');
+        if (jsonEl) jsonEl.textContent = jsonText;
+        window._lastTemplateJson = jsonText;
+        popup.querySelector('.tmpl-detail-apply')?.addEventListener('click', () => applyTemplate(namespace, type, templateId));
+        popup.querySelector('.tmpl-detail-copy')?.addEventListener('click', () => copyTemplateJson());
+        popup.querySelector('.tmpl-detail-back')?.addEventListener('click', () => showTemplateManagement(namespace));
+      }
     });
-
-    // Store JSON for copy
-    window._lastTemplateJson = JSON.stringify(data, null, 2);
   } catch (err) {
     Swal.fire('❌ Error', `Failed to load template: ${err.response?.data?.message || err.message}`, 'error');
   }
@@ -20082,20 +20098,22 @@ async function applyTemplate(sourceNs, type, templateId) {
   const mainNs = document.getElementById('namespace')?.value || sourceNs;
   const nsOptionsHtml = namespaces.map(ns => {
     const nsId = typeof ns === 'string' ? ns : (ns.id || ns.name || '');
+    const safeNsId = window.escapeHtml(nsId);
     // Default to the main panel's namespace, not the template source
     const selected = nsId === mainNs ? 'selected' : '';
-    return `<option value="${nsId}" ${selected}>${nsId}</option>`;
+    return `<option value="${safeNsId}" ${selected}>${safeNsId}</option>`;
   }).join('');
 
   const crossNsHint = sourceNs !== mainNs
-    ? `<div style="font-size:12px;color:#856404;background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:6px 10px;margin-bottom:10px;">💡 Template is from namespace <b>${sourceNs}</b>. You can select a different target namespace to create the resource in.</div>`
+    ? `<div style="font-size:12px;color:#856404;background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:6px 10px;margin-bottom:10px;">💡 Template is from namespace <b>${window.escapeHtml(sourceNs)}</b>. You can select a different target namespace to create the resource in.</div>`
     : '';
 
+  const safeTemplateIdHtml = window.escapeHtml(templateId);
   const { value: formValues } = await Swal.fire({
     title: `▶️ Apply ${typeMeta.label} Template`,
     html: `
       <div style="text-align:left;">
-        <p style="font-size:13px;color:#555;margin-bottom:8px;">Create a new <b>${typeMeta.label}</b> from template <code style="background:#e9ecef;padding:2px 6px;border-radius:3px;">${templateId}</code></p>
+        <p style="font-size:13px;color:#555;margin-bottom:8px;">Create a new <b>${typeMeta.label}</b> from template <code style="background:#e9ecef;padding:2px 6px;border-radius:3px;">${safeTemplateIdHtml}</code></p>
         ${crossNsHint}
         <div style="margin-bottom:10px;">
           <label style="font-size:13px;font-weight:500;">Target Namespace <span style="color:red;">*</span></label>
@@ -20109,7 +20127,7 @@ async function applyTemplate(sourceNs, type, templateId) {
         </div>
         <div style="margin-bottom:10px;">
           <label style="font-size:13px;font-weight:500;">Description (optional)</label>
-          <input id="tmplApplyDesc" class="swal2-input" placeholder="Created from template ${templateId}" style="margin:4px 0;width:100%;font-size:14px;">
+          <input id="tmplApplyDesc" class="swal2-input" placeholder="Created from template ${safeTemplateIdHtml}" style="margin:4px 0;width:100%;font-size:14px;">
         </div>
       </div>
     `,
@@ -20307,18 +20325,18 @@ async function saveConfigAsTemplate(namespace, mciId, mciReq) {
     title: '📄 Save as MCI Template',
     html: `
       <div style="text-align:left;">
-        <p style="font-size:13px;color:#555;">Save the extracted MCI configuration from <b>${mciId}</b> as a reusable template.</p>
+        <p style="font-size:13px;color:#555;">Save the extracted MCI configuration from <b>${window.escapeHtml(mciId)}</b> as a reusable template.</p>
         <div style="margin-bottom:8px;">
           <label style="font-size:13px;font-weight:500;">Template Name <span style="color:red;">*</span></label>
-          <input id="saveTmplName" class="swal2-input" value="${mciId}-template" style="margin:4px 0;width:100%;font-size:14px;">
+          <input id="saveTmplName" class="swal2-input" value="${window.escapeHtml(mciId)}-template" style="margin:4px 0;width:100%;font-size:14px;">
         </div>
         <div style="margin-bottom:8px;">
           <label style="font-size:13px;font-weight:500;">Description</label>
-          <input id="saveTmplDesc" class="swal2-input" value="Template extracted from MCI: ${mciId}" style="margin:4px 0;width:100%;font-size:14px;">
+          <input id="saveTmplDesc" class="swal2-input" value="Template extracted from MCI: ${window.escapeHtml(mciId)}" style="margin:4px 0;width:100%;font-size:14px;">
         </div>
         <div style="margin-bottom:8px;">
           <label style="font-size:13px;font-weight:500;">Configuration Preview</label>
-          <div style="background:#1e1e1e;color:#d4d4d4;padding:10px;border-radius:6px;max-height:250px;overflow:auto;font-family:monospace;font-size:11px;white-space:pre-wrap;">${JSON.stringify(mciReq, null, 2)}</div>
+          <pre id="saveTmplConfigPreview" style="background:#1e1e1e;color:#d4d4d4;padding:10px;border-radius:6px;max-height:250px;overflow:auto;font-family:monospace;font-size:11px;white-space:pre-wrap;"></pre>
         </div>
       </div>
     `,
@@ -20327,6 +20345,10 @@ async function saveConfigAsTemplate(namespace, mciId, mciReq) {
     confirmButtonText: '💾 Save as Template',
     confirmButtonColor: '#007bff',
     width: '650px',
+    didOpen: (popup) => {
+      const previewEl = popup.querySelector('#saveTmplConfigPreview');
+      if (previewEl) previewEl.textContent = JSON.stringify(mciReq, null, 2);
+    },
     preConfirm: () => {
       const name = document.getElementById('saveTmplName')?.value?.trim();
       if (!name) {
