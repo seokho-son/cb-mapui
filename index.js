@@ -100,6 +100,7 @@ import { defaults as defaultControls } from "ol/control";
 import Swal from "sweetalert2";
 import axios, { AxiosError } from "axios";
 import JSONFormatter from "json-formatter-js";
+import JSZip from "jszip";
 
 // ========== RESOURCE GRAPH MODULE (Resource Graph Feature) ==========
 // Import resource graph module for interactive resource visualization
@@ -1038,7 +1039,7 @@ function showMciContextMenu(pixel, mciInfo) {
         <button onclick="executeRemoteCmd(); Swal.close();" class="btn btn-warning btn-context">💻 Remote Cmd</button>
         <button onclick="showTaskManagementModal(); Swal.close();" class="btn btn-warning btn-context">📋 Cmd Status</button>
         <button onclick="transferFileToMci(); Swal.close();" class="btn btn-warning btn-context">📁 File Transfer</button>
-        <button onclick="document.querySelector('.save-file').click(); Swal.close();" class="btn btn-warning btn-context">💾 Download Key</button>
+        <button onclick="downloadAllSshKeys(); Swal.close();" class="btn btn-warning btn-context">📦 SSH Keys (ZIP)</button>
 
         <button onclick="showSnapshotManagementModal(); Swal.close();" class="btn btn-info btn-context">📸 Snapshots</button>       
         <button onclick="manageNLB(); Swal.close();" class="btn btn-info btn-context">⚖️ NLB</button>
@@ -15222,7 +15223,7 @@ function getAccessInfo() {
 window.getAccessInfo = getAccessInfo;
 
 
-// SSH Key save function
+// SSH Key save function (single VM)
 const saveBtn = document.querySelector(".save-file");
 saveBtn.addEventListener("click", function () {
   console.log(" [Retrieve MCI Access Information ...]\n");
@@ -15271,6 +15272,114 @@ saveBtn.addEventListener("click", function () {
     URL.revokeObjectURL(tempLink.href);
   });
 });
+
+// Download ALL VM SSH keys in an MCI as a single zip file
+function downloadAllSshKeys() {
+  console.log(" [Download All SSH Keys as ZIP ...]\n");
+
+  var config = getConfig();
+  var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
+  var namespace = namespaceElement.value;
+  var mciid = mciidElement.value;
+
+  if (!namespace || !mciid) {
+    Swal.fire("Error", "Please select a namespace and MCI first.", "warning");
+    return;
+  }
+
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=accessinfo&accessInfoOption=showSshKey`;
+
+  Swal.fire({
+    title: "Downloading SSH Keys...",
+    html: "Retrieving access information for all VMs.",
+    allowOutsideClick: false,
+    didOpen: () => { Swal.showLoading(); }
+  });
+
+  // Fetch both MCI info and access info in parallel
+  var mciInfoUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}`;
+  var authConfig = { username: username, password: password };
+
+  Promise.all([
+    axios({ method: "get", url: url, auth: authConfig }),
+    axios({ method: "get", url: mciInfoUrl, auth: authConfig })
+  ]).then(([accessRes, infoRes]) => {
+    const zip = new JSZip();
+    let keyCount = 0;
+
+    // Sanitize path component to prevent zip-slip (strip path separators and traversal segments)
+    const safeName = (name) => String(name).replace(/[\\/]/g, "_").replace(/\.\./g, "_").replace(/[^a-zA-Z0-9._-]/g, "_") || "unknown";
+
+    for (let subGroupAccessInfo of (accessRes.data.MciSubGroupAccessInfo || [])) {
+      const subGroupId = safeName(subGroupAccessInfo.SubGroupId || "unknown");
+      const subGroupVmSummaries = [];
+      for (let vmAccessInfo of (subGroupAccessInfo.MciVmAccessInfo || [])) {
+        const vmId = safeName(vmAccessInfo.vmId || "unknown");
+        const privateKey = (vmAccessInfo.privateKey || "").replace(/['",]+/g, "");
+        if (privateKey) {
+          zip.file(`${subGroupId}/${safeName(namespace)}-${safeName(mciid)}-${vmId}.pem`, privateKey);
+          keyCount++;
+        }
+        // Collect per-VM summary for subgroup JSON
+        subGroupVmSummaries.push({
+          vmId: vmId,
+          publicIP: vmAccessInfo.publicIP || "",
+          privateIP: vmAccessInfo.privateIP || "",
+          sshPort: vmAccessInfo.sshPort || 22,
+          vmUserName: vmAccessInfo.vmUserName || "",
+          keyFile: `${safeName(namespace)}-${safeName(mciid)}-${vmId}.pem`
+        });
+      }
+      // Add per-subgroup access info JSON
+      if (subGroupVmSummaries.length > 0) {
+        zip.file(`${subGroupId}/access-info.json`, JSON.stringify({
+          subGroupId: subGroupId,
+          vmCount: subGroupVmSummaries.length,
+          vms: subGroupVmSummaries
+        }, null, 2));
+      }
+    }
+
+    if (keyCount === 0) {
+      Swal.fire("No Keys Found", "No SSH private keys were found for this MCI.", "info");
+      return;
+    }
+
+    // Add MCI info JSON
+    zip.file(`${safeName(mciid)}-info.json`, JSON.stringify(infoRes.data, null, 2));
+
+    // Add access info JSON (redact privateKey to avoid duplication with .pem files)
+    const redactedAccessInfoJson = JSON.stringify(
+      accessRes.data,
+      (key, value) => (key === "privateKey" ? undefined : value),
+      2
+    );
+    zip.file(`${safeName(mciid)}-access-info.json`, redactedAccessInfoJson);
+
+    return zip.generateAsync({ type: "blob" }).then((content) => {
+      var tempLink = document.createElement("a");
+      tempLink.setAttribute("href", URL.createObjectURL(content));
+      tempLink.setAttribute("download", `${namespace}-${mciid}-ssh-keys.zip`);
+      tempLink.click();
+      URL.revokeObjectURL(tempLink.href);
+
+      Swal.fire({
+        icon: "success",
+        title: "Download Complete",
+        html: `Downloaded <strong>${keyCount}</strong> SSH key(s) as a ZIP file.<br><code>${window.escapeHtml(namespace)}-${window.escapeHtml(mciid)}-ssh-keys.zip</code>`,
+        timer: 3000,
+        showConfirmButton: false
+      });
+    });
+  }).catch((err) => {
+    console.error(err);
+    Swal.fire("Error", "Failed to retrieve SSH keys: " + (err.message || err), "error");
+  });
+}
+window.downloadAllSshKeys = downloadAllSshKeys;
 
 // Global array to store X-Request-Ids
 let xRequestIds = [];
