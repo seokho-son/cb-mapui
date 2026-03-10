@@ -1039,8 +1039,7 @@ function showMciContextMenu(pixel, mciInfo) {
         <button onclick="executeRemoteCmd(); Swal.close();" class="btn btn-warning btn-context">💻 Remote Cmd</button>
         <button onclick="showTaskManagementModal(); Swal.close();" class="btn btn-warning btn-context">📋 Cmd Status</button>
         <button onclick="transferFileToMci(); Swal.close();" class="btn btn-warning btn-context">📁 File Transfer</button>
-        <button onclick="document.querySelector('.save-file').click(); Swal.close();" class="btn btn-warning btn-context">💾 Download Key</button>
-        <button onclick="downloadAllSshKeys(); Swal.close();" class="btn btn-warning btn-context">📦 All Keys (ZIP)</button>
+        <button onclick="downloadAllSshKeys(); Swal.close();" class="btn btn-warning btn-context">📦 SSH Keys (ZIP)</button>
 
         <button onclick="showSnapshotManagementModal(); Swal.close();" class="btn btn-info btn-context">📸 Snapshots</button>       
         <button onclick="manageNLB(); Swal.close();" class="btn btn-info btn-context">⚖️ NLB</button>
@@ -15311,14 +15310,17 @@ function downloadAllSshKeys() {
     const zip = new JSZip();
     let keyCount = 0;
 
+    // Sanitize path component to prevent zip-slip (strip path separators and traversal segments)
+    const safeName = (name) => String(name).replace(/[\\/]/g, "_").replace(/\.\./g, "_").replace(/[^a-zA-Z0-9._-]/g, "_") || "unknown";
+
     for (let subGroupAccessInfo of (accessRes.data.MciSubGroupAccessInfo || [])) {
-      const subGroupId = subGroupAccessInfo.SubGroupId || "unknown";
+      const subGroupId = safeName(subGroupAccessInfo.SubGroupId || "unknown");
       const subGroupVmSummaries = [];
       for (let vmAccessInfo of (subGroupAccessInfo.MciVmAccessInfo || [])) {
-        const vmId = vmAccessInfo.vmId || "unknown";
+        const vmId = safeName(vmAccessInfo.vmId || "unknown");
         const privateKey = (vmAccessInfo.privateKey || "").replace(/['",]+/g, "");
         if (privateKey) {
-          zip.file(`${subGroupId}/${namespace}-${mciid}-${vmId}.pem`, privateKey);
+          zip.file(`${subGroupId}/${safeName(namespace)}-${safeName(mciid)}-${vmId}.pem`, privateKey);
           keyCount++;
         }
         // Collect per-VM summary for subgroup JSON
@@ -15328,7 +15330,7 @@ function downloadAllSshKeys() {
           privateIP: vmAccessInfo.privateIP || "",
           sshPort: vmAccessInfo.sshPort || 22,
           vmUserName: vmAccessInfo.vmUserName || "",
-          keyFile: `${namespace}-${mciid}-${vmId}.pem`
+          keyFile: `${safeName(namespace)}-${safeName(mciid)}-${vmId}.pem`
         });
       }
       // Add per-subgroup access info JSON
@@ -15347,12 +15349,17 @@ function downloadAllSshKeys() {
     }
 
     // Add MCI info JSON
-    zip.file(`${mciid}-info.json`, JSON.stringify(infoRes.data, null, 2));
+    zip.file(`${safeName(mciid)}-info.json`, JSON.stringify(infoRes.data, null, 2));
 
-    // Add access info JSON (with SSH keys)
-    zip.file(`${mciid}-access-info.json`, JSON.stringify(accessRes.data, null, 2));
+    // Add access info JSON (redact privateKey to avoid duplication with .pem files)
+    const redactedAccessInfoJson = JSON.stringify(
+      accessRes.data,
+      (key, value) => (key === "privateKey" ? undefined : value),
+      2
+    );
+    zip.file(`${safeName(mciid)}-access-info.json`, redactedAccessInfoJson);
 
-    zip.generateAsync({ type: "blob" }).then((content) => {
+    return zip.generateAsync({ type: "blob" }).then((content) => {
       var tempLink = document.createElement("a");
       tempLink.setAttribute("href", URL.createObjectURL(content));
       tempLink.setAttribute("download", `${namespace}-${mciid}-ssh-keys.zip`);
