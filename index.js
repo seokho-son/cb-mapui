@@ -14392,7 +14392,10 @@ const RECENT_CMDS_MAX = 30;
 
 function loadRecentCmds() {
   try {
-    return JSON.parse(localStorage.getItem(RECENT_CMDS_KEY) || '[]');
+    const raw = localStorage.getItem(RECENT_CMDS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
   } catch { return []; }
 }
 
@@ -14408,7 +14411,11 @@ function saveRecentCmd(commands, options = {}) {
   if (options.syncMode) entry.syncMode = true;
   deduped.unshift(entry);
   if (deduped.length > RECENT_CMDS_MAX) deduped.length = RECENT_CMDS_MAX;
-  localStorage.setItem(RECENT_CMDS_KEY, JSON.stringify(deduped));
+  try {
+    localStorage.setItem(RECENT_CMDS_KEY, JSON.stringify(deduped));
+  } catch (e) {
+    // Ignore storage errors (quota exceeded, disabled, Safari private mode)
+  }
 }
 
 function buildRecentCmdsSectionHtml() {
@@ -14451,6 +14458,7 @@ function buildRecentCmdsSectionHtml() {
 
 function getTimeAgo(isoStr) {
   const diff = Date.now() - new Date(isoStr).getTime();
+  if (isNaN(diff) || diff < 0) return 'unknown';
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;
@@ -14474,8 +14482,13 @@ window.applyRecentCmd = function(idx) {
   let startIdx = 0;
 
   if (appendMode) {
-    // Append after existing non-empty commands
-    startIdx = existingRows.length;
+    // Append after the last non-empty command (skip trailing empty rows)
+    let lastNonEmpty = -1;
+    existingRows.forEach((row, i) => {
+      const ta = document.getElementById(`cmd${i + 1}`);
+      if (ta && ta.value.trim() !== '') lastNonEmpty = i;
+    });
+    startIdx = lastNonEmpty + 1;
   } else {
     // Clear all existing textareas (don't remove DOM — just blank them)
     existingRows.forEach((row, i) => {
@@ -14763,14 +14776,14 @@ async function executeRemoteCmd() {
       const selectedMci = document.getElementById("mciSelector").value;
       const timeout = parseInt(document.getElementById("timeoutMinutes").value) || 30;
       const syncMode = document.getElementById("syncModeToggle")?.checked || false;
-      return { commands, selectedMci, timeout, syncMode };
+      const labelSelector = document.getElementById('labelSelector')?.value || '';
+      return { commands, selectedMci, timeout, syncMode, labelSelector };
     },
   }).then((result) => {
       // result.value is false if result.isDenied or another key such as result.isDismissed
       if (result.value && result.value.commands && result.value.commands.length > 0) {
         // Save to recent commands history (with label & sync context)
-        const labelVal = document.getElementById('labelSelector')?.value || '';
-        saveRecentCmd(result.value.commands, { labelSelector: labelVal, syncMode: result.value.syncMode });
+        saveRecentCmd(result.value.commands, { labelSelector: result.value.labelSelector, syncMode: result.value.syncMode });
         const selectedMciId = result.value.selectedMci;
         // Validate timeout is within allowed range (1-120 minutes)
         const timeoutMinutes = Math.max(1, Math.min(120, parseInt(result.value.timeout, 10) || 30));
@@ -15251,7 +15264,8 @@ async function transferFileToMci() {
               results.forEach(r => allResults.push({ ...r, _fileName: file.name }));
             } catch (error) {
               console.error(`Upload error for ${file.name}:`, error);
-              fileErrors.push(file.name);
+              const errMsg = error.response?.data?.message || error.message || 'Request failed';
+              fileErrors.push({ name: file.name, error: errMsg });
             }
           }
 
@@ -15263,9 +15277,9 @@ async function transferFileToMci() {
           resultHtml += `<p style="font-size: 1.1rem; margin-bottom: 12px;">📁 <b>${totalFiles}</b> file(s) — ✅ <b>${successCount}</b> succeeded, ❌ <b>${failCount}</b> failed</p>`;
 
           // Per-file request errors
-          fileErrors.forEach(name => {
+          fileErrors.forEach(fe => {
             resultHtml += `<div style="padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; background: #f8d7da; font-size: 0.8rem;">
-              ❌ <b>${window.escapeHtml(name)}</b> — Request failed
+              ❌ <b>${window.escapeHtml(fe.name)}</b> — ${window.escapeHtml(fe.error)}
             </div>`;
           });
 
