@@ -14900,8 +14900,8 @@ async function transferFileToMci() {
           <div class="popup-row">
             <div class="popup-col" style="flex: 1;">
               <div class="popup-field">
-                <label class="popup-label">File (max 50MB)</label>
-                <input type="file" id="fileInput" class="popup-input" style="padding: 4px;" />
+                <label class="popup-label">File(s) (max 50MB each)</label>
+                <input type="file" id="fileInput" class="popup-input" style="padding: 4px;" multiple />
               </div>
             </div>
           </div>
@@ -14914,7 +14914,7 @@ async function transferFileToMci() {
             </div>
           </div>
           <div style="font-size: 0.7rem; color: #666; padding: 4px 8px; background: #fff3cd; border-radius: 4px;">
-            📝 The file will be uploaded to the specified path on all targeted VMs via SCP through bastion hosts.
+            📝 File(s) will be uploaded to the specified path on all targeted VMs via SCP through bastion hosts. Multiple files can be selected.
           </div>
         </div>
       </div>
@@ -15005,20 +15005,22 @@ async function transferFileToMci() {
       if (mode === 'upload') {
         const fileInput = document.getElementById('fileInput');
         const targetPath = document.getElementById('targetPathInput').value;
-        if (!fileInput.files[0]) {
-          Swal.showValidationMessage('Please select a file to upload.');
+        const files = Array.from(fileInput.files);
+        if (files.length === 0) {
+          Swal.showValidationMessage('Please select file(s) to upload.');
           return false;
         }
         const fileSizeLimit = 50 * 1024 * 1024; // 50MB
-        if (fileInput.files[0].size > fileSizeLimit) {
-          Swal.showValidationMessage('File too large. Maximum upload size is 50MB.');
+        const oversized = files.find(f => f.size > fileSizeLimit);
+        if (oversized) {
+          Swal.showValidationMessage(`File "${oversized.name}" is too large. Maximum upload size is 50MB per file.`);
           return false;
         }
         if (!targetPath) {
           Swal.showValidationMessage('Please specify the target path.');
           return false;
         }
-        return { mode, selectedMci, file: fileInput.files[0], targetPath };
+        return { mode, selectedMci, files, targetPath };
       } else {
         const selectedVm = document.getElementById('downloadVmSelector').value;
         const sourcePath = document.getElementById('sourcePathInput').value;
@@ -15038,8 +15040,8 @@ async function transferFileToMci() {
       const { mode, selectedMci } = result.value;
 
       if (mode === 'upload') {
-        // === UPLOAD ===
-        const { file, targetPath } = result.value;
+        // === UPLOAD (supports multiple files) ===
+        const { files, targetPath } = result.value;
         const radioValue = Swal.getPopup().querySelector('input[name="selectOption"]:checked').value;
         let url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/transferFile/mci/${selectedMci}`;
         if (radioValue === 'SubGroup') {
@@ -15048,62 +15050,104 @@ async function transferFileToMci() {
           url += `?vmId=${encodeURIComponent(vmid)}`;
         }
 
-        var formData = new FormData();
-        formData.append('file', file);
-        formData.append('path', targetPath);
+        const totalFiles = files.length;
+        const scopeLabel = radioValue === 'SubGroup' ? subgroupid : radioValue === 'VM' ? vmid : selectedMci;
 
         Swal.fire({
-          title: '⬆️ Uploading...',
+          title: `⬆️ Uploading (0/${totalFiles})...`,
           html: `<div style="text-align: left; padding: 10px;">
-            <p><b>File:</b> ${window.escapeHtml(file.name)} (${(file.size / 1024).toFixed(1)} KB)</p>
+            <p><b>Files:</b> ${totalFiles} file(s) selected</p>
             <p><b>Target:</b> ${window.escapeHtml(targetPath)}</p>
-            <p><b>Scope:</b> ${window.escapeHtml(radioValue)} ${window.escapeHtml(radioValue === 'SubGroup' ? subgroupid : radioValue === 'VM' ? vmid : selectedMci)}</p>
+            <p><b>Scope:</b> ${window.escapeHtml(radioValue)} ${window.escapeHtml(scopeLabel)}</p>
+            <div id="uploadProgressDetail" style="margin-top: 8px; font-size: 0.8rem; color: #666;">Preparing...</div>
           </div>`,
           allowOutsideClick: false,
           didOpen: () => { Swal.showLoading(); },
         });
 
-        axios({
-          method: 'post',
-          url: url,
-          headers: {
-            'Authorization': `Basic ${btoa(`${username}:${password}`)}`,
-            'Content-Type': 'multipart/form-data',
-          },
-          data: formData,
-        })
-          .then((res) => {
-            const results = res.data.results || [];
-            const successCount = results.filter(r => !r.error).length;
-            const failCount = results.filter(r => r.error).length;
+        // Upload files sequentially and accumulate results
+        (async () => {
+          const allResults = [];
+          const fileErrors = [];
+          let lastResData = null;
 
-            let resultHtml = `<div style="text-align: left; padding: 10px; max-height: 400px; overflow-y: auto;">`;
-            resultHtml += `<p style="font-size: 1.1rem; margin-bottom: 12px;">✅ <b>${successCount}</b> succeeded, ❌ <b>${failCount}</b> failed</p>`;
-            results.forEach(r => {
-              const isSuccess = !r.error;
-              const safeVmId = window.escapeHtml(r.vmId || '');
-              const safeVmIp = window.escapeHtml(r.vmIp || 'N/A');
-              const safeDetail = isSuccess
-                ? '✅ ' + window.escapeHtml(r.stdout && r.stdout['0'] || 'OK')
-                : '❌ ' + window.escapeHtml(r.error || r.stderr && r.stderr['0'] || 'Failed');
-              resultHtml += `<div style="padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; background: ${isSuccess ? '#d4edda' : '#f8d7da'}; font-size: 0.8rem;">
-                <b>${safeVmId}</b> (${safeVmIp}) — ${safeDetail}
-              </div>`;
-            });
-            resultHtml += `</div>`;
+          const allResData = [];
 
-            Swal.fire({
-              icon: failCount === 0 ? 'success' : 'warning',
-              title: `Upload ${failCount === 0 ? 'Complete' : 'Partial'}`,
-              html: resultHtml,
-              width: 700,
-            });
-            displayJsonData(res.data, typeInfo);
-          })
-          .catch((error) => {
-            console.error('Upload error:', error);
-            errorAlert(error.response?.data ? JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, '') : error.message);
+          for (let i = 0; i < totalFiles; i++) {
+            const file = files[i];
+            const progressEl = document.getElementById('uploadProgressDetail');
+            if (progressEl) {
+              progressEl.textContent = `(${i + 1}/${totalFiles}) ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+            }
+            Swal.update({ title: `⬆️ Uploading (${i + 1}/${totalFiles})...` });
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('path', targetPath);
+
+            try {
+              const res = await axios({
+                method: 'post',
+                url: url,
+                headers: {
+                  'Authorization': `Basic ${btoa(`${username}:${password}`)}`,
+                  'Content-Type': 'multipart/form-data',
+                },
+                data: formData,
+              });
+              lastResData = res.data;
+              allResData.push({ fileName: file.name, ...res.data });
+              const results = res.data.results || [];
+              results.forEach(r => allResults.push({ ...r, _fileName: file.name }));
+            } catch (error) {
+              console.error(`Upload error for ${file.name}:`, error);
+              fileErrors.push(file.name);
+            }
+          }
+
+          // Show accumulated results
+          const successCount = allResults.filter(r => !r.error).length;
+          const failCount = allResults.filter(r => r.error).length + fileErrors.length;
+
+          let resultHtml = `<div style="text-align: left; padding: 10px; max-height: 400px; overflow-y: auto;">`;
+          resultHtml += `<p style="font-size: 1.1rem; margin-bottom: 12px;">📁 <b>${totalFiles}</b> file(s) — ✅ <b>${successCount}</b> succeeded, ❌ <b>${failCount}</b> failed</p>`;
+
+          // Per-file request errors
+          fileErrors.forEach(name => {
+            resultHtml += `<div style="padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; background: #f8d7da; font-size: 0.8rem;">
+              ❌ <b>${window.escapeHtml(name)}</b> — Request failed
+            </div>`;
           });
+
+          // Per-VM results
+          allResults.forEach(r => {
+            const isSuccess = !r.error;
+            const safeVmId = window.escapeHtml(r.vmId || '');
+            const safeVmIp = window.escapeHtml(r.vmIp || 'N/A');
+            const safeFileName = window.escapeHtml(r._fileName || '');
+            const safeDetail = isSuccess
+              ? '✅ ' + window.escapeHtml(r.stdout && r.stdout['0'] || 'OK')
+              : '❌ ' + window.escapeHtml(r.error || r.stderr && r.stderr['0'] || 'Failed');
+            resultHtml += `<div style="padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; background: ${isSuccess ? '#d4edda' : '#f8d7da'}; font-size: 0.8rem;">
+              <b>${safeVmId}</b> (${safeVmIp}) — ${safeFileName} — ${safeDetail}
+            </div>`;
+          });
+          resultHtml += `</div>`;
+
+          Swal.fire({
+            icon: failCount === 0 ? 'success' : 'warning',
+            title: `Upload ${failCount === 0 ? 'Complete' : 'Partial'}`,
+            html: resultHtml,
+            width: 700,
+          });
+          if (lastResData) {
+            // Show combined results for all files in JSON panel
+            const combinedData = totalFiles > 1
+              ? { totalFiles, results: allResData }
+              : lastResData;
+            displayJsonData(combinedData, typeInfo);
+          }
+        })();
 
       } else {
         // === DOWNLOAD ===
