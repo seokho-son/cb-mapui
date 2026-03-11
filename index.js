@@ -14386,6 +14386,150 @@ async function consumeSSEStream(url, username, password, abortController, onEven
 }
 
 
+// === Recent Remote Commands (localStorage) ===
+const RECENT_CMDS_KEY = 'recentRemoteCmds';
+const RECENT_CMDS_MAX = 30;
+
+function loadRecentCmds() {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_CMDS_KEY) || '[]');
+  } catch { return []; }
+}
+
+function saveRecentCmd(commands, options = {}) {
+  const filtered = commands.filter(c => c.trim());
+  if (filtered.length === 0) return;
+  const history = loadRecentCmds();
+  // Deduplicate: remove existing entry with same commands
+  const key = JSON.stringify(filtered);
+  const deduped = history.filter(h => JSON.stringify(h.commands) !== key);
+  const entry = { timestamp: new Date().toISOString(), commands: filtered };
+  if (options.labelSelector) entry.labelSelector = options.labelSelector;
+  if (options.syncMode) entry.syncMode = true;
+  deduped.unshift(entry);
+  if (deduped.length > RECENT_CMDS_MAX) deduped.length = RECENT_CMDS_MAX;
+  localStorage.setItem(RECENT_CMDS_KEY, JSON.stringify(deduped));
+}
+
+function buildRecentCmdsSectionHtml() {
+  const history = loadRecentCmds();
+  if (history.length === 0) return '';
+  const options = history.map((h, i) => {
+    const preview = h.commands.join(' && ').substring(0, 70) + (h.commands.join(' && ').length > 70 ? '...' : '');
+    const ago = getTimeAgo(h.timestamp);
+    const tags = [ago];
+    if (h.labelSelector) tags.push('🏷️');
+    if (h.syncMode) tags.push('⏱️');
+    return `<option value="${i}">${tags.join(' ')} — ${window.escapeHtml(preview)}</option>`;
+  }).join('');
+  return `
+    <div class="popup-section" id="recentCmdsSection">
+      <div class="popup-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>📋 Recent Commands (${history.length})</span>
+        <button type="button" onclick="clearRecentCmds()"
+          style="font-size: 10px; padding: 1px 6px; border: 1px solid #ccc; border-radius: 3px; background: #f8f9fa; cursor: pointer; font-weight: normal;">Clear History</button>
+      </div>
+      <div class="popup-row">
+        <div class="popup-col" style="flex: 3;">
+          <div class="popup-field">
+            <select id="recentCmdSelector" class="popup-select" onchange="applyRecentCmd(this.value)">
+              <option value="" selected>— Select from history —</option>
+              ${options}
+            </select>
+          </div>
+        </div>
+        <div class="popup-col" style="flex: 1;">
+          <div class="popup-field">
+            <label class="popup-inline" style="font-size: 0.8rem;">
+              <input type="checkbox" id="recentAppendMode"> Append
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function getTimeAgo(isoStr) {
+  const diff = Date.now() - new Date(isoStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+window.applyRecentCmd = function(idx) {
+  if (idx === '') return;
+  const history = loadRecentCmds();
+  const entry = history[parseInt(idx)];
+  if (!entry) return;
+  const appendMode = document.getElementById('recentAppendMode')?.checked || false;
+
+  const cmdContainer = document.getElementById('cmdContainer');
+  if (!cmdContainer) return;
+
+  const existingRows = cmdContainer.querySelectorAll('.cmdRow');
+  let startIdx = 0;
+
+  if (appendMode) {
+    // Append after existing non-empty commands
+    startIdx = existingRows.length;
+  } else {
+    // Clear all existing textareas (don't remove DOM — just blank them)
+    existingRows.forEach((row, i) => {
+      const ta = document.getElementById(`cmd${i + 1}`);
+      if (ta) { ta.value = ''; autoResizeTextarea(ta); }
+    });
+  }
+
+  entry.commands.forEach((cmd, i) => {
+    const n = startIdx + i + 1;
+    const el = document.getElementById(`cmd${n}`);
+    if (el) {
+      el.value = cmd;
+      autoResizeTextarea(el);
+    } else if (typeof window.addCmd === 'function') {
+      window.addCmd();
+      const newEl = document.getElementById(`cmd${n}`);
+      if (newEl) { newEl.value = cmd; autoResizeTextarea(newEl); }
+    }
+  });
+
+  // Restore label selector if saved (non-append mode only)
+  if (!appendMode && entry.labelSelector) {
+    const labelInput = document.getElementById('labelSelector');
+    if (labelInput) {
+      labelInput.value = entry.labelSelector;
+      if (window.updateSelectedLabelsDisplay) window.updateSelectedLabelsDisplay();
+      if (window.updateLabelMatchPreview) window.updateLabelMatchPreview();
+      if (window.updateAvailableLabelChipStyles) window.updateAvailableLabelChipStyles();
+    }
+  }
+
+  // Restore sync mode toggle if saved
+  if (!appendMode) {
+    const syncToggle = document.getElementById('syncModeToggle');
+    if (syncToggle) syncToggle.checked = !!entry.syncMode;
+  }
+
+  // Re-render placeholder inputs if available
+  if (typeof window.renderPlaceholderInputs === 'function') {
+    window.renderPlaceholderInputs();
+  }
+
+  // Reset selector
+  const selector = document.getElementById('recentCmdSelector');
+  if (selector) selector.value = '';
+};
+
+window.clearRecentCmds = function() {
+  localStorage.removeItem(RECENT_CMDS_KEY);
+  const section = document.getElementById('recentCmdsSection');
+  if (section) section.style.display = 'none';
+};
+
 async function executeRemoteCmd() {
   var config = getConfig(); var hostname = config.hostname;
   var port = config.port;
@@ -14577,6 +14721,9 @@ async function executeRemoteCmd() {
         </div>
       </div>
 
+      <!-- Recent Commands Section -->
+      ${buildRecentCmdsSectionHtml()}
+
       <!-- Label Selector Section (generated by helper function) -->
       ${window.generateLabelSelectorHtml(true, true)}
 
@@ -14621,6 +14768,9 @@ async function executeRemoteCmd() {
   }).then((result) => {
       // result.value is false if result.isDenied or another key such as result.isDismissed
       if (result.value && result.value.commands && result.value.commands.length > 0) {
+        // Save to recent commands history (with label & sync context)
+        const labelVal = document.getElementById('labelSelector')?.value || '';
+        saveRecentCmd(result.value.commands, { labelSelector: labelVal, syncMode: result.value.syncMode });
         const selectedMciId = result.value.selectedMci;
         // Validate timeout is within allowed range (1-120 minutes)
         const timeoutMinutes = Math.max(1, Math.min(120, parseInt(result.value.timeout, 10) || 30));
