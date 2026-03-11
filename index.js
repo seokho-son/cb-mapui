@@ -14386,6 +14386,163 @@ async function consumeSSEStream(url, username, password, abortController, onEven
 }
 
 
+// === Recent Remote Commands (localStorage) ===
+const RECENT_CMDS_KEY = 'recentRemoteCmds';
+const RECENT_CMDS_MAX = 30;
+
+function loadRecentCmds() {
+  try {
+    const raw = localStorage.getItem(RECENT_CMDS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+function saveRecentCmd(commands, options = {}) {
+  const filtered = commands.filter(c => c.trim());
+  if (filtered.length === 0) return;
+  const history = loadRecentCmds();
+  // Deduplicate: remove existing entry with same commands
+  const key = JSON.stringify(filtered);
+  const deduped = history.filter(h => JSON.stringify(h.commands) !== key);
+  const entry = { timestamp: new Date().toISOString(), commands: filtered };
+  if (options.labelSelector) entry.labelSelector = options.labelSelector;
+  if (options.syncMode) entry.syncMode = true;
+  deduped.unshift(entry);
+  if (deduped.length > RECENT_CMDS_MAX) deduped.length = RECENT_CMDS_MAX;
+  try {
+    localStorage.setItem(RECENT_CMDS_KEY, JSON.stringify(deduped));
+  } catch (e) {
+    // Ignore storage errors (quota exceeded, disabled, Safari private mode)
+  }
+}
+
+function buildRecentCmdsSectionHtml() {
+  const history = loadRecentCmds();
+  if (history.length === 0) return '';
+  const options = history.map((h, i) => {
+    const preview = h.commands.join(' && ').substring(0, 70) + (h.commands.join(' && ').length > 70 ? '...' : '');
+    const ago = getTimeAgo(h.timestamp);
+    const tags = [ago];
+    if (h.labelSelector) tags.push('🏷️');
+    if (h.syncMode) tags.push('⏱️');
+    return `<option value="${i}">${tags.join(' ')} — ${window.escapeHtml(preview)}</option>`;
+  }).join('');
+  return `
+    <div class="popup-section" id="recentCmdsSection">
+      <div class="popup-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>📋 Recent Commands (${history.length})</span>
+        <button type="button" onclick="clearRecentCmds()"
+          style="font-size: 10px; padding: 1px 6px; border: 1px solid #ccc; border-radius: 3px; background: #f8f9fa; cursor: pointer; font-weight: normal;">Clear History</button>
+      </div>
+      <div class="popup-row">
+        <div class="popup-col" style="flex: 3;">
+          <div class="popup-field">
+            <select id="recentCmdSelector" class="popup-select" onchange="applyRecentCmd(this.value)">
+              <option value="" selected>— Select from history —</option>
+              ${options}
+            </select>
+          </div>
+        </div>
+        <div class="popup-col" style="flex: 1;">
+          <div class="popup-field">
+            <label class="popup-inline" style="font-size: 0.8rem;">
+              <input type="checkbox" id="recentAppendMode"> Append
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function getTimeAgo(isoStr) {
+  const diff = Date.now() - new Date(isoStr).getTime();
+  if (isNaN(diff) || diff < 0) return 'unknown';
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+window.applyRecentCmd = function(idx) {
+  if (idx === '') return;
+  const history = loadRecentCmds();
+  const entry = history[parseInt(idx)];
+  if (!entry) return;
+  const appendMode = document.getElementById('recentAppendMode')?.checked || false;
+
+  const cmdContainer = document.getElementById('cmdContainer');
+  if (!cmdContainer) return;
+
+  const existingRows = cmdContainer.querySelectorAll('.cmdRow');
+  let startIdx = 0;
+
+  if (appendMode) {
+    // Append after the last non-empty command (skip trailing empty rows)
+    let lastNonEmpty = -1;
+    existingRows.forEach((row, i) => {
+      const ta = document.getElementById(`cmd${i + 1}`);
+      if (ta && ta.value.trim() !== '') lastNonEmpty = i;
+    });
+    startIdx = lastNonEmpty + 1;
+  } else {
+    // Clear all existing textareas (don't remove DOM — just blank them)
+    existingRows.forEach((row, i) => {
+      const ta = document.getElementById(`cmd${i + 1}`);
+      if (ta) { ta.value = ''; autoResizeTextarea(ta); }
+    });
+  }
+
+  entry.commands.forEach((cmd, i) => {
+    const n = startIdx + i + 1;
+    const el = document.getElementById(`cmd${n}`);
+    if (el) {
+      el.value = cmd;
+      autoResizeTextarea(el);
+    } else if (typeof window.addCmd === 'function') {
+      window.addCmd();
+      const newEl = document.getElementById(`cmd${n}`);
+      if (newEl) { newEl.value = cmd; autoResizeTextarea(newEl); }
+    }
+  });
+
+  // Restore label selector if saved (non-append mode only)
+  if (!appendMode && entry.labelSelector) {
+    const labelInput = document.getElementById('labelSelector');
+    if (labelInput) {
+      labelInput.value = entry.labelSelector;
+      if (window.updateSelectedLabelsDisplay) window.updateSelectedLabelsDisplay();
+      if (window.updateLabelMatchPreview) window.updateLabelMatchPreview();
+      if (window.updateAvailableLabelChipStyles) window.updateAvailableLabelChipStyles();
+    }
+  }
+
+  // Restore sync mode toggle if saved
+  if (!appendMode) {
+    const syncToggle = document.getElementById('syncModeToggle');
+    if (syncToggle) syncToggle.checked = !!entry.syncMode;
+  }
+
+  // Re-render placeholder inputs if available
+  if (typeof window.renderPlaceholderInputs === 'function') {
+    window.renderPlaceholderInputs();
+  }
+
+  // Reset selector
+  const selector = document.getElementById('recentCmdSelector');
+  if (selector) selector.value = '';
+};
+
+window.clearRecentCmds = function() {
+  localStorage.removeItem(RECENT_CMDS_KEY);
+  const section = document.getElementById('recentCmdsSection');
+  if (section) section.style.display = 'none';
+};
+
 async function executeRemoteCmd() {
   var config = getConfig(); var hostname = config.hostname;
   var port = config.port;
@@ -14577,6 +14734,9 @@ async function executeRemoteCmd() {
         </div>
       </div>
 
+      <!-- Recent Commands Section -->
+      ${buildRecentCmdsSectionHtml()}
+
       <!-- Label Selector Section (generated by helper function) -->
       ${window.generateLabelSelectorHtml(true, true)}
 
@@ -14616,11 +14776,14 @@ async function executeRemoteCmd() {
       const selectedMci = document.getElementById("mciSelector").value;
       const timeout = parseInt(document.getElementById("timeoutMinutes").value) || 30;
       const syncMode = document.getElementById("syncModeToggle")?.checked || false;
-      return { commands, selectedMci, timeout, syncMode };
+      const labelSelector = document.getElementById('labelSelector')?.value || '';
+      return { commands, selectedMci, timeout, syncMode, labelSelector };
     },
   }).then((result) => {
       // result.value is false if result.isDenied or another key such as result.isDismissed
       if (result.value && result.value.commands && result.value.commands.length > 0) {
+        // Save to recent commands history (with label & sync context)
+        saveRecentCmd(result.value.commands, { labelSelector: result.value.labelSelector, syncMode: result.value.syncMode });
         const selectedMciId = result.value.selectedMci;
         // Validate timeout is within allowed range (1-120 minutes)
         const timeoutMinutes = Math.max(1, Math.min(120, parseInt(result.value.timeout, 10) || 30));
@@ -14900,8 +15063,8 @@ async function transferFileToMci() {
           <div class="popup-row">
             <div class="popup-col" style="flex: 1;">
               <div class="popup-field">
-                <label class="popup-label">File (max 50MB)</label>
-                <input type="file" id="fileInput" class="popup-input" style="padding: 4px;" />
+                <label class="popup-label">File(s) (max 50MB each)</label>
+                <input type="file" id="fileInput" class="popup-input" style="padding: 4px;" multiple />
               </div>
             </div>
           </div>
@@ -14914,7 +15077,7 @@ async function transferFileToMci() {
             </div>
           </div>
           <div style="font-size: 0.7rem; color: #666; padding: 4px 8px; background: #fff3cd; border-radius: 4px;">
-            📝 The file will be uploaded to the specified path on all targeted VMs via SCP through bastion hosts.
+            📝 File(s) will be uploaded to the specified path on all targeted VMs via SCP through bastion hosts. Multiple files can be selected.
           </div>
         </div>
       </div>
@@ -15005,20 +15168,22 @@ async function transferFileToMci() {
       if (mode === 'upload') {
         const fileInput = document.getElementById('fileInput');
         const targetPath = document.getElementById('targetPathInput').value;
-        if (!fileInput.files[0]) {
-          Swal.showValidationMessage('Please select a file to upload.');
+        const files = Array.from(fileInput.files);
+        if (files.length === 0) {
+          Swal.showValidationMessage('Please select file(s) to upload.');
           return false;
         }
         const fileSizeLimit = 50 * 1024 * 1024; // 50MB
-        if (fileInput.files[0].size > fileSizeLimit) {
-          Swal.showValidationMessage('File too large. Maximum upload size is 50MB.');
+        const oversized = files.find(f => f.size > fileSizeLimit);
+        if (oversized) {
+          Swal.showValidationMessage(`File "${oversized.name}" is too large. Maximum upload size is 50MB per file.`);
           return false;
         }
         if (!targetPath) {
           Swal.showValidationMessage('Please specify the target path.');
           return false;
         }
-        return { mode, selectedMci, file: fileInput.files[0], targetPath };
+        return { mode, selectedMci, files, targetPath };
       } else {
         const selectedVm = document.getElementById('downloadVmSelector').value;
         const sourcePath = document.getElementById('sourcePathInput').value;
@@ -15038,8 +15203,8 @@ async function transferFileToMci() {
       const { mode, selectedMci } = result.value;
 
       if (mode === 'upload') {
-        // === UPLOAD ===
-        const { file, targetPath } = result.value;
+        // === UPLOAD (supports multiple files) ===
+        const { files, targetPath } = result.value;
         const radioValue = Swal.getPopup().querySelector('input[name="selectOption"]:checked').value;
         let url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/transferFile/mci/${selectedMci}`;
         if (radioValue === 'SubGroup') {
@@ -15048,62 +15213,105 @@ async function transferFileToMci() {
           url += `?vmId=${encodeURIComponent(vmid)}`;
         }
 
-        var formData = new FormData();
-        formData.append('file', file);
-        formData.append('path', targetPath);
+        const totalFiles = files.length;
+        const scopeLabel = radioValue === 'SubGroup' ? subgroupid : radioValue === 'VM' ? vmid : selectedMci;
 
         Swal.fire({
-          title: '⬆️ Uploading...',
+          title: `⬆️ Uploading (0/${totalFiles})...`,
           html: `<div style="text-align: left; padding: 10px;">
-            <p><b>File:</b> ${window.escapeHtml(file.name)} (${(file.size / 1024).toFixed(1)} KB)</p>
+            <p><b>Files:</b> ${totalFiles} file(s) selected</p>
             <p><b>Target:</b> ${window.escapeHtml(targetPath)}</p>
-            <p><b>Scope:</b> ${window.escapeHtml(radioValue)} ${window.escapeHtml(radioValue === 'SubGroup' ? subgroupid : radioValue === 'VM' ? vmid : selectedMci)}</p>
+            <p><b>Scope:</b> ${window.escapeHtml(radioValue)} ${window.escapeHtml(scopeLabel)}</p>
+            <div id="uploadProgressDetail" style="margin-top: 8px; font-size: 0.8rem; color: #666;">Preparing...</div>
           </div>`,
           allowOutsideClick: false,
           didOpen: () => { Swal.showLoading(); },
         });
 
-        axios({
-          method: 'post',
-          url: url,
-          headers: {
-            'Authorization': `Basic ${btoa(`${username}:${password}`)}`,
-            'Content-Type': 'multipart/form-data',
-          },
-          data: formData,
-        })
-          .then((res) => {
-            const results = res.data.results || [];
-            const successCount = results.filter(r => !r.error).length;
-            const failCount = results.filter(r => r.error).length;
+        // Upload files sequentially and accumulate results
+        (async () => {
+          const allResults = [];
+          const fileErrors = [];
+          let lastResData = null;
 
-            let resultHtml = `<div style="text-align: left; padding: 10px; max-height: 400px; overflow-y: auto;">`;
-            resultHtml += `<p style="font-size: 1.1rem; margin-bottom: 12px;">✅ <b>${successCount}</b> succeeded, ❌ <b>${failCount}</b> failed</p>`;
-            results.forEach(r => {
-              const isSuccess = !r.error;
-              const safeVmId = window.escapeHtml(r.vmId || '');
-              const safeVmIp = window.escapeHtml(r.vmIp || 'N/A');
-              const safeDetail = isSuccess
-                ? '✅ ' + window.escapeHtml(r.stdout && r.stdout['0'] || 'OK')
-                : '❌ ' + window.escapeHtml(r.error || r.stderr && r.stderr['0'] || 'Failed');
-              resultHtml += `<div style="padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; background: ${isSuccess ? '#d4edda' : '#f8d7da'}; font-size: 0.8rem;">
-                <b>${safeVmId}</b> (${safeVmIp}) — ${safeDetail}
-              </div>`;
-            });
-            resultHtml += `</div>`;
+          const allResData = [];
 
-            Swal.fire({
-              icon: failCount === 0 ? 'success' : 'warning',
-              title: `Upload ${failCount === 0 ? 'Complete' : 'Partial'}`,
-              html: resultHtml,
-              width: 700,
-            });
-            displayJsonData(res.data, typeInfo);
-          })
-          .catch((error) => {
-            console.error('Upload error:', error);
-            errorAlert(error.response?.data ? JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, '') : error.message);
+          for (let i = 0; i < totalFiles; i++) {
+            const file = files[i];
+            const progressEl = document.getElementById('uploadProgressDetail');
+            if (progressEl) {
+              progressEl.textContent = `(${i + 1}/${totalFiles}) ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+            }
+            Swal.update({ title: `⬆️ Uploading (${i + 1}/${totalFiles})...` });
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('path', targetPath);
+
+            try {
+              const res = await axios({
+                method: 'post',
+                url: url,
+                headers: {
+                  'Authorization': `Basic ${btoa(`${username}:${password}`)}`,
+                  'Content-Type': 'multipart/form-data',
+                },
+                data: formData,
+              });
+              lastResData = res.data;
+              allResData.push({ fileName: file.name, ...res.data });
+              const results = res.data.results || [];
+              results.forEach(r => allResults.push({ ...r, _fileName: file.name }));
+            } catch (error) {
+              console.error(`Upload error for ${file.name}:`, error);
+              const errMsg = error.response?.data?.message || error.message || 'Request failed';
+              fileErrors.push({ name: file.name, error: errMsg });
+            }
+          }
+
+          // Show accumulated results
+          const successCount = allResults.filter(r => !r.error).length;
+          const failCount = allResults.filter(r => r.error).length + fileErrors.length;
+
+          let resultHtml = `<div style="text-align: left; padding: 10px; max-height: 400px; overflow-y: auto;">`;
+          resultHtml += `<p style="font-size: 1.1rem; margin-bottom: 12px;">📁 <b>${totalFiles}</b> file(s) — ✅ <b>${successCount}</b> succeeded, ❌ <b>${failCount}</b> failed</p>`;
+
+          // Per-file request errors
+          fileErrors.forEach(fe => {
+            resultHtml += `<div style="padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; background: #f8d7da; font-size: 0.8rem;">
+              ❌ <b>${window.escapeHtml(fe.name)}</b> — ${window.escapeHtml(fe.error)}
+            </div>`;
           });
+
+          // Per-VM results
+          allResults.forEach(r => {
+            const isSuccess = !r.error;
+            const safeVmId = window.escapeHtml(r.vmId || '');
+            const safeVmIp = window.escapeHtml(r.vmIp || 'N/A');
+            const safeFileName = window.escapeHtml(r._fileName || '');
+            const safeDetail = isSuccess
+              ? '✅ ' + window.escapeHtml(r.stdout && r.stdout['0'] || 'OK')
+              : '❌ ' + window.escapeHtml(r.error || r.stderr && r.stderr['0'] || 'Failed');
+            resultHtml += `<div style="padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; background: ${isSuccess ? '#d4edda' : '#f8d7da'}; font-size: 0.8rem;">
+              <b>${safeVmId}</b> (${safeVmIp}) — ${safeFileName} — ${safeDetail}
+            </div>`;
+          });
+          resultHtml += `</div>`;
+
+          Swal.fire({
+            icon: failCount === 0 ? 'success' : 'warning',
+            title: `Upload ${failCount === 0 ? 'Complete' : 'Partial'}`,
+            html: resultHtml,
+            width: 700,
+          });
+          if (lastResData) {
+            // Show combined results for all files in JSON panel
+            const combinedData = totalFiles > 1
+              ? { totalFiles, results: allResData }
+              : lastResData;
+            displayJsonData(combinedData, typeInfo);
+          }
+        })();
 
       } else {
         // === DOWNLOAD ===
