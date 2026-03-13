@@ -1349,6 +1349,7 @@ const cspIconImg = {
   ncp: new URL("img/ncp.png", import.meta.url).href,
   kt: new URL("img/kt.png", import.meta.url).href,
   nhn: new URL("img/nhn.png", import.meta.url).href,
+  openstack: new URL("img/openstack.png", import.meta.url).href,
 
   // Add more CSP icons here
 };
@@ -9145,7 +9146,8 @@ function getProviderColor(provider) {
     'tencent': '#006EFF',
     'ncp': '#03C75A',
     'kt': '#E31837',
-    'nhn': '#FF6B35'
+    'nhn': '#FF6B35',
+    'openstack': '#ED1944'
   };
   
   if (!provider) return '#6c757d';
