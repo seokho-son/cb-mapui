@@ -1253,68 +1253,68 @@ function createStyle(src) {
 // temporary point
 var pnt = new Point([-68, -50]);
 
-addIconToMap("img/iconVm.png", pnt, "001");
+addIconToMap("img/icon-vm.png", pnt, "001");
 var iconStyleVm = new Style({
   image: new Icon({
     crossOrigin: "anonymous",
-    src: "img/iconVm.png",
+    src: "img/icon-vm.png",
     opacity: 1.0,
     scale: 0.7,
   }),
 });
-addIconToMap("img/iconK8s.png", pnt, "001");
+addIconToMap("img/icon-k8s.png", pnt, "001");
 var iconStyleK8s = new Style({
   image: new Icon({
     crossOrigin: "anonymous",
-    src: "img/iconK8s.png",
+    src: "img/icon-k8s.png",
     opacity: 1.0,
     scale: 0.7,
   }),
 });
 
 
-addIconToMap("img/iconNlb.png", pnt, "001");
+addIconToMap("img/icon-nlb.png", pnt, "001");
 var iconStyleNlb = new Style({
   image: new Icon({
     crossOrigin: "anonymous",
-    src: "img/iconNlb.png",
+    src: "img/icon-nlb.png",
     opacity: 1.0,
     scale: 0.8,
   }),
 });
-addIconToMap("img/iconVPN.png", pnt, "001");
+addIconToMap("img/icon-vpn.png", pnt, "001");
 var iconStyleVPN = new Style({
   image: new Icon({
     crossOrigin: "anonymous",
-    src: "img/iconVPN.png",
+    src: "img/icon-vpn.png",
     opacity: 1.0,
     scale: 0.8,
   }),
 });
 
-addIconToMap("img/iconVnet.png", pnt, "001");
+addIconToMap("img/icon-vnet.png", pnt, "001");
 var iconStyleVnet = new Style({
   image: new Icon({
     crossOrigin: "anonymous",
-    src: "img/iconVnet.png",
+    src: "img/icon-vnet.png",
     opacity: 1.0,
     scale: 0.8,
   }),
 });
-addIconToMap("img/iconSG.png", pnt, "001");
+addIconToMap("img/icon-sg.png", pnt, "001");
 var iconStyleSG = new Style({
   image: new Icon({
     crossOrigin: "anonymous",
-    src: "img/iconSG.png",
+    src: "img/icon-sg.png",
     opacity: 1.0,
     scale: 0.8,
   }),
 });
-addIconToMap("img/iconKey.png", pnt, "001");
+addIconToMap("img/icon-key.png", pnt, "001");
 var iconStyleKey = new Style({
   image: new Icon({
     crossOrigin: "anonymous",
-    src: "img/iconKey.png",
+    src: "img/icon-key.png",
     opacity: 1.0,
     scale: 0.8,
   }),
@@ -1340,16 +1340,16 @@ var iconStyleCircle = new Style({
 
 // CSP location icon styles
 const cspIconImg = {
-  azure: new URL("img/ht-azure.png", import.meta.url).href,
-  aws: new URL("img/ht-aws.png", import.meta.url).href,
-  gcp: new URL("img/ht-gcp.png", import.meta.url).href,
-  alibaba: new URL("img/ht-alibaba.png", import.meta.url).href,
-  ibm: new URL("img/ibm.png", import.meta.url).href,
-  tencent: new URL("img/tencent.png", import.meta.url).href,
-  ncp: new URL("img/ncp.png", import.meta.url).href,
-  kt: new URL("img/kt.png", import.meta.url).href,
-  nhn: new URL("img/nhn.png", import.meta.url).href,
-  openstack: new URL("img/openstack.png", import.meta.url).href,
+  azure: new URL("img/csp-azure.png", import.meta.url).href,
+  aws: new URL("img/csp-aws.png", import.meta.url).href,
+  gcp: new URL("img/csp-gcp.png", import.meta.url).href,
+  alibaba: new URL("img/csp-alibaba.png", import.meta.url).href,
+  ibm: new URL("img/csp-ibm.png", import.meta.url).href,
+  tencent: new URL("img/csp-tencent.png", import.meta.url).href,
+  ncp: new URL("img/csp-ncp.png", import.meta.url).href,
+  kt: new URL("img/csp-kt.png", import.meta.url).href,
+  nhn: new URL("img/csp-nhn.png", import.meta.url).href,
+  openstack: new URL("img/csp-openstack.png", import.meta.url).href,
 
   // Add more CSP icons here
 };
@@ -1410,10 +1410,32 @@ Object.keys(cspIconImg).forEach((csp, index) => {
   addIconToMap(cspIconImg[csp], pnt, iconIndex);
 });
 
+// Known cloud platform names (used for platform-based fallback resolution)
+const knownPlatforms = Object.keys(cspIconImg);
+
+/**
+ * Resolve a CSP name to its base cloud platform.
+ * e.g., "openstack-new01" → "openstack", "aws" → "aws"
+ * If the provider starts with a known platform name followed by '-',
+ * the base platform is returned. Otherwise, the lowercased original name is returned.
+ */
+function resolveCloudPlatform(providerName) {
+  if (!providerName) return '';
+  const lower = providerName.toLowerCase();
+  // Exact match first
+  if (knownPlatforms.includes(lower)) return lower;
+  // Prefix match: e.g., "openstack-new01" starts with "openstack-"
+  for (const platform of knownPlatforms) {
+    if (lower.startsWith(platform + '-')) return platform;
+  }
+  return lower;
+}
+
 // Provider Icon Mapping for VM visualization (using existing cspIconImg)
 function getProviderIcon(providerName) {
   const provider = providerName?.toLowerCase();
-  const iconPath = cspIconImg[provider] || "img/circle.png"; // fallback icon
+  const platform = resolveCloudPlatform(provider);
+  const iconPath = cspIconImg[provider] || cspIconImg[platform] || "img/circle.png"; // fallback icon
   return iconPath;
 }
 
@@ -1790,7 +1812,7 @@ function createVmStyleWithStatusBadge(vmStatus, providerName = null, baseScale =
     new Style({
       image: new Icon({
         crossOrigin: "anonymous",
-        src: "img/iconVm.png",
+        src: "img/icon-vm.png",
         opacity: 1.0,
         scale: baseScale * 0.3,
         anchor: [0.5, 0.5], // Center anchor
@@ -1878,6 +1900,27 @@ function changeSizeByName(status) {
   } else {
     return 2.5;
   }
+}
+
+/**
+ * Compute inter-MCI offset for VMs at shared locations.
+ * When multiple MCIs have VMs at the same region, each MCI gets a directional
+ * offset so their VM icons don't fully overlap.
+ * @param {number} mciIndex - This MCI's index at the shared location (0-based)
+ * @param {number} totalMcis - Total MCIs sharing this location
+ * @returns {{ox: number, oy: number}} offset in coordinate units
+ */
+function getMciLocationOffset(mciIndex, totalMcis) {
+  if (totalMcis <= 1 || mciIndex === 0) return { ox: 0, oy: 0 };
+  // Place MCIs on a ring around the base location
+  const ringRadius = 1.5; // coordinate-space radius (scaled by zoom later)
+  const angleStep = 2 * Math.PI / totalMcis;
+  const startAngle = 3 * Math.PI / 2; // base angle; first offset (index=1) lands near top
+  const angle = startAngle + angleStep * mciIndex;
+  return {
+    ox: ringRadius * Math.cos(angle),
+    oy: ringRadius * Math.sin(angle) * 0.78 // compress Y for map projection
+  };
 }
 
 function returnAdjustmentPoint(index, totalVMs) {
@@ -2874,8 +2917,33 @@ function getMci() {
         // Rebuild mciRenderMap from fresh API data
         mciRenderMap.clear();
         
+        // Track how many MCIs share each base location, so overlapping MCIs get offset
+        // Key: "roundedLon,roundedLat" → counter (incremented per MCI at that location)
+        const locationMciCounter = new globalThis.Map();
+        // For each MCI, store its assigned index per location
+        // Key: "mciId:locationKey" → mciIndexAtLocation
+        const mciLocationIndex = new globalThis.Map();
+
         if (obj.mci != null && obj.mci.length > 0) {
           debugLog.api(`Processing ${obj.mci.length} MCIs for map display`);
+
+          // First pass: assign MCI index per shared location
+          for (let item of obj.mci) {
+            if (item.vm == null || item.vm.length === 0) continue;
+            const seenLocations = new Set();
+            for (const vm of item.vm) {
+              if (!vm.location || vm.location.longitude === undefined || vm.location.latitude === undefined) continue;
+              // Round to ~0.5 degree to group nearby regions
+              const locKey = Math.round(vm.location.longitude * 2) / 2 + ',' + Math.round(vm.location.latitude * 2) / 2;
+              if (!seenLocations.has(locKey)) {
+                seenLocations.add(locKey);
+                const idx = locationMciCounter.get(locKey) || 0;
+                mciLocationIndex.set(item.id + ':' + locKey, idx);
+                locationMciCounter.set(locKey, idx + 1);
+              }
+            }
+          }
+
           for (let item of obj.mci) {
 
             var hideFlag = false;
@@ -2899,6 +2967,24 @@ function getMci() {
 
             var vmGeo = [];
 
+            // Build intra-MCI location groups: VMs within same ~0.5° grid get spread out
+            // Key: "roundedLon,roundedLat" → array of VM indices in that cell
+            const intraLocGroups = new globalThis.Map();
+            for (let vi = 0; vi < item.vm.length; vi++) {
+              const v = item.vm[vi];
+              if (!v.location || v.location.longitude === undefined || v.location.latitude === undefined) continue;
+              const gKey = Math.round(v.location.longitude * 2) / 2 + ',' + Math.round(v.location.latitude * 2) / 2;
+              if (!intraLocGroups.has(gKey)) intraLocGroups.set(gKey, []);
+              intraLocGroups.get(gKey).push(vi);
+            }
+            // Build per-VM lookup: vmIndex → { indexInGroup, groupSize }
+            const vmGroupInfo = new globalThis.Map();
+            for (const [, indices] of intraLocGroups) {
+              for (let gi = 0; gi < indices.length; gi++) {
+                vmGroupInfo.set(indices[gi], { indexInGroup: gi, groupSize: indices.length });
+              }
+            }
+
             var validateNum = 0;
             for (j = 0; j < item.vm.length; j++) {
               const vm = item.vm[j];
@@ -2906,43 +2992,50 @@ function getMci() {
                 console.warn(`VM ${vm.id || j}: missing location data, skipping`);
                 continue;
               }
-              
-              if (j == 0) {
-                vmGeo.push([
-                  vm.location.longitude * 1,
-                  vm.location.latitude * 1,
-                ]);
-              } else {
-                var groupCnt = 0;
-                if ((vm.location.longitude == item.vm[j - 1].location.longitude) && (vm.location.latitude == item.vm[j - 1].location.latitude)) {
-                  vmGeo.push([
-                    vm.location.longitude * 1 +
-                    (returnAdjustmentPoint(j, item.vm.length).ax / zoomLevel) * radius,
-                    vm.location.latitude * 1 +
-                    (returnAdjustmentPoint(j, item.vm.length).ay / zoomLevel) * radius,
-                  ]);
-                } else {
-                  vmGeo.push([
-                    vm.location.longitude * 1,
-                    vm.location.latitude * 1,
-                  ]);
-                }
+
+              // Compute inter-MCI offset for this VM's location
+              const vmLocKey = Math.round(vm.location.longitude * 2) / 2 + ',' + Math.round(vm.location.latitude * 2) / 2;
+              const mciIdxAtLoc = mciLocationIndex.get(item.id + ':' + vmLocKey) || 0;
+              const totalMcisAtLoc = locationMciCounter.get(vmLocKey) || 1;
+              const mciOff = getMciLocationOffset(mciIdxAtLoc, totalMcisAtLoc);
+              const mciOffX = (mciOff.ox / zoomLevel) * radius;
+              const mciOffY = (mciOff.oy / zoomLevel) * radius;
+
+              // Compute intra-MCI offset: spread VMs sharing the same location group
+              const gInfo = vmGroupInfo.get(j);
+              let intraOffX = 0, intraOffY = 0;
+              if (gInfo && gInfo.groupSize > 1 && gInfo.indexInGroup > 0) {
+                const adj = returnAdjustmentPoint(gInfo.indexInGroup, gInfo.groupSize);
+                intraOffX = (adj.ax / zoomLevel) * radius;
+                intraOffY = (adj.ay / zoomLevel) * radius;
               }
+
+              vmGeo.push([
+                vm.location.longitude * 1 + mciOffX + intraOffX,
+                vm.location.latitude * 1 + mciOffY + intraOffY,
+              ]);
               validateNum++;
             }
-            if (item.vm.length == 1) {
+            if (item.vm.length == 1 && item.vm[0].location && item.vm[0].location.longitude !== undefined && item.vm[0].location.latitude !== undefined) {
+              const singleVm = item.vm[0];
+              const sLocKey = Math.round(singleVm.location.longitude * 2) / 2 + ',' + Math.round(singleVm.location.latitude * 2) / 2;
+              const sIdx = mciLocationIndex.get(item.id + ':' + sLocKey) || 0;
+              const sTotal = locationMciCounter.get(sLocKey) || 1;
+              const sOff = getMciLocationOffset(sIdx, sTotal);
+              const sOffX = (sOff.ox / zoomLevel) * radius;
+              const sOffY = (sOff.oy / zoomLevel) * radius;
               vmGeo.pop();
               vmGeo.push([
-                item.vm[0].location.longitude * 1,
-                item.vm[0].location.latitude * 1,
+                singleVm.location.longitude * 1 + sOffX,
+                singleVm.location.latitude * 1 + sOffY,
               ]);
               vmGeo.push([
-                item.vm[0].location.longitude * 1 + Math.random() * 0.001,
-                item.vm[0].location.latitude * 1 + Math.random() * 0.001,
+                singleVm.location.longitude * 1 + sOffX + Math.random() * 0.001,
+                singleVm.location.latitude * 1 + sOffY + Math.random() * 0.001,
               ]);
               vmGeo.push([
-                item.vm[0].location.longitude * 1 + Math.random() * 0.001,
-                item.vm[0].location.latitude * 1 + Math.random() * 0.001,
+                singleVm.location.longitude * 1 + sOffX + Math.random() * 0.001,
+                singleVm.location.latitude * 1 + sOffY + Math.random() * 0.001,
               ]);
             }
             if (validateNum == item.vm.length) {
@@ -2999,20 +3092,27 @@ function getMci() {
                 }
                 
                 vmProviders.push(provider);
+
+                // Compute inter-MCI offset for this VM's location
+                const vmLocKey2 = Math.round(vm.location.longitude * 2) / 2 + ',' + Math.round(vm.location.latitude * 2) / 2;
+                const mciIdx2 = mciLocationIndex.get(item.id + ':' + vmLocKey2) || 0;
+                const totalMcis2 = locationMciCounter.get(vmLocKey2) || 1;
+                const mciOff2 = getMciLocationOffset(mciIdx2, totalMcis2);
+                const mciOffX2 = (mciOff2.ox / zoomLevel) * radius;
+                const mciOffY2 = (mciOff2.oy / zoomLevel) * radius;
                 
-                if (vmIndex == 0) {
-                  vmPoints.push([vm.location.longitude * 1, vm.location.latitude * 1]);
-                } else {
-                  const prevVm = item.vm[vmIndex - 1];
-                  if ((vm.location.longitude == prevVm.location.longitude) && (vm.location.latitude == prevVm.location.latitude)) {
-                    vmPoints.push([
-                      vm.location.longitude * 1 + (returnAdjustmentPoint(vmIndex, item.vm.length).ax / zoomLevel) * radius,
-                      vm.location.latitude * 1 + (returnAdjustmentPoint(vmIndex, item.vm.length).ay / zoomLevel) * radius,
-                    ]);
-                  } else {
-                    vmPoints.push([vm.location.longitude * 1, vm.location.latitude * 1]);
-                  }
+                // Compute intra-MCI offset: spread VMs sharing the same location group
+                const gInfo2 = vmGroupInfo.get(vmIndex);
+                let intraOffX2 = 0, intraOffY2 = 0;
+                if (gInfo2 && gInfo2.groupSize > 1 && gInfo2.indexInGroup > 0) {
+                  const adj2 = returnAdjustmentPoint(gInfo2.indexInGroup, gInfo2.groupSize);
+                  intraOffX2 = (adj2.ax / zoomLevel) * radius;
+                  intraOffY2 = (adj2.ay / zoomLevel) * radius;
                 }
+                vmPoints.push([
+                  vm.location.longitude * 1 + mciOffX2 + intraOffX2,
+                  vm.location.latitude * 1 + mciOffY2 + intraOffY2,
+                ]);
               }
 
               var newName = item.name;
@@ -3742,6 +3842,14 @@ function checkConnectionWithRetry() {
         geoCspPoints[providerName] = [];
       }
       geoCspPoints[providerName][0] = new MultiPoint(cspPoints[providerName]);
+
+      // Dynamically register icon style for unknown providers using platform fallback
+      if (!cspIconStyles[providerName]) {
+        const platform = resolveCloudPlatform(providerName);
+        if (cspIconImg[platform]) {
+          cspIconStyles[providerName] = createIconStyle(cspIconImg[platform]);
+        }
+      }
     });
 
     // Render the map with forced view update to trigger postrender event
@@ -9156,6 +9264,12 @@ function getProviderColor(provider) {
   
   if (definedColors[providerKey]) {
     return definedColors[providerKey];
+  }
+  
+  // Platform-based fallback: e.g., "openstack-new01" → "openstack" color
+  const platform = resolveCloudPlatform(providerKey);
+  if (platform !== providerKey && definedColors[platform]) {
+    return definedColors[platform];
   }
   
   return generateProviderColor(provider);
