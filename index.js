@@ -12208,6 +12208,32 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "curl -sSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/set-mcmp.sh | sudo bash";
       defaultRemoteCommand[2] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3001))'";
       break;
+    case "DevStack-Install":
+      // Install DevStack on bare-metal VMs (e.g., AWS m5.metal)
+      // CSP name is derived from MCI ID + VM ID for unique provider registration
+      // Location info is automatically populated from the VM's deployment location
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/1.installDevStack.sh -o /tmp/installDevStack.sh && bash /tmp/installDevStack.sh --csp-name openstack-$$Func(GetMciId())-$$Func(GetVmId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
+      defaultRemoteCommand[1] = "echo 'DevStack installed. Horizon: $$Func(GetPublicIP(target=this, prefix=http://, postfix=/dashboard))'";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "DevStack-Info":
+      // Get registration info from installed DevStack
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/2.getRegistrationInfo.sh -o /tmp/getRegistrationInfo.sh && bash /tmp/getRegistrationInfo.sh --csp-name openstack-$$Func(GetMciId())-$$Func(GetVmId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "DevStack-UpdateEndpoints":
+      // Update OpenStack service catalog endpoints after public IP change (e.g., suspend/resume)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/3.updateEndpoints.sh -o /tmp/updateEndpoints.sh && bash /tmp/updateEndpoints.sh --csp-name openstack-$$Func(GetMciId())-$$Func(GetVmId())";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "DevStack-Clean":
+      // Clean up failed or stale DevStack installation for re-install
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/4.cleanDevStack.sh -o /tmp/cleanDevStack.sh && bash /tmp/cleanDevStack.sh";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
     default:
       defaultRemoteCommand[0] = "ls -al";
       defaultRemoteCommand[1] = "";
@@ -12738,6 +12764,16 @@ window.predefinedScriptCategories = {
     scripts: [
       { value: 'CB-TB-Deploy', label: 'Deploy CB-Tumblebug', step: 1 },
       { value: 'M-CMP-Deploy', label: 'Deploy M-CMP', step: 2 }
+    ]
+  },
+  'openstack': {
+    label: '☁️ OpenStack',
+    description: 'Deploy and manage OpenStack (DevStack) instances as CSP providers',
+    scripts: [
+      { value: 'DevStack-Install', label: '1. Install DevStack', step: 1, experimental: true },
+      { value: 'DevStack-Info', label: '2. Get Registration Info', step: 2 },
+      { value: 'DevStack-UpdateEndpoints', label: '3. Update Endpoints (IP changed)', step: 3 },
+      { value: 'DevStack-Clean', label: '4. Clean / Rollback', step: 4 }
     ]
   },
   'monitoring': {
