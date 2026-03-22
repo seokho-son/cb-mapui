@@ -308,6 +308,9 @@ function showMapSettings() {
       </div>
     `;
   }).join('');
+
+  // Generic icon mode checkbox
+  const genericIconChecked = useGenericCspIcons ? 'checked' : '';
   
   Swal.fire({
     title: 'Map Settings',
@@ -328,6 +331,24 @@ function showMapSettings() {
       <label class="swal2-label">⏱️ Select Refresh Interval:</label>
       ${radioOptions}
     </div>
+    <hr style="margin: 16px 0;">
+    <div style="text-align: left; margin: 10px 0;">
+      <label class="swal2-label">☁️ CSP Icon Display Mode:</label>
+      <div style="margin: 8px 0;">
+        <input type="checkbox" id="genericIconToggle" ${genericIconChecked}>
+        <label for="genericIconToggle" style="margin-left: 8px; font-weight: normal;">
+          Use generic colored icons (hide CSP brand logos)
+        </label>
+      </div>
+      <div id="genericIconPreview" style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;">
+        ${Object.keys(cspGenericColors).map(csp => {
+          const color = cspGenericColors[csp];
+          return '<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:10px;background:' + color + ';color:#fff;font-size:10px;font-weight:bold;">' +
+            '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#fff;opacity:0.5;"></span>' +
+            csp.toUpperCase() + '</span>';
+        }).join('')}
+      </div>
+    </div>
   `,
     showCancelButton: true,
     confirmButtonText: 'Apply Settings',
@@ -337,7 +358,8 @@ function showMapSettings() {
         Swal.showValidationMessage('Please select a refresh interval');
         return false;
       }
-      return { refreshInterval: selectedInterval.value };
+      const genericIconEnabled = document.getElementById('genericIconToggle')?.checked || false;
+      return { refreshInterval: selectedInterval.value, genericIcons: genericIconEnabled };
     }
   }).then((result) => {
     if (result.isConfirmed) {
@@ -345,12 +367,22 @@ function showMapSettings() {
       
       // Update global refresh interval variable
       refreshInterval = newRefreshInterval;
+
+      // Update generic icon mode
+      useGenericCspIcons = result.value.genericIcons;
+      window.useGenericCspIcons = useGenericCspIcons;
+      // Clear cached generic styles so they can be regenerated if needed
+      Object.keys(cspGenericStyles).forEach(k => delete cspGenericStyles[k]);
+      // Force map re-render to apply icon change
+      map.render();
+      const view = map.getView();
+      if (view) view.changed();
       
       // Show success message
       Swal.fire({
         icon: 'success',
         title: 'Settings Applied',
-        text: `Refresh interval set to ${newRefreshInterval} seconds`,
+        text: `Refresh interval: ${newRefreshInterval}s` + (useGenericCspIcons ? ' | Generic CSP icons enabled' : ''),
         timer: 2000,
         showConfirmButton: false
       });
@@ -1354,6 +1386,67 @@ const cspIconImg = {
   // Add more CSP icons here
 };
 
+// Generic CSP icon mode toggle (false = branded icons, true = colored cloud icons)
+var useGenericCspIcons = false;
+window.useGenericCspIcons = useGenericCspIcons;
+
+// Per-CSP distinct colors for generic cloud icon mode
+const cspGenericColors = {
+  azure: '#0078D4',
+  aws: '#FF9900',
+  gcp: '#4285F4',
+  alibaba: '#FF6A00',
+  ibm: '#054ADA',
+  tencent: '#00C2FF',
+  ncp: '#2DB400',
+  kt: '#E52528',
+  nhn: '#1A6DFF',
+  openstack: '#ED1944',
+};
+// Fallback color for unknown CSPs
+const CSP_GENERIC_FALLBACK_COLOR = '#888888';
+
+// Create a generic colored cloud style for a CSP
+function createGenericCloudStyle(csp) {
+  const color = cspGenericColors[csp] || CSP_GENERIC_FALLBACK_COLOR;
+  return [
+    // Background layer: solid white cloud for opaque fill
+    new Style({
+      text: new Text({
+        text: '☁',
+        font: 'bold 28px sans-serif',
+        fill: new Fill({ color: '#ffffff' }),
+        stroke: new Stroke({ color: '#cccccc', width: 2 }),
+      }),
+    }),
+    // Foreground layer: CSP-colored cloud
+    new Style({
+      text: new Text({
+        text: '☁',
+        font: 'bold 24px sans-serif',
+        fill: new Fill({ color: color }),
+      }),
+    }),
+  ];
+}
+
+// Cache for generic cloud styles
+const cspGenericStyles = {};
+function getGenericCloudStyle(csp) {
+  if (!cspGenericStyles[csp]) {
+    cspGenericStyles[csp] = createGenericCloudStyle(csp);
+  }
+  return cspGenericStyles[csp];
+}
+
+// Get the appropriate CSP style based on current icon mode
+function getCspStyle(csp) {
+  if (useGenericCspIcons) {
+    return getGenericCloudStyle(csp);
+  }
+  return cspIconStyles[csp];
+}
+
 // cspIconStyles
 const cspIconStyles = {};
 
@@ -1433,6 +1526,7 @@ function resolveCloudPlatform(providerName) {
 
 // Provider Icon Mapping for VM visualization (using existing cspIconImg)
 function getProviderIcon(providerName) {
+  if (useGenericCspIcons) return null; // signal to use generic style instead
   const provider = providerName?.toLowerCase();
   const platform = resolveCloudPlatform(provider);
   const iconPath = cspIconImg[provider] || cspIconImg[platform] || "img/circle.png"; // fallback icon
@@ -1865,19 +1959,49 @@ function createVmStyleWithStatusBadge(vmStatus, providerName = null, baseScale =
   // Add provider icon if provider information is available (center-top using anchor)
   if (providerName && providerName !== 'unknown') {
     const providerIconSrc = getProviderIcon(providerName);
-    styles.push(
-      new Style({
-        image: new Icon({
-          crossOrigin: "anonymous",
-          src: providerIconSrc,
-          opacity: 0.9,
-          scale: baseScale * 0.3,
-          anchor: [0.5, 0.75], 
-          anchorXUnits: 'fraction',
-          anchorYUnits: 'fraction',
-        }),
-      })
-    );
+    if (providerIconSrc) {
+      // Branded image icon mode
+      styles.push(
+        new Style({
+          image: new Icon({
+            crossOrigin: "anonymous",
+            src: providerIconSrc,
+            opacity: 0.9,
+            scale: baseScale * 0.3,
+            anchor: [0.5, 0.75], 
+            anchorXUnits: 'fraction',
+            anchorYUnits: 'fraction',
+          }),
+        })
+      );
+    } else {
+      // Generic colored cloud icon mode
+      const platform = resolveCloudPlatform(providerName);
+      const color = cspGenericColors[platform] || cspGenericColors[providerName] || CSP_GENERIC_FALLBACK_COLOR;
+      // Background white cloud
+      styles.push(
+        new Style({
+          text: new Text({
+            text: '☁',
+            font: 'bold 18px sans-serif',
+            fill: new Fill({ color: '#ffffff' }),
+            stroke: new Stroke({ color: '#cccccc', width: 1.5 }),
+            offsetY: -16,
+          }),
+        })
+      );
+      // Foreground CSP-colored cloud
+      styles.push(
+        new Style({
+          text: new Text({
+            text: '☁',
+            font: 'bold 14px sans-serif',
+            fill: new Fill({ color: color }),
+            offsetY: -16,
+          }),
+        })
+      );
+    }
   }
 
   return styles;
@@ -3848,6 +3972,13 @@ function checkConnectionWithRetry() {
         const platform = resolveCloudPlatform(providerName);
         if (cspIconImg[platform]) {
           cspIconStyles[providerName] = createIconStyle(cspIconImg[platform]);
+        }
+      }
+      // Also register generic color for dynamically discovered providers
+      if (!cspGenericColors[providerName]) {
+        const platform = resolveCloudPlatform(providerName);
+        if (cspGenericColors[platform]) {
+          cspGenericColors[providerName] = cspGenericColors[platform];
         }
       }
     });
@@ -18408,8 +18539,12 @@ function drawObjects(event) {
   shuffledKeys.forEach((key) => {
     if (isAllSelected || selectedProviders.includes(key)) {
       if (Array.isArray(geoCspPoints[key]) && geoCspPoints[key].length) {
-        vectorContext.setStyle(cspIconStyles[key]);
-        vectorContext.drawGeometry(geoCspPoints[key][0]);
+        const style = getCspStyle(key);
+        const styles = Array.isArray(style) ? style : [style];
+        styles.forEach((s) => {
+          vectorContext.setStyle(s);
+          vectorContext.drawGeometry(geoCspPoints[key][0]);
+        });
       }
     }
   });
