@@ -1419,12 +1419,13 @@ function createGenericCloudStyle(csp) {
         stroke: new Stroke({ color: '#cccccc', width: 2 }),
       }),
     }),
-    // Foreground layer: CSP-colored cloud
+    // Foreground layer: CSP-colored cloud with contrasting stroke for overlap visibility
     new Style({
       text: new Text({
         text: '☁',
         font: 'bold 24px sans-serif',
         fill: new Fill({ color: color }),
+        stroke: new Stroke({ color: '#ffffff', width: 2 }),
       }),
     }),
   ];
@@ -1444,7 +1445,19 @@ function getCspStyle(csp) {
   if (useGenericCspIcons) {
     return getGenericCloudStyle(csp);
   }
-  return cspIconStyles[csp];
+  // Branded mode: prefer exact CSP match, then fall back via platform, then generic style
+  let style = cspIconStyles[csp];
+  if (!style) {
+    const platform = resolveCloudPlatform(csp);
+    if (platform && cspIconStyles[platform]) {
+      style = cspIconStyles[platform];
+    }
+  }
+  // Final fallback to generic icon to avoid returning undefined
+  if (!style) {
+    style = getGenericCloudStyle(csp);
+  }
+  return style;
 }
 
 // cspIconStyles
@@ -18574,8 +18587,11 @@ function drawObjects(event) {
     if (isAllSelected || selectedProviders.includes(key)) {
       if (Array.isArray(geoCspPoints[key]) && geoCspPoints[key].length) {
         const style = getCspStyle(key);
+        if (!style) return;
         const styles = Array.isArray(style) ? style : [style];
-        styles.forEach((s) => {
+        const validStyles = styles.filter(Boolean);
+        if (!validStyles.length) return;
+        validStyles.forEach((s) => {
           vectorContext.setStyle(s);
           vectorContext.drawGeometry(geoCspPoints[key][0]);
         });
