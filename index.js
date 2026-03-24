@@ -12365,6 +12365,30 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
+    case "Kolla-Install":
+      // Install OpenStack via Kolla-Ansible (Docker-based, production-grade, survives reboot)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/kolla/1.installKolla.sh -o /tmp/installKolla.sh && bash /tmp/installKolla.sh --csp-name openstack-$$Func(GetMciId())-$$Func(GetVmId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
+      defaultRemoteCommand[1] = "echo 'Kolla-Ansible installed. Horizon: $$Func(GetPublicIP(target=this, prefix=http://, postfix=/))'";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "Kolla-Info":
+      // Get registration info from Kolla-Ansible deployment
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/kolla/2.getRegistrationInfo.sh -o /tmp/getKollaInfo.sh && bash /tmp/getKollaInfo.sh --csp-name openstack-$$Func(GetMciId())-$$Func(GetVmId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "Kolla-UpdateEndpoints":
+      // Update OpenStack service catalog endpoints after public IP change
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/kolla/3.updateEndpoints.sh -o /tmp/updateKollaEndpoints.sh && bash /tmp/updateKollaEndpoints.sh --csp-name openstack-$$Func(GetMciId())-$$Func(GetVmId())";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "Kolla-Clean":
+      // Clean up Kolla-Ansible deployment
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/kolla/4.cleanKolla.sh -o /tmp/cleanKolla.sh && bash /tmp/cleanKolla.sh";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
     default:
       defaultRemoteCommand[0] = "ls -al";
       defaultRemoteCommand[1] = "";
@@ -12897,14 +12921,24 @@ window.predefinedScriptCategories = {
       { value: 'M-CMP-Deploy', label: 'Deploy M-CMP', step: 2 }
     ]
   },
-  'openstack': {
-    label: '☁️ OpenStack',
-    description: 'Deploy and manage OpenStack (DevStack) instances as CSP providers',
+  'openstack-devstack': {
+    label: '☁️ OpenStack (DevStack)',
+    description: 'Deploy OpenStack via DevStack — lightweight, dev/test only, does NOT survive reboot',
     scripts: [
       { value: 'DevStack-Install', label: '1. Install DevStack', step: 1, experimental: true },
       { value: 'DevStack-Info', label: '2. Get Registration Info', step: 2 },
       { value: 'DevStack-UpdateEndpoints', label: '3. Update Endpoints (IP changed)', step: 3 },
       { value: 'DevStack-Clean', label: '4. Clean / Rollback', step: 4 }
+    ]
+  },
+  'openstack-kolla': {
+    label: '☁️ OpenStack (Kolla-Ansible)',
+    description: 'Deploy OpenStack via Kolla-Ansible — Docker-based, production-grade, survives reboot',
+    scripts: [
+      { value: 'Kolla-Install', label: '1. Install Kolla-Ansible', step: 1, experimental: true },
+      { value: 'Kolla-Info', label: '2. Get Registration Info', step: 2 },
+      { value: 'Kolla-UpdateEndpoints', label: '3. Update Endpoints (IP changed)', step: 3 },
+      { value: 'Kolla-Clean', label: '4. Clean / Rollback', step: 4 }
     ]
   },
   'monitoring': {
