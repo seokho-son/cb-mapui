@@ -787,6 +787,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                     </div>
                   </div>
 
+                  <!-- Credential Holder Field (Control Tab) -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">🔑 Holder</span>
+                      </div>
+                      <span id="credentialHolder-control-display" class="form-control" style="background-color: #e9ecef; cursor: default; font-size: 13px;">admin</span>
+                    </div>
+                  </div>
+
                   <!-- Namespace ID Field -->
                   <div class="form-group">
                     <div class="input-group">
@@ -1059,6 +1069,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               <!-- Connection Status -->
               <span id="mapConnectionStatus" class="badge badge-secondary" style="font-size: 10px; min-width: 95px; width: 95px; text-align: center; display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                 <i class="fas fa-question-circle" style="margin-right: 3px;"></i>Unknown
+              </span>
+
+              <!-- Credential Holder -->
+              <span id="mapHolderBadge" class="badge badge-light" style="font-size: 10px; border: 1px solid #dee2e6; cursor: default;" title="Credential Holder (change in Settings)">
+                <i class="fas fa-key" style="margin-right: 2px; color: #6c757d;"></i><span id="mapHolderName">admin</span>
               </span>
               
               <!-- Last Updated -->
