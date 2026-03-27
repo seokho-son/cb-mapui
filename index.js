@@ -170,6 +170,7 @@ var configHostname = "localhost";
 var configPort = "1323";
 var configUsername = "default";
 var configPassword = "default";
+var configCredentialHolder = "admin";
 
 // Helper function to get current configuration
 function getConfig() {
@@ -177,9 +178,21 @@ function getConfig() {
     hostname: configHostname,
     port: configPort,
     username: configUsername,
-    password: configPassword
+    password: configPassword,
+    credentialHolder: configCredentialHolder
   };
 }
+
+// Axios interceptor: inject X-Credential-Holder header into all requests
+axios.interceptors.request.use(function (axiosConfig) {
+  if (configCredentialHolder && configCredentialHolder !== "") {
+    if (!axiosConfig.headers) {
+      axiosConfig.headers = {};
+    }
+    axiosConfig.headers["X-Credential-Holder"] = configCredentialHolder;
+  }
+  return axiosConfig;
+});
 
 var namespaceElement = document.getElementById("namespace");
 var mciidElement = document.getElementById("mciid");
@@ -311,6 +324,17 @@ function showMapSettings() {
 
   // Generic icon mode checkbox
   const genericIconChecked = useGenericCspIcons ? 'checked' : '';
+
+  // Build credential holder options from cached list
+  const holderOptions = cachedCredentialHolderList.map(holder => {
+    const holderId = window.escapeHtml(holder.credentialHolder || holder.id || '');
+    const connCount = holder.verifiedConnectionCount || holder.connectionCount || 0;
+    const providers = window.escapeHtml((holder.providers || []).join(', '));
+    const selected = (holder.credentialHolder || holder.id || '') === configCredentialHolder ? 'selected' : '';
+    return `<option value="${holderId}" ${selected} title="Providers: ${providers || 'none'}">${holderId} (${connCount} conn${connCount !== 1 ? 's' : ''})</option>`;
+  }).join('');
+  // Fallback if cache is empty
+  const holderSelectHtml = holderOptions || `<option value="${window.escapeHtml(configCredentialHolder)}" selected>${window.escapeHtml(configCredentialHolder)}</option>`;
   
   Swal.fire({
     title: 'Map Settings',
@@ -326,7 +350,16 @@ function showMapSettings() {
         display: block;
       }
     </style>
-    <p>⏱️ Configure Data Refresh Interval</p>
+    <div style="text-align: left; margin: 10px 0;">
+      <label class="swal2-label">🔑 Credential Holder:</label>
+      <select id="settings-credentialHolder" style="width: 100%; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px;">
+        ${holderSelectHtml}
+      </select>
+      <div style="margin-top: 4px; font-size: 11px; color: #6c757d;">
+        Connections and map icons will be filtered by the selected holder.
+      </div>
+    </div>
+    <hr style="margin: 16px 0;">
     <div class="swal2-radio-container">
       <label class="swal2-label">⏱️ Select Refresh Interval:</label>
       ${radioOptions}
@@ -359,11 +392,13 @@ function showMapSettings() {
         return false;
       }
       const genericIconEnabled = document.getElementById('genericIconToggle')?.checked || false;
-      return { refreshInterval: selectedInterval.value, genericIcons: genericIconEnabled };
+      const selectedHolder = document.getElementById('settings-credentialHolder')?.value || configCredentialHolder;
+      return { refreshInterval: selectedInterval.value, genericIcons: genericIconEnabled, credentialHolder: selectedHolder };
     }
   }).then((result) => {
     if (result.isConfirmed) {
       const newRefreshInterval = parseInt(result.value.refreshInterval);
+      const holderChanged = result.value.credentialHolder !== configCredentialHolder;
       
       // Update global refresh interval variable
       refreshInterval = newRefreshInterval;
@@ -377,12 +412,21 @@ function showMapSettings() {
       map.render();
       const view = map.getView();
       if (view) view.changed();
+
+      // Apply credential holder change (triggers connection reload + map refresh)
+      if (holderChanged) {
+        applyCredentialHolder(result.value.credentialHolder);
+      }
       
       // Show success message
+      var statusParts = [`Refresh: ${newRefreshInterval}s`];
+      if (useGenericCspIcons) statusParts.push('Generic icons');
+      statusParts.push(`Holder: ${result.value.credentialHolder}`);
+      
       Swal.fire({
         icon: 'success',
         title: 'Settings Applied',
-        text: `Refresh interval: ${newRefreshInterval}s` + (useGenericCspIcons ? ' | Generic CSP icons enabled' : ''),
+        text: statusParts.join(' | '),
         timer: 2000,
         showConfirmButton: false
       });
@@ -3697,6 +3741,10 @@ function checkConnectionWithRetry() {
             <label for="config-password">Password:</label>
             <input type="password" id="config-password" value="${configPassword}">
           </div>
+          <div class="config-input-group">
+            <label for="config-credentialHolder">Credential Holder:</label>
+            <input type="text" id="config-credentialHolder" value="${window.escapeHtml(configCredentialHolder)}">
+          </div>
           <button id="apply-config-btn" class="apply-config-btn">Apply & Retry Now</button>
         </div>
       </details>
@@ -3767,7 +3815,7 @@ function checkConnectionWithRetry() {
     updateStatusUI(CONNECTION_STATUS.CHECKING);
 
     const readyzUrl = `http://${configHostname}:${configPort}/tumblebug/readyz`;
-    const connConfigUrl = `http://${configHostname}:${configPort}/tumblebug/connConfig?filterVerified=true&filterRegionRepresentative=true`;
+    const connConfigUrl = `http://${configHostname}:${configPort}/tumblebug/connConfig?filterVerified=true&filterRegionRepresentative=true&filterCredentialHolder=${encodeURIComponent(configCredentialHolder)}`;
 
     try {
       // Step 1: Check readyz status first
@@ -4045,7 +4093,10 @@ function checkConnectionWithRetry() {
         if (newUsername) configUsername = newUsername;
         if (newPassword) configPassword = newPassword;
 
-        console.log('[Config Updated] ' + configHostname + ':' + configPort);
+        const newCredentialHolder = document.getElementById('config-credentialHolder').value;
+        if (newCredentialHolder) configCredentialHolder = newCredentialHolder;
+
+        console.log('[Config Updated] ' + configHostname + ':' + configPort + ' holder=' + configCredentialHolder);
 
         // Reset retry count and check immediately
         retryCount = 0;
@@ -4168,7 +4219,7 @@ function getConnection() {
     : 5;
   //setTimeout(() => console.log(getConnection()), filteredRefreshInterval*1000);
 
-  var url = `http://${hostname}:${port}/tumblebug/connConfig?filterVerified=true&filterRegionRepresentative=true`;
+  var url = `http://${hostname}:${port}/tumblebug/connConfig?filterVerified=true&filterRegionRepresentative=true&filterCredentialHolder=${encodeURIComponent(configCredentialHolder)}`;
 
   axios({
     method: "get",
@@ -11055,6 +11106,210 @@ window.deleteJobFromModal = deleteJobFromModal;
 
 // ==================== End of Schedule Resource Registration Functions ====================
 
+// ==================== Credential Holder Functions ====================
+
+// Cached credential holder list (populated at startup)
+var cachedCredentialHolderList = [];
+
+// Load credential holder list from CB-Tumblebug API
+function updateCredentialHolderList(callback) {
+  var config = getConfig();
+  var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
+
+  if (hostname && hostname != "" && port && port != "") {
+    var url = `http://${hostname}:${port}/tumblebug/credentialHolder`;
+
+    axios({
+      method: "get",
+      url: url,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+    })
+      .then((res) => {
+        cachedCredentialHolderList = res.data.credentialHolderList || [];
+        console.log('[CredentialHolder] Loaded ' + cachedCredentialHolderList.length + ' holders');
+        // Update UI displays
+        updateHolderStatusDisplays();
+        if (callback) callback(cachedCredentialHolderList);
+      })
+      .catch((err) => {
+        console.warn("[CredentialHolder] Failed to load holder list:", err.message || err);
+        cachedCredentialHolderList = [{ credentialHolder: "admin", providers: [], verifiedConnectionCount: 0 }];
+        updateHolderStatusDisplays();
+        if (callback) callback(cachedCredentialHolderList);
+      });
+  }
+}
+
+// Update all UI displays showing current holder
+function updateHolderStatusDisplays() {
+  // Update map controls badge
+  var holderNameEl = document.getElementById('mapHolderName');
+  if (holderNameEl) {
+    holderNameEl.textContent = configCredentialHolder;
+  }
+
+  // Update control tab read-only display
+  var controlDisplay = document.getElementById('credentialHolder-control-display');
+  if (controlDisplay) {
+    var holderInfo = cachedCredentialHolderList.find(h => h.credentialHolder === configCredentialHolder);
+    if (holderInfo) {
+      var connCount = holderInfo.verifiedConnectionCount || holderInfo.connectionCount || 0;
+      controlDisplay.textContent = `${configCredentialHolder} (${connCount} conns)`;
+    } else {
+      controlDisplay.textContent = configCredentialHolder;
+    }
+  }
+}
+
+// Change credential holder and reload connections + map
+function applyCredentialHolder(newHolder) {
+  if (newHolder === configCredentialHolder) return;
+  
+  var oldHolder = configCredentialHolder;
+  configCredentialHolder = newHolder;
+  console.log('[CredentialHolder] Changed: ' + oldHolder + ' → ' + newHolder);
+
+  // Update all status displays
+  updateHolderStatusDisplays();
+
+  // Reload connections filtered by new holder → re-render map
+  reloadConnectionsForHolder();
+}
+
+// Reload connections from CB-TB with current holder filter, then refresh map
+function reloadConnectionsForHolder() {
+  var config = getConfig();
+  var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
+
+  var url = `http://${hostname}:${port}/tumblebug/connConfig?filterVerified=true&filterRegionRepresentative=true&filterCredentialHolder=${encodeURIComponent(configCredentialHolder)}`;
+
+  console.log('[CredentialHolder] Reloading connections for holder:', configCredentialHolder);
+  updateMapConnectionStatus('connecting');
+
+  axios({
+    method: "get",
+    url: url,
+    auth: {
+      username: `${username}`,
+      password: `${password}`,
+    },
+    timeout: 15000,
+  })
+    .then((res) => {
+      var connData = res.data;
+      if (connData.connectionconfig) {
+        console.log('[CredentialHolder] Loaded ' + connData.connectionconfig.length + ' connections for holder: ' + configCredentialHolder);
+        
+        // Clear and re-process connection data on the map
+        // We need to use the same processConnectionData logic
+        // Since processConnectionData is a closure in checkConnectionWithRetry,
+        // we replicate the essential logic here:
+        window.cloudBaristaCentralData.connection = connData.connectionconfig;
+
+        // Clear existing CSP points
+        Object.keys(cspPoints).forEach(key => { cspPoints[key] = []; });
+        Object.keys(geoCspPoints).forEach(key => { geoCspPoints[key] = []; });
+
+        // Re-populate from new connection data
+        connData.connectionconfig.forEach((connConfig) => {
+          var providerName = connConfig.providerName;
+          if (!providerName) return;
+          var longitude = connConfig.regionDetail?.location?.longitude;
+          var latitude = connConfig.regionDetail?.location?.latitude;
+          if (longitude == null || latitude == null) return;
+
+          if (!cspPoints[providerName]) {
+            cspPoints[providerName] = [];
+          }
+          cspPoints[providerName].push([parseFloat(longitude), parseFloat(latitude)]);
+        });
+
+        // Rebuild geoCspPoints with MultiPoint geometries
+        Object.keys(cspPoints).forEach(providerName => {
+          if (cspPoints[providerName].length > 0) {
+            if (!geoCspPoints[providerName]) {
+              geoCspPoints[providerName] = [];
+            }
+            geoCspPoints[providerName][0] = new MultiPoint(cspPoints[providerName]);
+          }
+        });
+
+        // Refresh provider checkboxes to match new connection data
+        var providerCheckboxContainer = document.getElementById('provider-checkboxes');
+        if (providerCheckboxContainer) {
+          providerCheckboxContainer.innerHTML = '';
+          Object.keys(cspPoints).forEach(providerName => {
+            if (cspPoints[providerName].length === 0) return;
+            var checkboxDiv = document.createElement('div');
+            checkboxDiv.className = 'dropdown-item-text';
+            var formCheckDiv = document.createElement('div');
+            formCheckDiv.className = 'form-check';
+            var checkbox = document.createElement('input');
+            checkbox.className = 'form-check-input';
+            checkbox.type = 'checkbox';
+            checkbox.id = 'provider-' + providerName;
+            checkbox.value = providerName;
+            var label = document.createElement('label');
+            label.className = 'form-check-label';
+            label.setAttribute('for', 'provider-' + providerName);
+            label.textContent = providerName.toUpperCase();
+            formCheckDiv.appendChild(checkbox);
+            formCheckDiv.appendChild(label);
+            checkboxDiv.appendChild(formCheckDiv);
+            providerCheckboxContainer.appendChild(checkboxDiv);
+            checkbox.addEventListener('change', function() {
+              var allCb = document.getElementById('provider-all');
+              if (this.checked && allCb) { allCb.checked = false; }
+              updateMapBasedOnProviders();
+              updateProviderDropdownText();
+            });
+          });
+          // Reset "ALL" checkbox to checked
+          var allCb = document.getElementById('provider-all');
+          if (allCb) { allCb.checked = true; }
+          updateProviderDropdownText();
+        }
+
+        // Force map re-render
+        map.render();
+        var view = map.getView();
+        if (view) view.changed();
+        setTimeout(() => { map.render(); }, 100);
+        setTimeout(() => { map.render(); }, 500);
+
+        updateMapConnectionStatus('connected');
+
+        // Also refresh MCI data and namespace list for new holder context
+        updateNsList();
+        getMci();
+      } else {
+        console.log('[CredentialHolder] No connections for holder:', configCredentialHolder);
+        // Clear map points
+        Object.keys(cspPoints).forEach(key => { cspPoints[key] = []; });
+        Object.keys(geoCspPoints).forEach(key => { geoCspPoints[key] = []; });
+        window.cloudBaristaCentralData.connection = [];
+        map.render();
+        updateMapConnectionStatus('connected');
+      }
+    })
+    .catch((err) => {
+      console.error('[CredentialHolder] Failed to reload connections:', err);
+      updateMapConnectionStatus('disconnected');
+    });
+}
+window.reloadConnectionsForHolder = reloadConnectionsForHolder;
+
+// ==================== End of Credential Holder Functions ====================
+
 function updateNsList() {
   // Get all namespace select elements
   var namespaceSelects = [
@@ -11594,7 +11849,7 @@ function updateConnectionList() {
   var username = config.username;
   var password = config.password;
 
-  var url = `http://${hostname}:${port}/tumblebug/connConfig?filterVerified=true&filterRegionRepresentative=true`;
+  var url = `http://${hostname}:${port}/tumblebug/connConfig?filterVerified=true&filterRegionRepresentative=true&filterCredentialHolder=${encodeURIComponent(configCredentialHolder)}`;
 
   axios({
     method: "get",
@@ -16001,6 +16256,7 @@ window.onload = function () {
   // Use the new connection check with retry instead of single getConnection call
   setTimeout(checkConnectionWithRetry, 1000);
 
+  updateCredentialHolderList();
   updateNsList();
 
   getMci();

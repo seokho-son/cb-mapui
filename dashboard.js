@@ -11,6 +11,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Axios interceptor: inject X-Credential-Holder header into all dashboard API requests
+axios.interceptors.request.use(function (axiosConfig) {
+  // Get credential holder from parent window (index.js) config
+  var parentConfig = window.parent?.getConfig?.() || {};
+  var holder = parentConfig.credentialHolder || 'admin';
+  if (holder) {
+    if (!axiosConfig.headers) {
+      axiosConfig.headers = {};
+    }
+    axiosConfig.headers['X-Credential-Holder'] = holder;
+  }
+  return axiosConfig;
+});
+
 // Common delete function for all resources
 async function deleteResourceAsync(resourceType, resourceId, additionalParams = {}) {
   try {
@@ -143,9 +157,15 @@ async function deleteResourceAsync(resourceType, resourceId, additionalParams = 
     // Make DELETE request using axios with auth (same as index.js)
     const fullUrl = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug${endpoint}`;
     
+    // Get credential holder from parent config
+    const credentialHolder = parentConfig.credentialHolder || 'admin';
+    
     const response = await axios({
       method: 'DELETE',
       url: fullUrl,
+      headers: {
+        'X-Credential-Holder': credentialHolder
+      },
       auth: {
         username: parentConfig.username,
         password: parentConfig.password
@@ -475,6 +495,7 @@ const dashboardConfig = {
   port: '1323',
   username: 'default',
   password: 'default',
+  credentialHolder: 'admin',
   namespace: 'default',
   refreshInterval: 10000 // 10 seconds
 };
@@ -674,6 +695,9 @@ function loadSettings() {
     document.getElementById('port').value = dashboardConfig.port;
     document.getElementById('username').value = dashboardConfig.username;
     document.getElementById('password').value = dashboardConfig.password;
+    if (document.getElementById('credentialHolder')) {
+      document.getElementById('credentialHolder').value = dashboardConfig.credentialHolder || 'admin';
+    }
     document.getElementById('namespace').value = dashboardConfig.namespace;
     document.getElementById('refreshInterval').value = dashboardConfig.refreshInterval / 1000;
   }
@@ -685,6 +709,9 @@ function saveSettings() {
   dashboardConfig.port = document.getElementById('port').value;
   dashboardConfig.username = document.getElementById('username').value;
   dashboardConfig.password = document.getElementById('password').value;
+  if (document.getElementById('credentialHolder')) {
+    dashboardConfig.credentialHolder = document.getElementById('credentialHolder').value || 'admin';
+  }
   dashboardConfig.namespace = document.getElementById('namespace').value;
   dashboardConfig.refreshInterval = parseInt(document.getElementById('refreshInterval').value) * 1000;
   
