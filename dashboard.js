@@ -170,7 +170,7 @@ async function deleteResourceAsync(resourceType, resourceId, additionalParams = 
         username: parentConfig.username,
         password: parentConfig.password
       },
-      timeout: 60000
+      timeout: 600000
     });
 
     // Show success message
@@ -508,6 +508,32 @@ let centralData = {}; // Global centralData variable
 let refreshTimer = null;
 let charts = {};
 let selectedMciId = null; // Track selected MCI for VM filtering
+
+// Mutation cooldown: suppress subscription overwrites after local mutations
+let mutationCooldownUntil = 0;
+const MUTATION_COOLDOWN_MS = 8000; // 8 seconds
+
+function startMutationCooldown() {
+  mutationCooldownUntil = Date.now() + MUTATION_COOLDOWN_MS;
+}
+
+function isMutationCooldownActive() {
+  return Date.now() < mutationCooldownUntil;
+}
+
+// Schedule a fresh data fetch after cooldown expires
+let scheduledFetchTimer = null;
+function scheduleFreshFetch() {
+  if (scheduledFetchTimer) clearTimeout(scheduledFetchTimer);
+  scheduledFetchTimer = setTimeout(() => {
+    scheduledFetchTimer = null;
+    mutationCooldownUntil = 0; // Clear cooldown so subscription callback works
+    if (window.parent && typeof window.parent.getMci === 'function') {
+      window.parent.getMci();
+    }
+  }, MUTATION_COOLDOWN_MS + 500); // Fetch slightly after cooldown ends
+}
+
 let selectedK8sClusterId = null; // Track selected K8s cluster for node group filtering
 let eventListenersAttached = false; // Track if event listeners are already attached
 let performanceCleanupTimer = null; // Timer for periodic cleanup
@@ -599,7 +625,14 @@ document.addEventListener('DOMContentLoaded', function() {
   if (window.parent && window.parent.subscribeToDataUpdates) {
     console.log('Subscribing to central data updates...');
     window.parent.subscribeToDataUpdates(function(receivedData) {
-      console.log('Received data update from central store:', receivedData);
+      // Skip overwriting local data during mutation cooldown
+      // (prevents stale server data from undoing local deletions/changes)
+      if (isMutationCooldownActive()) {
+        console.log('[DataSync] Skipping subscription update during mutation cooldown');
+        return;
+      }
+
+      console.log('Received data update from central store');
       
       // Store centralData globally
       centralData = receivedData;
@@ -792,7 +825,6 @@ function initializeCharts() {
       ]
     },
     options: {
-      responsive: true,
       maintainAspectRatio: false,
       animation: {
         duration: 0 // Disable animations for frequent updates
@@ -845,7 +877,6 @@ function initializeCharts() {
       datasets: [] // Will be dynamically populated with regions
     },
     options: {
-      responsive: true,
       maintainAspectRatio: false,
       animation: {
         duration: 0 // Disable animations for frequent updates
@@ -950,7 +981,6 @@ function initializeCharts() {
       ]
     },
     options: {
-      responsive: true,
       maintainAspectRatio: false,
       animation: {
         duration: 0 // Disable animations for frequent updates
@@ -1140,7 +1170,7 @@ async function loadNamespaces() {
         username: parentConfig.username,
         password: parentConfig.password
       },
-      timeout: 30000
+      timeout: 600000
     });
     
     const namespaces = response.data.ns || [];
@@ -1193,7 +1223,7 @@ async function loadMciData() {
         username: parentConfig.username,
         password: parentConfig.password
       },
-      timeout: 30000
+      timeout: 600000
     });
     
     mciData = response.data.mci || [];
@@ -1242,7 +1272,7 @@ async function loadResourceOverview() {
           username: parentConfig.username,
           password: parentConfig.password
         },
-        timeout: 30000
+        timeout: 600000
       });
       
       // Handle different response structures
@@ -2090,14 +2120,15 @@ function updateK8sCharts() {
 // Update MCI table
 function updateMciTable() {
   // Check if data has changed before updating
-  if (!hasDataChanged('mci-table', mciData)) {
+  if (!hasDataChanged('mciTable', mciData)) {
     console.log('[Performance] MCI table: Skipping update - no changes detected');
     return;
   }
 
   const tbody = document.getElementById('mciTableBody');
+  destroyDataTable('mciTable');
   tbody.innerHTML = '';
-  
+
   // Update count badge
   const countBadge = document.getElementById('mciCountBadge');
   if (countBadge) {
@@ -2155,44 +2186,21 @@ function updateMciTable() {
       }
     }
     
-    // Determine button states based on actual status
-    const actualStatus = mci.status.startsWith('Creating') ? 'Creating' : mci.status;
-    const isRunning = actualStatus === 'Running';
-    const canResume = ['Suspended', 'Failed', 'Partial-Failed'].includes(actualStatus);
-    const canSuspend = isRunning;
-    const canRestart = isRunning;
-    
     row.innerHTML = `
-      <td title="${mci.id}"><strong>${smartTruncate(mci.id, 'id')}</strong></td>
+      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(mci.id)}" onchange="toggleRowSelect('mci', '${_escapeHtml(mci.id)}', this)"></td>
+      <td title="${mci.id}"><strong><a class="item-id-link" onclick="viewMciDetails('${_escapeHtml(mci.id)}')">${smartTruncate(mci.id, 'id')}</a></strong></td>
       <td><span class="status-badge status-${statusClass}">${mci.status}</span></td>
       <td title="${providerList || 'N/A'}">${smartTruncate(providerList || 'N/A', 'provider')}</td>
       <td>${vmCount}</td>
       <td title="${mci.targetAction || 'None'}">${smartTruncate(mci.targetAction || 'None', 'default')}</td>
       <td title="${mci.description || 'N/A'}">${smartTruncate(mci.description || 'N/A', 'description')}</td>
-      <td class="action-buttons">
-        <button class="btn btn-sm btn-outline-primary" onclick="viewMciDetails('${mci.id}')" title="View Details">
-          <i class="fas fa-eye"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-success" onclick="controlMci('${mci.id}', 'resume')" title="Resume" ${!canResume ? 'disabled' : ''}>
-          <i class="fas fa-play"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-warning" onclick="controlMci('${mci.id}', 'suspend')" title="Suspend" ${!canSuspend ? 'disabled' : ''}>
-          <i class="fas fa-pause"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-info" onclick="controlMci('${mci.id}', 'restart')" title="Restart" ${!canRestart ? 'disabled' : ''}>
-          <i class="fas fa-sync-alt"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteMci('${mci.id}')" title="Delete">
-          <i class="fas fa-trash"></i>
-        </button>
-      </td>
     `;
     
     // Add click event to select MCI
     row.style.cursor = 'pointer';
     row.addEventListener('click', function(e) {
-      // Don't trigger when clicking on buttons
-      if (e.target.closest('.action-buttons')) {
+      // Don't trigger when clicking on checkboxes or links
+      if (e.target.closest('.select-cell') || e.target.closest('.item-id-link')) {
         return;
       }
       selectMci(mci.id);
@@ -2206,13 +2214,10 @@ function updateMciTable() {
     tbody.appendChild(row);
   });
 
-  // Reinitialize DataTable if needed
-  setTimeout(() => {
-    reinitializeDataTablesIfNeeded();
-  }, 100);
+  // Restore selection state and reinitialize
+  restoreSelectionState('mci');
+  initDataTable('mciTable');
 }
-
-// Select MCI and update VM table
 function selectMci(mciId) {
   selectedMciId = mciId;
   console.log(`Selected MCI: ${mciId}`);
@@ -2326,9 +2331,8 @@ function updateVmTable() {
   }
 
   const tbody = document.getElementById('vmTableBody');
+  destroyDataTable('vmTable');
   tbody.innerHTML = '';
-  
-  // Update VM count display
   const vmCountElement = document.getElementById('vmCountBadge');
   if (vmCountElement) {
     vmCountElement.textContent = filteredVms.length;
@@ -2338,7 +2342,7 @@ function updateVmTable() {
     // Show message when no VMs found for selected MCI
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td colspan="8" class="text-center text-muted py-4">
+      <td colspan="9" class="text-center text-muted py-4">
         <i class="fas fa-info-circle me-2"></i>
         No VMs found for selected MCI: ${selectedMciId}
       </td>
@@ -2388,14 +2392,9 @@ function updateVmTable() {
       }
     }
     
-    // Determine button states
-    const isRunning = vm.status === 'Running';
-    const canResume = ['Suspended', 'Failed'].includes(vm.status);
-    const canSuspend = isRunning;
-    const canRestart = isRunning;
-    
     row.innerHTML = `
-      <td title="${vm.id}"><strong>${smartTruncate(vm.id, 'id')}</strong></td>
+      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(vm.id)}" data-mci-id="${_escapeHtml(vm.mciId)}" onchange="toggleRowSelect('vm', '${_escapeHtml(vm.id)}', this)"></td>
+      <td title="${vm.id}"><strong><a class="item-id-link" onclick="viewVmDetails('${_escapeHtml(vm.mciId)}', '${_escapeHtml(vm.id)}')">${smartTruncate(vm.id, 'id')}</a></strong></td>
       <td title="${vm.mciId}">${smartTruncate(vm.mciId, 'id')}</td>
       <td><span class="status-badge status-${statusClass}">${vm.status || 'Unknown'}</span></td>
       <td title="${provider}">${smartTruncate(provider, 'provider')}</td>
@@ -2403,32 +2402,13 @@ function updateVmTable() {
       <td title="${spec}">${smartTruncate(spec, 'spec')}</td>
       <td title="${publicIp}">${smartTruncate(publicIp, 'ip')}</td>
       <td title="${privateIp}">${smartTruncate(privateIp, 'ip')}</td>
-      <td class="action-buttons">
-        <button class="btn btn-sm btn-outline-primary" onclick="viewVmDetails('${vm.mciId}', '${vm.id}')" title="View Details">
-          <i class="fas fa-eye"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-success" onclick="controlVm('${vm.mciId}', '${vm.id}', 'resume')" title="Resume" ${!canResume ? 'disabled' : ''}>
-          <i class="fas fa-play"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-warning" onclick="controlVm('${vm.mciId}', '${vm.id}', 'suspend')" title="Suspend" ${!canSuspend ? 'disabled' : ''}>
-          <i class="fas fa-pause"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-info" onclick="controlVm('${vm.mciId}', '${vm.id}', 'restart')" title="Restart" ${!canRestart ? 'disabled' : ''}>
-          <i class="fas fa-sync-alt"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteVm('${vm.id}', '${vm.mciId}')" title="Delete VM">
-          <i class="fas fa-trash"></i>
-        </button>
-      </td>
     `;
     
-    // Add click event to select MCI when clicking on VM row (but not on buttons)
+    // Add click event to select MCI when clicking on VM row (but not on checkboxes)
     row.addEventListener('click', function(event) {
-      // Don't trigger if clicking on buttons or links
-      if (event.target.closest('button') || event.target.closest('a')) {
+      if (event.target.closest('.select-cell') || event.target.closest('.item-id-link')) {
         return;
       }
-      // Select the MCI this VM belongs to
       if (vm.mciId && selectedMciId !== vm.mciId) {
         selectMci(vm.mciId);
       }
@@ -2439,10 +2419,9 @@ function updateVmTable() {
     tbody.appendChild(row);
   });
 
-  // Reinitialize DataTable if needed
-  setTimeout(() => {
-    reinitializeDataTablesIfNeeded();
-  }, 100);
+  // Restore selection state and reinitialize
+  restoreSelectionState('vm');
+  initDataTable('vmTable');
 }
 
 // Update resource display
@@ -2552,7 +2531,7 @@ async function controlMci(mciId, action) {
         username: parentConfig.username,
         password: parentConfig.password
       },
-      timeout: 60000
+      timeout: 600000
     });
     
     showSuccessMessage(`MCI ${action} command sent successfully!`);
@@ -2599,7 +2578,7 @@ async function controlVm(mciId, vmId, action) {
         username: parentConfig.username,
         password: parentConfig.password
       },
-      timeout: 60000
+      timeout: 600000
     });
     
     showSuccessMessage(`VM ${action} command sent successfully!`);
@@ -2827,7 +2806,7 @@ function updateVNetTable() {
   const vNetData = centralData.vNet || [];
   
   // Check if data has changed before updating
-  if (!hasDataChanged('vnet-table', vNetData)) {
+  if (!hasDataChanged('vNetTable', vNetData)) {
     console.log('[Performance] VNet table: Skipping update - no changes detected');
     return;
   }
@@ -2835,6 +2814,7 @@ function updateVNetTable() {
   const tableBody = document.getElementById('vNetTableBody');
   if (!tableBody) return;
   
+  destroyDataTable('vNetTable');
   tableBody.innerHTML = '';
   
   // Update count badge
@@ -2847,7 +2827,8 @@ function updateVNetTable() {
     const row = document.createElement('tr');
     const subnetCount = vnet.subnetInfoList ? vnet.subnetInfoList.length : 0;
     row.innerHTML = `
-      <td title="${vnet.id}">${smartTruncate(vnet.id, 'id')}</td>
+      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(vnet.id)}" onchange="toggleRowSelect('vNet', '${_escapeHtml(vnet.id)}', this)"></td>
+      <td title="${vnet.id}"><a class="item-id-link" onclick="viewResourceDetails('vNet', '${_escapeHtml(vnet.id)}')">${smartTruncate(vnet.id, 'id')}</a></td>
       <td title="${vnet.name || 'N/A'}">${smartTruncate(vnet.name || 'N/A', 'name')}</td>
       <td><span class="status-badge status-${(vnet.status || 'unknown').toLowerCase()}">${vnet.status || 'Unknown'}</span></td>
       <td title="${vnet.connectionConfig?.providerName || 'N/A'}">${smartTruncate(vnet.connectionConfig?.providerName || 'N/A', 'provider')}</td>
@@ -2858,22 +2839,13 @@ function updateVNetTable() {
           ${subnetCount} subnet${subnetCount !== 1 ? 's' : ''}
         </a>
       </td>
-      <td class="action-buttons">
-        <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('vNet', '${vnet.id}')" title="View Details">
-          <i class="fas fa-eye"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteVNet('${vnet.id}')" title="Delete">
-          <i class="fas fa-trash"></i>
-        </button>
-      </td>
     `;
     tableBody.appendChild(row);
   });
   
-  // Reinitialize DataTable if needed
-  setTimeout(() => {
-    reinitializeDataTablesIfNeeded();
-  }, 100);
+  // Restore selection state and reinitialize
+  restoreSelectionState('vNet');
+  initDataTable('vNetTable');
 }
 
 // Subnet table functions
@@ -3007,6 +2979,7 @@ function updateSecurityGroupTable() {
   const tableBody = document.getElementById('securityGroupTableBody');
   if (!tableBody) return;
   
+  destroyDataTable('securityGroupTable');
   tableBody.innerHTML = '';
   
   // Update count badge
@@ -3018,29 +2991,21 @@ function updateSecurityGroupTable() {
   sgData.forEach(sg => {
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td title="${sg.id}">${smartTruncate(sg.id, 'id')}</td>
+      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(sg.id)}" onchange="toggleRowSelect('securityGroup', '${_escapeHtml(sg.id)}', this)"></td>
+      <td title="${sg.id}"><a class="item-id-link" onclick="viewResourceDetails('securityGroup', '${_escapeHtml(sg.id)}')">${smartTruncate(sg.id, 'id')}</a></td>
       <td title="${sg.name || 'N/A'}">${smartTruncate(sg.name || 'N/A', 'name')}</td>
       <td title="${sg.connectionConfig?.providerName || 'N/A'}">${smartTruncate(sg.connectionConfig?.providerName || 'N/A', 'provider')}</td>
       <td title="${sg.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(sg.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
       <td title="${sg.vNetId || 'N/A'}">${smartTruncate(sg.vNetId || 'N/A', 'id')}</td>
       <td>${sg.firewallRules ? sg.firewallRules.length : 0} rules</td>
       <td title="${sg.description || 'N/A'}">${smartTruncate(sg.description || 'N/A', 'description')}</td>
-      <td class="action-buttons">
-        <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('securityGroup', '${sg.id}')" title="View Details">
-          <i class="fas fa-eye"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteSecurityGroup('${sg.id}')" title="Delete">
-          <i class="fas fa-trash"></i>
-        </button>
-      </td>
     `;
     tableBody.appendChild(row);
   });
   
-  // Reinitialize DataTable if needed
-  setTimeout(() => {
-    reinitializeDataTablesIfNeeded();
-  }, 100);
+  // Restore selection state and reinitialize
+  restoreSelectionState('securityGroup');
+  initDataTable('securityGroupTable');
 }
 
 function updateSshKeyTable() {
@@ -3059,6 +3024,7 @@ function updateSshKeyTable() {
   const tableBody = document.getElementById('sshKeyTableBody');
   if (!tableBody) return;
   
+  destroyDataTable('sshKeyTable');
   tableBody.innerHTML = '';
   
   // Update count badge
@@ -3070,7 +3036,8 @@ function updateSshKeyTable() {
   sshKeyData.forEach(key => {
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td title="${key.id}">${smartTruncate(key.id, 'id')}</td>
+      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(key.id)}" onchange="toggleRowSelect('sshKey', '${_escapeHtml(key.id)}', this)"></td>
+      <td title="${key.id}"><a class="item-id-link" onclick="viewResourceDetails('sshKey', '${_escapeHtml(key.id)}')">${smartTruncate(key.id, 'id')}</a></td>
       <td title="${key.name || 'N/A'}">${smartTruncate(key.name || 'N/A', 'name')}</td>
       <td title="${key.connectionConfig?.providerName || 'N/A'}">${smartTruncate(key.connectionConfig?.providerName || 'N/A', 'provider')}</td>
       <td title="${key.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(key.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
@@ -3080,22 +3047,13 @@ function updateSshKeyTable() {
           <i class="fas fa-key"></i>
         </button>
       </td>
-      <td class="action-buttons">
-        <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('sshKey', '${key.id}')" title="View Details">
-          <i class="fas fa-eye"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteSshKey('${key.id}')" title="Delete">
-          <i class="fas fa-trash"></i>
-        </button>
-      </td>
     `;
     tableBody.appendChild(row);
   });
   
-  // Reinitialize DataTable if needed
-  setTimeout(() => {
-    reinitializeDataTablesIfNeeded();
-  }, 100);
+  // Restore selection state and reinitialize
+  restoreSelectionState('sshKey');
+  initDataTable('sshKeyTable');
 }
 
 function updateK8sClusterTable() {
@@ -3117,6 +3075,7 @@ function updateK8sClusterTable() {
   const tableBody = document.getElementById('k8sClusterTableBody');
   if (!tableBody) return;
   
+  destroyDataTable('k8sClusterTable');
   tableBody.innerHTML = '';
   
   // Update count badge
@@ -3168,7 +3127,8 @@ function updateK8sClusterTable() {
     }
     
     row.innerHTML = `
-      <td title="${cluster.id}"><strong>${smartTruncate(cluster.id, 'id')}</strong></td>
+      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(cluster.id)}" onchange="toggleRowSelect('k8sCluster', '${_escapeHtml(cluster.id)}', this)"></td>
+      <td title="${cluster.id}"><strong><a class="item-id-link" onclick="viewK8sClusterDetails('${_escapeHtml(cluster.id)}')">${smartTruncate(cluster.id, 'id')}</a></strong></td>
       <td><span class="status-badge status-${statusClass}">${cluster.status || 'Unknown'}</span></td>
       <td title="${cluster.connectionConfig?.providerName || 'N/A'}">${smartTruncate(cluster.connectionConfig?.providerName || 'N/A', 'provider')}</td>
       <td title="${cluster.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(cluster.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
@@ -3179,28 +3139,11 @@ function updateK8sClusterTable() {
       <td style="cursor: pointer;" onclick="selectK8sCluster('${cluster.id}')" title="Click to view node groups">
         <span class="badge badge-info">${nodeGroupsInfo}</span>
       </td>
-      <td class="action-buttons">
-        <button class="btn btn-sm btn-outline-primary" onclick="viewK8sClusterDetails('${cluster.id}')" title="View Details">
-          <i class="fas fa-eye"></i>
-        </button>
-        ${cluster.accessInfo && cluster.accessInfo.kubeconfig ? 
-          `<button class="btn btn-sm btn-outline-success" onclick="downloadKubeconfig('${cluster.id}')" title="Download Kubeconfig">
-            <i class="fas fa-download"></i>
-          </button>` : ''
-        }
-        <button class="btn btn-sm btn-outline-warning" onclick="controlK8sCluster('${cluster.id}', 'upgrade')" title="Upgrade">
-          <i class="fas fa-arrow-up"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteK8sCluster('${cluster.id}')" title="Delete">
-          <i class="fas fa-trash"></i>
-        </button>
-      </td>
     `;
     
     // Add click event to select cluster for node group filtering
     row.addEventListener('click', function(event) {
-      // Don't trigger if clicking on buttons or links
-      if (event.target.closest('button') || event.target.closest('a')) {
+      if (event.target.closest('.select-cell') || event.target.closest('.item-id-link') || event.target.closest('a')) {
         return;
       }
       selectK8sCluster(cluster.id);
@@ -3217,10 +3160,9 @@ function updateK8sClusterTable() {
   // Update node groups table
   updateK8sNodeGroupTable();
   
-  // Reinitialize DataTable if needed
-  setTimeout(() => {
-    reinitializeDataTablesIfNeeded();
-  }, 100);
+  // Restore selection state and reinitialize
+  restoreSelectionState('k8sCluster');
+  initDataTable('k8sClusterTable');
 }
 
 // Select K8s cluster and update node group table
@@ -3291,6 +3233,7 @@ function updateK8sNodeGroupTable() {
   const tableBody = document.getElementById('k8sNodeGroupTableBody');
   if (!tableBody) return;
   
+  destroyDataTable('k8sNodeGroupTable');
   tableBody.innerHTML = '';
   
   // Collect all node groups
@@ -3398,38 +3341,25 @@ function updateK8sNodeGroupTable() {
     // Image ID - use actual field name
     const imageId = nodeGroup.imageId || 'N/A';
     
+    const ngId = nodeGroup.name || nodeGroup.id;
+    
     row.innerHTML = `
+      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(ngId)}" data-cluster-id="${_escapeHtml(nodeGroup.clusterId)}" onchange="toggleRowSelect('k8sNodeGroup', '${_escapeHtml(ngId)}', this)"></td>
       <td title="${nodeGroup.clusterId}">${smartTruncate(nodeGroup.clusterId, 'id')}</td>
-      <td title="${nodeGroup.name || nodeGroup.id}"><strong>${smartTruncate(nodeGroup.name || nodeGroup.id, 'name')}</strong></td>
+      <td title="${ngId}"><strong><a class="item-id-link" onclick="viewNodeGroupDetails('${_escapeHtml(nodeGroup.clusterId)}', '${_escapeHtml(ngId)}')">${smartTruncate(ngId, 'name')}</a></strong></td>
       <td><span class="status-badge status-${statusClass}">${nodeGroup.status || 'Unknown'}</span></td>
       <td title="${specId}">${smartTruncate(specId, 'spec')}</td>
       <td title="${imageId}">${smartTruncate(imageId, 'default')}</td>
       <td><span class="badge badge-primary">${nodesInfo}</span></td>
       <td>${sizeInfo}</td>
       <td><span class="badge ${nodeGroup.onAutoScaling ? 'badge-success' : 'badge-secondary'}">${autoScalingInfo}</span></td>
-      <td class="action-buttons">
-        <button class="btn btn-sm btn-outline-primary" onclick="viewNodeGroupDetails('${nodeGroup.clusterId}', '${nodeGroup.name || nodeGroup.id}')" title="View Details">
-          <i class="fas fa-eye"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-info" onclick="toggleAutoScaling('${nodeGroup.clusterId}', '${nodeGroup.name || nodeGroup.id}', ${!nodeGroup.onAutoScaling})" title="${nodeGroup.onAutoScaling ? 'Disable' : 'Enable'} Auto Scaling">
-          <i class="fas fa-${nodeGroup.onAutoScaling ? 'pause' : 'play'}"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-warning" onclick="scaleNodeGroup('${nodeGroup.clusterId}', '${nodeGroup.name || nodeGroup.id}')" title="Scale Node Group">
-          <i class="fas fa-expand-arrows-alt"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteNodeGroup('${nodeGroup.name || nodeGroup.id}', '${nodeGroup.clusterId}')" title="Delete Node Group">
-          <i class="fas fa-trash"></i>
-        </button>
-      </td>
     `;
     
     // Add click event to select cluster when clicking on node group row
     row.addEventListener('click', function(event) {
-      // Don't trigger if clicking on buttons
-      if (event.target.closest('button')) {
+      if (event.target.closest('.select-cell') || event.target.closest('.item-id-link')) {
         return;
       }
-      // Select the cluster this node group belongs to
       if (nodeGroup.clusterId && selectedK8sClusterId !== nodeGroup.clusterId) {
         selectK8sCluster(nodeGroup.clusterId);
       }
@@ -3439,6 +3369,10 @@ function updateK8sNodeGroupTable() {
     
     tableBody.appendChild(row);
   });
+
+  // Restore selection state
+  restoreSelectionState('k8sNodeGroup');
+  initDataTable('k8sNodeGroupTable');
 }
 
 // Optimized Connection Table Management with caching
@@ -3755,6 +3689,7 @@ function updateCustomImageTable() {
   const tableBody = document.getElementById('customImageTableBody');
   if (!tableBody) return;
   
+  destroyDataTable('customImageTable');
   tableBody.innerHTML = '';
   
   // Update count badge
@@ -3780,29 +3715,21 @@ function updateCustomImageTable() {
     
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td title="${image.id}">${smartTruncate(image.id, 'id')}</td>
+      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(image.id)}" onchange="toggleRowSelect('customImage', '${_escapeHtml(image.id)}', this)"></td>
+      <td title="${image.id}"><a class="item-id-link" onclick="viewResourceDetails('customImage', '${_escapeHtml(image.id)}')">${smartTruncate(image.id, 'id')}</a></td>
       <td title="${image.name || 'N/A'}">${smartTruncate(image.name || 'N/A', 'name')}</td>
       <td><span class="status-badge status-${imageStatus.toLowerCase()}">${imageStatus}</span></td>
       <td title="${providerName}">${smartTruncate(providerName, 'provider')}</td>
       <td title="${regionName}">${smartTruncate(regionName, 'region')}</td>
       <td title="${osType}">${smartTruncate(osType, 'default')}</td>
       <td>${image.creationDate ? new Date(image.creationDate).toLocaleDateString() : 'N/A'}</td>
-      <td class="action-buttons">
-        <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('customImage', '${image.id}')" title="View Details">
-          <i class="fas fa-eye"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteCustomImage('${image.id}')" title="Delete">
-          <i class="fas fa-trash"></i>
-        </button>
-      </td>
     `;
     tableBody.appendChild(row);
   });
   
-  // Reinitialize DataTable if needed
-  setTimeout(() => {
-    reinitializeDataTablesIfNeeded();
-  }, 100);
+  // Restore selection state and reinitialize
+  restoreSelectionState('customImage');
+  initDataTable('customImageTable');
 }
 
 function updateDataDiskTable() {
@@ -3815,6 +3742,7 @@ function updateDataDiskTable() {
   const tableBody = document.getElementById('dataDiskTableBody');
   if (!tableBody) return;
   
+  destroyDataTable('dataDiskTable');
   tableBody.innerHTML = '';
   
   // Update count badge
@@ -3826,32 +3754,21 @@ function updateDataDiskTable() {
   diskData.forEach(disk => {
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td title="${disk.id}">${smartTruncate(disk.id, 'id')}</td>
+      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(disk.id)}" onchange="toggleRowSelect('dataDisk', '${_escapeHtml(disk.id)}', this)"></td>
+      <td title="${disk.id}"><a class="item-id-link" onclick="viewResourceDetails('dataDisk', '${_escapeHtml(disk.id)}')">${smartTruncate(disk.id, 'id')}</a></td>
       <td title="${disk.name || 'N/A'}">${smartTruncate(disk.name || 'N/A', 'name')}</td>
       <td><span class="status-badge status-${(disk.status || 'unknown').toLowerCase()}">${disk.status || 'Unknown'}</span></td>
       <td title="${disk.connectionConfig?.providerName || 'N/A'}">${smartTruncate(disk.connectionConfig?.providerName || 'N/A', 'provider')}</td>
       <td title="${disk.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(disk.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
       <td title="${disk.diskSize || 'N/A'}">${smartTruncate(disk.diskSize || 'N/A', 'default')}</td>
       <td title="${disk.diskType || 'N/A'}">${smartTruncate(disk.diskType || 'N/A', 'default')}</td>
-      <td class="action-buttons">
-        <button class="btn btn-sm btn-outline-primary" onclick="viewResourceDetails('dataDisk', '${disk.id}')" title="View Details">
-          <i class="fas fa-eye"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-warning" onclick="resizeDisk('${disk.id}')" title="Resize">
-          <i class="fas fa-expand"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteDataDisk('${disk.id}')" title="Delete">
-          <i class="fas fa-trash"></i>
-        </button>
-      </td>
     `;
     tableBody.appendChild(row);
   });
   
-  // Reinitialize DataTable if needed
-  setTimeout(() => {
-    reinitializeDataTablesIfNeeded();
-  }, 100);
+  // Restore selection state and reinitialize
+  restoreSelectionState('dataDisk');
+  initDataTable('dataDiskTable');
 }
 
 function updateVpnTable() {
@@ -3863,7 +3780,7 @@ function updateVpnTable() {
   const vpnData = centralData.vpn || [];
   
   // Check if data has changed before updating
-  if (!hasDataChanged('vpn-table', vpnData)) {
+  if (!hasDataChanged('vpnTable', vpnData)) {
     console.log('[Performance] VPN table: Skipping update - no changes detected');
     return;
   }
@@ -3871,6 +3788,7 @@ function updateVpnTable() {
   const tableBody = document.getElementById('vpnTableBody');
   if (!tableBody) return;
   
+  destroyDataTable('vpnTable');
   tableBody.innerHTML = '';
   
   // Update count badge
@@ -3882,28 +3800,20 @@ function updateVpnTable() {
   vpnData.forEach(vpn => {
     const row = document.createElement('tr');
     row.innerHTML = `
+      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(vpn.id || 'N/A')}" data-mci-id="${_escapeHtml(vpn.mciId || 'N/A')}" onchange="toggleRowSelect('vpn', '${_escapeHtml(vpn.id || 'N/A')}', this)"></td>
       <td title="${vpn.mciId || 'N/A'}">${smartTruncate(vpn.mciId || 'N/A', 'id')}</td>
-      <td title="${vpn.id || 'N/A'}">${smartTruncate(vpn.id || 'N/A', 'id')}</td>
+      <td title="${vpn.id || 'N/A'}"><a class="item-id-link" onclick="viewVpnDetails('${_escapeHtml(vpn.mciId || '')}', '${_escapeHtml(vpn.id || '')}')">${smartTruncate(vpn.id || 'N/A', 'id')}</a></td>
       <td><span class="status-badge status-${(vpn.status || 'unknown').toLowerCase()}">${vpn.status || 'Unknown'}</span></td>
       <td title="${vpn.vpnSites ? vpn.vpnSites.length : 0}">${vpn.vpnSites ? vpn.vpnSites.length : 0} sites</td>
       <td title="${vpn.connectionConfig?.providerName || 'N/A'}">${smartTruncate(vpn.connectionConfig?.providerName || 'N/A', 'provider')}</td>
       <td title="${vpn.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(vpn.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
-      <td class="action-buttons">
-        <button class="btn btn-sm btn-outline-primary" onclick="viewVpnDetails('${vpn.mciId}', '${vpn.id}')" title="View Details">
-          <i class="fas fa-eye"></i>
-        </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteVpn('${vpn.mciId}', '${vpn.id}')" title="Delete">
-          <i class="fas fa-trash"></i>
-        </button>
-      </td>
     `;
     tableBody.appendChild(row);
   });
   
-  // Reinitialize DataTable if needed
-  setTimeout(() => {
-    reinitializeDataTablesIfNeeded();
-  }, 100);
+  // Restore selection state and reinitialize
+  restoreSelectionState('vpn');
+  initDataTable('vpnTable');
 }
 
 // Resource management functions
@@ -4834,11 +4744,11 @@ function initializeDataTables() {
 
   const tableConfigs = [
     {
-      id: 'mci-table',
+      id: 'mciTable',
       config: {
         pageLength: 25,
-        responsive: true,
-        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+        autoWidth: false,
+        dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
              '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
         language: {
@@ -4852,28 +4762,27 @@ function initializeDataTables() {
             previous: "Previous"
           }
         },
-        order: [[0, 'asc']], // Default sort by first column
-        stateSave: false, // Disable state saving to avoid conflicts
-        scrollY: false, // Disable DataTables scrolling, use CSS instead
+        order: [[1, 'asc']], // Sort by second column (ID), first is checkbox
+        stateSave: false,
+        scrollY: false,
         scrollCollapse: false,
         columnDefs: [
           { 
-            targets: -1, // Last column (Actions)
+            targets: 0, // Checkbox column
             orderable: false,
             searchable: false,
-            width: "200px",
-            className: "text-center",
-            responsivePriority: 1 // Highest priority for Actions column
+            width: "36px",
+            className: "text-center"
           }
         ]
       }
     },
     {
-      id: 'vm-table',
+      id: 'vmTable',
       config: {
         pageLength: 25,
-        responsive: true,
-        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+        autoWidth: false,
+        dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
              '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
         language: {
@@ -4887,28 +4796,27 @@ function initializeDataTables() {
             previous: "Previous"
           }
         },
-        order: [[0, 'asc']],
-        stateSave: false, // Disable state saving to avoid conflicts
+        order: [[1, 'asc']],
+        stateSave: false,
         scrollY: false,
         scrollCollapse: false,
         columnDefs: [
           { 
-            targets: -1, // Actions column
+            targets: 0,
             orderable: false,
             searchable: false,
-            width: "250px",
-            className: "text-center",
-            responsivePriority: 1 // Highest priority for Actions column
+            width: "36px",
+            className: "text-center"
           }
         ]
       }
     },
     {
-      id: 'vnet-table',
+      id: 'vNetTable',
       config: {
         pageLength: 25,
-        responsive: true,
-        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+        autoWidth: false,
+        dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
              '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
         language: {
@@ -4916,26 +4824,25 @@ function initializeDataTables() {
           lengthMenu: "Show _MENU_ entries",
           info: "Showing _START_ to _END_ of _TOTAL_ entries"
         },
-        order: [[0, 'asc']],
-        stateSave: false, // Disable state saving to avoid conflicts
+        order: [[1, 'asc']],
+        stateSave: false,
         columnDefs: [
           { 
-            targets: -1, // Actions column
+            targets: 0,
             orderable: false,
             searchable: false,
-            width: "150px",
-            className: "text-center",
-            responsivePriority: 1 // Highest priority for Actions column
+            width: "36px",
+            className: "text-center"
           }
         ]
       }
     },
     {
-      id: 'security-group-table',
+      id: 'securityGroupTable',
       config: {
         pageLength: 25,
-        responsive: true,
-        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+        autoWidth: false,
+        dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
              '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
         language: {
@@ -4943,26 +4850,25 @@ function initializeDataTables() {
           lengthMenu: "Show _MENU_ entries",
           info: "Showing _START_ to _END_ of _TOTAL_ entries"
         },
-        order: [[0, 'asc']],
-        stateSave: false, // Disable state saving to avoid conflicts
+        order: [[1, 'asc']],
+        stateSave: false,
         columnDefs: [
           { 
-            targets: -1, // Actions column
+            targets: 0,
             orderable: false,
             searchable: false,
-            width: "150px",
-            className: "text-center",
-            responsivePriority: 1 // Highest priority for Actions column
+            width: "36px",
+            className: "text-center"
           }
         ]
       }
     },
     {
-      id: 'ssh-key-table',
+      id: 'sshKeyTable',
       config: {
         pageLength: 25,
-        responsive: true,
-        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+        autoWidth: false,
+        dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
              '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
         language: {
@@ -4970,26 +4876,25 @@ function initializeDataTables() {
           lengthMenu: "Show _MENU_ entries",
           info: "Showing _START_ to _END_ of _TOTAL_ entries"
         },
-        order: [[0, 'asc']],
-        stateSave: false, // Disable state saving to avoid conflicts
+        order: [[1, 'asc']],
+        stateSave: false,
         columnDefs: [
           { 
-            targets: -1, // Actions column
+            targets: 0,
             orderable: false,
             searchable: false,
-            width: "150px",
-            className: "text-center",
-            responsivePriority: 1 // Highest priority for Actions column
+            width: "36px",
+            className: "text-center"
           }
         ]
       }
     },
     {
-      id: 'k8s-cluster-table',
+      id: 'k8sClusterTable',
       config: {
         pageLength: 25,
-        responsive: true,
-        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+        autoWidth: false,
+        dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
              '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
         language: {
@@ -4997,26 +4902,25 @@ function initializeDataTables() {
           lengthMenu: "Show _MENU_ entries",
           info: "Showing _START_ to _END_ of _TOTAL_ entries"
         },
-        order: [[0, 'asc']],
-        stateSave: false, // Disable state saving to avoid conflicts
+        order: [[1, 'asc']],
+        stateSave: false,
         columnDefs: [
           { 
-            targets: -1, // Actions column
+            targets: 0,
             orderable: false,
             searchable: false,
-            width: "200px",
-            className: "text-center",
-            responsivePriority: 1 // Highest priority for Actions column
+            width: "36px",
+            className: "text-center"
           }
         ]
       }
     },
     {
-      id: 'vpn-table',
+      id: 'vpnTable',
       config: {
         pageLength: 25,
-        responsive: true,
-        dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>' +
+        autoWidth: false,
+        dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
              '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
         language: {
@@ -5024,17 +4928,76 @@ function initializeDataTables() {
           lengthMenu: "Show _MENU_ entries",
           info: "Showing _START_ to _END_ of _TOTAL_ entries"
         },
-        order: [[0, 'asc']],
-        stateSave: false, // Disable state saving to avoid conflicts
+        order: [[1, 'asc']],
+        stateSave: false,
         columnDefs: [
           { 
-            targets: -1, // Actions column
+            targets: 0,
             orderable: false,
             searchable: false,
-            width: "150px",
-            className: "text-center",
-            responsivePriority: 1 // Highest priority for Actions column
+            width: "36px",
+            className: "text-center"
           }
+        ]
+      }
+    },
+    {
+      id: 'k8sNodeGroupTable',
+      config: {
+        pageLength: 25,
+        autoWidth: false,
+        dom: '<"row"<"col-sm-12"l>>' +
+             '<"row"<"col-sm-12"tr>>' +
+             '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
+        language: {
+          search: "Search:",
+          lengthMenu: "Show _MENU_ entries",
+          info: "Showing _START_ to _END_ of _TOTAL_ entries"
+        },
+        order: [[1, 'asc']],
+        stateSave: false,
+        columnDefs: [
+          { targets: 0, orderable: false, searchable: false, width: "36px", className: "text-center" }
+        ]
+      }
+    },
+    {
+      id: 'dataDiskTable',
+      config: {
+        pageLength: 25,
+        autoWidth: false,
+        dom: '<"row"<"col-sm-12"l>>' +
+             '<"row"<"col-sm-12"tr>>' +
+             '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
+        language: {
+          search: "Search:",
+          lengthMenu: "Show _MENU_ entries",
+          info: "Showing _START_ to _END_ of _TOTAL_ entries"
+        },
+        order: [[1, 'asc']],
+        stateSave: false,
+        columnDefs: [
+          { targets: 0, orderable: false, searchable: false, width: "36px", className: "text-center" }
+        ]
+      }
+    },
+    {
+      id: 'customImageTable',
+      config: {
+        pageLength: 25,
+        autoWidth: false,
+        dom: '<"row"<"col-sm-12"l>>' +
+             '<"row"<"col-sm-12"tr>>' +
+             '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
+        language: {
+          search: "Search:",
+          lengthMenu: "Show _MENU_ entries",
+          info: "Showing _START_ to _END_ of _TOTAL_ entries"
+        },
+        order: [[1, 'asc']],
+        stateSave: false,
+        columnDefs: [
+          { targets: 0, orderable: false, searchable: false, width: "36px", className: "text-center" }
         ]
       }
     }
@@ -5043,61 +5006,32 @@ function initializeDataTables() {
   tableConfigs.forEach(tableConfig => {
     const tableElement = document.getElementById(tableConfig.id);
     if (tableElement && !dataTableInstances[tableConfig.id]) {
+      // Skip tables that only have placeholder rows (colspan) or are empty
+      if (!tableHasDataRows(tableConfig.id)) {
+        console.log(`[DataTables] Skipping ${tableConfig.id} (no data rows yet)`);
+        return;
+      }
       try {
-        // Check if jQuery DataTable is available
         if (typeof $ !== 'undefined' && $.fn.DataTable) {
-          // Destroy existing DataTable if it exists
           if ($.fn.DataTable.isDataTable(`#${tableConfig.id}`)) {
-            $(`#${tableConfig.id}`).DataTable().destroy();
-            console.log(`[DataTables] Destroyed existing table: ${tableConfig.id}`);
+            const dt = $(`#${tableConfig.id}`).DataTable();
+            dt.clear();    // Clear internal cache so .destroy() won't restore old rows
+            dt.destroy();
           }
           
-          // Initialize with jQuery DataTable and enable searching/ordering
           const config = {
             ...tableConfig.config,
             searching: true,
             ordering: true,
-            stateSave: false, // Always disable state saving
-            order: [], // Reset any saved ordering to default
-            destroy: true, // Allow re-initialization
+            stateSave: false,
+            destroy: true,
           };
           
           dataTableInstances[tableConfig.id] = $(`#${tableConfig.id}`).DataTable(config);
-          console.log(`[DataTables] Initialized table with jQuery: ${tableConfig.id}`);
-          
-          // Verify that sorting classes are being applied after initialization
-          setTimeout(() => {
-            const headers = $(`#${tableConfig.id} thead th`);
-            console.log(`[DataTables] Verifying headers for ${tableConfig.id}:`);
-            headers.each((index, header) => {
-              const classes = header.className;
-              const hasOrderingClass = classes.includes('sorting') || classes.includes('sorting_asc') || classes.includes('sorting_desc');
-              console.log(`[DataTables] Header ${index}: "${$(header).text()}" | Classes: ${classes} | Has ordering: ${hasOrderingClass}`);
-            });
-            
-            // Check if search box and other DataTables controls are rendered
-            const wrapper = $(`#${tableConfig.id}_wrapper`);
-            const searchBox = wrapper.find('input[type="search"]');
-            const lengthSelect = wrapper.find('select[name$="_length"]');
-            const pagination = wrapper.find('.dataTables_paginate');
-            
-            console.log(`[DataTables] UI Elements for ${tableConfig.id}:`);
-            console.log(`[DataTables] - Wrapper exists: ${wrapper.length > 0}`);
-            console.log(`[DataTables] - Search box exists: ${searchBox.length > 0}, visible: ${searchBox.is(':visible')}`);
-            console.log(`[DataTables] - Length select exists: ${lengthSelect.length > 0}, visible: ${lengthSelect.is(':visible')}`);
-            console.log(`[DataTables] - Pagination exists: ${pagination.length > 0}, visible: ${pagination.is(':visible')}`);
-            
-            if (searchBox.length > 0) {
-              console.log(`[DataTables] - Search box element:`, searchBox[0]);
-              console.log(`[DataTables] - Search box CSS:`, window.getComputedStyle(searchBox[0]));
-            }
-          }, 200);
-          
-        } else {
-          console.warn(`[DataTables] jQuery DataTable not available for ${tableConfig.id}`);
+          console.log(`[DataTables] Initialized: ${tableConfig.id}`);
         }
       } catch (error) {
-        console.warn(`[DataTables] Failed to initialize table ${tableConfig.id}:`, error);
+        console.warn(`[DataTables] Failed to initialize ${tableConfig.id}:`, error);
       }
     }
   });
@@ -5109,7 +5043,116 @@ document.addEventListener('DOMContentLoaded', function() {
   setTimeout(() => {
     initializeDataTables();
   }, 500);
+
+  // Adjust DataTable column widths on window resize
+  let resizeTimer;
+  window.addEventListener('resize', function() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (typeof $ !== 'undefined' && $.fn.DataTable) {
+        $.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
+      }
+    }, 150);
+  });
 });
+
+// Check if a table has real data rows (not just colspan placeholder rows)
+function tableHasDataRows(tableId) {
+  const table = document.getElementById(tableId);
+  if (!table) return false;
+  const tbody = table.querySelector('tbody');
+  if (!tbody) return false;
+  const rows = tbody.querySelectorAll('tr');
+  if (rows.length === 0) return false;
+  // Check if any row has real cells (no colspan spanning all columns)
+  for (const row of rows) {
+    const cells = row.querySelectorAll('td');
+    if (cells.length > 1) return true; // Multiple cells = real data row
+    if (cells.length === 1 && !cells[0].hasAttribute('colspan')) return true;
+  }
+  return false;
+}
+
+// Function to reinitialize a single DataTable after innerHTML update
+// Destroy existing DataTable instance (must be called BEFORE updating tbody content)
+function destroyDataTable(tableId) {
+  if (typeof $ === 'undefined' || !$.fn.DataTable) return;
+  try {
+    if ($.fn.DataTable.isDataTable(`#${tableId}`)) {
+      $(`#${tableId}`).DataTable().destroy();
+    }
+    delete dataTableInstances[tableId];
+  } catch (e) {
+    console.warn(`[DataTables] Failed to destroy ${tableId}:`, e);
+  }
+}
+
+// Initialize DataTable on a table (must be called AFTER tbody has new content)
+function initDataTable(tableId) {
+  if (typeof $ === 'undefined' || !$.fn.DataTable) return;
+  try {
+    const knownTables = {
+      'mciTable': true, 'vmTable': true, 'vNetTable': true,
+      'securityGroupTable': true, 'sshKeyTable': true,
+      'k8sClusterTable': true, 'vpnTable': true,
+      'k8sNodeGroupTable': true, 'dataDiskTable': true, 'customImageTable': true
+    };
+    if (!knownTables[tableId]) return;
+
+    // Skip if table only has placeholder rows (colspan) or is empty
+    if (!tableHasDataRows(tableId)) {
+      delete dataTableInstances[tableId];
+      return;
+    }
+
+    // Destroy if somehow still active
+    if ($.fn.DataTable.isDataTable(`#${tableId}`)) {
+      $(`#${tableId}`).DataTable().destroy();
+      delete dataTableInstances[tableId];
+    }
+
+    const config = {
+      pageLength: 25,
+      autoWidth: false,
+      searching: true,
+      ordering: true,
+      stateSave: false,
+      destroy: true,
+      order: [[1, 'asc']],
+      dom: '<"row"<"col-sm-12"l>>' +
+           '<"row"<"col-sm-12"tr>>' +
+           '<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
+      language: {
+        search: "Search:",
+        lengthMenu: "Show _MENU_ entries",
+        info: "Showing _START_ to _END_ of _TOTAL_ entries"
+      },
+      columnDefs: [
+        { targets: 0, orderable: false, searchable: false, width: "36px", className: "text-center" }
+      ]
+    };
+    dataTableInstances[tableId] = $(`#${tableId}`).DataTable(config);
+  } catch (e) {
+    console.warn(`[DataTables] Failed to init ${tableId}:`, e);
+  }
+}
+
+// Legacy wrapper - destroy then init (for backward compatibility)
+function refreshDataTable(tableId) {
+  destroyDataTable(tableId);
+  initDataTable(tableId);
+}
+
+// Map tableType to DataTable element ID
+function getDataTableId(tableType) {
+  const map = {
+    'mci': 'mciTable', 'vm': 'vmTable', 'vNet': 'vNetTable',
+    'securityGroup': 'securityGroupTable', 'sshKey': 'sshKeyTable',
+    'k8sCluster': 'k8sClusterTable', 'vpn': 'vpnTable',
+    'k8sNodeGroup': 'k8sNodeGroupTable', 'dataDisk': 'dataDiskTable', 'customImage': 'customImageTable'
+  };
+  return map[tableType] || null;
+}
 
 // Function to reinitialize DataTables if needed
 function reinitializeDataTablesIfNeeded() {
@@ -5137,3 +5180,620 @@ function reinitializeDataTablesIfNeeded() {
 window.dataTableInstances = dataTableInstances;
 window.initializeDataTables = initializeDataTables;
 window.reinitializeDataTablesIfNeeded = reinitializeDataTablesIfNeeded;
+window.refreshDataTable = refreshDataTable;
+
+// ===============================
+// Table Multi-Select, Toolbar & Filter System
+// ===============================
+
+// Selection state per table type
+const tableSelections = {};
+
+// Table config lookup
+function getTableConfig(tableType) {
+  const configs = {
+    mci:           { tableId: 'mciTable',           bodyId: 'mciTableBody' },
+    vm:            { tableId: 'vmTable',             bodyId: 'vmTableBody' },
+    k8sCluster:    { tableId: 'k8sClusterTable',    bodyId: 'k8sClusterTableBody' },
+    k8sNodeGroup:  { tableId: 'k8sNodeGroupTable',  bodyId: 'k8sNodeGroupTableBody' },
+    vNet:          { tableId: 'vNetTable',           bodyId: 'vNetTableBody' },
+    securityGroup: { tableId: 'securityGroupTable',  bodyId: 'securityGroupTableBody' },
+    sshKey:        { tableId: 'sshKeyTable',         bodyId: 'sshKeyTableBody' },
+    customImage:   { tableId: 'customImageTable',    bodyId: 'customImageTableBody' },
+    dataDisk:      { tableId: 'dataDiskTable',       bodyId: 'dataDiskTableBody' },
+    vpn:           { tableId: 'vpnTable',            bodyId: 'vpnTableBody' },
+  };
+  return configs[tableType] || null;
+}
+
+function initSelection(tableType) {
+  if (!tableSelections[tableType]) {
+    tableSelections[tableType] = new Set();
+  }
+}
+
+// Toggle a single row's selection
+function toggleRowSelect(tableType, itemId, checkbox) {
+  initSelection(tableType);
+  if (checkbox.checked) {
+    tableSelections[tableType].add(itemId);
+  } else {
+    tableSelections[tableType].delete(itemId);
+  }
+  // Update the row highlight
+  const row = checkbox.closest('tr');
+  if (row) {
+    row.classList.toggle('row-selected', checkbox.checked);
+  }
+  updateSelectAllCheckbox(tableType);
+  updateToolbarState(tableType);
+}
+
+// Toggle select-all checkbox
+function toggleSelectAll(tableType, selectAllCheckbox) {
+  initSelection(tableType);
+  const cfg = getTableConfig(tableType);
+  if (!cfg) return;
+  const tbody = document.getElementById(cfg.bodyId);
+  if (!tbody) return;
+
+  // Only operate on visible rows
+  const rows = tbody.querySelectorAll('tr');
+  rows.forEach(tr => {
+    if (tr.style.display === 'none') return;
+    const cb = tr.querySelector('.row-select-checkbox');
+    if (!cb) return;
+    cb.checked = selectAllCheckbox.checked;
+    const itemId = cb.getAttribute('data-item-id');
+    if (selectAllCheckbox.checked) {
+      tableSelections[tableType].add(itemId);
+      tr.classList.add('row-selected');
+    } else {
+      tableSelections[tableType].delete(itemId);
+      tr.classList.remove('row-selected');
+    }
+  });
+  updateToolbarState(tableType);
+}
+
+// Sync select-all checkbox state
+function updateSelectAllCheckbox(tableType) {
+  const cfg = getTableConfig(tableType);
+  if (!cfg) return;
+  const table = document.getElementById(cfg.tableId);
+  if (!table) return;
+  const selectAllCb = table.querySelector('.select-all-checkbox');
+  if (!selectAllCb) return;
+
+  const tbody = document.getElementById(cfg.bodyId);
+  if (!tbody) return;
+  const visible = tbody.querySelectorAll('tr:not([style*="display: none"]) .row-select-checkbox');
+  const checked = tbody.querySelectorAll('tr:not([style*="display: none"]) .row-select-checkbox:checked');
+  selectAllCb.checked = visible.length > 0 && checked.length === visible.length;
+  selectAllCb.indeterminate = checked.length > 0 && checked.length < visible.length;
+}
+
+// Update toolbar action buttons visibility & selection count
+function updateToolbarState(tableType) {
+  initSelection(tableType);
+  const count = tableSelections[tableType].size;
+
+  const countEl = document.getElementById(`${tableType}SelectionCount`);
+  if (countEl) {
+    countEl.textContent = count > 0 ? `${count} selected` : '';
+  }
+
+  const actionsEl = document.getElementById(`${tableType}BulkActions`);
+  if (actionsEl) {
+    actionsEl.style.display = count > 0 ? 'flex' : 'none';
+  }
+
+  // single-action buttons only enabled when exactly 1 selected
+  const singleBtns = document.querySelectorAll(`#${tableType}BulkActions .single-action-btn`);
+  singleBtns.forEach(btn => { btn.disabled = count !== 1; });
+}
+
+function getSelectedItems(tableType) {
+  initSelection(tableType);
+  return Array.from(tableSelections[tableType]);
+}
+
+function clearTableSelection(tableType) {
+  if (tableSelections[tableType]) tableSelections[tableType].clear();
+  const cfg = getTableConfig(tableType);
+  if (!cfg) return;
+  const table = document.getElementById(cfg.tableId);
+  if (!table) return;
+  table.querySelectorAll('.row-select-checkbox, .select-all-checkbox').forEach(cb => { cb.checked = false; });
+  table.querySelectorAll('tr.row-selected').forEach(r => r.classList.remove('row-selected'));
+  updateToolbarState(tableType);
+}
+
+// Restore checkbox state after table re-render
+function restoreSelectionState(tableType) {
+  initSelection(tableType);
+  if (tableSelections[tableType].size === 0) return;
+  const cfg = getTableConfig(tableType);
+  if (!cfg) return;
+  const tbody = document.getElementById(cfg.bodyId);
+  if (!tbody) return;
+  tbody.querySelectorAll('.row-select-checkbox').forEach(cb => {
+    const id = cb.getAttribute('data-item-id');
+    if (tableSelections[tableType].has(id)) {
+      cb.checked = true;
+      const row = cb.closest('tr');
+      if (row) row.classList.add('row-selected');
+    }
+  });
+  // Remove IDs no longer present in the table
+  const currentIds = new Set();
+  tbody.querySelectorAll('.row-select-checkbox').forEach(cb => {
+    currentIds.add(cb.getAttribute('data-item-id'));
+  });
+  tableSelections[tableType].forEach(id => {
+    if (!currentIds.has(id)) tableSelections[tableType].delete(id);
+  });
+  updateSelectAllCheckbox(tableType);
+  updateToolbarState(tableType);
+}
+
+// ----- Filter -----
+function filterTableRows(tableType, keyword) {
+  const cfg = getTableConfig(tableType);
+  if (!cfg) return;
+  const tbody = document.getElementById(cfg.bodyId);
+  if (!tbody) return;
+
+  const lowerKw = keyword.toLowerCase().trim();
+  let visibleCount = 0;
+  const rows = tbody.querySelectorAll('tr');
+  rows.forEach(row => {
+    if (!lowerKw) {
+      row.style.display = '';
+      visibleCount++;
+    } else {
+      const text = row.textContent.toLowerCase();
+      const match = text.includes(lowerKw);
+      row.style.display = match ? '' : 'none';
+      if (match) visibleCount++;
+    }
+  });
+
+  const filterCountEl = document.getElementById(`${tableType}FilterCount`);
+  if (filterCountEl) {
+    if (lowerKw) {
+      filterCountEl.textContent = `(${visibleCount} shown)`;
+      filterCountEl.style.display = 'inline';
+    } else {
+      filterCountEl.style.display = 'none';
+    }
+  }
+  // re-sync select-all after filter
+  updateSelectAllCheckbox(tableType);
+}
+
+// ----- Toolbar injection -----
+function injectToolbar(tableType, bulkActionsHtml) {
+  const cfg = getTableConfig(tableType);
+  if (!cfg) return;
+  const table = document.getElementById(cfg.tableId);
+  if (!table) return;
+  const tableContainer = table.closest('.table-responsive');
+  if (!tableContainer) return;
+
+  // Build toolbar
+  const toolbar = document.createElement('div');
+  toolbar.className = 'table-toolbar';
+  toolbar.id = `${tableType}Toolbar`;
+  toolbar.innerHTML = `
+    <div class="toolbar-left">
+      <span class="selection-info" id="${tableType}SelectionCount"></span>
+      <span class="filter-count" id="${tableType}FilterCount" style="display:none;"></span>
+      <div class="bulk-actions" id="${tableType}BulkActions" style="display:none;">
+        ${bulkActionsHtml}
+      </div>
+    </div>
+    <div class="toolbar-right">
+      <div class="input-group input-group-sm" style="width:auto;">
+        <div class="input-group-prepend">
+          <span class="input-group-text" style="background:white;border-right:none;"><i class="fas fa-search" style="color:#adb5bd;"></i></span>
+        </div>
+        <input type="text" class="form-control table-filter-input"
+               placeholder="Filter..."
+               id="${tableType}Filter"
+               oninput="filterTableRows('${tableType}', this.value)"
+               style="border-left:none;">
+      </div>
+    </div>
+  `;
+  tableContainer.parentNode.insertBefore(toolbar, tableContainer);
+}
+
+// Setup all table enhancements (called once)
+function setupTableEnhancements() {
+  const configs = {
+    mci: `
+      <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('mci')" title="View Details"><i class="fas fa-eye"></i> View</button>
+      <button class="btn btn-sm btn-outline-success" onclick="bulkControlMci('resume')" title="Resume"><i class="fas fa-play"></i> Resume</button>
+      <button class="btn btn-sm btn-outline-warning" onclick="bulkControlMci('suspend')" title="Suspend"><i class="fas fa-pause"></i> Suspend</button>
+      <button class="btn btn-sm btn-outline-info" onclick="bulkControlMci('restart')" title="Restart"><i class="fas fa-sync-alt"></i> Restart</button>
+      <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('mci')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
+    `,
+    vm: `
+      <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('vm')" title="View Details"><i class="fas fa-eye"></i> View</button>
+      <button class="btn btn-sm btn-outline-success" onclick="bulkControlVm('resume')" title="Resume"><i class="fas fa-play"></i> Resume</button>
+      <button class="btn btn-sm btn-outline-warning" onclick="bulkControlVm('suspend')" title="Suspend"><i class="fas fa-pause"></i> Suspend</button>
+      <button class="btn btn-sm btn-outline-info" onclick="bulkControlVm('restart')" title="Restart"><i class="fas fa-sync-alt"></i> Restart</button>
+      <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('vm')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
+    `,
+    k8sCluster: `
+      <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('k8sCluster')" title="View Details"><i class="fas fa-eye"></i> View</button>
+      <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('k8sCluster')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
+    `,
+    k8sNodeGroup: `
+      <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('k8sNodeGroup')" title="View Details"><i class="fas fa-eye"></i> View</button>
+      <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('k8sNodeGroup')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
+    `,
+    vNet: `
+      <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('vNet')" title="View Details"><i class="fas fa-eye"></i> View</button>
+      <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('vNet')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
+    `,
+    securityGroup: `
+      <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('securityGroup')" title="View Details"><i class="fas fa-eye"></i> View</button>
+      <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('securityGroup')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
+    `,
+    sshKey: `
+      <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('sshKey')" title="View Details"><i class="fas fa-eye"></i> View</button>
+      <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('sshKey')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
+    `,
+    customImage: `
+      <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('customImage')" title="View Details"><i class="fas fa-eye"></i> View</button>
+      <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('customImage')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
+    `,
+    dataDisk: `
+      <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('dataDisk')" title="View Details"><i class="fas fa-eye"></i> View</button>
+      <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('dataDisk')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
+    `,
+    vpn: `
+      <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('vpn')" title="View Details"><i class="fas fa-eye"></i> View</button>
+      <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('vpn')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
+    `,
+  };
+
+  Object.entries(configs).forEach(([tableType, html]) => {
+    injectToolbar(tableType, html);
+    initSelection(tableType);
+  });
+}
+
+// ----- Bulk Action Handlers -----
+
+// View details (single selection)
+function bulkViewDetails(tableType) {
+  const selected = getSelectedItems(tableType);
+  if (selected.length !== 1) return;
+  const itemId = selected[0];
+
+  switch (tableType) {
+    case 'mci': viewMciDetails(itemId); break;
+    case 'vm': {
+      const cb = document.querySelector(`#vmTableBody .row-select-checkbox[data-item-id="${CSS.escape(itemId)}"]`);
+      const mciId = cb ? cb.getAttribute('data-mci-id') : null;
+      if (mciId) viewVmDetails(mciId, itemId);
+      break;
+    }
+    case 'k8sCluster': viewK8sClusterDetails(itemId); break;
+    case 'k8sNodeGroup': {
+      const cb = document.querySelector(`#k8sNodeGroupTableBody .row-select-checkbox[data-item-id="${CSS.escape(itemId)}"]`);
+      const clusterId = cb ? cb.getAttribute('data-cluster-id') : null;
+      if (clusterId) viewNodeGroupDetails(clusterId, itemId);
+      break;
+    }
+    case 'vNet': viewResourceDetails('vNet', itemId); break;
+    case 'securityGroup': viewResourceDetails('securityGroup', itemId); break;
+    case 'sshKey': viewResourceDetails('sshKey', itemId); break;
+    case 'customImage': viewResourceDetails('customImage', itemId); break;
+    case 'dataDisk': viewResourceDetails('dataDisk', itemId); break;
+    case 'vpn': {
+      const cb = document.querySelector(`#vpnTableBody .row-select-checkbox[data-item-id="${CSS.escape(itemId)}"]`);
+      const mciId = cb ? cb.getAttribute('data-mci-id') : null;
+      if (mciId) viewVpnDetails(mciId, itemId);
+      break;
+    }
+  }
+}
+
+// Run async tasks in parallel batches of given concurrency
+async function runInBatches(tasks, concurrency = 10) {
+  const results = [];
+  for (let i = 0; i < tasks.length; i += concurrency) {
+    const batch = tasks.slice(i, i + concurrency);
+    const batchResults = await Promise.allSettled(batch.map(fn => fn()));
+    results.push(...batchResults);
+  }
+  return results;
+}
+
+// Bulk control MCI (resume/suspend/restart)
+async function bulkControlMci(action) {
+  const selected = getSelectedItems('mci');
+  if (selected.length === 0) return;
+
+  const result = await Swal.fire({
+    title: `${action.charAt(0).toUpperCase() + action.slice(1)} ${selected.length} MCI(s)?`,
+    text: `Selected: ${selected.join(', ')}`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: `Yes, ${action}`,
+  });
+  if (!result.isConfirmed) return;
+
+  const parentConfig = window.parent?.getConfig?.() || { hostname: 'localhost', port: '1323', username: 'default', password: 'default' };
+  const nsEl = window.parent?.document?.getElementById('namespace') || window.parent?.document?.getElementById('namespace-control');
+  const ns = nsEl?.value || 'default';
+
+  showRefreshIndicator(true);
+  const tasks = selected.map(mciId => () =>
+    axios.get(`http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${ns}/control/mci/${mciId}?action=${action}`, {
+      auth: { username: parentConfig.username, password: parentConfig.password },
+      timeout: 600000
+    })
+  );
+  const results = await runInBatches(tasks, 10);
+  const successCount = results.filter(r => r.status === 'fulfilled').length;
+  results.filter(r => r.status === 'rejected').forEach(r => console.error(`Failed to ${action} MCI:`, r.reason));
+
+  showRefreshIndicator(false);
+  showSuccessMessage(`${action} sent for ${successCount}/${selected.length} MCI(s)`);
+  clearTableSelection('mci');
+  // Activate cooldown then schedule delayed re-fetch for fresh data
+  startMutationCooldown();
+  scheduleFreshFetch();
+}
+
+// Bulk control VM (resume/suspend/restart)
+async function bulkControlVm(action) {
+  const selected = getSelectedItems('vm');
+  if (selected.length === 0) return;
+
+  const result = await Swal.fire({
+    title: `${action.charAt(0).toUpperCase() + action.slice(1)} ${selected.length} VM(s)?`,
+    text: `Selected: ${selected.join(', ')}`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: `Yes, ${action}`,
+  });
+  if (!result.isConfirmed) return;
+
+  const parentConfig = window.parent?.getConfig?.() || { hostname: 'localhost', port: '1323', username: 'default', password: 'default' };
+  const nsEl = window.parent?.document?.getElementById('namespace') || window.parent?.document?.getElementById('namespace-control');
+  const ns = nsEl?.value || 'default';
+
+  showRefreshIndicator(true);
+  const tasks = selected.map(vmId => {
+    const cb = document.querySelector(`#vmTableBody .row-select-checkbox[data-item-id="${CSS.escape(vmId)}"]`);
+    const mciId = cb ? cb.getAttribute('data-mci-id') : null;
+    if (!mciId) return null;
+    return () => axios.get(`http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${ns}/control/mci/${mciId}/vm/${vmId}?action=${action}`, {
+      auth: { username: parentConfig.username, password: parentConfig.password },
+      timeout: 600000
+    });
+  }).filter(Boolean);
+  const results = await runInBatches(tasks, 10);
+  const successCount = results.filter(r => r.status === 'fulfilled').length;
+  results.filter(r => r.status === 'rejected').forEach(r => console.error(`Failed to ${action} VM:`, r.reason));
+
+  showRefreshIndicator(false);
+  showSuccessMessage(`${action} sent for ${successCount}/${selected.length} VM(s)`);
+  clearTableSelection('vm');
+  // Activate cooldown then schedule delayed re-fetch for fresh data
+  startMutationCooldown();
+  scheduleFreshFetch();
+}
+
+// Bulk delete (generic for all resource types)
+async function bulkDeleteItems(tableType) {
+  const selected = getSelectedItems(tableType);
+  if (selected.length === 0) return;
+
+  const typeLabels = {
+    mci: 'MCI', vm: 'VM', k8sCluster: 'K8s Cluster', k8sNodeGroup: 'K8s Node Group',
+    vNet: 'vNet', securityGroup: 'Security Group', sshKey: 'SSH Key',
+    customImage: 'Custom Image', dataDisk: 'Data Disk', vpn: 'VPN'
+  };
+  const label = typeLabels[tableType] || tableType;
+
+  const result = await Swal.fire({
+    title: `Delete ${selected.length} ${label}(s)?`,
+    html: `<p>This action cannot be undone.</p><p style="font-size:0.85rem;color:#6c757d;">${selected.map(id => _escapeHtml(id)).join('<br>')}</p>`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#d33',
+    confirmButtonText: 'Yes, delete all',
+    cancelButtonText: 'Cancel'
+  });
+  if (!result.isConfirmed) return;
+
+  const parentConfig = window.parent?.getConfig?.() || { hostname: 'localhost', port: '1323', username: 'default', password: 'default' };
+  const nsEl = window.parent?.document?.getElementById('namespace') || window.parent?.document?.getElementById('namespace-control');
+  const ns = nsEl?.value || 'default';
+  const credentialHolder = parentConfig.credentialHolder || 'admin';
+  let successCount = 0;
+  let errors = [];
+
+  Swal.fire({ title: 'Deleting...', text: `Deleting ${selected.length} item(s)...`, allowOutsideClick: true, didOpen: () => Swal.showLoading() });
+
+  // Build tasks with endpoints
+  const tasks = [];
+  for (const itemId of selected) {
+    let endpoint = '';
+    switch (tableType) {
+      case 'mci':
+        endpoint = `/ns/${ns}/mci/${itemId}?option=terminate`;
+        break;
+      case 'vm': {
+        const cb = document.querySelector(`#vmTableBody .row-select-checkbox[data-item-id="${CSS.escape(itemId)}"]`);
+        const mciId = cb ? cb.getAttribute('data-mci-id') : null;
+        if (!mciId) { errors.push(`VM ${itemId}: unknown MCI`); continue; }
+        endpoint = `/ns/${ns}/mci/${mciId}/vm/${itemId}`;
+        break;
+      }
+      case 'k8sCluster':
+        endpoint = `/ns/${ns}/k8sCluster/${itemId}`;
+        break;
+      case 'k8sNodeGroup': {
+        const cb = document.querySelector(`#k8sNodeGroupTableBody .row-select-checkbox[data-item-id="${CSS.escape(itemId)}"]`);
+        const clusterId = cb ? cb.getAttribute('data-cluster-id') : null;
+        if (!clusterId) { errors.push(`NodeGroup ${itemId}: unknown cluster`); continue; }
+        endpoint = `/ns/${ns}/k8sCluster/${clusterId}/k8sNodeGroup/${itemId}`;
+        break;
+      }
+      case 'vNet':
+        endpoint = `/ns/${ns}/resources/vNet/${itemId}?action=withsubnets`;
+        break;
+      case 'securityGroup':
+        endpoint = `/ns/${ns}/resources/securityGroup/${itemId}`;
+        break;
+      case 'sshKey':
+        endpoint = `/ns/${ns}/resources/sshKey/${itemId}`;
+        break;
+      case 'customImage':
+        endpoint = `/ns/${ns}/resources/customImage/${itemId}`;
+        break;
+      case 'dataDisk':
+        endpoint = `/ns/${ns}/resources/dataDisk/${itemId}`;
+        break;
+      case 'vpn': {
+        const cb = document.querySelector(`#vpnTableBody .row-select-checkbox[data-item-id="${CSS.escape(itemId)}"]`);
+        const mciId = cb ? cb.getAttribute('data-mci-id') : null;
+        if (!mciId) { errors.push(`VPN ${itemId}: unknown MCI`); continue; }
+        endpoint = `/ns/${ns}/mci/${mciId}/vpn/${itemId}`;
+        break;
+      }
+      default:
+        continue;
+    }
+
+    tasks.push({ itemId, fn: () => axios({ method: 'DELETE', url: `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug${endpoint}`,
+      headers: { 'X-Credential-Holder': credentialHolder },
+      auth: { username: parentConfig.username, password: parentConfig.password }, timeout: 600000
+    }) });
+  }
+
+  const results = await runInBatches(tasks.map(t => t.fn), 10);
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') {
+      successCount++;
+    } else {
+      const msg = r.reason?.response?.data?.message || r.reason?.message || 'Unknown error';
+      errors.push(`${tasks[i].itemId}: ${msg}`);
+    }
+  });
+
+  if (errors.length > 0) {
+    await Swal.fire({
+      title: `Deleted ${successCount}/${selected.length}`,
+      html: `<p>${errors.length} error(s):</p><pre style="text-align:left;font-size:0.8rem;max-height:200px;overflow:auto;">${errors.map(e => _escapeHtml(e)).join('\n')}</pre>`,
+      icon: successCount > 0 ? 'warning' : 'error',
+    });
+  } else {
+    await Swal.fire({ title: 'Deleted!', text: `Successfully deleted ${successCount} item(s).`, icon: 'success', timer: 2500, showConfirmButton: false });
+  }
+
+  clearTableSelection(tableType);
+
+  // Immediately remove successfully deleted items from local data and re-render
+  const deletedIds = new Set();
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') deletedIds.add(tasks[i].itemId);
+  });
+
+  if (deletedIds.size > 0) {
+    switch (tableType) {
+      case 'mci':
+        mciData = mciData.filter(m => !deletedIds.has(m.id));
+        vmData = vmData.filter(v => {
+          const mciId = v.mciId || (v.id && v.id.split('-')[0]);
+          return !deletedIds.has(mciId);
+        });
+        updateMciTable();
+        updateVmTable();
+        break;
+      case 'vm':
+        vmData = vmData.filter(v => !deletedIds.has(v.id));
+        updateVmTable();
+        break;
+      case 'k8sCluster':
+        if (centralData?.k8sCluster) {
+          centralData.k8sCluster = centralData.k8sCluster.filter(c => !deletedIds.has(c.id));
+        }
+        updateK8sClusterTable();
+        updateK8sNodeGroupTable();
+        break;
+      case 'k8sNodeGroup':
+        // Node groups are nested in k8sCluster data; refresh from server
+        updateK8sNodeGroupTable();
+        break;
+      case 'vNet':
+        if (centralData?.vNet) {
+          centralData.vNet = centralData.vNet.filter(v => !deletedIds.has(v.id));
+        }
+        updateVNetTable();
+        break;
+      case 'securityGroup':
+        if (centralData?.securityGroup) {
+          centralData.securityGroup = centralData.securityGroup.filter(sg => !deletedIds.has(sg.id));
+        }
+        updateSecurityGroupTable();
+        break;
+      case 'sshKey':
+        if (centralData?.sshKey) {
+          centralData.sshKey = centralData.sshKey.filter(sk => !deletedIds.has(sk.id));
+        }
+        updateSshKeyTable();
+        break;
+      case 'customImage':
+        if (centralData?.customImage) {
+          centralData.customImage = centralData.customImage.filter(ci => !deletedIds.has(ci.id));
+        }
+        updateCustomImageTable();
+        break;
+      case 'dataDisk':
+        if (centralData?.dataDisk) {
+          centralData.dataDisk = centralData.dataDisk.filter(dd => !deletedIds.has(dd.id));
+        }
+        updateDataDiskTable();
+        break;
+      case 'vpn':
+        if (centralData?.vpn) {
+          centralData.vpn = centralData.vpn.filter(vpn => !deletedIds.has(vpn.id));
+        }
+        updateVpnTable();
+        break;
+    }
+    updateStatistics();
+    updateCharts();
+  }
+
+  // Activate cooldown to prevent subscription from restoring deleted items,
+  // then schedule a delayed re-fetch for eventual consistency
+  startMutationCooldown();
+  scheduleFreshFetch();
+}
+
+// Initialize enhancements on DOM ready
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(() => {
+    setupTableEnhancements();
+  }, 100);
+});
+
+// Export enhancement functions
+window.toggleRowSelect = toggleRowSelect;
+window.toggleSelectAll = toggleSelectAll;
+window.filterTableRows = filterTableRows;
+window.bulkViewDetails = bulkViewDetails;
+window.bulkControlMci = bulkControlMci;
+window.bulkControlVm = bulkControlVm;
+window.bulkDeleteItems = bulkDeleteItems;
+window.clearTableSelection = clearTableSelection;

@@ -3055,7 +3055,7 @@ function getMci() {
         username: `${username}`,
         password: `${password}`,
       },
-      timeout: 60000,
+      timeout: 600000,
     })
       .then((res) => {
         var obj = res.data;
@@ -3348,7 +3348,7 @@ function getMci() {
         username: `${username}`,
         password: `${password}`,
       },
-      timeout: 10000,
+      timeout: 600000,
     }).then((res) => {
       var obj = res.data;
       debugLog.api('vNet API response:', obj);
@@ -3391,7 +3391,7 @@ function getMci() {
         username: `${username}`,
         password: `${password}`,
       },
-      timeout: 10000,
+      timeout: 600000,
     }).then((res) => {
       var obj = res.data;
       debugLog.api('Security Group API response:', obj);
@@ -3435,7 +3435,7 @@ function getMci() {
         username: `${username}`,
         password: `${password}`,
       },
-      timeout: 10000,
+      timeout: 600000,
     }).then((res) => {
       var obj = res.data;
       debugLog.api('SSH Key API response:', obj);
@@ -3481,7 +3481,7 @@ function getMci() {
         username: `${username}`,
         password: `${password}`,
       },
-      timeout: 10000,
+      timeout: 600000,
     }).then((res) => {
       var obj = res.data;
       debugLog.api('Custom Image API response:', obj);
@@ -3511,7 +3511,7 @@ function getMci() {
         username: `${username}`,
         password: `${password}`,
       },
-      timeout: 10000,
+      timeout: 600000,
     }).then((res) => {
       var obj = res.data;
       debugLog.api('Data Disk API response:', obj);
@@ -4228,7 +4228,7 @@ function getConnection() {
       username: `${username}`,
       password: `${password}`,
     },
-    timeout: 60000,
+    timeout: 600000,
   })
     .then((res) => {
       var obj = res.data;
@@ -10056,7 +10056,7 @@ function statusMCI() {
       username: `${username}`,
       password: `${password}`,
     },
-    timeout: 260000,
+    timeout: 600000,
   })
     .then((res) => {
       console.log("[Status MCI]");
@@ -12017,7 +12017,7 @@ function AddNLB() {
       username: `${username}`,
       password: `${password}`,
     },
-    timeout: 30000,
+    timeout: 600000,
   })
     .then((res) => {
       var subGroupOptions = '';
@@ -12176,7 +12176,7 @@ function DelNLB() {
       username: `${username}`,
       password: `${password}`,
     },
-    timeout: 30000,
+    timeout: 600000,
   })
     .then((res) => {
       var subGroupOptions = '';
@@ -17790,7 +17790,7 @@ function showSubGroupSelectionForScaleOut(selectedMciId, namespace, hostname, po
       username: `${username}`,
       password: `${password}`,
     },
-    timeout: 30000,
+    timeout: 600000,
   })
     .then((res) => {
       var subGroupOptions = '';
@@ -18224,7 +18224,7 @@ function showMciSelectionForScaleOut(title, description, successCallback) {
       username: `${username}`,
       password: `${password}`,
     },
-    timeout: 30000,
+    timeout: 600000,
   })
     .then((res) => {
       var mciOptions = '';
@@ -18462,7 +18462,7 @@ function showMciScaleOutReview(selectedMciId, subGroupName, vmCountPerLocation, 
       username: `${username}`,
       password: `${password}`,
     },
-    timeout: 60000
+    timeout: 600000
   })
     .then((res) => {
       console.log("SubGroup review completed successfully");
@@ -19221,7 +19221,7 @@ function loadK8sClusterData() {
       username: `${username}`,
       password: `${password}`,
     },
-    timeout: 10000,
+    timeout: 600000,
   }).then((res) => {
     var obj = res.data;
     // console.log('K8s cluster API response:', obj);
