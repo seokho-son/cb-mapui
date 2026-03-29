@@ -1114,33 +1114,33 @@ function showMciContextMenu(pixel, mciInfo) {
         <p><strong>Status:</strong> ${mciInfo.status}</p>
         <p><strong>Distance:</strong> ${mciInfo.distance.toFixed(3)} units</p>
       </div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 15px;">
+      <div class="mci-context-grid" style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-top: 15px;">
 
-        <button onclick="showActionsMenu(); Swal.close();" class="btn btn-success btn-context">🕹️ Control</button>      
+        <button class="btn btn-success btn-context btn-mci-action" data-action="control">🕹️ Control</button>
         <button onclick="statusMCI(); Swal.close();" class="btn btn-success btn-context">📊 Status</button>
         <button onclick="getAccessInfo(); Swal.close();" class="btn btn-success btn-context">🔑 Access Info</button>
+        <button class="btn btn-success btn-context btn-mci-action" data-action="sshKeys">📦 SSH Keys</button>
 
         <button onclick="executeRemoteCmd(); Swal.close();" class="btn btn-warning btn-context">💻 Remote Cmd</button>
         <button onclick="showTaskManagementModal(); Swal.close();" class="btn btn-warning btn-context">📋 Cmd Status</button>
         <button onclick="transferFileToMci(); Swal.close();" class="btn btn-warning btn-context">📁 File Transfer</button>
-        <button onclick="downloadAllSshKeys(); Swal.close();" class="btn btn-warning btn-context">📦 SSH Keys (ZIP)</button>
+        <button class="btn btn-warning btn-context btn-mci-action" data-action="dns">🌐 Global DNS</button>
 
-        <button onclick="showSnapshotManagementModal(); Swal.close();" class="btn btn-info btn-context">📸 Snapshots</button>       
-        <button onclick="manageNLB(); Swal.close();" class="btn btn-info btn-context">⚖️ NLB</button>
+        <button class="btn btn-info btn-context btn-mci-action" data-action="nlb">⚖️ NLB</button>
         <button onclick="updateFirewallRules(); Swal.close();" class="btn btn-info btn-context">🔥 Firewall</button>
+        <button onclick="showSnapshotManagementModal(); Swal.close();" class="btn btn-info btn-context">📸 Snapshots</button>
+        <button class="btn btn-info btn-context btn-mci-action" data-action="scaleOut">⬆️ Scale Out</button>
 
-        <button class="btn btn-primary btn-context btn-mci-action" data-action="scaleOut">⬆️ Scale Out</button>
         <button class="btn btn-primary btn-context btn-mci-action" data-action="copyConfig">📋 Copy Config</button>
         <button class="btn btn-primary btn-context btn-mci-action" data-action="saveTemplate">📄 Save Template</button>
+        <button class="btn btn-danger btn-context btn-mci-action" data-action="delete">🗑️ Delete MCI</button>
 
-        <button onclick="executeAction('delete'); Swal.close();" class="btn btn-danger btn-context">🗑️ Delete MCI</button>
-        <button class="btn btn-info btn-context btn-mci-action" data-action="dns">🌐 Global DNS</button>
       </div>
     `,
     showConfirmButton: false,
     showCancelButton: true,
     cancelButtonText: '❌ Close',
-    width: '700px',
+    width: '850px',
     customClass: {
       popup: 'swal2-mci-context'
     },
@@ -1149,6 +1149,12 @@ function showMciContextMenu(pixel, mciInfo) {
       popup.querySelectorAll('.btn-mci-action').forEach(btn => {
         btn.addEventListener('click', () => {
           const action = btn.dataset.action;
+          // Functions that open their own Swal (no explicit close needed)
+          if (action === 'control') { showActionsMenu(); return; }
+          if (action === 'nlb') { manageNLB(); return; }
+          if (action === 'delete') { executeAction('delete'); return; }
+          if (action === 'sshKeys') { downloadAllSshKeys(); return; }
+          // Functions that don't open Swal — close context menu after
           if (action === 'scaleOut') scaleOutMciFromContext(mciName);
           else if (action === 'copyConfig') copyMciConfig(mciName);
           else if (action === 'saveTemplate') saveMciAsTemplate(mciName);
@@ -1156,6 +1162,14 @@ function showMciContextMenu(pixel, mciInfo) {
           Swal.close();
         });
       });
+      // Auto-span Delete MCI button to fill remaining columns in last row
+      const grid = popup.querySelector('.mci-context-grid');
+      if (grid) {
+        const cols = 4;
+        const total = grid.children.length;
+        const span = cols - ((total - 1) % cols);
+        if (span > 1) grid.lastElementChild.style.gridColumn = 'span ' + span;
+      }
     },
     willClose: () => {
       // Clear context menu selection when popup closes
@@ -19253,13 +19267,13 @@ function loadK8sClusterData() {
     let k8sClusterData = [];
     if (obj.K8sClusterInfo) {
       k8sClusterData = obj.K8sClusterInfo;
-      console.log('Using K8sClusterInfo field');
+      // console.log('Using K8sClusterInfo field');
     } else if (obj.cluster) {
       k8sClusterData = obj.cluster;
-      console.log('Using cluster field');
+      // console.log('Using cluster field');
     }
     
-    console.log('Final k8sClusterData:', k8sClusterData);
+    // console.log('Final k8sClusterData:', k8sClusterData);
     
     window.cloudBaristaCentralData.k8sCluster = k8sClusterData;
     window.cloudBaristaCentralData.resourceData.k8sCluster = k8sClusterData;
