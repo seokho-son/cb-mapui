@@ -12624,9 +12624,9 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "";
       break;
     case "Jitsi":
-      defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/jitsi/startServer.sh";
-      defaultRemoteCommand[1] = "chmod +x ~/startServer.sh";
-      defaultRemoteCommand[2] = "sudo ~/startServer.sh " + "$$Func(GetPublicIPs(separator=' '))" + " " + "<DNS_DOMAIN> <EMAIL_ADDRESS>";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/jitsi/startServer.sh | sudo bash -s -- <DNS_DOMAIN> <EMAIL_ADDRESS>";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
       break;
     case "Stress":
       defaultRemoteCommand[0] = "sudo apt install -y stress > /dev/null; stress -c 16 -t 60";
