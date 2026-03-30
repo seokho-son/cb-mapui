@@ -20858,6 +20858,7 @@ function renderTemplateCard(t, typeMeta, namespace) {
         </div>
         <div class="tmpl-card-actions">
           <button onclick="viewTemplateDetail('${safeNs}', '${safeType}', '${safeId}')" class="btn btn-sm btn-outline-info" title="View">👁️</button>
+          ${typeMeta.key === 'mci' ? `<button onclick="loadTemplateToMciConfig('${safeNs}', '${safeId}')" class="btn btn-sm btn-outline-primary" title="Load to MC-Infra Configuration">📋 Load to Config</button>` : ''}
           <button onclick="applyTemplate('${safeNs}', '${safeType}', '${safeId}')" class="btn btn-sm btn-outline-success" title="Apply">▶️</button>
           <button onclick="deleteTemplate('${safeNs}', '${safeType}', '${safeId}')" class="btn btn-sm btn-outline-danger" title="Delete">🗑️</button>
         </div>
@@ -20978,8 +20979,9 @@ async function viewTemplateDetail(namespace, type, templateId) {
             <span style="font-size:11px;color:#888;margin-left:8px;">Created: ${window.escapeHtml(createdAtStr)}</span>
           </div>
           <pre id="tmplDetailJson" style="background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;max-height:450px;overflow:auto;font-family:monospace;font-size:12px;white-space:pre-wrap;"></pre>
-          <div style="margin-top:10px;display:flex;gap:8px;">
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn btn-success btn-sm tmpl-detail-apply">▶️ Apply This Template</button>
+            ${type === 'mci' ? `<button class="btn btn-outline-primary btn-sm tmpl-detail-load">📋 Load to Config</button>` : ''}
             <button class="btn btn-outline-secondary btn-sm tmpl-detail-copy">📋 Copy JSON</button>
             <button class="btn btn-outline-primary btn-sm tmpl-detail-back">⬅️ Back to List</button>
           </div>
@@ -20995,12 +20997,13 @@ async function viewTemplateDetail(namespace, type, templateId) {
         if (jsonEl) jsonEl.textContent = jsonText;
         window._lastTemplateJson = jsonText;
         popup.querySelector('.tmpl-detail-apply')?.addEventListener('click', () => applyTemplate(namespace, type, templateId));
+        popup.querySelector('.tmpl-detail-load')?.addEventListener('click', () => loadTemplateToMciConfig(namespace, templateId));
         popup.querySelector('.tmpl-detail-copy')?.addEventListener('click', () => copyTemplateJson());
         popup.querySelector('.tmpl-detail-back')?.addEventListener('click', () => showTemplateManagement(namespace));
       }
     });
   } catch (err) {
-    Swal.fire('❌ Error', `Failed to load template: ${err.response?.data?.message || err.message}`, 'error');
+    Swal.fire({ icon: 'error', title: '❌ Error', text: `Failed to load template: ${err.response?.data?.message || err.message}` });
   }
 }
 window.viewTemplateDetail = viewTemplateDetail;
@@ -21332,6 +21335,140 @@ async function saveConfigAsTemplate(namespace, mciId, mciReq) {
   }
 }
 window.saveConfigAsTemplate = saveConfigAsTemplate;
+
+// Load an MCI template into the MC-Infra Configuration panel (same as Copy Config)
+async function loadTemplateToMciConfig(namespace, templateId) {
+  const config = getConfig();
+  const { hostname, port, username, password } = config;
+  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/template/mci/${templateId}`;
+
+  const spinnerId = addSpinnerTask('Loading template to MC-Infra Configuration');
+  let data;
+  try {
+    const res = await axios.get(url, { auth: { username, password } });
+    data = res.data;
+  } catch (err) {
+    removeSpinnerTask(spinnerId);
+    Swal.fire({ icon: 'error', title: '❌ Error', text: `Failed to load template: ${err.response?.data?.message || err.message}` });
+    return;
+  }
+
+  const mciReq = data.mciDynamicReq;
+  if (!mciReq || !mciReq.subGroups || mciReq.subGroups.length === 0) {
+    removeSpinnerTask(spinnerId);
+    Swal.fire('⚠️ Warning', 'No SubGroup configuration found in this template.', 'warning');
+    return;
+  }
+
+  // Close Template Management modal
+  Swal.close();
+
+  // Clear existing configuration
+  clearCircle('');
+
+  // Populate vmSubGroupReqeustFromSpecList and recommendedSpecList (mirrors copyMciConfig logic)
+  // Fetch spec details for each subGroup in parallel via specId
+  const specFetches = mciReq.subGroups.map(function(sg) {
+    var vmConfig = $.extend({}, createMciReqVmTmplt);
+    vmConfig.name           = sg.name           || ('g' + (vmSubGroupReqeustFromSpecList.length + 1));
+    vmConfig.specId         = sg.specId          || '';
+    vmConfig.imageId        = sg.imageId         || 'ubuntu22.04';
+    vmConfig.rootDiskType   = sg.rootDiskType    || 'default';
+    vmConfig.rootDiskSize   = sg.rootDiskSize    || 0;
+    vmConfig.subGroupSize   = sg.subGroupSize    || 1;
+    vmConfig.description    = sg.description     || 'mapui';
+    vmConfig.connectionName = sg.connectionName  || '';
+    vmConfig.zone           = sg.zone            || '';
+    if (sg.label && Object.keys(sg.label).length > 0) {
+      vmConfig.label = sg.label;
+    }
+    vmSubGroupReqeustFromSpecList.push(vmConfig);
+
+    // Fetch spec details if specId is available
+    if (sg.specId) {
+      const specUrl = `http://${hostname}:${port}/tumblebug/ns/system/resources/spec/${sg.specId}`;
+      return axios.get(specUrl, { auth: { username, password } })
+        .then(function(specRes) {
+          const s = specRes.data;
+          return {
+            id:                  sg.specId,
+            providerName:        s.providerName         || extractProviderFromSpecId(sg.specId),
+            regionName:          s.regionName           || extractRegionFromSpecId(sg.specId),
+            cspSpecName:         s.cspSpecName          || sg.specId,
+            vCPU:                s.vCPU                 ?? 'N/A',
+            memoryGiB:           s.memoryGiB            ?? 'N/A',
+            costPerHour:         s.costPerHour          || 0,
+            acceleratorType:     s.acceleratorType      || '',
+            acceleratorModel:    s.acceleratorModel     || '',
+            acceleratorCount:    s.acceleratorCount     || 0,
+            acceleratorMemoryGB: s.acceleratorMemoryGB  || '',
+            connectionName:      sg.connectionName      || '',
+            rootDiskType:        sg.rootDiskType        || 'default'
+          };
+        })
+        .catch(function() {
+          // Fallback to parsed values if spec fetch fails
+          return {
+            id:                  sg.specId,
+            providerName:        extractProviderFromSpecId(sg.specId),
+            regionName:          extractRegionFromSpecId(sg.specId),
+            cspSpecName:         sg.specId,
+            vCPU:                'N/A',
+            memoryGiB:           'N/A',
+            costPerHour:         0,
+            acceleratorType:     '',
+            acceleratorModel:    '',
+            acceleratorCount:    0,
+            acceleratorMemoryGB: '',
+            connectionName:      sg.connectionName || '',
+            rootDiskType:        sg.rootDiskType   || 'default'
+          };
+        });
+    } else {
+      return Promise.resolve({
+        id:                  '',
+        providerName:        '',
+        regionName:          '',
+        cspSpecName:         '',
+        vCPU:                'N/A',
+        memoryGiB:           'N/A',
+        costPerHour:         0,
+        acceleratorType:     '',
+        acceleratorModel:    '',
+        acceleratorCount:    0,
+        acceleratorMemoryGB: '',
+        connectionName:      sg.connectionName || '',
+        rootDiskType:        sg.rootDiskType   || 'default'
+      });
+    }
+  });
+
+  // Wait for all spec fetches, then render
+  try {
+    const specInfoList = await Promise.all(specFetches);
+    specInfoList.forEach(function(specInfo) {
+      recommendedSpecList.push(specInfo);
+    });
+    updateSubGroupReview();
+
+    // Switch to Provision tab
+    var provisionTab = document.getElementById('provision-tab');
+    if (provisionTab) provisionTab.click();
+
+    Swal.fire({
+      toast: true,
+      position: 'bottom-end',
+      icon: 'success',
+      title: `Template "${window.escapeHtml(templateId)}" loaded to Provision panel`,
+      showConfirmButton: false,
+      timer: 3000,
+      timerProgressBar: true
+    });
+  } finally {
+    removeSpinnerTask(spinnerId);
+  }
+}
+window.loadTemplateToMciConfig = loadTemplateToMciConfig;
 
 // =====================================================================
 // Global DNS Management (Route53)
