@@ -21003,7 +21003,7 @@ async function viewTemplateDetail(namespace, type, templateId) {
       }
     });
   } catch (err) {
-    Swal.fire('❌ Error', `Failed to load template: ${err.response?.data?.message || err.message}`, 'error');
+    Swal.fire({ icon: 'error', title: '❌ Error', text: `Failed to load template: ${err.response?.data?.message || err.message}` });
   }
 }
 window.viewTemplateDetail = viewTemplateDetail;
@@ -21349,13 +21349,13 @@ async function loadTemplateToMciConfig(namespace, templateId) {
     data = res.data;
   } catch (err) {
     removeSpinnerTask(spinnerId);
-    Swal.fire('❌ Error', `Failed to load template: ${err.response?.data?.message || err.message}`, 'error');
+    Swal.fire({ icon: 'error', title: '❌ Error', text: `Failed to load template: ${err.response?.data?.message || err.message}` });
     return;
   }
-  removeSpinnerTask(spinnerId);
 
   const mciReq = data.mciDynamicReq;
   if (!mciReq || !mciReq.subGroups || mciReq.subGroups.length === 0) {
+    removeSpinnerTask(spinnerId);
     Swal.fire('⚠️ Warning', 'No SubGroup configuration found in this template.', 'warning');
     return;
   }
@@ -21444,7 +21444,8 @@ async function loadTemplateToMciConfig(namespace, templateId) {
   });
 
   // Wait for all spec fetches, then render
-  Promise.all(specFetches).then(function(specInfoList) {
+  try {
+    const specInfoList = await Promise.all(specFetches);
     specInfoList.forEach(function(specInfo) {
       recommendedSpecList.push(specInfo);
     });
@@ -21463,7 +21464,9 @@ async function loadTemplateToMciConfig(namespace, templateId) {
       timer: 3000,
       timerProgressBar: true
     });
-  });
+  } finally {
+    removeSpinnerTask(spinnerId);
+  }
 }
 window.loadTemplateToMciConfig = loadTemplateToMciConfig;
 
