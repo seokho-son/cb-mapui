@@ -1125,6 +1125,7 @@ function showMciContextMenu(pixel, mciInfo) {
         <button onclick="showTaskManagementModal(); Swal.close();" class="btn btn-warning btn-context">📋 Cmd Status</button>
         <button onclick="transferFileToMci(); Swal.close();" class="btn btn-warning btn-context">📁 File Transfer</button>
         <button class="btn btn-warning btn-context btn-mci-action" data-action="dns">🌐 Global DNS</button>
+        <button onclick="setBastionNode(); Swal.close();" class="btn btn-warning btn-context">🔗 Set Bastion</button>
 
         <button class="btn btn-info btn-context btn-mci-action" data-action="nlb">⚖️ NLB</button>
         <button onclick="updateFirewallRules(); Swal.close();" class="btn btn-info btn-context">🔥 Firewall</button>
@@ -12444,6 +12445,31 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "sudo ~/setup-wireguard-mesh.sh --nodes \"<NODES_MAPPING>\"";
       defaultRemoteCommand[2] = "";
       break;
+    case "PortForward-Add":
+      // Forward an external port on this VM to a target IP:port (e.g., OpenStack floating IP)
+      // Fill in FLOATING_IP, EXT_PORT, TARGET_PORT in the parameter fields below the command
+      defaultRemoteCommand[0] = "IFACE=$(ip route show 0.0.0.0/0 | grep -oE \"dev [^ ]+\" | cut -c5-) && sudo sysctl -w net.ipv4.ip_forward=1 && sudo iptables -t nat -A PREROUTING -i $IFACE -p tcp --dport <EXT_PORT> -j DNAT --to-destination <FLOATING_IP>:<TARGET_PORT> && sudo iptables -A FORWARD -p tcp -d <FLOATING_IP> --dport <TARGET_PORT> -j ACCEPT && sudo iptables -t nat -A POSTROUTING -j MASQUERADE && echo \"✅ Port forwarding :<EXT_PORT> → <FLOATING_IP>:<TARGET_PORT> activated\" && echo \"🌐 Access: http://$$Func(GetPublicIP(target=this)):<EXT_PORT>\"";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "PortForward-List":
+      // List current port forwarding (DNAT) rules with line numbers
+      defaultRemoteCommand[0] = "echo '=== PREROUTING (DNAT) ===' && sudo iptables -t nat -L PREROUTING -n --line-numbers -v";
+      defaultRemoteCommand[1] = "echo '=== FORWARD ===' && sudo iptables -L FORWARD -n --line-numbers -v";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "PortForward-Del":
+      // Delete a port forwarding rule by line number (run PortForward-List first to see line numbers)
+      defaultRemoteCommand[0] = "sudo iptables -t nat -D PREROUTING <RULE_NUM> && echo '✅ PREROUTING rule #<RULE_NUM> deleted'";
+      defaultRemoteCommand[1] = "sudo iptables -t nat -L PREROUTING -n --line-numbers";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "PortForward-Save":
+      // Persist iptables rules across reboots (Debian/Ubuntu)
+      defaultRemoteCommand[0] = "sudo apt-get install -y iptables-persistent && sudo netfilter-persistent save && echo '✅ iptables rules saved (will persist across reboots)'";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
     case "Ollama":
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOllama.sh | sh";
       defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
@@ -12965,6 +12991,26 @@ window.PLACEHOLDER_METADATA = {
     hint: '54.1.1.1:10.200.0.1,35.2.2.2:10.200.0.2',
     secret: false,
   },
+  'FLOATING_IP': {
+    description: 'Target IP to forward to (e.g. OpenStack floating IP)',
+    hint: '172.24.4.99',
+    secret: false,
+  },
+  'EXT_PORT': {
+    description: 'External port to expose on this VM',
+    hint: '80',
+    secret: false,
+  },
+  'TARGET_PORT': {
+    description: 'Target port on the destination VM',
+    hint: '80',
+    secret: false,
+  },
+  'RULE_NUM': {
+    description: 'Rule line number to delete (from PortForward-List output)',
+    hint: '1',
+    secret: false,
+  },
 };
 
 /**
@@ -13259,7 +13305,11 @@ window.predefinedScriptCategories = {
     description: 'Network configuration tools',
     scripts: [
       { value: 'Setup-CrossNAT', label: 'Setup Cross-Cloud NAT', step: 1 },
-      { value: 'Setup-WireGuard', label: 'Setup WireGuard Mesh VPN', step: 2 }
+      { value: 'Setup-WireGuard', label: 'Setup WireGuard Mesh VPN', step: 2 },
+      { value: 'PortForward-Add', label: '🔀 Port Forwarding: Add rule', step: 3 },
+      { value: 'PortForward-List', label: '🔀 Port Forwarding: List rules', step: 4 },
+      { value: 'PortForward-Del', label: '🔀 Port Forwarding: Delete rule', step: 5 },
+      { value: 'PortForward-Save', label: '🔀 Port Forwarding: Save (persist on reboot)', step: 6, optional: true }
     ]
   },
   'utility': {
@@ -15164,6 +15214,247 @@ window.clearRecentCmds = function() {
   if (section) section.style.display = 'none';
 };
 
+async function setBastionNode() {
+  var config = getConfig();
+  var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
+  var namespace = namespaceElement.value;
+  var mciid = getSelectedMciId();
+
+  if (!namespace || !mciid) {
+    errorAlert("Please select a namespace and MCI first");
+    return;
+  }
+
+  // Load VMs in the current (target) MCI
+  let targetVmOptions = '<option value="">-- select VM --</option>';
+  try {
+    const mciRes = await axios.get(
+      `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}`,
+      { auth: { username, password } }
+    );
+    const vms = mciRes.data.vm || [];
+    vms.forEach(vm => {
+      const label = vm.publicIP ? `${vm.id} (${vm.publicIP})` : vm.id;
+      targetVmOptions += `<option value="${vm.id}">${label}</option>`;
+    });
+  } catch (err) {
+    console.error("Failed to fetch target MCI VMs:", err);
+  }
+
+  Swal.fire({
+    title: "🔗 Set Bastion Node",
+    width: 680,
+    html: `
+    ${POPUP_STYLES}
+    <div class="popup-container">
+
+      <!-- Target VM Section -->
+      <div class="popup-section">
+        <div class="popup-section-title">🎯 Target VM (needs bastion access)</div>
+        <div class="popup-row">
+          <div class="popup-col">
+            <div class="popup-field">
+              <label class="popup-label">Namespace</label>
+              <span class="popup-value">${namespace}</span>
+            </div>
+          </div>
+          <div class="popup-col">
+            <div class="popup-field">
+              <label class="popup-label">MCI</label>
+              <span class="popup-value">${mciid}</span>
+            </div>
+          </div>
+          <div class="popup-col" style="flex: 2;">
+            <div class="popup-field">
+              <label class="popup-label">Target VM</label>
+              <select id="bastionTargetVmId" class="popup-select">${targetVmOptions}</select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bastion Node Section -->
+      <div class="popup-section">
+        <div class="popup-section-title">🛡️ Bastion Node (jump host — can be from another namespace/MCI)</div>
+        <div class="popup-row">
+          <div class="popup-col">
+            <div class="popup-field">
+              <label class="popup-label">Namespace</label>
+              <input type="text" id="bastionNsId" class="popup-input" value="${namespace}"
+                placeholder="${namespace}" title="Bastion VM's namespace (leave as-is for same namespace)">
+            </div>
+          </div>
+          <div class="popup-col" style="flex: 0 0 auto;">
+            <div class="popup-field">
+              <label class="popup-label">&nbsp;</label>
+              <button type="button" id="loadBastionMciBtn"
+                style="padding: 6px 12px; background: #0d6efd; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.82rem; white-space: nowrap;">
+                🔄 Load MCIs
+              </button>
+            </div>
+          </div>
+          <div class="popup-col" style="flex: 2;">
+            <div class="popup-field">
+              <label class="popup-label">MCI</label>
+              <select id="bastionMciId" class="popup-select">
+                <option value="">-- click Load MCIs --</option>
+              </select>
+            </div>
+          </div>
+          <div class="popup-col" style="flex: 2;">
+            <div class="popup-field">
+              <label class="popup-label">Bastion VM</label>
+              <select id="bastionVmId" class="popup-select">
+                <option value="">-- select MCI first --</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="popup-row">
+          <div class="popup-col">
+            <span class="popup-hint">💡 For cross-namespace bastions (e.g. AWS VM in a shared-services namespace), change the namespace above and click Load MCIs.</span>
+          </div>
+        </div>
+      </div>
+
+    </div>`,
+    showCancelButton: true,
+    confirmButtonText: "Set Bastion",
+    cancelButtonText: "Cancel",
+    didOpen: () => {
+      // Load MCIs button handler
+      document.getElementById('loadBastionMciBtn').addEventListener('click', async () => {
+        const bastionNs = document.getElementById('bastionNsId').value.trim();
+        if (!bastionNs) { return; }
+        const mciSel = document.getElementById('bastionMciId');
+        mciSel.innerHTML = '<option value="">Loading...</option>';
+        document.getElementById('bastionVmId').innerHTML = '<option value="">-- select MCI first --</option>';
+        try {
+          const res = await axios.get(
+            `http://${hostname}:${port}/tumblebug/ns/${bastionNs}/mci?option=id`,
+            { auth: { username, password } }
+          );
+          const mcis = res.data.output || [];
+          mciSel.innerHTML = '<option value="">-- select MCI --</option>' +
+            mcis.map(m => `<option value="${m}">${m}</option>`).join('');
+        } catch (err) {
+          mciSel.innerHTML = '<option value="">Failed to load</option>';
+          console.error("Failed to load bastion MCIs:", err);
+        }
+      });
+
+      // MCI change → load VMs
+      document.getElementById('bastionMciId').addEventListener('change', async () => {
+        const bastionNs = document.getElementById('bastionNsId').value.trim();
+        const bastionMci = document.getElementById('bastionMciId').value;
+        const vmSel = document.getElementById('bastionVmId');
+        if (!bastionMci) {
+          vmSel.innerHTML = '<option value="">-- select MCI first --</option>';
+          return;
+        }
+        vmSel.innerHTML = '<option value="">Loading...</option>';
+        try {
+          const res = await axios.get(
+            `http://${hostname}:${port}/tumblebug/ns/${bastionNs}/mci/${bastionMci}`,
+            { auth: { username, password } }
+          );
+          const vms = res.data.vm || [];
+          // Prefer VMs with public IP (those can actually serve as bastions)
+          vmSel.innerHTML = '<option value="">-- auto-select (public IP) --</option>' +
+            vms.map(vm => {
+              const hasPublic = !!vm.publicIP;
+              const label = hasPublic
+                ? `${vm.id}  ✅ ${vm.publicIP}`
+                : `${vm.id}  (no public IP)`;
+              return `<option value="${vm.id}" ${hasPublic ? '' : 'style="color:#aaa;"'}>${label}</option>`;
+            }).join('');
+        } catch (err) {
+          vmSel.innerHTML = '<option value="">Failed to load</option>';
+          console.error("Failed to load bastion VMs:", err);
+        }
+      });
+    },
+    preConfirm: () => {
+      const targetVmId = document.getElementById('bastionTargetVmId').value;
+      const bastionNsId = document.getElementById('bastionNsId').value.trim();
+      const bastionMciId = document.getElementById('bastionMciId').value;
+      const bastionVmId = document.getElementById('bastionVmId').value; // may be empty → auto-select
+      if (!targetVmId) {
+        Swal.showValidationMessage("Please select a target VM");
+        return false;
+      }
+      if (!bastionMciId) {
+        Swal.showValidationMessage("Please load MCIs and select a bastion MCI");
+        return false;
+      }
+      return { targetVmId, bastionNsId, bastionMciId, bastionVmId };
+    },
+  }).then(async (result) => {
+    if (!result.isConfirmed || !result.value) return;
+
+    const { targetVmId, bastionNsId, bastionMciId, bastionVmId } = result.value;
+
+    // Build URL based on how many components differ
+    let url;
+    const sameBastionNs = bastionNsId === namespace;
+    const sameBastionMci = bastionMciId === mciid;
+
+    if (sameBastionNs && sameBastionMci && bastionVmId) {
+      // Same NS, same MCI
+      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/vm/${targetVmId}/bastion/${bastionVmId}`;
+    } else if (sameBastionNs && bastionVmId) {
+      // Same NS, different MCI
+      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/vm/${targetVmId}/bastion/${bastionMciId}/${bastionVmId}`;
+    } else if (sameBastionNs && !bastionVmId) {
+      // Same NS, different MCI, auto-select VM
+      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/vm/${targetVmId}/bastion/${bastionMciId}/`;
+    } else if (bastionVmId) {
+      // Cross-NS with explicit VM
+      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/vm/${targetVmId}/bastion/${bastionNsId}/${bastionMciId}/${bastionVmId}`;
+    } else {
+      // Cross-NS, auto-select VM — not supported via URL params; fall back to explicit auto-select call
+      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/vm/${targetVmId}/bastion/${bastionNsId}/${bastionMciId}/`;
+    }
+
+    // Remove trailing slash if bastionVmId is empty (auto-select not available via 3-segment route)
+    // For auto-select, use the existing same-MCI route which auto-picks a public-IP VM in bastionMciId
+    if (!bastionVmId) {
+      // Use bastionMciId route without VM ID — not directly supported; show guidance
+      Swal.fire({
+        icon: 'info',
+        title: 'Auto-select requires a VM ID',
+        text: `Please select a specific bastion VM. Auto-selection across MCI/namespaces is not supported via the UI — select a VM with a ✅ public IP from the list.`,
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
+
+    const spinnerId = addSpinnerTask("Setting bastion node...");
+    try {
+      const res = await axios({
+        method: 'put',
+        url: url,
+        auth: { username, password },
+        timeout: 30000,
+      });
+      removeSpinnerTask(spinnerId);
+      Swal.fire({
+        icon: 'success',
+        title: '✅ Bastion Set',
+        html: `<pre style="text-align:left;font-size:0.8rem;white-space:pre-wrap;">${JSON.stringify(res.data, null, 2)}</pre>`,
+        width: 600,
+      });
+    } catch (err) {
+      removeSpinnerTask(spinnerId);
+      const msg = err.response?.data?.message || err.message;
+      Swal.fire({ icon: 'error', title: 'Failed to set bastion', text: msg });
+    }
+  });
+}
+
 async function executeRemoteCmd() {
   var config = getConfig(); var hostname = config.hostname;
   var port = config.port;
@@ -15273,6 +15564,13 @@ async function executeRemoteCmd() {
                 <input type="number" id="timeoutMinutes" class="popup-input" style="width: 60px;" value="30" min="1" max="120">
                 <span style="font-size: 0.75rem; color: #666;">min</span>
               </div>
+            </div>
+          </div>
+          <div class="popup-col" style="flex: 0 0 auto;">
+            <div class="popup-field">
+              <label class="popup-label">SSH User</label>
+              <input type="text" id="sshUserName" class="popup-input" style="width: 90px;" placeholder="auto"
+                title="Leave blank to auto-detect (tries cb-user, ubuntu, root, ec2-user). Set explicitly for OpenStack (ubuntu) or custom images.">
             </div>
           </div>
         </div>
@@ -15398,7 +15696,8 @@ async function executeRemoteCmd() {
       const timeout = parseInt(document.getElementById("timeoutMinutes").value) || 30;
       const syncMode = document.getElementById("syncModeToggle")?.checked || false;
       const labelSelector = document.getElementById('labelSelector')?.value || '';
-      return { commands, selectedMci, timeout, syncMode, labelSelector };
+      const sshUserName = document.getElementById('sshUserName')?.value?.trim() || '';
+      return { commands, selectedMci, timeout, syncMode, labelSelector, sshUserName };
     },
   }).then((result) => {
       // result.value is false if result.isDenied or another key such as result.isDismissed
@@ -15435,7 +15734,9 @@ async function executeRemoteCmd() {
         cmd = result.value.commands;
         console.log(cmd.join(", "));
 
+        const sshUserName = result.value.sshUserName || '';
         var commandReqTmp = {
+          userName: sshUserName,
           command: cmd,
           timeoutMinutes: timeoutMinutes,
         };
@@ -15532,6 +15833,7 @@ async function executeRemoteCmd() {
       }
     });
 }
+window.setBastionNode = setBastionNode;
 window.executeRemoteCmd = executeRemoteCmd;
 
 // Function for transferFileToMci by remoteCmd button item
