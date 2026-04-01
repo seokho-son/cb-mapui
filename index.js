@@ -15237,8 +15237,10 @@ async function setBastionNode() {
     );
     const vms = mciRes.data.vm || [];
     vms.forEach(vm => {
-      const label = vm.publicIP ? `${vm.id} (${vm.publicIP})` : vm.id;
-      targetVmOptions += `<option value="${vm.id}">${label}</option>`;
+      const rawLabel = vm.publicIP ? `${vm.id} (${vm.publicIP})` : vm.id;
+      const escapedValue = window.escapeHtml(String(vm.id));
+      const escapedLabel = window.escapeHtml(String(rawLabel));
+      targetVmOptions += `<option value="${escapedValue}">${escapedLabel}</option>`;
     });
   } catch (err) {
     console.error("Failed to fetch target MCI VMs:", err);
@@ -15258,13 +15260,13 @@ async function setBastionNode() {
           <div class="popup-col">
             <div class="popup-field">
               <label class="popup-label">Namespace</label>
-              <span class="popup-value">${namespace}</span>
+              <span class="popup-value">${window.escapeHtml(namespace)}</span>
             </div>
           </div>
           <div class="popup-col">
             <div class="popup-field">
               <label class="popup-label">MCI</label>
-              <span class="popup-value">${mciid}</span>
+              <span class="popup-value">${window.escapeHtml(mciid)}</span>
             </div>
           </div>
           <div class="popup-col" style="flex: 2;">
@@ -15337,9 +15339,14 @@ async function setBastionNode() {
             `http://${hostname}:${port}/tumblebug/ns/${bastionNs}/mci?option=id`,
             { auth: { username, password } }
           );
-          const mcis = res.data.output || [];
-          mciSel.innerHTML = '<option value="">-- select MCI --</option>' +
-            mcis.map(m => `<option value="${m}">${m}</option>`).join('');
+          const mcis = Array.isArray(res.data.output) ? res.data.output : [];
+          mciSel.innerHTML = '<option value="">-- select MCI --</option>';
+          mcis.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = String(m);
+            opt.textContent = String(m);
+            mciSel.appendChild(opt);
+          });
         } catch (err) {
           mciSel.innerHTML = '<option value="">Failed to load</option>';
           console.error("Failed to load bastion MCIs:", err);
@@ -15362,15 +15369,16 @@ async function setBastionNode() {
             { auth: { username, password } }
           );
           const vms = res.data.vm || [];
-          // Prefer VMs with public IP (those can actually serve as bastions)
-          vmSel.innerHTML = '<option value="">-- auto-select (public IP) --</option>' +
-            vms.map(vm => {
-              const hasPublic = !!vm.publicIP;
-              const label = hasPublic
-                ? `${vm.id}  ✅ ${vm.publicIP}`
-                : `${vm.id}  (no public IP)`;
-              return `<option value="${vm.id}" ${hasPublic ? '' : 'style="color:#aaa;"'}>${label}</option>`;
-            }).join('');
+          // Only show VMs — no auto-select placeholder (auto-select is not supported)
+          vmSel.innerHTML = '<option value="">-- select VM --</option>';
+          vms.forEach(vm => {
+            const hasPublic = !!vm.publicIP;
+            const opt = document.createElement('option');
+            opt.value = String(vm.id);
+            opt.textContent = hasPublic ? `${vm.id}  ✅ ${vm.publicIP}` : `${vm.id}  (no public IP)`;
+            if (!hasPublic) opt.style.color = '#aaa';
+            vmSel.appendChild(opt);
+          });
         } catch (err) {
           vmSel.innerHTML = '<option value="">Failed to load</option>';
           console.error("Failed to load bastion VMs:", err);
@@ -15444,7 +15452,7 @@ async function setBastionNode() {
       Swal.fire({
         icon: 'success',
         title: '✅ Bastion Set',
-        html: `<pre style="text-align:left;font-size:0.8rem;white-space:pre-wrap;">${JSON.stringify(res.data, null, 2)}</pre>`,
+        text: JSON.stringify(res.data, null, 2),
         width: 600,
       });
     } catch (err) {
@@ -15734,12 +15742,14 @@ async function executeRemoteCmd() {
         cmd = result.value.commands;
         console.log(cmd.join(", "));
 
-        const sshUserName = result.value.sshUserName || '';
+        const sshUserName = (result.value.sshUserName || '').trim();
         var commandReqTmp = {
-          userName: sshUserName,
           command: cmd,
           timeoutMinutes: timeoutMinutes,
         };
+        if (sshUserName !== '') {
+          commandReqTmp.userName = sshUserName;
+        }
 
         var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
 
