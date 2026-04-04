@@ -37,9 +37,7 @@ async function deleteResourceAsync(resourceType, resourceId, additionalParams = 
     };
     
     // Get current namespace from parent window's namespace element
-    const namespaceElement = window.parent?.document?.getElementById('namespace') || 
-                            window.parent?.document?.getElementById('namespace-control');
-    const currentNamespace = namespaceElement?.value || additionalParams.nsId || 'default';
+    const currentNamespace = window.parent?.configNamespace || additionalParams.nsId || 'default';
     
     let endpoint = '';
     let confirmMessage = '';
@@ -655,14 +653,6 @@ document.addEventListener('DOMContentLoaded', function() {
       updateMciTable();
       updateVmTable();
       updateAllResourceTables();
-      
-      // Update last updated timestamp
-      const lastUpdatedElement = document.getElementById('lastUpdated');
-      if (lastUpdatedElement && centralData.lastUpdated) {
-        lastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleTimeString('en-US');
-      } else {
-        lastUpdatedElement.textContent = 'No data';
-      }
     });
     
     // Check if data is already available
@@ -680,14 +670,6 @@ document.addEventListener('DOMContentLoaded', function() {
         updateConnectionStatus('disconnected');
       }
       
-      // Update last updated timestamp
-      const lastUpdatedElement = document.getElementById('lastUpdated');
-      if (lastUpdatedElement && centralData.lastUpdated) {
-        lastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleTimeString('en-US');
-      } else {
-        lastUpdatedElement.textContent = 'No data';
-      }
-      
       updateStatistics();
       updateCharts();
       updateMciTable();
@@ -699,8 +681,6 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
       // No central data available yet
       console.log('Central data not available, waiting for data from Map...');
-      updateConnectionStatus('disconnected');
-      document.getElementById('lastUpdated').textContent = 'Waiting for Map data...';
     }
   } else {
     // Fallback: traditional loading if not in iframe
@@ -716,56 +696,14 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
-// Load settings from localStorage
-function loadSettings() {
-  const saved = localStorage.getItem('cb-dashboard-settings');
-  if (saved) {
-    const settings = JSON.parse(saved);
-    Object.assign(dashboardConfig, settings);
-    
-    // Update form fields
-    document.getElementById('hostname').value = dashboardConfig.hostname;
-    document.getElementById('port').value = dashboardConfig.port;
-    document.getElementById('username').value = dashboardConfig.username;
-    document.getElementById('password').value = dashboardConfig.password;
-    if (document.getElementById('credentialHolder')) {
-      document.getElementById('credentialHolder').value = dashboardConfig.credentialHolder || 'admin';
-    }
-    document.getElementById('namespace').value = dashboardConfig.namespace;
-    document.getElementById('refreshInterval').value = dashboardConfig.refreshInterval / 1000;
-  }
-}
+// Load settings — no-op: dashboard uses Map settings via window.parent
+function loadSettings() {}
 
-// Save settings to localStorage
-function saveSettings() {
-  dashboardConfig.hostname = document.getElementById('hostname').value;
-  dashboardConfig.port = document.getElementById('port').value;
-  dashboardConfig.username = document.getElementById('username').value;
-  dashboardConfig.password = document.getElementById('password').value;
-  if (document.getElementById('credentialHolder')) {
-    dashboardConfig.credentialHolder = document.getElementById('credentialHolder').value || 'admin';
-  }
-  dashboardConfig.namespace = document.getElementById('namespace').value;
-  dashboardConfig.refreshInterval = parseInt(document.getElementById('refreshInterval').value) * 1000;
-  
-  localStorage.setItem('cb-dashboard-settings', JSON.stringify(dashboardConfig));
-  
-  // Close modal
-  $('#settingsModal').modal('hide');
-  
-  // Restart auto-refresh with new interval
-  startAutoRefresh();
-  
-  // Refresh data immediately
-  refreshDashboard();
-  
-  showSuccessMessage('Settings saved successfully!');
-}
+// Save settings — no-op: dashboard uses Map settings via window.parent
+function saveSettings() {}
 
-// Show settings modal
-function showSettings() {
-  $('#settingsModal').modal('show');
-}
+// Show settings — no-op: settings modal removed
+function showSettings() {}
 
 // Initialize Chart.js charts with proper cleanup
 function initializeCharts() {
@@ -1079,19 +1017,9 @@ async function refreshDashboard() {
       // Update UI controls
       updateShowAllButton();
       
-      // Update last refresh time from central data
-      const lastUpdatedElement = document.getElementById('lastUpdated');
-      if (lastUpdatedElement && centralData.lastUpdated) {
-        lastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleTimeString('en-US');
-      } else {
-        lastUpdatedElement.textContent = 'No data';
-      }
-      
       console.log('Dashboard refreshed with shared data');
     } else {
       console.warn('No shared data available from parent window');
-      updateConnectionStatus('disconnected');
-      document.getElementById('lastUpdated').textContent = 'No connection';
     }
   } catch (error) {
     console.error('Error refreshing dashboard:', error);
@@ -1129,77 +1057,11 @@ async function testConnection() {
   }
 }
 
-// Update connection status indicator
-function updateConnectionStatus(status) {
-  const statusElement = document.getElementById('connectionStatus');
-  
-  switch (status) {
-    case 'connected':
-      statusElement.className = 'badge badge-success';
-      statusElement.innerHTML = '<i class="fas fa-check-circle"></i> Connected';
-      break;
-    case 'connecting':
-      statusElement.className = 'badge badge-warning';
-      statusElement.innerHTML = '<i class="fas fa-sync fa-spin"></i> Updating';
-      break;
-    case 'disconnected':
-      statusElement.className = 'badge badge-danger';
-      statusElement.innerHTML = '<i class="fas fa-times-circle"></i> No Data';
-      break;
-    default:
-      statusElement.className = 'badge badge-secondary';
-      statusElement.innerHTML = '<i class="fas fa-question-circle"></i> Unknown';
-  }
-}
+// Update connection status — no-op: status UI removed (managed by Map)
+function updateConnectionStatus(status) {}
 
-// Load namespace list
-async function loadNamespaces() {
-  // Get config from parent window (index.js) - same as delete functions
-  const parentConfig = window.parent?.getConfig?.() || { 
-    hostname: 'localhost', 
-    port: '1323',
-    username: 'default', 
-    password: 'default' 
-  };
-  
-  const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns`;
-  
-  try {
-    const response = await axios.get(url, {
-      auth: {
-        username: parentConfig.username,
-        password: parentConfig.password
-      },
-      timeout: 600000
-    });
-    
-    const namespaces = response.data.ns || [];
-    const namespaceSelect = document.getElementById('namespace');
-    
-    // Clear existing options
-    namespaceSelect.innerHTML = '';
-    
-    // Add namespaces
-    namespaces.forEach(ns => {
-      const option = document.createElement('option');
-      option.value = ns.id;
-      option.textContent = ns.id;
-      if (ns.id === dashboardConfig.namespace) {
-        option.selected = true;
-      }
-      namespaceSelect.appendChild(option);
-    });
-    
-    // If current namespace doesn't exist, use first available
-    if (!namespaces.find(ns => ns.id === dashboardConfig.namespace) && namespaces.length > 0) {
-      dashboardConfig.namespace = namespaces[0].id;
-      namespaceSelect.value = dashboardConfig.namespace;
-    }
-  } catch (error) {
-    console.error('Error loading namespaces:', error);
-    // Use default namespace if API call fails
-  }
-}
+// Load namespace list — no-op: namespace managed by Map settings
+async function loadNamespaces() {}
 
 // Load MCI data
 async function loadMciData() {
@@ -2517,9 +2379,7 @@ async function controlMci(mciId, action) {
   };
   
   // Get current namespace from parent window's namespace element
-  const namespaceElement = window.parent?.document?.getElementById('namespace') || 
-                          window.parent?.document?.getElementById('namespace-control');
-  const currentNamespace = namespaceElement?.value || 'default';
+  const currentNamespace = window.parent?.configNamespace || 'default';
   
   const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${currentNamespace}/control/mci/${mciId}?action=${action}`;
   
@@ -2564,9 +2424,7 @@ async function controlVm(mciId, vmId, action) {
   };
   
   // Get current namespace from parent window's namespace element
-  const namespaceElement = window.parent?.document?.getElementById('namespace') || 
-                          window.parent?.document?.getElementById('namespace-control');
-  const currentNamespace = namespaceElement?.value || 'default';
+  const currentNamespace = window.parent?.configNamespace || 'default';
   
   const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${currentNamespace}/control/mci/${mciId}/vm/${vmId}?action=${action}`;
   
@@ -2682,11 +2540,8 @@ function startAutoRefresh() {
   console.log(`Auto-refresh started with interval: ${dashboardConfig.refreshInterval}ms`);
 }
 
-// Show/hide refresh indicator
-function showRefreshIndicator(show) {
-  const indicator = document.getElementById('refreshIndicator');
-  indicator.style.display = show ? 'inline-block' : 'none';
-}
+// Show/hide refresh indicator — no-op: indicator UI removed
+function showRefreshIndicator(show) {}
 
 // Message functions
 function showSuccessMessage(message, duration = 3000) {
@@ -4390,9 +4245,7 @@ function scaleNodeGroup(clusterId, nodeGroupName) {
         };
         
         // Get current namespace from parent window's namespace element
-        const namespaceElement = window.parent?.document?.getElementById('namespace') || 
-                                window.parent?.document?.getElementById('namespace-control');
-        const currentNamespace = namespaceElement?.value || 'default';
+        const currentNamespace = window.parent?.configNamespace || 'default';
         
         // Call CB-Tumblebug API
         const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${currentNamespace}/k8sCluster/${clusterId}/k8sNodeGroup/${nodeGroupName}/autoscaleSize`;
@@ -5529,8 +5382,7 @@ async function bulkControlMci(action) {
   if (!result.isConfirmed) return;
 
   const parentConfig = window.parent?.getConfig?.() || { hostname: 'localhost', port: '1323', username: 'default', password: 'default' };
-  const nsEl = window.parent?.document?.getElementById('namespace') || window.parent?.document?.getElementById('namespace-control');
-  const ns = nsEl?.value || 'default';
+  const ns = window.parent?.configNamespace || 'default';
 
   showRefreshIndicator(true);
   const tasks = selected.map(mciId => () =>
@@ -5566,8 +5418,7 @@ async function bulkControlVm(action) {
   if (!result.isConfirmed) return;
 
   const parentConfig = window.parent?.getConfig?.() || { hostname: 'localhost', port: '1323', username: 'default', password: 'default' };
-  const nsEl = window.parent?.document?.getElementById('namespace') || window.parent?.document?.getElementById('namespace-control');
-  const ns = nsEl?.value || 'default';
+  const ns = window.parent?.configNamespace || 'default';
 
   showRefreshIndicator(true);
   const tasks = selected.map(vmId => {
@@ -5615,8 +5466,7 @@ async function bulkDeleteItems(tableType) {
   if (!result.isConfirmed) return;
 
   const parentConfig = window.parent?.getConfig?.() || { hostname: 'localhost', port: '1323', username: 'default', password: 'default' };
-  const nsEl = window.parent?.document?.getElementById('namespace') || window.parent?.document?.getElementById('namespace-control');
-  const ns = nsEl?.value || 'default';
+  const ns = window.parent?.configNamespace || 'default';
   const credentialHolder = parentConfig.credentialHolder || 'admin';
   let successCount = 0;
   let errors = [];

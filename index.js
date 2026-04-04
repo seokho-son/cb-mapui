@@ -174,6 +174,9 @@ var configPort = "1323";
 var configUsername = "default";
 var configPassword = "default";
 var configCredentialHolder = "admin";
+var configNamespace = "";
+window.configNamespace = configNamespace;
+var cachedNamespaceList = [];
 
 // Helper function to get current configuration
 function getConfig() {
@@ -182,9 +185,11 @@ function getConfig() {
     port: configPort,
     username: configUsername,
     password: configPassword,
-    credentialHolder: configCredentialHolder
+    credentialHolder: configCredentialHolder,
+    namespace: configNamespace
   };
 }
+window.getConfig = getConfig;
 
 // Axios interceptor: inject X-Credential-Holder header into all requests
 axios.interceptors.request.use(function (axiosConfig) {
@@ -197,7 +202,6 @@ axios.interceptors.request.use(function (axiosConfig) {
   return axiosConfig;
 });
 
-var namespaceElement = document.getElementById("namespace");
 var mciidElement = document.getElementById("mciid");
 
 // Central Data Store for sharing with Dashboard
@@ -242,26 +246,10 @@ function notifyDataSubscribers() {
   });
 }
 
-// Initialize map's Last Updated display
+// Initialize map's Last Updated display (no-op: timestamp removed from banner)
 function initializeMapLastUpdated() {
-  const mapLastUpdatedElement = document.getElementById('mapLastUpdatedTime');
-  if (!mapLastUpdatedElement) return;
-  
-  // Subscribe to central data updates
-  window.subscribeToDataUpdates(function(centralData) {
-    if (centralData.lastUpdated) {
-      mapLastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleTimeString('en-US');
-    } else {
-      mapLastUpdatedElement.textContent = 'Never';
-    }
-  });
-  
-  // Initial display
-  if (window.cloudBaristaCentralData.lastUpdated) {
-    mapLastUpdatedElement.textContent = new Date(window.cloudBaristaCentralData.lastUpdated).toLocaleTimeString('en-US');
-  } else {
-    mapLastUpdatedElement.textContent = 'Never';
-  }
+  // Timestamp display was removed from the map controls banner.
+  // This function is kept as a no-op to avoid breaking callers.
 }
 
 // Update map connection status
@@ -269,32 +257,31 @@ function updateMapConnectionStatus(status) {
   const statusElement = document.getElementById('mapConnectionStatus');
   if (!statusElement) return;
   
-  // Set consistent styling for all states with wider fixed width
+  // Set consistent styling for all states (icon-only)
   statusElement.style.fontSize = '10px';
-  statusElement.style.minWidth = '95px';
-  statusElement.style.width = '95px';
   statusElement.style.textAlign = 'center';
   statusElement.style.display = 'inline-block';
-  statusElement.style.whiteSpace = 'nowrap';
-  statusElement.style.overflow = 'hidden';
-  statusElement.style.textOverflow = 'ellipsis';
   
   switch (status) {
     case 'connected':
       statusElement.className = 'badge badge-success';
-      statusElement.innerHTML = '<i class="fas fa-check-circle" style="margin-right: 3px;"></i>Connected';
+      statusElement.innerHTML = '<i class="fas fa-check-circle"></i>';
+      statusElement.title = 'Connected';
       break;
     case 'connecting':
       statusElement.className = 'badge badge-warning';
-      statusElement.innerHTML = '<i class="fas fa-sync fa-spin" style="margin-right: 3px;"></i>Updating';
+      statusElement.innerHTML = '<i class="fas fa-sync fa-spin"></i>';
+      statusElement.title = 'Updating';
       break;
     case 'disconnected':
       statusElement.className = 'badge badge-danger';
-      statusElement.innerHTML = '<i class="fas fa-times-circle" style="margin-right: 3px;"></i>No Data';
+      statusElement.innerHTML = '<i class="fas fa-times-circle"></i>';
+      statusElement.title = 'No Data';
       break;
     default:
       statusElement.className = 'badge badge-secondary';
-      statusElement.innerHTML = '<i class="fas fa-question-circle" style="margin-right: 3px;"></i>Unknown';
+      statusElement.innerHTML = '<i class="fas fa-question-circle"></i>';
+      statusElement.title = 'Unknown';
   }
 }
 
@@ -328,6 +315,14 @@ function showMapSettings() {
   // Generic icon mode checkbox
   const genericIconChecked = useGenericCspIcons ? 'checked' : '';
 
+  // Build namespace options from cached list
+  const nsOptions = cachedNamespaceList.map(ns => {
+    const safeNs = window.escapeHtml(ns);
+    const selected = ns === configNamespace ? 'selected' : '';
+    return `<option value="${safeNs}" ${selected}>${safeNs}</option>`;
+  }).join('');
+  const nsSelectHtml = nsOptions || `<option value="${window.escapeHtml(configNamespace)}" selected>${window.escapeHtml(configNamespace) || '(none)'}</option>`;
+
   // Build credential holder options from cached list
   const holderOptions = cachedCredentialHolderList.map(holder => {
     const holderId = window.escapeHtml(holder.credentialHolder || holder.id || '');
@@ -353,6 +348,16 @@ function showMapSettings() {
         display: block;
       }
     </style>
+    <div style="text-align: left; margin: 10px 0;">
+      <label class="swal2-label">🏷️ Namespace ID:</label>
+      <select id="settings-namespace" style="width: 100%; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px;">
+        ${nsSelectHtml}
+      </select>
+      <div style="margin-top: 4px; font-size: 11px; color: #6c757d;">
+        Active namespace used across Provision and Control panels.
+      </div>
+    </div>
+    <hr style="margin: 16px 0;">
     <div style="text-align: left; margin: 10px 0;">
       <label class="swal2-label">🔑 Credential Holder:</label>
       <select id="settings-credentialHolder" style="width: 100%; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px;">
@@ -396,7 +401,8 @@ function showMapSettings() {
       }
       const genericIconEnabled = document.getElementById('genericIconToggle')?.checked || false;
       const selectedHolder = document.getElementById('settings-credentialHolder')?.value || configCredentialHolder;
-      return { refreshInterval: selectedInterval.value, genericIcons: genericIconEnabled, credentialHolder: selectedHolder };
+      const selectedNs = document.getElementById('settings-namespace')?.value || configNamespace;
+      return { refreshInterval: selectedInterval.value, genericIcons: genericIconEnabled, credentialHolder: selectedHolder, namespace: selectedNs };
     }
   }).then((result) => {
     if (result.isConfirmed) {
@@ -411,19 +417,27 @@ function showMapSettings() {
       window.useGenericCspIcons = useGenericCspIcons;
       // Clear cached generic styles so they can be regenerated if needed
       Object.keys(cspGenericStyles).forEach(k => delete cspGenericStyles[k]);
+      Object.keys(vmGenericCloudStyleCache).forEach(k => delete vmGenericCloudStyleCache[k]);
       // Force map re-render to apply icon change
       map.render();
       const view = map.getView();
       if (view) view.changed();
 
+      // Apply namespace change
+      const nsChanged = result.value.namespace !== configNamespace;
+      if (nsChanged) {
+        applyNamespace(result.value.namespace);
+      }
+
       // Apply credential holder change (triggers connection reload + map refresh)
       if (holderChanged) {
         applyCredentialHolder(result.value.credentialHolder);
       }
-      
+
       // Show success message
       var statusParts = [`Refresh: ${newRefreshInterval}s`];
       if (useGenericCspIcons) statusParts.push('Generic icons');
+      statusParts.push(`NS: ${result.value.namespace}`);
       statusParts.push(`Holder: ${result.value.credentialHolder}`);
       
       Swal.fire({
@@ -1062,27 +1076,7 @@ function showMciContextMenu(pixel, mciInfo) {
   // Store the selected MCI for use in control actions
   contextMenuSelectedMci = mciInfo.name;
   
-  // Sync namespace from Provision tab to Control tab
-  const provisionNamespace = document.getElementById('namespace');
-  const controlNamespace = document.getElementById('namespace-control');
-  if (provisionNamespace && controlNamespace && provisionNamespace.value) {
-    // Ensure the namespace option exists in control tab
-    let optionExists = false;
-    for (let option of controlNamespace.options) {
-      if (option.value === provisionNamespace.value) {
-        optionExists = true;
-        break;
-      }
-    }
-    if (!optionExists) {
-      const newOption = document.createElement('option');
-      newOption.value = provisionNamespace.value;
-      newOption.text = provisionNamespace.value;
-      controlNamespace.add(newOption);
-    }
-    // Set value without triggering change event (avoid updateMciList race condition)
-    controlNamespace.value = provisionNamespace.value;
-  }
+  // Namespace is managed globally via configNamespace
 
   // Set the selected MCI in the control panel
   const mciSelect = document.getElementById('mciid');
@@ -1487,38 +1481,83 @@ const cspGenericColors = {
 // Fallback color for unknown CSPs
 const CSP_GENERIC_FALLBACK_COLOR = '#888888';
 
-// Create a generic colored cloud style for a CSP
-function createGenericCloudStyle(csp) {
-  const color = cspGenericColors[csp] || CSP_GENERIC_FALLBACK_COLOR;
-  return [
-    // Background layer: solid white cloud for opaque fill
-    new Style({
-      text: new Text({
-        text: '☁',
-        font: 'bold 28px sans-serif',
-        fill: new Fill({ color: '#ffffff' }),
-        stroke: new Stroke({ color: '#cccccc', width: 2 }),
-      }),
-    }),
-    // Foreground layer: CSP-colored cloud with contrasting stroke for overlap visibility
-    new Style({
-      text: new Text({
-        text: '☁',
-        font: 'bold 24px sans-serif',
-        fill: new Fill({ color: color }),
-        stroke: new Stroke({ color: '#ffffff', width: 2 }),
-      }),
-    }),
+// Draw a cloud shape onto a Canvas and return a pixel-ready HTMLCanvasElement.
+// Using Canvas 2D avoids async image loading issues with vectorContext.setStyle().
+function createCloudCanvas(fillColor) {
+  const W = 44, H = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // Cloud shape: 5 overlapping circles
+  const circles = [
+    { x: 14, y: 20, r: 8 },   // left
+    { x: 22, y: 16, r: 10 },  // center-top
+    { x: 30, y: 19, r: 7 },   // right
+    { x: 18, y: 22, r: 7 },   // bottom-left
+    { x: 26, y: 22, r: 7 },   // bottom-right
   ];
+
+  // White outline pass
+  ctx.fillStyle = '#ffffff';
+  circles.forEach(c => {
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.r + 2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Colored fill pass
+  ctx.fillStyle = fillColor;
+  circles.forEach(c => {
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  return canvas;
 }
 
-// Cache for generic cloud styles
+// Create a generic colored cloud style for a CSP using a pre-rendered Canvas.
+// Canvas-based icons are synchronously available to vectorContext.setStyle().
+function createGenericCloudStyle(csp) {
+  const color = cspGenericColors[csp] || CSP_GENERIC_FALLBACK_COLOR;
+  return new Style({
+    image: new Icon({
+      img: createCloudCanvas(color),
+      scale: 0.72,
+    }),
+  });
+}
+
+// Cache for generic cloud styles (background CSP map points)
 const cspGenericStyles = {};
 function getGenericCloudStyle(csp) {
   if (!cspGenericStyles[csp]) {
     cspGenericStyles[csp] = createGenericCloudStyle(csp);
   }
   return cspGenericStyles[csp];
+}
+
+// Cache for VM overlay generic cloud styles keyed by "csp:scale"
+// Separate from cspGenericStyles because scale varies per VM
+const vmGenericCloudStyleCache = {};
+function getVmGenericCloudStyle(csp, scale) {
+  const key = `${csp}:${scale}`;
+  if (!vmGenericCloudStyleCache[key]) {
+    const platform = resolveCloudPlatform(csp);
+    const color = cspGenericColors[platform] || cspGenericColors[csp] || CSP_GENERIC_FALLBACK_COLOR;
+    vmGenericCloudStyleCache[key] = new Style({
+      image: new Icon({
+        img: createCloudCanvas(color),
+        scale: scale,
+        anchor: [0.5, 0.75],
+        anchorXUnits: 'fraction',
+        anchorYUnits: 'fraction',
+      }),
+    });
+  }
+  return vmGenericCloudStyleCache[key];
 }
 
 // Get the appropriate CSP style based on current icon mode
@@ -2109,34 +2148,8 @@ function createVmStyleWithStatusBadge(vmStatus, providerName = null, baseScale =
           }),
         })
       );
-    } else {
-      // Generic colored cloud icon mode
-      const platform = resolveCloudPlatform(providerName);
-      const color = cspGenericColors[platform] || cspGenericColors[providerName] || CSP_GENERIC_FALLBACK_COLOR;
-      // Background white cloud
-      styles.push(
-        new Style({
-          text: new Text({
-            text: '☁',
-            font: 'bold 18px sans-serif',
-            fill: new Fill({ color: '#ffffff' }),
-            stroke: new Stroke({ color: '#cccccc', width: 1.5 }),
-            offsetY: -16,
-          }),
-        })
-      );
-      // Foreground CSP-colored cloud
-      styles.push(
-        new Style({
-          text: new Text({
-            text: '☁',
-            font: 'bold 14px sans-serif',
-            fill: new Fill({ color: color }),
-            offsetY: -16,
-          }),
-        })
-      );
     }
+    // Generic colored cloud icon mode — no overlay icon
   }
 
   return styles;
@@ -3108,7 +3121,7 @@ function getMci() {
   var port = configPort;
   var username = configUsername;
   var password = configPassword;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   // Use global refreshInterval variable instead of DOM element
   var filteredRefreshInterval = isNormalInteger(refreshInterval.toString())
@@ -4601,7 +4614,7 @@ function showFinalMciConfirmation(createMciReq, url, totalCost, totalNodeScale, 
 function proceedWithBuildAgnosticImage(createMciReq, snapshotName, snapshotDescription, cleanupMciAfterSnapshot, username, password) {
   const hostname = configHostname;
   const port = configPort;
-  const namespace = namespaceElement.value;
+  const namespace = configNamespace;
   const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/buildAgnosticImage`;
   
   // Prepare buildAgnosticImage request body
@@ -6145,7 +6158,7 @@ function reviewWithSelectedSubgroups(selectedSubgroups) {
   var port = configPort;
   var username = configUsername;
   var password = configPassword;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   
   // Get current createMciReq from global vmSubGroupReqeustFromSpecList
   if (vmSubGroupReqeustFromSpecList.length === 0) {
@@ -6232,7 +6245,7 @@ function createMci() {
     var port = configPort;
     var username = configUsername;
     var password = configPassword;
-    var namespace = namespaceElement.value;
+    var namespace = configNamespace;
 
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mciDynamic`;
 
@@ -6370,7 +6383,7 @@ function createK8sCluster() {
   const port = configPort;
   const username = configUsername;
   const password = configPassword;
-  const namespace = namespaceElement.value;
+  const namespace = configNamespace;
 
   // For multi-cluster, use namePrefix approach (simplified dialog)
   if (isMultiCluster) {
@@ -6747,7 +6760,7 @@ function addNodeGroupToK8sCluster() {
   const port = configPort;
   const username = configUsername;
   const password = configPassword;
-  const namespace = namespaceElement.value;
+  const namespace = configNamespace;
 
   // First, get list of existing K8s clusters
   const listUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster`;
@@ -7962,7 +7975,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
         console.log("Searching images for selected spec:", selectedSpec.id);
 
         // Get namespace for custom image API call
-        var namespace = namespaceElement.value;
+        var namespace = configNamespace;
 
         // Search images API call and custom images API call in parallel
         Promise.all([
@@ -9486,7 +9499,7 @@ function createSubGroupItem(vm, spec, index) {
         <div class="d-flex align-items-center mb-1 flex-wrap">
           <span class="badge mr-1" style="background-color: #343a40; color: white; font-size: 0.75rem;">💻 ${vm.name || `SubGroup-${index + 1}`} ⨉ ${vm.subGroupSize}</span>
           <span class="badge mr-1" style="background-color: ${providerColor}; color: ${providerTextColor}; font-size: 0.7rem;">
-            ${(spec?.providerName || 'Unknown').toUpperCase()}
+            ${useGenericCspIcons ? 'Cloud' : (spec?.providerName || 'Unknown').toUpperCase()}
           </span>
           <span class="badge mr-1" style="background-color: ${regionColor}; color: ${regionTextColor}; font-size: 0.7rem;">
             ${spec?.regionName || 'Unknown Region'}
@@ -9907,7 +9920,7 @@ function controlMCI(action) {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = getSelectedMciId();
 
   if (!namespace) {
@@ -9983,7 +9996,7 @@ function hideMCI() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
 
@@ -10109,7 +10122,7 @@ function statusMCI() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = getSelectedMciId();
 
   // Validate required parameters
@@ -10170,7 +10183,7 @@ function deleteMCI() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = getSelectedMciId();
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=terminate`;
@@ -10216,7 +10229,7 @@ function releaseResources() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/sharedResources`;
 
@@ -10296,7 +10309,7 @@ function registerCspResource() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   var url = `http://${hostname}:${port}/tumblebug/registerCspResourcesAll?mciFlag=n`;
 
@@ -11229,17 +11242,24 @@ function updateHolderStatusDisplays() {
     holderNameEl.textContent = configCredentialHolder;
   }
 
-  // Update control tab read-only display
-  var controlDisplay = document.getElementById('credentialHolder-control-display');
-  if (controlDisplay) {
-    var holderInfo = cachedCredentialHolderList.find(h => h.credentialHolder === configCredentialHolder);
-    if (holderInfo) {
-      var connCount = holderInfo.verifiedConnectionCount || holderInfo.connectionCount || 0;
-      controlDisplay.textContent = `${configCredentialHolder} (${connCount} conns)`;
-    } else {
-      controlDisplay.textContent = configCredentialHolder;
-    }
-  }
+}
+
+// Update NS ID map badge
+function updateNsDisplays() {
+  var nsName = configNamespace || '—';
+  var mapNsNameEl = document.getElementById('mapNsName');
+  if (mapNsNameEl) mapNsNameEl.textContent = nsName;
+}
+
+// Change active namespace and refresh dependent lists
+function applyNamespace(newNs) {
+  if (newNs === configNamespace) return;
+  var oldNs = configNamespace;
+  configNamespace = newNs;
+  window.configNamespace = newNs;
+  console.log('[Namespace] Changed: ' + oldNs + ' → ' + newNs);
+  updateNsDisplays();
+  updateMciList();
 }
 
 // Change credential holder and reload connections + map
@@ -11386,89 +11406,55 @@ window.reloadConnectionsForHolder = reloadConnectionsForHolder;
 // ==================== End of Credential Holder Functions ====================
 
 function updateNsList() {
-  // Get all namespace select elements
-  var namespaceSelects = [
-    document.getElementById("namespace"),           // Provision tab
-    document.getElementById("namespace-control")    // Control tab  
-  ];
-  
-  // Store previous selections
-  var previousSelections = namespaceSelects.map(select => select ? select.value : '');
-  
-  // Clear options in all namespace selects
-  namespaceSelects.forEach(selectElement => {
-    if (selectElement) {
-      var i, L = selectElement.options.length - 1;
-      for (i = L; i >= 0; i--) {
-        selectElement.remove(i);
-      }
-    }
-  });
-
-  var config = getConfig(); var hostname = config.hostname;
+  var config = getConfig();
+  var hostname = config.hostname;
   var port = config.port;
   var username = config.username;
   var password = config.password;
 
-  if (hostname && hostname != "" && port && port != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns?option=id`;
+  if (!hostname || hostname === "" || !port || port === "") return;
 
-    axios({
-      method: "get",
-      url: url,
-      auth: {
-        username: `${username}`,
-        password: `${password}`,
-      },
-    })
-      .then((res) => {
-        if (res.data.output != null) {
-          // Update all namespace select elements
-          for (let item of res.data.output) {
-            if (item && item.trim() !== "") {
-              namespaceSelects.forEach((selectElement, index) => {
-                if (selectElement) {
-                  var option = document.createElement("option");
-                  option.value = item;
-                  option.text = item;
-                  selectElement.appendChild(option);
-                }
-              });
-            }
-          }
-          
-          // Restore previous selections
-          namespaceSelects.forEach((selectElement, index) => {
-            if (selectElement && previousSelections[index]) {
-              for (let i = 0; i < selectElement.options.length; i++) {
-                if (selectElement.options[i].value == previousSelections[index]) {
-                  selectElement.options[i].selected = true;
-                  break;
-                }
-              }
-            }
-          });
+  var url = `http://${hostname}:${port}/tumblebug/ns?option=id`;
+
+  axios({
+    method: "get",
+    url: url,
+    auth: { username, password },
+  })
+    .then((res) => {
+      if (res.data.output != null) {
+        cachedNamespaceList = res.data.output.filter(item => item && item.trim() !== "");
+
+        // If no namespace selected yet, pick the first one
+        if (!configNamespace && cachedNamespaceList.length > 0) {
+          configNamespace = cachedNamespaceList[0];
+          window.configNamespace = configNamespace;
         }
-      })
-      .finally(function () {
-        updateMciList();
-      });
-  }
+        // If current selection no longer in list, reset to first
+        if (configNamespace && !cachedNamespaceList.includes(configNamespace) && cachedNamespaceList.length > 0) {
+          configNamespace = cachedNamespaceList[0];
+          window.configNamespace = configNamespace;
+        }
+
+        updateNsDisplays();
+
+        // Update Settings modal NS select if currently open
+        var settingsNsSelect = document.getElementById('settings-namespace');
+        if (settingsNsSelect) {
+          settingsNsSelect.innerHTML = cachedNamespaceList.map(ns => {
+            const safeNs = window.escapeHtml(ns);
+            const selected = ns === configNamespace ? 'selected' : '';
+            return `<option value="${safeNs}" ${selected}>${safeNs}</option>`;
+          }).join('');
+        }
+      }
+    })
+    .finally(function () {
+      updateMciList();
+    });
 }
 
-// Function to sync namespace selection across all tabs
-function syncNamespaceSelection(selectedValue) {
-  var namespaceSelects = [
-    document.getElementById("namespace"),           // Provision tab
-    document.getElementById("namespace-control")    // Control tab  
-  ];
-  
-  namespaceSelects.forEach(selectElement => {
-    if (selectElement && selectElement.value !== selectedValue) {
-      selectElement.value = selectedValue;
-    }
-  });
-}
+// (syncNamespaceSelection removed — namespace is now a global configNamespace)
 
 var mciList = [];
 var mciHideList = [];
@@ -11487,147 +11473,7 @@ function updateMciList() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
-
-  if (namespace && namespace != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
-
-    axios({
-      method: "get",
-      url: url,
-      auth: {
-        username: `${username}`,
-        password: `${password}`,
-      },
-    })
-      .then((res) => {
-        if (res.data.output != null) {
-          // mciList = res.data.output;
-          for (let item of res.data.output) {
-            if (item && item.trim() !== "") {
-              var option = document.createElement("option");
-              option.value = item;
-              option.text = item;
-              selectElement.appendChild(option);
-            }
-          }
-          for (let i = 0; i < selectElement.options.length; i++) {
-            if (selectElement.options[i].value == previousSelection) {
-              selectElement.options[i].selected = true;
-              break;
-            }
-          }
-        }
-      })
-      .finally(function () {
-        // MCI list updated
-      });
-  }
-}
-
-function updateNsList() {
-  // Get all namespace select elements
-  var namespaceSelects = [
-    document.getElementById("namespace"),           // Provision tab
-    document.getElementById("namespace-control")    // Control tab  
-  ];
-  
-  // Store previous selections
-  var previousSelections = namespaceSelects.map(select => select ? select.value : '');
-  
-  // Clear options in all namespace selects
-  namespaceSelects.forEach(selectElement => {
-    if (selectElement) {
-      var i, L = selectElement.options.length - 1;
-      for (i = L; i >= 0; i--) {
-        selectElement.remove(i);
-      }
-    }
-  });
-
-  var config = getConfig(); var hostname = config.hostname;
-  var port = config.port;
-  var username = config.username;
-  var password = config.password;
-
-  if (hostname && hostname != "" && port && port != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns?option=id`;
-
-    axios({
-      method: "get",
-      url: url,
-      auth: {
-        username: `${username}`,
-        password: `${password}`,
-      },
-    })
-      .then((res) => {
-        if (res.data.output != null) {
-          // Update all namespace select elements
-          for (let item of res.data.output) {
-            if (item && item.trim() !== "") {
-              namespaceSelects.forEach((selectElement, index) => {
-                if (selectElement) {
-                  var option = document.createElement("option");
-                  option.value = item;
-                  option.text = item;
-                  selectElement.appendChild(option);
-                }
-              });
-            }
-          }
-          
-          // Restore previous selections
-          namespaceSelects.forEach((selectElement, index) => {
-            if (selectElement && previousSelections[index]) {
-              for (let i = 0; i < selectElement.options.length; i++) {
-                if (selectElement.options[i].value == previousSelections[index]) {
-                  selectElement.options[i].selected = true;
-                  break;
-                }
-              }
-            }
-          });
-        }
-      })
-      .finally(function () {
-        updateMciList();
-      });
-  }
-}
-
-// Function to sync namespace selection across all tabs
-function syncNamespaceSelection(selectedValue) {
-  var namespaceSelects = [
-    document.getElementById("namespace"),           // Provision tab
-    document.getElementById("namespace-control")    // Control tab  
-  ];
-  
-  namespaceSelects.forEach(selectElement => {
-    if (selectElement && selectElement.value !== selectedValue) {
-      selectElement.value = selectedValue;
-    }
-  });
-}
-
-var mciList = [];
-var mciHideList = [];
-
-function updateMciList() {
-  // Clear options in 'select'
-  var selectElement = document.getElementById("mciid");
-  var previousSelection = selectElement.value;
-  var i,
-    L = selectElement.options.length - 1;
-  for (i = L; i >= 0; i--) {
-    selectElement.remove(i);
-  }
-
-  var config = getConfig(); var hostname = config.hostname;
-  var port = config.port;
-  var username = config.username;
-  var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (namespace && namespace != "") {
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
@@ -11732,7 +11578,7 @@ function updateVmAndIpListsFromMci() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = mciidElement.value;
 
   if (namespace && namespace != "" && mciid && mciid != "") {
@@ -11813,7 +11659,7 @@ function updateResourceList(resourceType) {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (namespace && namespace != "" && resourceType && resourceType != "") {
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/${resourceType}?option=id`;
@@ -11857,28 +11703,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Initialize provider dropdown text
   updateProviderDropdownText();
   
-  // Namespace event handlers
-  const namespaceElement = document.getElementById("namespace");
-  if (namespaceElement) {
-    namespaceElement.onmouseover = function () {
-      updateNsList();
-    };
-    namespaceElement.onchange = function () {
-      syncNamespaceSelection(this.value);
-      updateMciList();
-    };
-  }
-  
-  const namespaceControlElement = document.getElementById("namespace-control");
-  if (namespaceControlElement) {
-    namespaceControlElement.onmouseover = function () {
-      updateNsList();
-    };
-    namespaceControlElement.onchange = function () {
-      syncNamespaceSelection(this.value);
-      updateMciList();
-    };
-  }
+  // Namespace is now managed via Map Settings (configNamespace global)
   
   // Resource list event handlers
   const vNetElement = document.getElementById(typeStringVNet);
@@ -11974,7 +11799,7 @@ function AddMcNLB() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -12068,7 +11893,7 @@ function AddNLB() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = mciidElement.value;
 
   if (!mciid) {
@@ -12227,7 +12052,7 @@ function DelNLB() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = mciidElement.value;
 
   if (!mciid) {
@@ -12693,7 +12518,7 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "";
       break;
     case "ExtractToWebRoot":
-      defaultRemoteCommand[0] = "which unzip || sudo apt-get install -y unzip; f=$(ls /home/cb-user/*.zip /home/cb-user/*.tar.gz /home/cb-user/*.tgz /home/cb-user/*.tar.bz2 2>/dev/null | head -1); case \"$f\" in *.zip) unzip -o \"$f\" -d /var/www/html/ ;; *.tar.gz|*.tgz) tar -xzf \"$f\" -C /var/www/html/ ;; *.tar.bz2) tar -xjf \"$f\" -C /var/www/html/ ;; esac";
+      defaultRemoteCommand[0] = "which unzip || sudo apt-get install -y unzip; f=$(ls /home/cb-user/*.zip /home/cb-user/*.tar.gz /home/cb-user/*.tgz /home/cb-user/*.tar.bz2 2>/dev/null | head -1); case \"$f\" in *.zip) sudo unzip -o \"$f\" -d /var/www/html/ ;; *.tar.gz|*.tgz) sudo tar -xzf \"$f\" -C /var/www/html/ ;; *.tar.bz2) sudo tar -xjf \"$f\" -C /var/www/html/ ;; esac";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
@@ -12798,7 +12623,7 @@ function stopApp() {
     var port = config.port;
     var username = config.username;
     var password = config.password;
-    var namespace = namespaceElement.value;
+    var namespace = configNamespace;
 
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}`;
     var cmd = [];
@@ -12868,7 +12693,7 @@ function statusApp() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = mciidElement.value;
 
   if (mciid) {
@@ -13365,7 +13190,7 @@ window.predefinedScriptCategories = {
     description: 'Utility scripts and tools',
     scripts: [
       { value: 'RebootVM', label: 'Reboot VM', step: 1 },
-      { value: 'Nginx', label: 'Install Nginx Web Server', step: 2 },
+      { value: 'Nginx', label: 'Install Web Server', step: 2 },
       { value: 'MvToWebRoot', label: 'Move files to web root (/var/www/html/)', step: 3 },
       { value: 'ExtractToWebRoot', label: 'Extract archive to web root (auto-detect format)', step: 4 },
       { value: 'Jitsi', label: 'Install Jitsi (Video Conf)', step: 5 },
@@ -15288,7 +15113,7 @@ async function setBastionNode() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = getSelectedMciId();
 
   if (!namespace || !mciid) {
@@ -15536,7 +15361,7 @@ async function executeRemoteCmd() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = getSelectedMciId();
   var subgroupid = getSubGroupIdFromVmSelection();
   var vmid = document.getElementById("vmid").value;
@@ -15596,8 +15421,8 @@ async function executeRemoteCmd() {
     </div>`;
 
   Swal.fire({
-    title: "🖥️ Remote Command Execution",
-    width: 750,
+    title: "🖥️ Application Deployment",
+    width: 850,
     html: `
     ${POPUP_STYLES}
     <div class="popup-container">
@@ -16143,7 +15968,7 @@ async function transferFileToMci() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = mciidElement.value;
   var subgroupid = getSubGroupIdFromVmSelection();
   var vmid = document.getElementById("vmid").value;
@@ -16421,7 +16246,7 @@ async function transferFileToMci() {
           'chmod +x /home/cb-user/*.sh && bash /home/cb-user/*.sh',
           'sudo chmod +x /home/cb-user/*.sh && sudo bash /home/cb-user/*.sh',
           // Archive extraction to web root (auto-detect format, overwrite-safe)
-          'which unzip || sudo apt-get install -y unzip; f=/home/cb-user/{filename}; case "$f" in *.zip) unzip -o "$f" -d /var/www/html/ ;; *.tar.gz|*.tgz) tar -xzf "$f" -C /var/www/html/ ;; *.tar.bz2) tar -xjf "$f" -C /var/www/html/ ;; esac',
+          'which unzip || sudo apt-get install -y unzip; f=/home/cb-user/{filename}; case "$f" in *.zip) sudo unzip -o "$f" -d /var/www/html/ ;; *.tar.gz|*.tgz) sudo tar -xzf "$f" -C /var/www/html/ ;; *.tar.bz2) sudo tar -xjf "$f" -C /var/www/html/ ;; esac',
           // Archive extraction to home dir
           'tar -xzf /home/cb-user/*.tar.gz -C /home/cb-user/',
           'unzip /home/cb-user/*.zip -d /home/cb-user/',
@@ -16751,7 +16576,7 @@ function getAccessInfo() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = getSelectedMciId();
 
   if (!namespace) {
@@ -16793,7 +16618,7 @@ saveBtn.addEventListener("click", function () {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = mciidElement.value;
   var groupid = getSubGroupIdFromVmSelection();
   var vmid = document.getElementById("vmid").value;
@@ -16843,7 +16668,7 @@ function downloadAllSshKeys() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = mciidElement.value;
 
   if (!namespace || !mciid) {
@@ -17140,7 +16965,7 @@ function updateFirewallRules() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var nsId = namespaceElement.value;
+  var nsId = configNamespace;
   var mciId = mciidElement.value;
   var subgroupid = getSubGroupIdFromVmSelection();
   var vmid = document.getElementById("vmid").value;
@@ -17904,7 +17729,7 @@ function deleteFirewallRule(sgId, sgName, ruleData) {
         var port = config.port;
         var username = config.username;
         var password = config.password;
-        var nsId = namespaceElement.value;
+        var nsId = configNamespace;
 
         // Prepare request data for deletion
         const deleteRule = {
@@ -18157,7 +17982,7 @@ function addNewRuleToSg(sgId, sgName) {
       var portVal = config.port;
       var username = config.username;
       var password = config.password;
-      var nsId = namespaceElement.value;
+      var nsId = configNamespace;
 
       // Prepare request data for addition
       const newRule = {
@@ -18246,7 +18071,7 @@ function scaleOutSubGroup() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   // Show dialog to get number of VMs to add
   Swal.fire({
@@ -18320,7 +18145,7 @@ function scaleOutSubGroupWithSelection() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -18344,7 +18169,7 @@ function scaleOutMciFromContext(mciId) {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -18368,7 +18193,7 @@ function copyMciConfig(mciId) {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -18516,7 +18341,7 @@ function saveMciAsTemplate(mciId) {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -18797,7 +18622,7 @@ function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, po
 
 // Function to show MCI Actions menu in SweetAlert
 function showActionsMenu() {
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = getSelectedMciId();
   
   if (!namespace) {
@@ -18975,7 +18800,7 @@ function showMciSelectionForScaleOut(title, description, successCallback) {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (!namespace || namespace === "") {
     errorAlert("Please select a namespace first");
@@ -19062,7 +18887,7 @@ function scaleOutMciWithConfiguration() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -19970,7 +19795,7 @@ function loadK8sClusterData() {
   var port = configPort;
   var username = configUsername;
   var password = configPassword;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (!namespace || namespace === "") {
     console.log("No namespace specified for K8s cluster data load");
@@ -20131,7 +19956,7 @@ async function loadVpnDataFromMcis() {
   try {
     const config = getConfig();
     const { hostname, port, username, password } = config;
-    const namespace = namespaceElement?.value || config.username;
+    const namespace = configNamespace || config.username;
     
     // Use existing MCI data from central store - no fallback API call
     let mciData = [];
@@ -20254,7 +20079,7 @@ function toggleSnapshotAutoRefresh() {
 
 // Show Snapshot Management Modal
 async function showSnapshotManagementModal() {
-  const namespace = document.getElementById('namespace').value;
+  const namespace = configNamespace;
   if (!namespace) {
     Swal.fire('Warning', 'Please select a namespace first', 'warning');
     return;
@@ -20448,7 +20273,7 @@ async function showSnapshotManagementModal() {
 
 // Create VM Snapshot (supports both single VM and MCI-wide snapshots)
 async function createVmSnapshotFromModal() {
-  const namespace = document.getElementById('namespace').value;
+  const namespace = configNamespace;
   const mciId = document.getElementById('snapshotMciSelect').value;
   const vmId = document.getElementById('snapshotVmSelect').value;
   const snapshotName = document.getElementById('snapshotName').value;
@@ -20601,7 +20426,7 @@ async function createVmSnapshotFromModal() {
 async function loadCustomImagesInModal(namespace) {
   // Priority: passed parameter > window storage > input field
   if (!namespace) {
-    namespace = window.currentSnapshotNamespace || document.getElementById('namespace')?.value;
+    namespace = window.currentSnapshotNamespace || configNamespace;
   }
   
   console.log('loadCustomImagesInModal called with namespace:', namespace);
@@ -20715,7 +20540,7 @@ async function loadCustomImagesInModal(namespace) {
 
 // View Custom Image Details
 async function viewCustomImageDetails(imageId) {
-  const namespace = window.currentSnapshotNamespace || document.getElementById('namespace')?.value;
+  const namespace = window.currentSnapshotNamespace || configNamespace;
   if (!namespace) {
     Swal.fire('Error', 'Namespace not available', 'error');
     return;
@@ -20807,7 +20632,7 @@ async function deleteCustomImageFromModal(imageId) {
 
   if (!result.isConfirmed) return;
 
-  const namespace = window.currentSnapshotNamespace || document.getElementById('namespace')?.value;
+  const namespace = window.currentSnapshotNamespace || configNamespace;
   if (!namespace) {
     Swal.fire('Error', 'Namespace not available', 'error');
     return;
@@ -21099,7 +20924,7 @@ async function showTaskManagementModal() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = getSelectedMciId();
 
   if (!namespace) {
@@ -21409,7 +21234,7 @@ async function showTemplateManagement(overrideNs) {
   const authConfig = { username, password };
 
   // Determine initial namespace
-  const currentNs = overrideNs || document.getElementById('namespace')?.value || '';
+  const currentNs = overrideNs || configNamespace || '';
 
   // Load namespace list
   let namespaces = [];
@@ -21776,7 +21601,7 @@ async function applyTemplate(sourceNs, type, templateId) {
   }
 
   // Default target namespace: use the main panel's namespace (not the template source ns)
-  const mainNs = document.getElementById('namespace')?.value || sourceNs;
+  const mainNs = configNamespace || sourceNs;
   const nsOptionsHtml = namespaces.map(ns => {
     const nsId = typeof ns === 'string' ? ns : (ns.id || ns.name || '');
     const safeNsId = window.escapeHtml(nsId);
@@ -22208,7 +22033,7 @@ window.loadTemplateToMciConfig = loadTemplateToMciConfig;
 
 async function showDnsManagementModal(preselectedMciId) {
   const config = getConfig();
-  const namespace = document.getElementById("namespace")?.value || 'default';
+  const namespace = configNamespace || 'default';
 
   // Build MCI source section - if preselectedMciId, pre-fill it
   const mciSourceChecked = preselectedMciId ? 'checked' : '';

@@ -3559,7 +3559,7 @@ export function showResourceGraph() {
 
     // Get current data
     const mciData = window.cloudBaristaCentralData?.mciData || [];
-    const namespace = document.getElementById('namespace')?.value || '';
+    const namespace = window.configNamespace || '';
     
     // Always try to update graph if namespace is available (even with empty data)
     if (namespace) {
@@ -3635,7 +3635,7 @@ export function subscribeToUpdates() {
   if (window.subscribeToDataUpdates) {
     window.subscribeToDataUpdates((centralData) => {
       if (isGraphVisible) {
-        const namespace = document.getElementById('namespace')?.value || '';
+        const namespace = window.configNamespace || '';
         if (namespace) {
           // Pass full centralData for comprehensive change detection
           updateGraph(centralData.mciData || [], namespace, false, centralData);
