@@ -174,6 +174,9 @@ var configPort = "1323";
 var configUsername = "default";
 var configPassword = "default";
 var configCredentialHolder = "admin";
+var configNamespace = "";
+window.configNamespace = configNamespace;
+var cachedNamespaceList = [];
 
 // Helper function to get current configuration
 function getConfig() {
@@ -182,9 +185,11 @@ function getConfig() {
     port: configPort,
     username: configUsername,
     password: configPassword,
-    credentialHolder: configCredentialHolder
+    credentialHolder: configCredentialHolder,
+    namespace: configNamespace
   };
 }
+window.getConfig = getConfig;
 
 // Axios interceptor: inject X-Credential-Holder header into all requests
 axios.interceptors.request.use(function (axiosConfig) {
@@ -197,7 +202,6 @@ axios.interceptors.request.use(function (axiosConfig) {
   return axiosConfig;
 });
 
-var namespaceElement = document.getElementById("namespace");
 var mciidElement = document.getElementById("mciid");
 
 // Central Data Store for sharing with Dashboard
@@ -242,26 +246,10 @@ function notifyDataSubscribers() {
   });
 }
 
-// Initialize map's Last Updated display
+// Initialize map's Last Updated display (no-op: timestamp removed from banner)
 function initializeMapLastUpdated() {
-  const mapLastUpdatedElement = document.getElementById('mapLastUpdatedTime');
-  if (!mapLastUpdatedElement) return;
-  
-  // Subscribe to central data updates
-  window.subscribeToDataUpdates(function(centralData) {
-    if (centralData.lastUpdated) {
-      mapLastUpdatedElement.textContent = new Date(centralData.lastUpdated).toLocaleTimeString('en-US');
-    } else {
-      mapLastUpdatedElement.textContent = 'Never';
-    }
-  });
-  
-  // Initial display
-  if (window.cloudBaristaCentralData.lastUpdated) {
-    mapLastUpdatedElement.textContent = new Date(window.cloudBaristaCentralData.lastUpdated).toLocaleTimeString('en-US');
-  } else {
-    mapLastUpdatedElement.textContent = 'Never';
-  }
+  // Timestamp display was removed from the map controls banner.
+  // This function is kept as a no-op to avoid breaking callers.
 }
 
 // Update map connection status
@@ -269,32 +257,31 @@ function updateMapConnectionStatus(status) {
   const statusElement = document.getElementById('mapConnectionStatus');
   if (!statusElement) return;
   
-  // Set consistent styling for all states with wider fixed width
+  // Set consistent styling for all states (icon-only)
   statusElement.style.fontSize = '10px';
-  statusElement.style.minWidth = '95px';
-  statusElement.style.width = '95px';
   statusElement.style.textAlign = 'center';
   statusElement.style.display = 'inline-block';
-  statusElement.style.whiteSpace = 'nowrap';
-  statusElement.style.overflow = 'hidden';
-  statusElement.style.textOverflow = 'ellipsis';
   
   switch (status) {
     case 'connected':
       statusElement.className = 'badge badge-success';
-      statusElement.innerHTML = '<i class="fas fa-check-circle" style="margin-right: 3px;"></i>Connected';
+      statusElement.innerHTML = '<i class="fas fa-check-circle"></i>';
+      statusElement.title = 'Connected';
       break;
     case 'connecting':
       statusElement.className = 'badge badge-warning';
-      statusElement.innerHTML = '<i class="fas fa-sync fa-spin" style="margin-right: 3px;"></i>Updating';
+      statusElement.innerHTML = '<i class="fas fa-sync fa-spin"></i>';
+      statusElement.title = 'Updating';
       break;
     case 'disconnected':
       statusElement.className = 'badge badge-danger';
-      statusElement.innerHTML = '<i class="fas fa-times-circle" style="margin-right: 3px;"></i>No Data';
+      statusElement.innerHTML = '<i class="fas fa-times-circle"></i>';
+      statusElement.title = 'No Data';
       break;
     default:
       statusElement.className = 'badge badge-secondary';
-      statusElement.innerHTML = '<i class="fas fa-question-circle" style="margin-right: 3px;"></i>Unknown';
+      statusElement.innerHTML = '<i class="fas fa-question-circle"></i>';
+      statusElement.title = 'Unknown';
   }
 }
 
@@ -328,6 +315,14 @@ function showMapSettings() {
   // Generic icon mode checkbox
   const genericIconChecked = useGenericCspIcons ? 'checked' : '';
 
+  // Build namespace options from cached list
+  const nsOptions = cachedNamespaceList.map(ns => {
+    const safeNs = window.escapeHtml(ns);
+    const selected = ns === configNamespace ? 'selected' : '';
+    return `<option value="${safeNs}" ${selected}>${safeNs}</option>`;
+  }).join('');
+  const nsSelectHtml = nsOptions || `<option value="${window.escapeHtml(configNamespace)}" selected>${window.escapeHtml(configNamespace) || '(none)'}</option>`;
+
   // Build credential holder options from cached list
   const holderOptions = cachedCredentialHolderList.map(holder => {
     const holderId = window.escapeHtml(holder.credentialHolder || holder.id || '');
@@ -353,6 +348,16 @@ function showMapSettings() {
         display: block;
       }
     </style>
+    <div style="text-align: left; margin: 10px 0;">
+      <label class="swal2-label">🏷️ Namespace ID:</label>
+      <select id="settings-namespace" style="width: 100%; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px;">
+        ${nsSelectHtml}
+      </select>
+      <div style="margin-top: 4px; font-size: 11px; color: #6c757d;">
+        Active namespace used across Provision and Control panels.
+      </div>
+    </div>
+    <hr style="margin: 16px 0;">
     <div style="text-align: left; margin: 10px 0;">
       <label class="swal2-label">🔑 Credential Holder:</label>
       <select id="settings-credentialHolder" style="width: 100%; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px;">
@@ -396,7 +401,8 @@ function showMapSettings() {
       }
       const genericIconEnabled = document.getElementById('genericIconToggle')?.checked || false;
       const selectedHolder = document.getElementById('settings-credentialHolder')?.value || configCredentialHolder;
-      return { refreshInterval: selectedInterval.value, genericIcons: genericIconEnabled, credentialHolder: selectedHolder };
+      const selectedNs = document.getElementById('settings-namespace')?.value || configNamespace;
+      return { refreshInterval: selectedInterval.value, genericIcons: genericIconEnabled, credentialHolder: selectedHolder, namespace: selectedNs };
     }
   }).then((result) => {
     if (result.isConfirmed) {
@@ -411,19 +417,27 @@ function showMapSettings() {
       window.useGenericCspIcons = useGenericCspIcons;
       // Clear cached generic styles so they can be regenerated if needed
       Object.keys(cspGenericStyles).forEach(k => delete cspGenericStyles[k]);
+      Object.keys(vmGenericCloudStyleCache).forEach(k => delete vmGenericCloudStyleCache[k]);
       // Force map re-render to apply icon change
       map.render();
       const view = map.getView();
       if (view) view.changed();
 
+      // Apply namespace change
+      const nsChanged = result.value.namespace !== configNamespace;
+      if (nsChanged) {
+        applyNamespace(result.value.namespace);
+      }
+
       // Apply credential holder change (triggers connection reload + map refresh)
       if (holderChanged) {
         applyCredentialHolder(result.value.credentialHolder);
       }
-      
+
       // Show success message
       var statusParts = [`Refresh: ${newRefreshInterval}s`];
       if (useGenericCspIcons) statusParts.push('Generic icons');
+      statusParts.push(`NS: ${result.value.namespace}`);
       statusParts.push(`Holder: ${result.value.credentialHolder}`);
       
       Swal.fire({
@@ -1062,27 +1076,7 @@ function showMciContextMenu(pixel, mciInfo) {
   // Store the selected MCI for use in control actions
   contextMenuSelectedMci = mciInfo.name;
   
-  // Sync namespace from Provision tab to Control tab
-  const provisionNamespace = document.getElementById('namespace');
-  const controlNamespace = document.getElementById('namespace-control');
-  if (provisionNamespace && controlNamespace && provisionNamespace.value) {
-    // Ensure the namespace option exists in control tab
-    let optionExists = false;
-    for (let option of controlNamespace.options) {
-      if (option.value === provisionNamespace.value) {
-        optionExists = true;
-        break;
-      }
-    }
-    if (!optionExists) {
-      const newOption = document.createElement('option');
-      newOption.value = provisionNamespace.value;
-      newOption.text = provisionNamespace.value;
-      controlNamespace.add(newOption);
-    }
-    // Set value without triggering change event (avoid updateMciList race condition)
-    controlNamespace.value = provisionNamespace.value;
-  }
+  // Namespace is managed globally via configNamespace
 
   // Set the selected MCI in the control panel
   const mciSelect = document.getElementById('mciid');
@@ -1487,38 +1481,83 @@ const cspGenericColors = {
 // Fallback color for unknown CSPs
 const CSP_GENERIC_FALLBACK_COLOR = '#888888';
 
-// Create a generic colored cloud style for a CSP
-function createGenericCloudStyle(csp) {
-  const color = cspGenericColors[csp] || CSP_GENERIC_FALLBACK_COLOR;
-  return [
-    // Background layer: solid white cloud for opaque fill
-    new Style({
-      text: new Text({
-        text: '☁',
-        font: 'bold 28px sans-serif',
-        fill: new Fill({ color: '#ffffff' }),
-        stroke: new Stroke({ color: '#cccccc', width: 2 }),
-      }),
-    }),
-    // Foreground layer: CSP-colored cloud with contrasting stroke for overlap visibility
-    new Style({
-      text: new Text({
-        text: '☁',
-        font: 'bold 24px sans-serif',
-        fill: new Fill({ color: color }),
-        stroke: new Stroke({ color: '#ffffff', width: 2 }),
-      }),
-    }),
+// Draw a cloud shape onto a Canvas and return a pixel-ready HTMLCanvasElement.
+// Using Canvas 2D avoids async image loading issues with vectorContext.setStyle().
+function createCloudCanvas(fillColor) {
+  const W = 44, H = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // Cloud shape: 5 overlapping circles
+  const circles = [
+    { x: 14, y: 20, r: 8 },   // left
+    { x: 22, y: 16, r: 10 },  // center-top
+    { x: 30, y: 19, r: 7 },   // right
+    { x: 18, y: 22, r: 7 },   // bottom-left
+    { x: 26, y: 22, r: 7 },   // bottom-right
   ];
+
+  // White outline pass
+  ctx.fillStyle = '#ffffff';
+  circles.forEach(c => {
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.r + 2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Colored fill pass
+  ctx.fillStyle = fillColor;
+  circles.forEach(c => {
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  return canvas;
 }
 
-// Cache for generic cloud styles
+// Create a generic colored cloud style for a CSP using a pre-rendered Canvas.
+// Canvas-based icons are synchronously available to vectorContext.setStyle().
+function createGenericCloudStyle(csp) {
+  const color = cspGenericColors[csp] || CSP_GENERIC_FALLBACK_COLOR;
+  return new Style({
+    image: new Icon({
+      img: createCloudCanvas(color),
+      scale: 0.72,
+    }),
+  });
+}
+
+// Cache for generic cloud styles (background CSP map points)
 const cspGenericStyles = {};
 function getGenericCloudStyle(csp) {
   if (!cspGenericStyles[csp]) {
     cspGenericStyles[csp] = createGenericCloudStyle(csp);
   }
   return cspGenericStyles[csp];
+}
+
+// Cache for VM overlay generic cloud styles keyed by "csp:scale"
+// Separate from cspGenericStyles because scale varies per VM
+const vmGenericCloudStyleCache = {};
+function getVmGenericCloudStyle(csp, scale) {
+  const key = `${csp}:${scale}`;
+  if (!vmGenericCloudStyleCache[key]) {
+    const platform = resolveCloudPlatform(csp);
+    const color = cspGenericColors[platform] || cspGenericColors[csp] || CSP_GENERIC_FALLBACK_COLOR;
+    vmGenericCloudStyleCache[key] = new Style({
+      image: new Icon({
+        img: createCloudCanvas(color),
+        scale: scale,
+        anchor: [0.5, 0.75],
+        anchorXUnits: 'fraction',
+        anchorYUnits: 'fraction',
+      }),
+    });
+  }
+  return vmGenericCloudStyleCache[key];
 }
 
 // Get the appropriate CSP style based on current icon mode
@@ -1895,6 +1934,47 @@ function generateRandomString() {
   return Math.random().toString(36).substr(2, 5);
 }
 
+// MCI name word pool — familiar words across animals, fruits, flowers, nature, snacks, fantasy, gems, space
+const _mciNameWordPool = [
+  // 🐾 Animals
+  'lion','tiger','eagle','wolf','bear','fox','panda','hawk','dolphin','penguin',
+  'rabbit','shark','whale','parrot','dragon',
+  // 🍎 Fruits
+  'apple','banana','orange','grape','mango','lemon','peach','cherry','melon','coconut',
+  'kiwi','lime','plum','pear','strawberry',
+  // 🌸 Flowers
+  'rose','lily','daisy','tulip','poppy','violet','orchid','lavender','jasmine','sunflower',
+  // 🌍 Nature
+  'rainbow','storm','thunder','wind','fire','ice','snow','river','ocean','island',
+  'forest','mountain','volcano','desert','glacier',
+  // 🍪 Snacks & Drinks
+  'cookie','candy','waffle','donut','muffin','brownie','caramel','honey','latte','cocoa',
+  // 🎮 Fantasy
+  'wizard','knight','ninja','pirate','viking','samurai','hunter','ranger','shadow','blaze',
+  // 💎 Gems
+  'ruby','sapphire','emerald','diamond','pearl','jade','amber','topaz','opal','crystal',
+  // 🚀 Space
+  'sun','moon','star','mars','venus','saturn','jupiter','comet','meteor','galaxy',
+  'nebula','aurora','eclipse','rocket','orbit',
+];
+
+// Returns an MCI-friendly name like "mc-panda", preferring words not recently used.
+// Usage history is stored in localStorage so it persists across sessions.
+function generateMciName() {
+  const STORAGE_KEY = 'mciNameUsedWords';
+  const used = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+
+  const unused = _mciNameWordPool.filter(w => !used.includes(w));
+  const pool = unused.length > 0 ? unused : _mciNameWordPool; // reset when all used
+  const word = pool[Math.floor(Math.random() * pool.length)];
+
+  // Record usage (keep last 100 entries max)
+  const updated = [...used.filter(w => w !== word), word].slice(-100);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+
+  return word;
+}
+
 // Helper function to split K8s cluster name into multiple lines for better display
 function splitK8sNameToLines(name, maxLineLength = 18) {
   if (!name) return [''];
@@ -2068,34 +2148,8 @@ function createVmStyleWithStatusBadge(vmStatus, providerName = null, baseScale =
           }),
         })
       );
-    } else {
-      // Generic colored cloud icon mode
-      const platform = resolveCloudPlatform(providerName);
-      const color = cspGenericColors[platform] || cspGenericColors[providerName] || CSP_GENERIC_FALLBACK_COLOR;
-      // Background white cloud
-      styles.push(
-        new Style({
-          text: new Text({
-            text: '☁',
-            font: 'bold 18px sans-serif',
-            fill: new Fill({ color: '#ffffff' }),
-            stroke: new Stroke({ color: '#cccccc', width: 1.5 }),
-            offsetY: -16,
-          }),
-        })
-      );
-      // Foreground CSP-colored cloud
-      styles.push(
-        new Style({
-          text: new Text({
-            text: '☁',
-            font: 'bold 14px sans-serif',
-            fill: new Fill({ color: color }),
-            offsetY: -16,
-          }),
-        })
-      );
     }
+    // Generic colored cloud icon mode — no overlay icon
   }
 
   return styles;
@@ -3067,7 +3121,7 @@ function getMci() {
   var port = configPort;
   var username = configUsername;
   var password = configPassword;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   // Use global refreshInterval variable instead of DOM element
   var filteredRefreshInterval = isNormalInteger(refreshInterval.toString())
@@ -4560,7 +4614,7 @@ function showFinalMciConfirmation(createMciReq, url, totalCost, totalNodeScale, 
 function proceedWithBuildAgnosticImage(createMciReq, snapshotName, snapshotDescription, cleanupMciAfterSnapshot, username, password) {
   const hostname = configHostname;
   const port = configPort;
-  const namespace = namespaceElement.value;
+  const namespace = configNamespace;
   const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/buildAgnosticImage`;
   
   // Prepare buildAgnosticImage request body
@@ -6104,7 +6158,7 @@ function reviewWithSelectedSubgroups(selectedSubgroups) {
   var port = configPort;
   var username = configUsername;
   var password = configPassword;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   
   // Get current createMciReq from global vmSubGroupReqeustFromSpecList
   if (vmSubGroupReqeustFromSpecList.length === 0) {
@@ -6132,8 +6186,7 @@ function reviewWithSelectedSubgroups(selectedSubgroups) {
   
   // Create modified MCI request with filtered VMs
   var modifiedCreateMciReq = JSON.parse(JSON.stringify(createMciReqTmplt));
-  var randomString = generateRandomString();
-  modifiedCreateMciReq.name = "mc-" + randomString;
+  modifiedCreateMciReq.name = "mc-" + generateMciName();
   modifiedCreateMciReq.subGroups = filteredVmRequests;
   
   // Calculate costs and details for selected SubGroups
@@ -6192,14 +6245,12 @@ function createMci() {
     var port = configPort;
     var username = configUsername;
     var password = configPassword;
-    var namespace = namespaceElement.value;
+    var namespace = configNamespace;
 
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mciDynamic`;
 
-    var randomString = generateRandomString();
-
     var createMciReq = createMciReqTmplt;
-    createMciReq.name = "mc-" + `${randomString}`;
+    createMciReq.name = "mc-" + generateMciName();
     createMciReq.subGroups = vmSubGroupReqeustFromSpecList;
     let totalCost = 0;
     let totalNodeScale = 0;
@@ -6332,7 +6383,7 @@ function createK8sCluster() {
   const port = configPort;
   const username = configUsername;
   const password = configPassword;
-  const namespace = namespaceElement.value;
+  const namespace = configNamespace;
 
   // For multi-cluster, use namePrefix approach (simplified dialog)
   if (isMultiCluster) {
@@ -6709,7 +6760,7 @@ function addNodeGroupToK8sCluster() {
   const port = configPort;
   const username = configUsername;
   const password = configPassword;
-  const namespace = namespaceElement.value;
+  const namespace = configNamespace;
 
   // First, get list of existing K8s clusters
   const listUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster`;
@@ -7924,7 +7975,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
         console.log("Searching images for selected spec:", selectedSpec.id);
 
         // Get namespace for custom image API call
-        var namespace = namespaceElement.value;
+        var namespace = configNamespace;
 
         // Search images API call and custom images API call in parallel
         Promise.all([
@@ -9448,7 +9499,7 @@ function createSubGroupItem(vm, spec, index) {
         <div class="d-flex align-items-center mb-1 flex-wrap">
           <span class="badge mr-1" style="background-color: #343a40; color: white; font-size: 0.75rem;">💻 ${vm.name || `SubGroup-${index + 1}`} ⨉ ${vm.subGroupSize}</span>
           <span class="badge mr-1" style="background-color: ${providerColor}; color: ${providerTextColor}; font-size: 0.7rem;">
-            ${(spec?.providerName || 'Unknown').toUpperCase()}
+            ${useGenericCspIcons ? 'Cloud' : (spec?.providerName || 'Unknown').toUpperCase()}
           </span>
           <span class="badge mr-1" style="background-color: ${regionColor}; color: ${regionTextColor}; font-size: 0.7rem;">
             ${spec?.regionName || 'Unknown Region'}
@@ -9869,7 +9920,7 @@ function controlMCI(action) {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = getSelectedMciId();
 
   if (!namespace) {
@@ -9945,7 +9996,7 @@ function hideMCI() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
 
@@ -10071,7 +10122,7 @@ function statusMCI() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = getSelectedMciId();
 
   // Validate required parameters
@@ -10132,7 +10183,7 @@ function deleteMCI() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = getSelectedMciId();
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=terminate`;
@@ -10178,7 +10229,7 @@ function releaseResources() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/sharedResources`;
 
@@ -10258,7 +10309,7 @@ function registerCspResource() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   var url = `http://${hostname}:${port}/tumblebug/registerCspResourcesAll?mciFlag=n`;
 
@@ -11191,17 +11242,24 @@ function updateHolderStatusDisplays() {
     holderNameEl.textContent = configCredentialHolder;
   }
 
-  // Update control tab read-only display
-  var controlDisplay = document.getElementById('credentialHolder-control-display');
-  if (controlDisplay) {
-    var holderInfo = cachedCredentialHolderList.find(h => h.credentialHolder === configCredentialHolder);
-    if (holderInfo) {
-      var connCount = holderInfo.verifiedConnectionCount || holderInfo.connectionCount || 0;
-      controlDisplay.textContent = `${configCredentialHolder} (${connCount} conns)`;
-    } else {
-      controlDisplay.textContent = configCredentialHolder;
-    }
-  }
+}
+
+// Update NS ID map badge
+function updateNsDisplays() {
+  var nsName = configNamespace || '—';
+  var mapNsNameEl = document.getElementById('mapNsName');
+  if (mapNsNameEl) mapNsNameEl.textContent = nsName;
+}
+
+// Change active namespace and refresh dependent lists
+function applyNamespace(newNs) {
+  if (newNs === configNamespace) return;
+  var oldNs = configNamespace;
+  configNamespace = newNs;
+  window.configNamespace = newNs;
+  console.log('[Namespace] Changed: ' + oldNs + ' → ' + newNs);
+  updateNsDisplays();
+  updateMciList();
 }
 
 // Change credential holder and reload connections + map
@@ -11348,89 +11406,55 @@ window.reloadConnectionsForHolder = reloadConnectionsForHolder;
 // ==================== End of Credential Holder Functions ====================
 
 function updateNsList() {
-  // Get all namespace select elements
-  var namespaceSelects = [
-    document.getElementById("namespace"),           // Provision tab
-    document.getElementById("namespace-control")    // Control tab  
-  ];
-  
-  // Store previous selections
-  var previousSelections = namespaceSelects.map(select => select ? select.value : '');
-  
-  // Clear options in all namespace selects
-  namespaceSelects.forEach(selectElement => {
-    if (selectElement) {
-      var i, L = selectElement.options.length - 1;
-      for (i = L; i >= 0; i--) {
-        selectElement.remove(i);
-      }
-    }
-  });
-
-  var config = getConfig(); var hostname = config.hostname;
+  var config = getConfig();
+  var hostname = config.hostname;
   var port = config.port;
   var username = config.username;
   var password = config.password;
 
-  if (hostname && hostname != "" && port && port != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns?option=id`;
+  if (!hostname || hostname === "" || !port || port === "") return;
 
-    axios({
-      method: "get",
-      url: url,
-      auth: {
-        username: `${username}`,
-        password: `${password}`,
-      },
-    })
-      .then((res) => {
-        if (res.data.output != null) {
-          // Update all namespace select elements
-          for (let item of res.data.output) {
-            if (item && item.trim() !== "") {
-              namespaceSelects.forEach((selectElement, index) => {
-                if (selectElement) {
-                  var option = document.createElement("option");
-                  option.value = item;
-                  option.text = item;
-                  selectElement.appendChild(option);
-                }
-              });
-            }
-          }
-          
-          // Restore previous selections
-          namespaceSelects.forEach((selectElement, index) => {
-            if (selectElement && previousSelections[index]) {
-              for (let i = 0; i < selectElement.options.length; i++) {
-                if (selectElement.options[i].value == previousSelections[index]) {
-                  selectElement.options[i].selected = true;
-                  break;
-                }
-              }
-            }
-          });
+  var url = `http://${hostname}:${port}/tumblebug/ns?option=id`;
+
+  axios({
+    method: "get",
+    url: url,
+    auth: { username, password },
+  })
+    .then((res) => {
+      if (res.data.output != null) {
+        cachedNamespaceList = res.data.output.filter(item => item && item.trim() !== "");
+
+        // If no namespace selected yet, pick the first one
+        if (!configNamespace && cachedNamespaceList.length > 0) {
+          configNamespace = cachedNamespaceList[0];
+          window.configNamespace = configNamespace;
         }
-      })
-      .finally(function () {
-        updateMciList();
-      });
-  }
+        // If current selection no longer in list, reset to first
+        if (configNamespace && !cachedNamespaceList.includes(configNamespace) && cachedNamespaceList.length > 0) {
+          configNamespace = cachedNamespaceList[0];
+          window.configNamespace = configNamespace;
+        }
+
+        updateNsDisplays();
+
+        // Update Settings modal NS select if currently open
+        var settingsNsSelect = document.getElementById('settings-namespace');
+        if (settingsNsSelect) {
+          settingsNsSelect.innerHTML = cachedNamespaceList.map(ns => {
+            const safeNs = window.escapeHtml(ns);
+            const selected = ns === configNamespace ? 'selected' : '';
+            return `<option value="${safeNs}" ${selected}>${safeNs}</option>`;
+          }).join('');
+        }
+      }
+    })
+    .finally(function () {
+      updateMciList();
+    });
 }
 
-// Function to sync namespace selection across all tabs
-function syncNamespaceSelection(selectedValue) {
-  var namespaceSelects = [
-    document.getElementById("namespace"),           // Provision tab
-    document.getElementById("namespace-control")    // Control tab  
-  ];
-  
-  namespaceSelects.forEach(selectElement => {
-    if (selectElement && selectElement.value !== selectedValue) {
-      selectElement.value = selectedValue;
-    }
-  });
-}
+// (syncNamespaceSelection removed — namespace is now a global configNamespace)
 
 var mciList = [];
 var mciHideList = [];
@@ -11449,147 +11473,7 @@ function updateMciList() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
-
-  if (namespace && namespace != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
-
-    axios({
-      method: "get",
-      url: url,
-      auth: {
-        username: `${username}`,
-        password: `${password}`,
-      },
-    })
-      .then((res) => {
-        if (res.data.output != null) {
-          // mciList = res.data.output;
-          for (let item of res.data.output) {
-            if (item && item.trim() !== "") {
-              var option = document.createElement("option");
-              option.value = item;
-              option.text = item;
-              selectElement.appendChild(option);
-            }
-          }
-          for (let i = 0; i < selectElement.options.length; i++) {
-            if (selectElement.options[i].value == previousSelection) {
-              selectElement.options[i].selected = true;
-              break;
-            }
-          }
-        }
-      })
-      .finally(function () {
-        // MCI list updated
-      });
-  }
-}
-
-function updateNsList() {
-  // Get all namespace select elements
-  var namespaceSelects = [
-    document.getElementById("namespace"),           // Provision tab
-    document.getElementById("namespace-control")    // Control tab  
-  ];
-  
-  // Store previous selections
-  var previousSelections = namespaceSelects.map(select => select ? select.value : '');
-  
-  // Clear options in all namespace selects
-  namespaceSelects.forEach(selectElement => {
-    if (selectElement) {
-      var i, L = selectElement.options.length - 1;
-      for (i = L; i >= 0; i--) {
-        selectElement.remove(i);
-      }
-    }
-  });
-
-  var config = getConfig(); var hostname = config.hostname;
-  var port = config.port;
-  var username = config.username;
-  var password = config.password;
-
-  if (hostname && hostname != "" && port && port != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns?option=id`;
-
-    axios({
-      method: "get",
-      url: url,
-      auth: {
-        username: `${username}`,
-        password: `${password}`,
-      },
-    })
-      .then((res) => {
-        if (res.data.output != null) {
-          // Update all namespace select elements
-          for (let item of res.data.output) {
-            if (item && item.trim() !== "") {
-              namespaceSelects.forEach((selectElement, index) => {
-                if (selectElement) {
-                  var option = document.createElement("option");
-                  option.value = item;
-                  option.text = item;
-                  selectElement.appendChild(option);
-                }
-              });
-            }
-          }
-          
-          // Restore previous selections
-          namespaceSelects.forEach((selectElement, index) => {
-            if (selectElement && previousSelections[index]) {
-              for (let i = 0; i < selectElement.options.length; i++) {
-                if (selectElement.options[i].value == previousSelections[index]) {
-                  selectElement.options[i].selected = true;
-                  break;
-                }
-              }
-            }
-          });
-        }
-      })
-      .finally(function () {
-        updateMciList();
-      });
-  }
-}
-
-// Function to sync namespace selection across all tabs
-function syncNamespaceSelection(selectedValue) {
-  var namespaceSelects = [
-    document.getElementById("namespace"),           // Provision tab
-    document.getElementById("namespace-control")    // Control tab  
-  ];
-  
-  namespaceSelects.forEach(selectElement => {
-    if (selectElement && selectElement.value !== selectedValue) {
-      selectElement.value = selectedValue;
-    }
-  });
-}
-
-var mciList = [];
-var mciHideList = [];
-
-function updateMciList() {
-  // Clear options in 'select'
-  var selectElement = document.getElementById("mciid");
-  var previousSelection = selectElement.value;
-  var i,
-    L = selectElement.options.length - 1;
-  for (i = L; i >= 0; i--) {
-    selectElement.remove(i);
-  }
-
-  var config = getConfig(); var hostname = config.hostname;
-  var port = config.port;
-  var username = config.username;
-  var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (namespace && namespace != "") {
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
@@ -11694,7 +11578,7 @@ function updateVmAndIpListsFromMci() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = mciidElement.value;
 
   if (namespace && namespace != "" && mciid && mciid != "") {
@@ -11775,7 +11659,7 @@ function updateResourceList(resourceType) {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (namespace && namespace != "" && resourceType && resourceType != "") {
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/${resourceType}?option=id`;
@@ -11819,28 +11703,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Initialize provider dropdown text
   updateProviderDropdownText();
   
-  // Namespace event handlers
-  const namespaceElement = document.getElementById("namespace");
-  if (namespaceElement) {
-    namespaceElement.onmouseover = function () {
-      updateNsList();
-    };
-    namespaceElement.onchange = function () {
-      syncNamespaceSelection(this.value);
-      updateMciList();
-    };
-  }
-  
-  const namespaceControlElement = document.getElementById("namespace-control");
-  if (namespaceControlElement) {
-    namespaceControlElement.onmouseover = function () {
-      updateNsList();
-    };
-    namespaceControlElement.onchange = function () {
-      syncNamespaceSelection(this.value);
-      updateMciList();
-    };
-  }
+  // Namespace is now managed via Map Settings (configNamespace global)
   
   // Resource list event handlers
   const vNetElement = document.getElementById(typeStringVNet);
@@ -11936,7 +11799,7 @@ function AddMcNLB() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -12030,7 +11893,7 @@ function AddNLB() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = mciidElement.value;
 
   if (!mciid) {
@@ -12189,7 +12052,7 @@ function DelNLB() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = mciidElement.value;
 
   if (!mciid) {
@@ -12649,6 +12512,16 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
       defaultRemoteCommand[2] = "";
       break;
+    case "MvToWebRoot":
+      defaultRemoteCommand[0] = "sudo mv /home/cb-user/* /var/www/html/";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "ExtractToWebRoot":
+      defaultRemoteCommand[0] = "which unzip || sudo apt-get install -y unzip; f=$(ls /home/cb-user/*.zip /home/cb-user/*.tar.gz /home/cb-user/*.tgz /home/cb-user/*.tar.bz2 2>/dev/null | head -1); case \"$f\" in *.zip) sudo unzip -o \"$f\" -d /var/www/html/ ;; *.tar.gz|*.tgz) sudo tar -xzf \"$f\" -C /var/www/html/ ;; *.tar.bz2) sudo tar -xjf \"$f\" -C /var/www/html/ ;; esac";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
     case "Jitsi":
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/jitsi/startServer.sh | sudo bash -s -- <DNS_DOMAIN> <EMAIL_ADDRESS>";
       defaultRemoteCommand[1] = "";
@@ -12750,7 +12623,7 @@ function stopApp() {
     var port = config.port;
     var username = config.username;
     var password = config.password;
-    var namespace = namespaceElement.value;
+    var namespace = configNamespace;
 
     var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}`;
     var cmd = [];
@@ -12820,7 +12693,7 @@ function statusApp() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = mciidElement.value;
 
   if (mciid) {
@@ -13317,9 +13190,11 @@ window.predefinedScriptCategories = {
     description: 'Utility scripts and tools',
     scripts: [
       { value: 'RebootVM', label: 'Reboot VM', step: 1 },
-      { value: 'Nginx', label: 'Install Nginx Web Server', step: 2 },
-      { value: 'Jitsi', label: 'Install Jitsi (Video Conf)', step: 3 },
-      { value: 'Stress', label: 'CPU Stress Test', step: 4 }
+      { value: 'Nginx', label: 'Install Web Server', step: 2 },
+      { value: 'MvToWebRoot', label: 'Move files to web root (/var/www/html/)', step: 3 },
+      { value: 'ExtractToWebRoot', label: 'Extract archive to web root (auto-detect format)', step: 4 },
+      { value: 'Jitsi', label: 'Install Jitsi (Video Conf)', step: 5 },
+      { value: 'Stress', label: 'CPU Stress Test', step: 6 }
     ]
   },
   'all': {
@@ -14309,7 +14184,7 @@ function _escAndLinkify(text) {
  * Groups output by VM → Command for readability.
  * @param {Object} data - The API response with data.results[]
  */
-function showRemoteCmdResult(data) {
+function showRemoteCmdResult(data, appliedDnsUrl) {
   if (!data || !Array.isArray(data.results) || data.results.length === 0) {
     displayJsonData(data, typeInfo);
     return;
@@ -14458,7 +14333,16 @@ function showRemoteCmdResult(data) {
   const statusColor = hasAnyError ? '#d32f2f' : (hasAnyStderr ? '#e65100' : '#2e7d32');
   const statusText = hasAnyError ? 'Error' : (hasAnyStderr ? 'Completed (with stderr)' : 'Success');
 
+  const dnsLinkHtml = appliedDnsUrl ? `
+    <div style="padding: 6px 12px; background: #e8f4fd; border: 1px solid #b8daff; border-radius: 6px; margin-bottom: 8px; font-size: 12px; display: flex; align-items: center; gap: 8px;">
+      <span>🌐</span>
+      <span style="color: #555;">DNS:</span>
+      <a href="${appliedDnsUrl}" target="_blank" style="color: #0d6efd; font-weight: 600; text-decoration: none;">${window.escapeHtml(appliedDnsUrl)}</a>
+      <span style="color: #888; font-size: 11px;">(click to open in new tab)</span>
+    </div>` : '';
+
   const summaryHtml = `
+    ${dnsLinkHtml}
     <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 10px;">
       <div style="display: flex; align-items: center; gap: 10px;">
         <span style="font-size: 18px;">${statusIcon}</span>
@@ -14539,12 +14423,13 @@ window._cmdStreamSessions = {};
  * Create a new streaming session, start SSE consumption in background,
  * and open the streaming modal.
  */
-function startStreamingSession(streamUrl, username, password, xRequestId, mciId, spinnerId) {
+function startStreamingSession(streamUrl, username, password, xRequestId, mciId, spinnerId, appliedDnsUrl) {
   const session = {
     xRequestId,
     mciId,
     spinnerId,
     streamUrl,
+    appliedDnsUrl: appliedDnsUrl || null,
     startTime: Date.now(),
     vmState: {},        // { vmId: { status, stdoutLines: [], stderrLines: [], statusInfo: null } }
     doneSummary: null,
@@ -14702,7 +14587,15 @@ function openStreamingSessionModal(xRequestId) {
     const handlingCount = vmIds.filter(id => session.vmState[id].status === 'Handling').length;
     const isFinished = session.doneSummary !== null;
 
+    const streamDnsLinkHtml = session.appliedDnsUrl ? `
+      <div style="padding:5px 10px;background:#e8f4fd;border:1px solid #b8daff;border-radius:5px;margin-bottom:6px;font-size:11px;display:flex;align-items:center;gap:6px;">
+        <span>🌐</span>
+        <a href="${session.appliedDnsUrl}" target="_blank" style="color:#0d6efd;font-weight:600;text-decoration:none;">${window.escapeHtml(session.appliedDnsUrl)}</a>
+        <span style="color:#888;">(open in new tab)</span>
+      </div>` : '';
+
     let summaryHtml = `
+      ${streamDnsLinkHtml}
       <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:#f8f9fa;border:1px solid #e0e0e0;border-radius:5px;margin-bottom:8px;">
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:16px;">${isFinished ? (session.commandError || session.doneSummary.failedVms > 0 ? '⚠️' : '✅') : '⏳'}</span>
@@ -15220,7 +15113,7 @@ async function setBastionNode() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = getSelectedMciId();
 
   if (!namespace || !mciid) {
@@ -15468,10 +15361,11 @@ async function executeRemoteCmd() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = getSelectedMciId();
   var subgroupid = getSubGroupIdFromVmSelection();
   var vmid = document.getElementById("vmid").value;
+  let _appliedDnsUrl = null; // set when Apply DNS succeeds
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -15527,8 +15421,8 @@ async function executeRemoteCmd() {
     </div>`;
 
   Swal.fire({
-    title: "🖥️ Remote Command Execution",
-    width: 750,
+    title: "🖥️ Application Deployment",
+    width: 850,
     html: `
     ${POPUP_STYLES}
     <div class="popup-container">
@@ -15582,6 +15476,76 @@ async function executeRemoteCmd() {
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- DNS Update - shown only if hosted zones are available -->
+      <div id="dnsUpdateSection" style="display:none; margin-top: 8px;">
+        <div class="popup-section" style="border: 1px solid #b8daff; background: #f0f7ff;">
+          <div class="popup-section-title" id="dnsPanelToggle"
+            style="cursor:pointer; user-select:none; display:flex; justify-content:space-between; align-items:center;"
+            onclick="document.getElementById('dnsPanelBody').style.display = document.getElementById('dnsPanelBody').style.display === 'none' ? '' : 'none'; this.querySelector('.dns-chevron').textContent = document.getElementById('dnsPanelBody').style.display === 'none' ? '▶' : '▼';">
+            <span>🌐 DNS Update</span>
+            <span class="dns-chevron" style="font-size:0.7rem; color:#555;">▶</span>
+          </div>
+          <div id="dnsPanelBody" style="display:none; margin-top: 8px;">
+            <div class="popup-row">
+              <div class="popup-col" style="flex: 1.5;">
+                <div class="popup-field">
+                  <label class="popup-label">Hosted Zone</label>
+                  <select id="dnsHostedZone" class="popup-input"></select>
+                </div>
+              </div>
+              <div class="popup-col" style="flex: 1.5;">
+                <div class="popup-field">
+                  <label class="popup-label">Record Name <span style="font-weight:normal;color:#888;">(subdomain or blank for apex)</span></label>
+                  <input type="text" id="dnsRecordName" class="popup-input" placeholder="e.g., www  or  api.myapp">
+                </div>
+              </div>
+            </div>
+            <div class="popup-row">
+              <div class="popup-col" style="flex: 0.5;">
+                <div class="popup-field">
+                  <label class="popup-label">Type</label>
+                  <select id="dnsRecordType" class="popup-input">
+                    <option value="A">A</option>
+                    <option value="AAAA">AAAA</option>
+                    <option value="CNAME">CNAME</option>
+                  </select>
+                </div>
+              </div>
+              <div class="popup-col" style="flex: 0.5;">
+                <div class="popup-field">
+                  <label class="popup-label">TTL (s)</label>
+                  <input type="number" id="dnsTtl" class="popup-input" value="300" min="1">
+                </div>
+              </div>
+              <div class="popup-col" style="flex: 1; display:flex; align-items:flex-end;">
+                <button type="button" id="applyDnsBtn"
+                  style="width:100%; padding:6px 12px; background:#0d6efd; color:white; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem;">
+                  🌐 Apply DNS
+                </button>
+              </div>
+            </div>
+            <div id="dnsApplyResult" style="margin-top:6px; font-size:0.78rem;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upload Files Section -->
+      <div class="popup-section">
+        <div class="popup-section-title">📁 Upload Files <span style="font-weight:normal; font-size:0.75rem; color:#888;">(optional, uploaded to /home/cb-user/ before commands run)</span></div>
+        <div class="popup-row">
+          <div class="popup-col" style="flex:1;">
+            <input type="file" id="rcUploadFileInput" class="popup-input" style="padding:4px;" multiple>
+          </div>
+          <div class="popup-col" style="flex:0 0 auto;">
+            <button type="button" id="rcUploadBtn"
+              style="padding:5px 14px; background:#6c757d; color:white; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem; white-space:nowrap;">
+              ⬆️ Upload Now
+            </button>
+          </div>
+        </div>
+        <div id="rcUploadStatus" style="margin-top:5px; font-size:0.78rem;"></div>
       </div>
 
       <!-- Commands Section -->
@@ -15683,7 +15647,7 @@ async function executeRemoteCmd() {
 
       <!-- Task Management -->
       <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee; text-align: right;">
-        <button type="button" onclick="showTaskManagementModal()" 
+        <button type="button" onclick="showTaskManagementModal()"
           style="background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">
           📋 View Running Tasks
         </button>
@@ -15697,6 +15661,157 @@ async function executeRemoteCmd() {
       setupClearLabelButtonListener(); // Setup Clear All button listener
       // Auto-resize textareas on open
       document.querySelectorAll('#cmdContainer textarea').forEach(ta => autoResizeTextarea(ta));
+
+      // Upload Files handler (parallel, 5 at a time)
+      document.getElementById('rcUploadBtn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('rcUploadFileInput');
+        const statusEl = document.getElementById('rcUploadStatus');
+        const files = Array.from(fileInput.files);
+        if (files.length === 0) {
+          statusEl.innerHTML = '<span style="color:#dc3545;">⚠️ No files selected.</span>';
+          return;
+        }
+        const oversized = files.find(f => f.size > 50 * 1024 * 1024);
+        if (oversized) {
+          statusEl.innerHTML = `<span style="color:#dc3545;">⚠️ "${window.escapeHtml(oversized.name)}" exceeds 50MB limit.</span>`;
+          return;
+        }
+        const mciId = document.getElementById('mciSelector').value;
+        if (!mciId) {
+          statusEl.innerHTML = '<span style="color:#dc3545;">⚠️ Select an MCI first.</span>';
+          return;
+        }
+
+        const radioEl = Swal.getPopup().querySelector('input[name="selectOption"]:checked');
+        const radioValue = radioEl ? radioEl.value : 'MCI';
+        let uploadUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/transferFile/mci/${mciId}`;
+        if (radioValue === 'SubGroup') uploadUrl += `?subGroupId=${encodeURIComponent(subgroupid)}`;
+        else if (radioValue === 'VM') uploadUrl += `?vmId=${encodeURIComponent(vmid)}`;
+
+        const btn = document.getElementById('rcUploadBtn');
+        btn.disabled = true;
+        statusEl.innerHTML = `<span style="color:#0d6efd;">⏳ Uploading 0/${files.length}...</span>`;
+
+        const CONCURRENCY = 3;
+        let completed = 0;
+        let succeeded = 0;
+        let failed = 0;
+
+        // Upload in batches of CONCURRENCY
+        const vmFailDetails = []; // { fileName, vmId, error }
+        for (let i = 0; i < files.length; i += CONCURRENCY) {
+          const batch = files.slice(i, i + CONCURRENCY);
+          await Promise.all(batch.map(async (file) => {
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('path', '/home/cb-user');
+            try {
+              const res = await axios.post(uploadUrl, fd, {
+                headers: {
+                  'Authorization': `Basic ${btoa(`${username}:${password}`)}`,
+                  'Content-Type': 'multipart/form-data',
+                },
+              });
+              // Check per-VM results inside the response body
+              const results = res.data?.results || [];
+              const vmFails = results.filter(r => r.error && r.error.trim());
+              if (vmFails.length > 0) {
+                vmFails.forEach(r => vmFailDetails.push({ fileName: file.name, vmId: r.vmId || '?', error: r.error }));
+                failed++;
+                console.warn(`RC upload VM-level failure for ${file.name}:`, vmFails);
+              } else {
+                succeeded++;
+              }
+            } catch (e) {
+              failed++;
+              console.error(`RC upload error for ${file.name}:`, e);
+            }
+            completed++;
+            statusEl.innerHTML = `<span style="color:#0d6efd;">⏳ Uploading ${completed}/${files.length}... ✅${succeeded} ❌${failed}</span>`;
+          }));
+        }
+
+        btn.disabled = false;
+        const color = failed === 0 ? '#198754' : '#fd7e14';
+        let statusMsg = `<span style="color:${color};">✅ ${succeeded} uploaded${failed > 0 ? `, ❌ ${failed} failed` : ''} (${files.length} total)</span>`;
+        if (vmFailDetails.length > 0) {
+          const detailLines = vmFailDetails.map(d =>
+            `<div style="margin-top:2px;">• ${window.escapeHtml(d.fileName)} → VM <b>${window.escapeHtml(d.vmId)}</b>: ${window.escapeHtml(d.error)}</div>`
+          ).join('');
+          statusMsg += `<div style="margin-top:4px; color:#dc3545; font-size:0.75rem;">${detailLines}</div>`;
+        }
+        statusEl.innerHTML = statusMsg;
+      });
+
+      // Load Route53 hosted zones; show DNS section only if available
+      (async () => {
+        try {
+          const res = await axios.get(
+            `http://${hostname}:${port}/tumblebug/resources/globalDns/hostedZone`,
+            { headers: { 'Authorization': `Basic ${btoa(`${username}:${password}`)}` } }
+          );
+          const zones = res.data?.hostedZones || [];
+          if (zones.length === 0) return; // No Route53 access — keep section hidden
+
+          const zoneSelect = document.getElementById('dnsHostedZone');
+          zoneSelect.innerHTML = zones.map(z =>
+            `<option value="${window.escapeHtml(z.name)}">${window.escapeHtml(z.name)} (${z.recordCount} records)</option>`
+          ).join('');
+          // Pre-fill record name with the currently selected MCI ID
+          const currentMciId = document.getElementById('mciSelector')?.value || '';
+          if (currentMciId) {
+            document.getElementById('dnsRecordName').value = currentMciId;
+          }
+          document.getElementById('dnsUpdateSection').style.display = '';
+        } catch (_) {
+          // Route53 not available or credentials missing — silently hide
+        }
+      })();
+
+      // Apply DNS button handler
+      document.getElementById('applyDnsBtn').addEventListener('click', async () => {
+        const domainName = document.getElementById('dnsHostedZone').value;
+        const recordName = document.getElementById('dnsRecordName').value.trim();
+        const recordType = document.getElementById('dnsRecordType').value;
+        const ttl = parseInt(document.getElementById('dnsTtl').value) || 300;
+        const mciId = document.getElementById('mciSelector').value;
+        const resultEl = document.getElementById('dnsApplyResult');
+
+        if (!mciId) {
+          resultEl.innerHTML = '<span style="color:#dc3545;">⚠️ Select an MCI first.</span>';
+          return;
+        }
+
+        const btn = document.getElementById('applyDnsBtn');
+        btn.disabled = true;
+        btn.textContent = '⏳ Applying...';
+        resultEl.innerHTML = '';
+
+        try {
+          const body = {
+            domainName,
+            recordName,
+            recordType,
+            ttl,
+            routingPolicy: 'simple',
+            setBy: { mci: { nsId: namespace, mciId } },
+          };
+          await axios.put(
+            `http://${hostname}:${port}/tumblebug/resources/globalDns/record`,
+            body,
+            { headers: { 'Authorization': `Basic ${btoa(`${username}:${password}`)}` } }
+          );
+          const fullRecord = (recordName ? `${recordName}.${domainName}` : domainName).replace(/\.$/, '');
+          _appliedDnsUrl = `http://${fullRecord}`;
+          resultEl.innerHTML = `<span style="color:#198754;">✅ DNS record updated: <a href="${_appliedDnsUrl}" target="_blank" style="color:#198754; font-weight:bold;">${window.escapeHtml(fullRecord)}</a> → MCI public IPs (TTL ${ttl}s)</span>`;
+        } catch (err) {
+          const msg = err.response?.data?.message || err.message || 'Request failed';
+          resultEl.innerHTML = `<span style="color:#dc3545;">❌ ${window.escapeHtml(msg)}</span>`;
+        } finally {
+          btn.disabled = false;
+          btn.textContent = '🌐 Apply DNS';
+        }
+      });
     },
     preConfirm: () => {
       const commands = collectCommands();
@@ -15705,7 +15820,7 @@ async function executeRemoteCmd() {
       const syncMode = document.getElementById("syncModeToggle")?.checked || false;
       const labelSelector = document.getElementById('labelSelector')?.value || '';
       const sshUserName = document.getElementById('sshUserName')?.value?.trim() || '';
-      return { commands, selectedMci, timeout, syncMode, labelSelector, sshUserName };
+      return { commands, selectedMci, timeout, syncMode, labelSelector, sshUserName, appliedDnsUrl: _appliedDnsUrl };
     },
   }).then((result) => {
       // result.value is false if result.isDenied or another key such as result.isDismissed
@@ -15716,6 +15831,7 @@ async function executeRemoteCmd() {
         // Validate timeout is within allowed range (1-120 minutes)
         const timeoutMinutes = Math.max(1, Math.min(120, parseInt(result.value.timeout, 10) || 30));
         const useSyncMode = result.value.syncMode;
+        const appliedDnsUrl = result.value.appliedDnsUrl || null;
         
         // Handle radio button value
         const radioValue = Swal.getPopup().querySelector(
@@ -15772,7 +15888,7 @@ async function executeRemoteCmd() {
             },
           }).then((res) => {
             console.log('[RemoteCmd] Sync response:', 'status=' + res.status, res);
-            showRemoteCmdResult(res.data);
+            showRemoteCmdResult(res.data, appliedDnsUrl);
             removeSpinnerTask(spinnerId);
           }).catch(function (error) {
             if (error.response) {
@@ -15810,11 +15926,11 @@ async function executeRemoteCmd() {
               var xReqId = res.data.xRequestId;
               var streamUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/stream/cmd/mci/${selectedMciId}?xRequestId=${encodeURIComponent(xReqId)}`;
               console.log('[RemoteCmd] Starting streaming session:', xReqId);
-              startStreamingSession(streamUrl, username, password, xReqId, selectedMciId, spinnerId);
+              startStreamingSession(streamUrl, username, password, xReqId, selectedMciId, spinnerId, appliedDnsUrl);
             } else {
               // Fallback: sync response (async=true not in URL or server returned non-202)
               console.warn('[RemoteCmd] Sync fallback - status:', res.status, 'data:', res.data);
-              showRemoteCmdResult(res.data);
+              showRemoteCmdResult(res.data, appliedDnsUrl);
               removeSpinnerTask(spinnerId);
             }
           })
@@ -15852,7 +15968,7 @@ async function transferFileToMci() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = mciidElement.value;
   var subgroupid = getSubGroupIdFromVmSelection();
   var vmid = document.getElementById("vmid").value;
@@ -16009,8 +16125,25 @@ async function transferFileToMci() {
               </div>
             </div>
           </div>
+          <div class="popup-row">
+            <div class="popup-col" style="flex: 1;">
+              <div class="popup-field">
+                <label class="popup-label">Post-transfer Command <span style="font-weight: normal; color: #888;">(optional)</span>
+                  <span id="favoritesCountBadge" style="display:none; font-size:0.7rem; background:#ffc107; color:#333; border-radius:3px; padding:1px 5px; margin-left:4px;"></span>
+                  <span style="font-size:0.7rem; color:#0d6efd; margin-left:4px;" title="Use {filename} to insert the uploaded file's name into the command">💡 use <code>{filename}</code> for per-file substitution</span>
+                </label>
+                <div style="display:flex; gap:6px; align-items:center;">
+                  <input type="text" id="postTransferCmd" class="popup-input" value="" placeholder="e.g., sudo mv /home/cb-user/{filename} /var/www/html/{filename}" style="flex:1;">
+                  <button type="button" id="saveFavBtn" title="Save to favorites" style="padding:4px 8px; border:1px solid #ffc107; background:#fff8e1; border-radius:4px; cursor:pointer; font-size:0.85rem; white-space:nowrap;">⭐</button>
+                  <button type="button" id="showFavBtn" title="Show favorites" style="padding:4px 8px; border:1px solid #0d6efd; background:#e7f0ff; border-radius:4px; cursor:pointer; font-size:0.85rem; white-space:nowrap;">📋</button>
+                </div>
+                <div id="favoritesDropdown" style="display:none; margin-top:4px; border:1px solid #ddd; border-radius:4px; background:#fff; max-height:140px; overflow-y:auto; box-shadow:0 2px 6px rgba(0,0,0,0.1);"></div>
+              </div>
+            </div>
+          </div>
           <div style="font-size: 0.7rem; color: #666; padding: 4px 8px; background: #fff3cd; border-radius: 4px;">
-            📝 File(s) will be uploaded to the specified path on all targeted VMs via SCP through bastion hosts. Multiple files can be selected.
+            📝 File(s) will be uploaded to the specified path on all targeted VMs via SCP through bastion hosts. Multiple files can be selected.<br>
+            🔧 If a post-transfer command is provided, it will be executed on each VM after successful file transfer (e.g., move file to a privileged location).
           </div>
         </div>
       </div>
@@ -16093,6 +16226,111 @@ async function transferFileToMci() {
         const vmSelector = document.getElementById('downloadVmSelector');
         vmSelector.innerHTML = buildVmOptionsHtml(newVmList);
       });
+
+      // Favorites for post-transfer command (persisted via localStorage)
+      const FAV_KEY = 'postTransferCmdFavorites';
+      const getFavs = () => JSON.parse(localStorage.getItem(FAV_KEY) || '[]');
+      const setFavs = (f) => localStorage.setItem(FAV_KEY, JSON.stringify(f));
+
+      // Seed default favorites on first use
+      if (!localStorage.getItem(FAV_KEY)) {
+        setFavs([
+          // Web server deployment
+          'sudo mv /home/cb-user/* /var/www/html/',
+          'sudo cp /home/cb-user/nginx.conf /etc/nginx/sites-available/default && sudo systemctl restart nginx',
+          'sudo cp /home/cb-user/nginx.conf /etc/nginx/ && sudo nginx -t && sudo systemctl reload nginx',
+          // Directory creation
+          'sudo mkdir -p /var/www/html && sudo mv /home/cb-user/* /var/www/html/',
+          'mkdir -p /home/cb-user/app && mv /home/cb-user/* /home/cb-user/app/',
+          // Permissions & script execution
+          'chmod +x /home/cb-user/*.sh && bash /home/cb-user/*.sh',
+          'sudo chmod +x /home/cb-user/*.sh && sudo bash /home/cb-user/*.sh',
+          // Archive extraction to web root (auto-detect format, overwrite-safe)
+          'which unzip || sudo apt-get install -y unzip; f=/home/cb-user/{filename}; case "$f" in *.zip) sudo unzip -o "$f" -d /var/www/html/ ;; *.tar.gz|*.tgz) sudo tar -xzf "$f" -C /var/www/html/ ;; *.tar.bz2) sudo tar -xjf "$f" -C /var/www/html/ ;; esac',
+          // Archive extraction to home dir
+          'tar -xzf /home/cb-user/*.tar.gz -C /home/cb-user/',
+          'unzip /home/cb-user/*.zip -d /home/cb-user/',
+          // Docker
+          'docker load -i /home/cb-user/*.tar',
+          'cd /home/cb-user && docker compose up -d',
+          // Package install
+          'sudo dpkg -i /home/cb-user/*.deb',
+          // Systemd service
+          'sudo cp /home/cb-user/*.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now $(basename /home/cb-user/*.service)',
+          // Disk & system usage
+          'df -h',
+          'du -sh /home/cb-user/*',
+          'free -h && df -h',
+        ]);
+      }
+
+      const refreshFavBadge = () => {
+        const f = getFavs();
+        const badge = document.getElementById('favoritesCountBadge');
+        badge.style.display = f.length > 0 ? '' : 'none';
+        badge.textContent = `${f.length} saved`;
+      };
+
+      const renderFavList = () => {
+        const f = getFavs();
+        const dropdown = document.getElementById('favoritesDropdown');
+        if (f.length === 0) {
+          dropdown.innerHTML = '<div style="padding:8px;color:#888;font-size:0.8rem;">No favorites saved yet.</div>';
+          return;
+        }
+        dropdown.innerHTML = f.map((cmd, i) =>
+          `<div style="display:flex;align-items:center;gap:4px;padding:5px 8px;border-bottom:1px solid #eee;">
+            <span class="fav-cmd-item" data-idx="${i}" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;color:#0d6efd;font-size:0.8rem;" title="${cmd.replace(/"/g,'&quot;')}">${cmd}</span>
+            <button type="button" class="fav-del-btn" data-idx="${i}" style="border:none;background:none;color:#dc3545;cursor:pointer;padding:0 4px;font-size:0.85rem;" title="Remove">✕</button>
+          </div>`
+        ).join('');
+      };
+
+      refreshFavBadge();
+
+      document.getElementById('saveFavBtn').addEventListener('click', () => {
+        const cmd = document.getElementById('postTransferCmd').value.trim();
+        if (!cmd) return;
+        const f = getFavs();
+        if (f.includes(cmd)) {
+          const btn = document.getElementById('saveFavBtn');
+          btn.style.borderColor = '#aaa';
+          setTimeout(() => { btn.style.borderColor = '#ffc107'; }, 1500);
+          return;
+        }
+        f.push(cmd);
+        setFavs(f);
+        refreshFavBadge();
+        const btn = document.getElementById('saveFavBtn');
+        btn.textContent = '✅';
+        setTimeout(() => { btn.textContent = '⭐'; }, 1200);
+      });
+
+      document.getElementById('showFavBtn').addEventListener('click', () => {
+        const dropdown = document.getElementById('favoritesDropdown');
+        if (dropdown.style.display === 'none') {
+          renderFavList();
+          dropdown.style.display = '';
+        } else {
+          dropdown.style.display = 'none';
+        }
+      });
+
+      document.getElementById('favoritesDropdown').addEventListener('click', (e) => {
+        const item = e.target.closest('.fav-cmd-item');
+        const delBtn = e.target.closest('.fav-del-btn');
+        if (item) {
+          const f = getFavs();
+          document.getElementById('postTransferCmd').value = f[+item.dataset.idx] || '';
+          document.getElementById('favoritesDropdown').style.display = 'none';
+        } else if (delBtn) {
+          const f = getFavs();
+          f.splice(+delBtn.dataset.idx, 1);
+          setFavs(f);
+          refreshFavBadge();
+          renderFavList();
+        }
+      });
     },
     preConfirm: () => {
       const mode = document.getElementById('fileTransferMode').value;
@@ -16116,7 +16354,8 @@ async function transferFileToMci() {
           Swal.showValidationMessage('Please specify the target path.');
           return false;
         }
-        return { mode, selectedMci, files, targetPath };
+        const postTransferCmd = document.getElementById('postTransferCmd').value.trim();
+        return { mode, selectedMci, files, targetPath, postTransferCmd };
       } else {
         const selectedVm = document.getElementById('downloadVmSelector').value;
         const sourcePath = document.getElementById('sourcePathInput').value;
@@ -16137,9 +16376,10 @@ async function transferFileToMci() {
 
       if (mode === 'upload') {
         // === UPLOAD (supports multiple files) ===
-        const { files, targetPath } = result.value;
+        const { files, targetPath, postTransferCmd } = result.value;
         const radioValue = Swal.getPopup().querySelector('input[name="selectOption"]:checked').value;
-        let url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/transferFile/mci/${selectedMci}`;
+        const endpoint = postTransferCmd ? 'transferFileAndCmd' : 'transferFile';
+        let url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/${endpoint}/mci/${selectedMci}`;
         if (radioValue === 'SubGroup') {
           url += `?subGroupId=${encodeURIComponent(subgroupid)}`;
         } else if (radioValue === 'VM') {
@@ -16155,32 +16395,29 @@ async function transferFileToMci() {
             <p><b>Files:</b> ${totalFiles} file(s) selected</p>
             <p><b>Target:</b> ${window.escapeHtml(targetPath)}</p>
             <p><b>Scope:</b> ${window.escapeHtml(radioValue)} ${window.escapeHtml(scopeLabel)}</p>
+            ${postTransferCmd ? `<p><b>Post-cmd:</b> <code style="font-size:0.8rem;" id="postCmdPreview">${window.escapeHtml(postTransferCmd)}</code></p>` : ''}
             <div id="uploadProgressDetail" style="margin-top: 8px; font-size: 0.8rem; color: #666;">Preparing...</div>
           </div>`,
           allowOutsideClick: false,
           didOpen: () => { Swal.showLoading(); },
         });
 
-        // Upload files sequentially and accumulate results
+        // Upload files in parallel batches of 5
         (async () => {
           const allResults = [];
           const fileErrors = [];
           let lastResData = null;
-
           const allResData = [];
+          let completed = 0;
+          const CONCURRENCY = 3;
 
-          for (let i = 0; i < totalFiles; i++) {
-            const file = files[i];
-            const progressEl = document.getElementById('uploadProgressDetail');
-            if (progressEl) {
-              progressEl.textContent = `(${i + 1}/${totalFiles}) ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
-            }
-            Swal.update({ title: `⬆️ Uploading (${i + 1}/${totalFiles})...` });
-
+          const uploadFile = async (file) => {
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('path', targetPath);
-
+            formData.append('path', targetPath.replace(/\/+$/, ''));
+            if (postTransferCmd) {
+              formData.append('command', postTransferCmd.replaceAll('{filename}', file.name));
+            }
             try {
               const res = await axios({
                 method: 'post',
@@ -16200,6 +16437,14 @@ async function transferFileToMci() {
               const errMsg = error.response?.data?.message || error.message || 'Request failed';
               fileErrors.push({ name: file.name, error: errMsg });
             }
+            completed++;
+            const progressEl = document.getElementById('uploadProgressDetail');
+            if (progressEl) progressEl.textContent = `${completed}/${totalFiles} done...`;
+            Swal.update({ title: `⬆️ Uploading (${completed}/${totalFiles})...` });
+          };
+
+          for (let i = 0; i < totalFiles; i += CONCURRENCY) {
+            await Promise.all(files.slice(i, i + CONCURRENCY).map(uploadFile));
           }
 
           // Show accumulated results
@@ -16331,7 +16576,7 @@ function getAccessInfo() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = getSelectedMciId();
 
   if (!namespace) {
@@ -16373,7 +16618,7 @@ saveBtn.addEventListener("click", function () {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = mciidElement.value;
   var groupid = getSubGroupIdFromVmSelection();
   var vmid = document.getElementById("vmid").value;
@@ -16423,7 +16668,7 @@ function downloadAllSshKeys() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = mciidElement.value;
 
   if (!namespace || !mciid) {
@@ -16720,7 +16965,7 @@ function updateFirewallRules() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var nsId = namespaceElement.value;
+  var nsId = configNamespace;
   var mciId = mciidElement.value;
   var subgroupid = getSubGroupIdFromVmSelection();
   var vmid = document.getElementById("vmid").value;
@@ -17484,7 +17729,7 @@ function deleteFirewallRule(sgId, sgName, ruleData) {
         var port = config.port;
         var username = config.username;
         var password = config.password;
-        var nsId = namespaceElement.value;
+        var nsId = configNamespace;
 
         // Prepare request data for deletion
         const deleteRule = {
@@ -17737,7 +17982,7 @@ function addNewRuleToSg(sgId, sgName) {
       var portVal = config.port;
       var username = config.username;
       var password = config.password;
-      var nsId = namespaceElement.value;
+      var nsId = configNamespace;
 
       // Prepare request data for addition
       const newRule = {
@@ -17826,7 +18071,7 @@ function scaleOutSubGroup() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   // Show dialog to get number of VMs to add
   Swal.fire({
@@ -17900,7 +18145,7 @@ function scaleOutSubGroupWithSelection() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -17924,7 +18169,7 @@ function scaleOutMciFromContext(mciId) {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -17948,7 +18193,7 @@ function copyMciConfig(mciId) {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -18096,7 +18341,7 @@ function saveMciAsTemplate(mciId) {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -18377,7 +18622,7 @@ function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, po
 
 // Function to show MCI Actions menu in SweetAlert
 function showActionsMenu() {
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = getSelectedMciId();
   
   if (!namespace) {
@@ -18555,7 +18800,7 @@ function showMciSelectionForScaleOut(title, description, successCallback) {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (!namespace || namespace === "") {
     errorAlert("Please select a namespace first");
@@ -18642,7 +18887,7 @@ function scaleOutMciWithConfiguration() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -19550,7 +19795,7 @@ function loadK8sClusterData() {
   var port = configPort;
   var username = configUsername;
   var password = configPassword;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
 
   if (!namespace || namespace === "") {
     console.log("No namespace specified for K8s cluster data load");
@@ -19711,7 +19956,7 @@ async function loadVpnDataFromMcis() {
   try {
     const config = getConfig();
     const { hostname, port, username, password } = config;
-    const namespace = namespaceElement?.value || config.username;
+    const namespace = configNamespace || config.username;
     
     // Use existing MCI data from central store - no fallback API call
     let mciData = [];
@@ -19834,7 +20079,7 @@ function toggleSnapshotAutoRefresh() {
 
 // Show Snapshot Management Modal
 async function showSnapshotManagementModal() {
-  const namespace = document.getElementById('namespace').value;
+  const namespace = configNamespace;
   if (!namespace) {
     Swal.fire('Warning', 'Please select a namespace first', 'warning');
     return;
@@ -20028,7 +20273,7 @@ async function showSnapshotManagementModal() {
 
 // Create VM Snapshot (supports both single VM and MCI-wide snapshots)
 async function createVmSnapshotFromModal() {
-  const namespace = document.getElementById('namespace').value;
+  const namespace = configNamespace;
   const mciId = document.getElementById('snapshotMciSelect').value;
   const vmId = document.getElementById('snapshotVmSelect').value;
   const snapshotName = document.getElementById('snapshotName').value;
@@ -20181,7 +20426,7 @@ async function createVmSnapshotFromModal() {
 async function loadCustomImagesInModal(namespace) {
   // Priority: passed parameter > window storage > input field
   if (!namespace) {
-    namespace = window.currentSnapshotNamespace || document.getElementById('namespace')?.value;
+    namespace = window.currentSnapshotNamespace || configNamespace;
   }
   
   console.log('loadCustomImagesInModal called with namespace:', namespace);
@@ -20295,7 +20540,7 @@ async function loadCustomImagesInModal(namespace) {
 
 // View Custom Image Details
 async function viewCustomImageDetails(imageId) {
-  const namespace = window.currentSnapshotNamespace || document.getElementById('namespace')?.value;
+  const namespace = window.currentSnapshotNamespace || configNamespace;
   if (!namespace) {
     Swal.fire('Error', 'Namespace not available', 'error');
     return;
@@ -20387,7 +20632,7 @@ async function deleteCustomImageFromModal(imageId) {
 
   if (!result.isConfirmed) return;
 
-  const namespace = window.currentSnapshotNamespace || document.getElementById('namespace')?.value;
+  const namespace = window.currentSnapshotNamespace || configNamespace;
   if (!namespace) {
     Swal.fire('Error', 'Namespace not available', 'error');
     return;
@@ -20679,7 +20924,7 @@ async function showTaskManagementModal() {
   var port = config.port;
   var username = config.username;
   var password = config.password;
-  var namespace = namespaceElement.value;
+  var namespace = configNamespace;
   var mciid = getSelectedMciId();
 
   if (!namespace) {
@@ -20989,7 +21234,7 @@ async function showTemplateManagement(overrideNs) {
   const authConfig = { username, password };
 
   // Determine initial namespace
-  const currentNs = overrideNs || document.getElementById('namespace')?.value || '';
+  const currentNs = overrideNs || configNamespace || '';
 
   // Load namespace list
   let namespaces = [];
@@ -21356,7 +21601,7 @@ async function applyTemplate(sourceNs, type, templateId) {
   }
 
   // Default target namespace: use the main panel's namespace (not the template source ns)
-  const mainNs = document.getElementById('namespace')?.value || sourceNs;
+  const mainNs = configNamespace || sourceNs;
   const nsOptionsHtml = namespaces.map(ns => {
     const nsId = typeof ns === 'string' ? ns : (ns.id || ns.name || '');
     const safeNsId = window.escapeHtml(nsId);
@@ -21384,7 +21629,7 @@ async function applyTemplate(sourceNs, type, templateId) {
         </div>
         <div style="margin-bottom:10px;">
           <label style="font-size:13px;font-weight:500;">Name <span style="color:red;">*</span></label>
-          <input id="tmplApplyName" class="swal2-input" placeholder="my-new-resource" style="margin:4px 0;width:100%;font-size:14px;">
+          <input id="tmplApplyName" class="swal2-input" placeholder="my-new-resource" value="mc-${generateMciName()}" style="margin:4px 0;width:100%;font-size:14px;">
         </div>
         <div style="margin-bottom:10px;">
           <label style="font-size:13px;font-weight:500;">Description (optional)</label>
@@ -21788,7 +22033,7 @@ window.loadTemplateToMciConfig = loadTemplateToMciConfig;
 
 async function showDnsManagementModal(preselectedMciId) {
   const config = getConfig();
-  const namespace = document.getElementById("namespace")?.value || 'default';
+  const namespace = configNamespace || 'default';
 
   // Build MCI source section - if preselectedMciId, pre-fill it
   const mciSourceChecked = preselectedMciId ? 'checked' : '';
