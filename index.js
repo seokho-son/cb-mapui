@@ -293,7 +293,7 @@ function showMapRefreshIndicator(show) {
   }
 }
 
-// Show map settings (simple version)
+// Show map settings
 function showMapSettings() {
   // Get current refresh interval from global variable
   const currentRefreshInterval = refreshInterval.toString();
@@ -301,21 +301,18 @@ function showMapSettings() {
   // Define available refresh intervals
   const intervals = [1, 5, 10, 20, 30, 40, 50, 100];
   
-  // Generate radio button options
-  const radioOptions = intervals.map(interval => {
-    const checked = currentRefreshInterval == interval ? 'checked' : '';
-    return `
-      <div style="margin: 8px 0; text-align: left;">
-        <input type="radio" id="refresh-${interval}" name="refreshInterval" value="${interval}" ${checked}>
-        <label for="refresh-${interval}" style="margin-left: 8px; font-weight: normal;">${interval} seconds</label>
-      </div>
-    `;
+  // Generate interval pill options
+  const intervalPills = intervals.map(interval => {
+    return `<label class="refresh-pill">
+      <input class="refresh-pill-input" type="radio" name="refreshInterval" value="${interval}" ${currentRefreshInterval == interval ? 'checked' : ''}>
+      <span class="refresh-pill-label">${interval}s</span>
+    </label>`;
   }).join('');
 
-  // Generic icon mode checkbox
+  // Generic icon mode
   const genericIconChecked = useGenericCspIcons ? 'checked' : '';
 
-  // Build namespace options from cached list
+  // Build namespace options
   const nsOptions = cachedNamespaceList.map(ns => {
     const safeNs = window.escapeHtml(ns);
     const selected = ns === configNamespace ? 'selected' : '';
@@ -323,7 +320,7 @@ function showMapSettings() {
   }).join('');
   const nsSelectHtml = nsOptions || `<option value="${window.escapeHtml(configNamespace)}" selected>${window.escapeHtml(configNamespace) || '(none)'}</option>`;
 
-  // Build credential holder options from cached list
+  // Build credential holder options
   const holderOptions = cachedCredentialHolderList.map(holder => {
     const holderId = window.escapeHtml(holder.credentialHolder || holder.id || '');
     const connCount = holder.verifiedConnectionCount || holder.connectionCount || 0;
@@ -331,68 +328,84 @@ function showMapSettings() {
     const selected = (holder.credentialHolder || holder.id || '') === configCredentialHolder ? 'selected' : '';
     return `<option value="${holderId}" ${selected} title="Providers: ${providers || 'none'}">${holderId} (${connCount} conn${connCount !== 1 ? 's' : ''})</option>`;
   }).join('');
-  // Fallback if cache is empty
   const holderSelectHtml = holderOptions || `<option value="${window.escapeHtml(configCredentialHolder)}" selected>${window.escapeHtml(configCredentialHolder)}</option>`;
   
   Swal.fire({
-    title: 'Map Settings',
+    title: '',
     html: `
     <style>
-      .swal2-radio-container {
-        text-align: left;
-        margin: 10px 0;
-      }
-      .swal2-label {
-        margin-bottom: 10px;
-        font-weight: bold;
-        display: block;
-      }
+      .settings-section { text-align:left; margin:0 0 16px 0; }
+      .settings-label { font-size:12px; font-weight:600; color:#495057; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+      .settings-label i { font-size:13px; color:#6c757d; width:16px; text-align:center; }
+      .settings-hint { font-size:11px; color:#9ca3af; margin-top:4px; }
+      .settings-select { width:100%; padding:7px 10px; border:1px solid #dee2e6; border-radius:6px; font-size:13px; color:#212529; background:#fff; transition:border-color .15s; outline:none; }
+      .settings-select:focus { border-color:#86b7fe; box-shadow:0 0 0 3px rgba(13,110,253,.15); }
+      .settings-divider { border:none; border-top:1px solid #f0f0f0; margin:16px 0; }
+      .settings-pills { text-align:center; }
+      .refresh-pill { position:relative; display:inline-block; margin:3px; cursor:pointer; }
+      .refresh-pill-input { position:absolute; opacity:0; width:1px; height:1px; margin:0; }
+      .refresh-pill-label { display:inline-block; padding:4px 12px; border-radius:16px; border:1px solid #ced4da; background:#fff; color:#495057; font-size:12px; font-weight:500; transition:all .15s; }
+      .refresh-pill-input:checked + .refresh-pill-label { background:#0d6efd; color:#fff; border-color:#0d6efd; }
+      .refresh-pill-input:focus + .refresh-pill-label, .refresh-pill-input:focus-visible + .refresh-pill-label { outline:2px solid #86b7fe; outline-offset:2px; }
+      .settings-toggle { display:flex; align-items:center; gap:8px; cursor:pointer; }
+      .settings-toggle input[type="checkbox"] { width:16px; height:16px; accent-color:#0d6efd; cursor:pointer; }
+      .settings-toggle span { font-size:13px; color:#495057; }
+      .settings-csp-preview { margin-top:8px; display:flex; flex-wrap:wrap; gap:4px; justify-content:center; }
+      .settings-csp-pill { display:inline-flex; align-items:center; gap:3px; padding:2px 7px; border-radius:10px; color:#fff; font-size:9px; font-weight:600; letter-spacing:.3px; }
     </style>
-    <div style="text-align: left; margin: 10px 0;">
-      <label class="swal2-label">🏷️ Namespace ID:</label>
-      <select id="settings-namespace" style="width: 100%; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px;">
-        ${nsSelectHtml}
-      </select>
-      <div style="margin-top: 4px; font-size: 11px; color: #6c757d;">
-        Active namespace used across Provision and Control panels.
-      </div>
+    <div style="text-align:center;margin-bottom:16px;">
+      <i class="fas fa-cog" style="font-size:20px;color:#6c757d;"></i>
+      <div style="font-size:16px;font-weight:600;color:#212529;margin-top:4px;">Settings</div>
     </div>
-    <hr style="margin: 16px 0;">
-    <div style="text-align: left; margin: 10px 0;">
-      <label class="swal2-label">🔑 Credential Holder:</label>
-      <select id="settings-credentialHolder" style="width: 100%; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px;">
-        ${holderSelectHtml}
-      </select>
-      <div style="margin-top: 4px; font-size: 11px; color: #6c757d;">
-        Connections and map icons will be filtered by the selected holder.
-      </div>
+
+    <div class="settings-section">
+      <div class="settings-label"><i class="fas fa-tag"></i> Namespace</div>
+      <select id="settings-namespace" class="settings-select">${nsSelectHtml}</select>
+      <div class="settings-hint">Active namespace for Provision and Control panels</div>
     </div>
-    <hr style="margin: 16px 0;">
-    <div class="swal2-radio-container">
-      <label class="swal2-label">⏱️ Select Refresh Interval:</label>
-      ${radioOptions}
+
+    <hr class="settings-divider">
+
+    <div class="settings-section">
+      <div class="settings-label"><i class="fas fa-key"></i> Credential Holder</div>
+      <select id="settings-credentialHolder" class="settings-select">${holderSelectHtml}</select>
+      <div class="settings-hint">Filter connections and map icons by holder</div>
     </div>
-    <hr style="margin: 16px 0;">
-    <div style="text-align: left; margin: 10px 0;">
-      <label class="swal2-label">☁️ CSP Icon Display Mode:</label>
-      <div style="margin: 8px 0;">
+
+    <hr class="settings-divider">
+
+    <div class="settings-section">
+      <div class="settings-label"><i class="fas fa-sync-alt"></i> Refresh Interval</div>
+      <div class="settings-pills">${intervalPills}</div>
+    </div>
+
+    <hr class="settings-divider">
+
+    <div class="settings-section">
+      <div class="settings-label"><i class="fas fa-palette"></i> CSP Icon Style</div>
+      <label class="settings-toggle">
         <input type="checkbox" id="genericIconToggle" ${genericIconChecked}>
-        <label for="genericIconToggle" style="margin-left: 8px; font-weight: normal;">
-          Use generic colored icons (hide CSP brand logos)
-        </label>
-      </div>
-      <div id="genericIconPreview" style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;">
+        <span>Use generic colored icons (hide CSP logos)</span>
+      </label>
+      <div class="settings-csp-preview">
         ${Object.keys(cspGenericColors).map(csp => {
           const color = cspGenericColors[csp];
-          return '<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:10px;background:' + color + ';color:#fff;font-size:10px;font-weight:bold;">' +
-            '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#fff;opacity:0.5;"></span>' +
+          return '<span class="settings-csp-pill" style="background:' + color + ';">' +
+            '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.4);"></span>' +
             csp.toUpperCase() + '</span>';
         }).join('')}
       </div>
     </div>
   `,
     showCancelButton: true,
-    confirmButtonText: 'Apply Settings',
+    confirmButtonText: 'Apply',
+    cancelButtonText: 'Cancel',
+    customClass: {
+      popup: 'swal2-popup',
+      confirmButton: 'swal2-confirm',
+      cancelButton: 'swal2-cancel'
+    },
+    width: 380,
     preConfirm: () => {
       const selectedInterval = document.querySelector('input[name="refreshInterval"]:checked');
       if (!selectedInterval) {
@@ -434,18 +447,20 @@ function showMapSettings() {
         applyCredentialHolder(result.value.credentialHolder);
       }
 
-      // Show success message
-      var statusParts = [`Refresh: ${newRefreshInterval}s`];
-      if (useGenericCspIcons) statusParts.push('Generic icons');
+      // Show brief confirmation
+      var statusParts = [];
       statusParts.push(`NS: ${result.value.namespace}`);
       statusParts.push(`Holder: ${result.value.credentialHolder}`);
+      statusParts.push(`Refresh: ${newRefreshInterval}s`);
+      if (useGenericCspIcons) statusParts.push('Generic icons: ON');
       
       Swal.fire({
         icon: 'success',
-        title: 'Settings Applied',
-        text: statusParts.join(' | '),
-        timer: 2000,
-        showConfirmButton: false
+        text: statusParts.join(' · '),
+        timer: 1500,
+        showConfirmButton: false,
+        toast: true,
+        position: 'top-end'
       });
     }
   });
@@ -6240,6 +6255,10 @@ function reviewWithSelectedSubgroups(selectedSubgroups) {
 }
 
 function createMci() {
+  // Scroll Provision panel to top
+  var scrollableCol = document.querySelector('.scrollable-column');
+  if (scrollableCol) scrollableCol.scrollTop = 0;
+
   if (vmSubGroupReqeustFromSpecList.length != 0) {
     var hostname = configHostname;
     var port = configPort;
@@ -12345,12 +12364,12 @@ function setDefaultRemoteCommandsByApp(appName) {
       break;
     case "OpenWebUI":
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh | bash -s -- ollama \"$$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))\"";
-      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
+      defaultRemoteCommand[1] = "echo 'Access to $$Func(GetPublicIP(target=this, prefix=http://))'";
       defaultRemoteCommand[2] = "";
       break;
     case "OpenWebUI-vLLM":
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh | bash -s -- vllm \"$$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:8000/v1))\"";
-      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
+      defaultRemoteCommand[1] = "echo 'Access to $$Func(GetPublicIP(target=this, prefix=http://))'";
       defaultRemoteCommand[2] = "";
       break;
     case "TelemetrySensor":
@@ -12509,8 +12528,8 @@ function setDefaultRemoteCommandsByApp(appName) {
       break;
     case "Nginx":
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/nginx/startServer.sh | bash -s -- --ip $$Func(GetPublicIP(target=this))";
-      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://))'";
-      defaultRemoteCommand[2] = "";
+      defaultRemoteCommand[1] = "which unzip || sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y unzip; f=$(ls /home/cb-user/*.zip /home/cb-user/*.tar.gz /home/cb-user/*.tgz /home/cb-user/*.tar.bz2 2>/dev/null | head -1); [ -n \"$f\" ] && case \"$f\" in *.zip) sudo unzip -o \"$f\" -d /var/www/html/ ;; *.tar.gz|*.tgz) sudo tar -xzf \"$f\" -C /var/www/html/ ;; *.tar.bz2) sudo tar -xjf \"$f\" -C /var/www/html/ ;; esac || echo 'No archive found in /home/cb-user/, skipping extraction.'";
+      defaultRemoteCommand[2] = "echo 'Access to $$Func(GetPublicIP(target=this, prefix=http://))'";
       break;
     case "MvToWebRoot":
       defaultRemoteCommand[0] = "sudo mv /home/cb-user/* /var/www/html/";
@@ -12518,7 +12537,7 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "";
       break;
     case "ExtractToWebRoot":
-      defaultRemoteCommand[0] = "which unzip || sudo apt-get install -y unzip; f=$(ls /home/cb-user/*.zip /home/cb-user/*.tar.gz /home/cb-user/*.tgz /home/cb-user/*.tar.bz2 2>/dev/null | head -1); case \"$f\" in *.zip) sudo unzip -o \"$f\" -d /var/www/html/ ;; *.tar.gz|*.tgz) sudo tar -xzf \"$f\" -C /var/www/html/ ;; *.tar.bz2) sudo tar -xjf \"$f\" -C /var/www/html/ ;; esac";
+      defaultRemoteCommand[0] = "which unzip || sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y unzip; f=$(ls /home/cb-user/*.zip /home/cb-user/*.tar.gz /home/cb-user/*.tgz /home/cb-user/*.tar.bz2 2>/dev/null | head -1); [ -n \"$f\" ] && case \"$f\" in *.zip) sudo unzip -o \"$f\" -d /var/www/html/ ;; *.tar.gz|*.tgz) sudo tar -xzf \"$f\" -C /var/www/html/ ;; *.tar.bz2) sudo tar -xjf \"$f\" -C /var/www/html/ ;; esac || echo 'No archive found in /home/cb-user/, skipping extraction.'";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
@@ -15548,6 +15567,33 @@ async function executeRemoteCmd() {
         <div id="rcUploadStatus" style="margin-top:5px; font-size:0.78rem;"></div>
       </div>
 
+      <!-- Predefined Scripts Section -->
+      <div class="popup-section">
+        <div class="popup-section-title">📜 Predefined Scripts</div>
+        <div id="scriptCategoryTabs" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
+          ${window.generateScriptCategoryTabsHtml(true)}
+        </div>
+        <div id="categoryDescription" style="font-size: 0.7rem; color: #666; margin-bottom: 6px; padding: 4px 8px; background: #fff3cd; border-radius: 4px;">
+          📝 ${(window.predefinedScriptCategories[window._currentScriptCategory || 'llm-ollama'] || window.predefinedScriptCategories['llm-ollama']).description}
+        </div>
+        <div class="popup-row">
+          <div class="popup-col" style="flex: 3;">
+            <div class="popup-field">
+              <select id="predefinedScripts" class="popup-select">
+                ${window.generateScriptOptionsHtml((window.predefinedScriptCategories[window._currentScriptCategory || 'llm-ollama'] || window.predefinedScriptCategories['llm-ollama']).scripts)}
+              </select>
+            </div>
+          </div>
+          <div class="popup-col" style="flex: 1;">
+            <div class="popup-field">
+              <label class="popup-inline" style="font-size: 0.8rem;">
+                <input type="checkbox" id="scriptAppendMode"> Append
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Commands Section -->
       <div class="popup-section">
         <div class="popup-section-title">⌨️ Commands</div>
@@ -15594,33 +15640,6 @@ async function executeRemoteCmd() {
               style="padding: 4px 12px; border: 1px solid #6c757d; border-radius: 4px; background: #f8f9fa; color: #333; cursor: pointer; font-size: 12px;">
               Reset
             </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Predefined Scripts Section -->
-      <div class="popup-section">
-        <div class="popup-section-title">📜 Predefined Scripts</div>
-        <div id="scriptCategoryTabs" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
-          ${window.generateScriptCategoryTabsHtml(true)}
-        </div>
-        <div id="categoryDescription" style="font-size: 0.7rem; color: #666; margin-bottom: 6px; padding: 4px 8px; background: #fff3cd; border-radius: 4px;">
-          📝 ${(window.predefinedScriptCategories[window._currentScriptCategory || 'llm-ollama'] || window.predefinedScriptCategories['llm-ollama']).description}
-        </div>
-        <div class="popup-row">
-          <div class="popup-col" style="flex: 3;">
-            <div class="popup-field">
-              <select id="predefinedScripts" class="popup-select">
-                ${window.generateScriptOptionsHtml((window.predefinedScriptCategories[window._currentScriptCategory || 'llm-ollama'] || window.predefinedScriptCategories['llm-ollama']).scripts)}
-              </select>
-            </div>
-          </div>
-          <div class="popup-col" style="flex: 1;">
-            <div class="popup-field">
-              <label class="popup-inline" style="font-size: 0.8rem;">
-                <input type="checkbox" id="scriptAppendMode"> Append
-              </label>
-            </div>
           </div>
         </div>
       </div>
@@ -16246,7 +16265,7 @@ async function transferFileToMci() {
           'chmod +x /home/cb-user/*.sh && bash /home/cb-user/*.sh',
           'sudo chmod +x /home/cb-user/*.sh && sudo bash /home/cb-user/*.sh',
           // Archive extraction to web root (auto-detect format, overwrite-safe)
-          'which unzip || sudo apt-get install -y unzip; f=/home/cb-user/{filename}; case "$f" in *.zip) sudo unzip -o "$f" -d /var/www/html/ ;; *.tar.gz|*.tgz) sudo tar -xzf "$f" -C /var/www/html/ ;; *.tar.bz2) sudo tar -xjf "$f" -C /var/www/html/ ;; esac',
+          'which unzip || sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y unzip; f=/home/cb-user/{filename}; case "$f" in *.zip) sudo unzip -o "$f" -d /var/www/html/ ;; *.tar.gz|*.tgz) sudo tar -xzf "$f" -C /var/www/html/ ;; *.tar.bz2) sudo tar -xjf "$f" -C /var/www/html/ ;; esac',
           // Archive extraction to home dir
           'tar -xzf /home/cb-user/*.tar.gz -C /home/cb-user/',
           'unzip /home/cb-user/*.zip -d /home/cb-user/',
