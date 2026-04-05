@@ -1027,11 +1027,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           <div id="map-controls" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(255, 255, 255, 0.95); border-radius: 8px; padding: 8px 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 1px solid rgba(0,0,0,0.1); backdrop-filter: blur(10px);">
             <div style="display: flex; align-items: center; gap: 12px; font-size: 12px; color: #6c757d; white-space: nowrap;">
               
-              <!-- Connection Status -->
-              <span id="mapConnectionStatus" class="badge badge-secondary" style="font-size: 10px; text-align: center; display: inline-block;" title="Unknown">
-                <i class="fas fa-question-circle"></i>
-              </span>
-
               <!-- Namespace ID -->
               <span id="mapNsBadge" class="badge badge-light" style="font-size: 10px; border: 1px solid #dee2e6; cursor: default;" title="Namespace ID (change in Settings)">
                 <i class="fas fa-tag" style="margin-right: 2px; color: #6c757d;"></i><span id="mapNsName">—</span>
@@ -1042,13 +1037,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                 <i class="fas fa-key" style="margin-right: 2px; color: #6c757d;"></i><span id="mapHolderName">admin</span>
               </span>
               
-              <!-- Refresh Indicator -->
-              <i class="fas fa-sync-alt" id="mapRefreshIndicator" style="visibility: hidden; animation: spin 1s linear infinite; width: 12px; text-align: center;"></i>
-              
               <!-- Settings Button -->
-              <button onclick="showMapSettings()" style="background: none; border: none; color: #495057; padding: 2px 6px; border-radius: 4px; cursor: pointer; font-size: 12px;" onmouseover="this.style.backgroundColor='rgba(0,0,0,0.1)'" onmouseout="this.style.backgroundColor='transparent'">
-                <i class="fas fa-cog"></i> Settings
+              <button onclick="showMapSettings()" aria-label="Map settings" title="Map settings" style="background: none; border: none; color: #495057; padding: 2px 6px; border-radius: 4px; cursor: pointer; font-size: 12px;" onmouseover="this.style.backgroundColor='rgba(0,0,0,0.1)'" onmouseout="this.style.backgroundColor='transparent'">
+                <i class="fas fa-cog"></i>
               </button>
+
+              <!-- Connection Status -->
+              <span id="mapConnectionStatus" class="badge badge-secondary" style="font-size: 10px; text-align: center; display: inline-block;" title="Unknown">
+                <i class="fas fa-question-circle"></i>
+              </span>
               
             </div>
           </div>
