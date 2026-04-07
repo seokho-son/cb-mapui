@@ -13062,7 +13062,6 @@ window.predefinedScriptCategories = {
     description: 'Ollama-based LLM service deployment',
     scripts: [
       { value: 'Nvidia', label: '1. Install GPU Driver', step: 1 },
-      { value: 'NvidiaVgpu', label: '1-alt. Install GPU Driver (vGPU)', step: 1, optional: true },
       { value: 'RebootVM', label: '2. Reboot VM', step: 2 },
       { value: 'Nvidia-Status', label: '3. Check GPU Driver', step: 3 },
       { value: 'Ollama', label: '4. Install Ollama', step: 4 },
@@ -13076,7 +13075,6 @@ window.predefinedScriptCategories = {
     description: 'vLLM-based high-performance LLM service',
     scripts: [
       { value: 'Nvidia', label: '1. Install GPU Driver', step: 1, targetLabel: 'accelerator=gpu' },
-      { value: 'NvidiaVgpu', label: '1-alt. Install GPU Driver (vGPU)', step: 1, optional: true, targetLabel: 'accelerator=gpu' },
       { value: 'RebootVM', label: '2. Reboot VM', step: 2, targetLabel: 'accelerator=gpu' },
       { value: 'Nvidia-Status', label: '3. Check GPU Driver', step: 3, targetLabel: 'accelerator=gpu' },
       { value: 'vLLM', label: '4. Install vLLM', step: 4, targetLabel: 'accelerator=gpu' },
@@ -13093,7 +13091,6 @@ window.predefinedScriptCategories = {
     description: 'LLM benchmark environment (vLLM + GuideLLM + Monitoring)',
     scripts: [
       { value: 'Nvidia', label: '1. Install GPU Driver', step: 1, targetLabel: 'accelerator=gpu' },
-      { value: 'NvidiaVgpu', label: '1-alt. Install GPU Driver (vGPU)', step: 1, optional: true, targetLabel: 'accelerator=gpu' },
       { value: 'RebootVM', label: '2. Reboot VM', step: 2, targetLabel: 'accelerator=gpu' },
       { value: 'Nvidia-Status', label: '3. Check GPU Driver', step: 3, targetLabel: 'accelerator=gpu' },
       { value: 'BenchmarkTarget', label: '4. Setup Benchmark Target (vLLM+Model+Telemetry)', step: 4, targetLabel: 'accelerator=gpu' },
@@ -13102,41 +13099,25 @@ window.predefinedScriptCategories = {
       { value: 'BenchmarkTelemetryExport', label: '7. Export Metrics to CSV', step: 7, optional: true, targetLabel: 'role=benchmark', targetLabels: ['role=benchmark', 'role=observability'] }
     ]
   },
-  'k8s-general': {
-    label: '☸️ K8s (General)',
-    description: 'General Kubernetes cluster deployment',
+  'k8s': {
+    label: '☸️ Kubernetes',
+    description: 'Kubernetes cluster deployment — Standard, GPU, or llm-d (distributed LLM inference). Steps 4-6 are for GPU workers; steps 9-13 are for llm-d only.',
     scripts: [
-      { value: 'Setup-WireGuard', label: '0. Setup WireGuard VPN', step: 0, optional: true },
-      { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane', step: 1, targetLabel: 'role=control' },
-      { value: 'K8sGetJoinCommand', label: '2. Get Join Command', step: 2, targetLabel: 'role=control', syncMode: true },
-      { value: 'K8sGetKubeconfig', label: '3. Get Kubeconfig (Base64)', step: 3, targetLabel: 'role=control', syncMode: true },
-      { value: 'Nvidia', label: '4. Install GPU Driver', step: 4, optional: true, targetLabel: 'accelerator=gpu' },
-      { value: 'NvidiaVgpu', label: '4-alt. Install GPU Driver (vGPU)', step: 4, optional: true, targetLabel: 'accelerator=gpu' },
-      { value: 'RebootVM', label: '5. Reboot VM', step: 5, optional: true, targetLabel: 'role=node' },
-      { value: 'Nvidia-Status', label: '6. Check GPU Driver', step: 6, optional: true, targetLabel: 'accelerator=gpu' },
-      { value: 'K8sWorker-Deploy', label: '7. Deploy Worker', step: 7, targetLabel: 'role=node' },
-      { value: 'K8sClusterStatus', label: '8. Check Cluster Status', step: 8, targetLabel: 'role=control', syncMode: true },
-      { value: 'K8sGpuStatus', label: '9. Check GPU Status', step: 9, optional: true, targetLabel: 'accelerator=gpu', syncMode: true }
-    ]
-  },
-  'k8s-llmd': {
-    label: '☸️ K8s (llm-d)',
-    description: 'Kubernetes with llm-d for distributed LLM inference (helmfile)',
-    scripts: [
-      { value: 'Setup-WireGuard', label: '0. Setup WireGuard VPN', step: 0, optional: true },
-      { value: 'K8sLlmdControlPlane', label: '1. Deploy Control Plane (llm-d)', step: 1, targetLabel: 'role=control' },
-      { value: 'K8sGetJoinCommand', label: '2. Get Join Command', step: 2, targetLabel: 'role=control', syncMode: true },
-      { value: 'K8sGetKubeconfig', label: '3. Get Kubeconfig (Base64)', step: 3, targetLabel: 'role=control', syncMode: true },
-      { value: 'Nvidia', label: '4. Install GPU Driver', step: 4, targetLabel: 'accelerator=gpu' },
-      { value: 'NvidiaVgpu', label: '4-alt. Install GPU Driver (vGPU)', step: 4, optional: true, targetLabel: 'accelerator=gpu' },
-      { value: 'RebootVM', label: '5. Reboot VM', step: 5, targetLabel: 'role=node' },
-      { value: 'Nvidia-Status', label: '6. Check GPU Driver', step: 6, targetLabel: 'accelerator=gpu' },
-      { value: 'K8sWorker-Deploy', label: '7. Deploy Worker', step: 7, targetLabel: 'role=node' },
-      { value: 'K8sClusterStatus', label: '8. Check Cluster Status', step: 8, targetLabel: 'role=control', syncMode: true },
-      { value: 'LlmdCheck', label: '9. Check llm-d Prerequisites', step: 9, targetLabel: 'role=control', syncMode: true },
-      { value: 'LlmdDeployWithModel', label: '10. Deploy llm-d with Model', step: 10, targetLabel: 'role=control' },
-      { value: 'LlmdStatus', label: '11. Check llm-d Status', step: 11, targetLabel: 'role=control', syncMode: true },
-      { value: 'LlmdUninstall', label: '12. Uninstall llm-d', step: 12, targetLabel: 'role=control', optional: true }
+      { value: 'Setup-WireGuard',        label: '0. Setup WireGuard VPN (optional)',         step: 0,  optional: true },
+      { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane (Standard)',         step: 1,  targetLabel: 'role=control' },
+      { value: 'K8sLlmdControlPlane',    label: '1-alt. Deploy Control Plane (llm-d)',        step: 1,  targetLabel: 'role=control', optional: true },
+      { value: 'K8sGetJoinCommand',      label: '2. Get Join Command',                        step: 2,  targetLabel: 'role=control', syncMode: true },
+      { value: 'K8sGetKubeconfig',       label: '3. Get Kubeconfig (Base64)',                 step: 3,  targetLabel: 'role=control', syncMode: true },
+      { value: 'Nvidia',                 label: '4. Install GPU Driver (GPU worker only)',    step: 4,  targetLabel: 'accelerator=gpu', optional: true },
+      { value: 'RebootVM',               label: '5. Reboot VM (GPU worker only)',             step: 5,  targetLabel: 'role=node', optional: true },
+      { value: 'Nvidia-Status',          label: '6. Check GPU Driver (GPU worker only)',      step: 6,  targetLabel: 'accelerator=gpu', optional: true, syncMode: true },
+      { value: 'K8sWorker-Deploy',       label: '7. Deploy Worker & Join Cluster',           step: 7,  targetLabel: 'role=node' },
+      { value: 'K8sClusterStatus',       label: '8. Check Cluster Status',                   step: 8,  targetLabel: 'role=control', syncMode: true },
+      { value: 'K8sGpuStatus',           label: '9. Check GPU Operator Status (GPU/llm-d)',  step: 9,  targetLabel: 'role=control', optional: true, syncMode: true },
+      { value: 'LlmdCheck',              label: '10. Check llm-d Prerequisites (llm-d only)',step: 10, targetLabel: 'role=control', optional: true, syncMode: true },
+      { value: 'LlmdDeployWithModel',    label: '11. Deploy llm-d with Model (llm-d only)',  step: 11, targetLabel: 'role=control', optional: true },
+      { value: 'LlmdStatus',             label: '12. Check llm-d Status (llm-d only)',       step: 12, targetLabel: 'role=control', optional: true, syncMode: true },
+      { value: 'LlmdUninstall',          label: '13. Uninstall llm-d (llm-d only)',          step: 13, targetLabel: 'role=control', optional: true }
     ]
   },
   'ml-ray': {
@@ -14563,6 +14544,23 @@ function openStreamingSessionModal(xRequestId) {
         ${statusBadge(vm.status)}
         ${vm.statusInfo && vm.statusInfo.elapsedTime ? `<span style="font-size:10px;color:#888;">${vm.statusInfo.elapsedTime}s</span>` : ''}
       </div>`;
+
+    // Show error details when status is Failed/Timeout (e.g. SSH connection failure, command timeout)
+    if (['Failed', 'Timeout'].includes(vm.status) && vm.statusInfo) {
+      const errMsg = vm.statusInfo.errorMessage;
+      const summary = vm.statusInfo.resultSummary;
+      if (errMsg || summary) {
+        html += `
+      <div style="margin-bottom:4px;padding:8px;background:#ffebee;border-left:4px solid #d32f2f;border-radius:4px;">`;
+        if (summary) {
+          html += `<div style="font-size:11px;font-weight:600;color:#c62828;margin-bottom:2px;">${window.escapeHtml(summary)}</div>`;
+        }
+        if (errMsg) {
+          html += `<div style="font-size:11px;color:#b71c1c;word-break:break-all;white-space:pre-wrap;">${window.escapeHtml(errMsg)}</div>`;
+        }
+        html += `</div>`;
+      }
+    }
 
     if (stdoutText) {
       html += `
