@@ -13101,7 +13101,7 @@ window.predefinedScriptCategories = {
   },
   'k8s': {
     label: '☸️ Kubernetes',
-    description: 'Kubernetes cluster deployment — Standard, GPU, or llm-d (distributed LLM inference). Steps 4-6 are for GPU workers; steps 9-12 are for llm-d only.',
+    description: 'Kubernetes cluster deployment — Standard, GPU, or llm-d (distributed LLM inference). Steps 4-6 are for GPU workers; steps 9-13 are for llm-d only.',
     scripts: [
       { value: 'Setup-WireGuard',        label: '0. Setup WireGuard VPN (optional)',         step: 0,  optional: true },
       { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane (Standard)',         step: 1,  targetLabel: 'role=control' },
@@ -13113,7 +13113,7 @@ window.predefinedScriptCategories = {
       { value: 'Nvidia-Status',          label: '6. Check GPU Driver (GPU worker only)',      step: 6,  targetLabel: 'accelerator=gpu', optional: true, syncMode: true },
       { value: 'K8sWorker-Deploy',       label: '7. Deploy Worker & Join Cluster',           step: 7,  targetLabel: 'role=node' },
       { value: 'K8sClusterStatus',       label: '8. Check Cluster Status',                   step: 8,  targetLabel: 'role=control', syncMode: true },
-      { value: 'K8sGpuStatus',           label: '9. Check GPU Operator Status (llm-d only)', step: 9,  targetLabel: 'role=control', optional: true, syncMode: true },
+      { value: 'K8sGpuStatus',           label: '9. Check GPU Operator Status (GPU/llm-d)',  step: 9,  targetLabel: 'role=control', optional: true, syncMode: true },
       { value: 'LlmdCheck',              label: '10. Check llm-d Prerequisites (llm-d only)',step: 10, targetLabel: 'role=control', optional: true, syncMode: true },
       { value: 'LlmdDeployWithModel',    label: '11. Deploy llm-d with Model (llm-d only)',  step: 11, targetLabel: 'role=control', optional: true },
       { value: 'LlmdStatus',             label: '12. Check llm-d Status (llm-d only)',       step: 12, targetLabel: 'role=control', optional: true, syncMode: true },
@@ -14545,7 +14545,7 @@ function openStreamingSessionModal(xRequestId) {
         ${vm.statusInfo && vm.statusInfo.elapsedTime ? `<span style="font-size:10px;color:#888;">${vm.statusInfo.elapsedTime}s</span>` : ''}
       </div>`;
 
-    // Show error details when status is Failed/Timeout and no stdout/stderr (e.g. SSH connection failure)
+    // Show error details when status is Failed/Timeout (e.g. SSH connection failure, command timeout)
     if (['Failed', 'Timeout'].includes(vm.status) && vm.statusInfo) {
       const errMsg = vm.statusInfo.errorMessage;
       const summary = vm.statusInfo.resultSummary;
