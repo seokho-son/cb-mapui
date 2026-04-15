@@ -45,15 +45,15 @@ async function deleteResourceAsync(resourceType, resourceId, additionalParams = 
     let successTitle = 'Request Accepted!'; // Default title
     
     switch (resourceType) {
-      case 'mci':
-        endpoint = `/ns/${currentNamespace}/mci/${resourceId}?option=terminate`;
-        confirmMessage = `Are you sure you want to delete MCI "${resourceId}" and terminate all its VMs?`;
-        successMessage = `Delete request for MCI "${resourceId}" has been accepted.`;
+      case 'infra':
+        endpoint = `/ns/${currentNamespace}/infra/${resourceId}?option=terminate`;
+        confirmMessage = `Are you sure you want to delete Infra "${resourceId}" and terminate all its VMs?`;
+        successMessage = `Delete request for Infra "${resourceId}" has been accepted.`;
         break;
         
       case 'vm':
-        endpoint = `/ns/${currentNamespace}/mci/${additionalParams.mciId}/vm/${resourceId}`;
-        confirmMessage = `Are you sure you want to delete VM "${resourceId}" from MCI "${additionalParams.mciId}"?`;
+        endpoint = `/ns/${currentNamespace}/infra/${additionalParams.infraId}/vm/${resourceId}`;
+        confirmMessage = `Are you sure you want to delete VM "${resourceId}" from Infra "${additionalParams.infraId}"?`;
         successMessage = `Delete request for VM "${resourceId}" has been accepted.`;
         break;
         
@@ -240,9 +240,9 @@ async function deleteResourceAsync(resourceType, resourceId, additionalParams = 
 function refreshResourceData(resourceType, additionalParams) {
   try {
     switch (resourceType) {
-      case 'mci':
-        if (typeof loadMciData === 'function') {
-          loadMciData();
+      case 'infra':
+        if (typeof loadInfraData === 'function') {
+          loadInfraData();
         }
         break;
         
@@ -303,12 +303,12 @@ function refreshResourceData(resourceType, additionalParams) {
 }
 
 // Resource-specific delete functions
-async function deleteMci(mciId, nsId = null) {
-  return await deleteResourceAsync('mci', mciId, { nsId });
+async function deleteInfra(infraId, nsId = null) {
+  return await deleteResourceAsync('infra', infraId, { nsId });
 }
 
-async function deleteVm(vmId, mciId, nsId = null) {
-  return await deleteResourceAsync('vm', vmId, { mciId, nsId });
+async function deleteVm(vmId, infraId, nsId = null) {
+  return await deleteResourceAsync('vm', vmId, { infraId, nsId });
 }
 
 async function deleteK8sCluster(clusterId, nsId = null) {
@@ -342,8 +342,8 @@ async function deleteDataDisk(dataDiskId, nsId = null) {
 // VPN management functions
 async function refreshVpnList() {
   try {
-    if (window.parent && window.parent.loadVpnDataFromMcis) {
-      await window.parent.loadVpnDataFromMcis();
+    if (window.parent && window.parent.loadVpnDataFromInfras) {
+      await window.parent.loadVpnDataFromInfras();
       updateVpnTable();
     }
   } catch (error) {
@@ -352,8 +352,8 @@ async function refreshVpnList() {
   }
 }
 
-async function deleteVpn(mciId, vpnId) {
-  if (!confirm(`Are you sure you want to delete VPN "${vpnId}" from MCI "${mciId}"?`)) {
+async function deleteVpn(infraId, vpnId) {
+  if (!confirm(`Are you sure you want to delete VPN "${vpnId}" from Infra "${infraId}"?`)) {
     return;
   }
 
@@ -361,7 +361,7 @@ async function deleteVpn(mciId, vpnId) {
     const config = window.parent?.getConfig() || {};
     const nsId = config.namespace || 'default';
     
-    const response = await fetch(`${getApiUrl()}/tumblebug/ns/${nsId}/mci/${mciId}/vpn/${vpnId}`, {
+    const response = await fetch(`${getApiUrl()}/tumblebug/ns/${nsId}/infra/${infraId}/vpn/${vpnId}`, {
       method: 'DELETE',
       headers: getAuthHeaders()
     });
@@ -370,7 +370,7 @@ async function deleteVpn(mciId, vpnId) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    console.log(`VPN ${vpnId} deleted successfully from MCI ${mciId}`);
+    console.log(`VPN ${vpnId} deleted successfully from Infra ${infraId}`);
     showSuccessMessage(`VPN ${vpnId} deleted successfully`);
     
     // Refresh VPN data
@@ -381,12 +381,12 @@ async function deleteVpn(mciId, vpnId) {
   }
 }
 
-async function viewVpnDetails(mciId, vpnId) {
+async function viewVpnDetails(infraId, vpnId) {
   try {
     const config = window.parent?.getConfig() || {};
     const nsId = config.namespace || 'default';
     
-    const response = await fetch(`${getApiUrl()}/tumblebug/ns/${nsId}/mci/${mciId}/vpn/${vpnId}`, {
+    const response = await fetch(`${getApiUrl()}/tumblebug/ns/${nsId}/infra/${infraId}/vpn/${vpnId}`, {
       method: 'GET',
       headers: getAuthHeaders()
     });
@@ -420,7 +420,7 @@ function showVpnDetailsModal(vpnData) {
                   <tr><td><strong>ID:</strong></td><td>${vpnData.id || 'N/A'}</td></tr>
                   <tr><td><strong>Name:</strong></td><td>${vpnData.name || 'N/A'}</td></tr>
                   <tr><td><strong>Status:</strong></td><td><span class="status-badge status-${(vpnData.status || 'unknown').toLowerCase()}">${vpnData.status || 'Unknown'}</span></td></tr>
-                  <tr><td><strong>MCI ID:</strong></td><td>${vpnData.mciId || 'N/A'}</td></tr>
+                  <tr><td><strong>Infra ID:</strong></td><td>${vpnData.infraId || 'N/A'}</td></tr>
                 </table>
               </div>
               <div class="col-md-6">
@@ -499,13 +499,13 @@ const dashboardConfig = {
 };
 
 // Global variables
-let mciData = [];
+let infraData = [];
 let vmData = [];
 let resourceData = {};
 let centralData = {}; // Global centralData variable
 let refreshTimer = null;
 let charts = {};
-let selectedMciId = null; // Track selected MCI for VM filtering
+let selectedInfraId = null; // Track selected Infra for VM filtering
 
 // Mutation cooldown: suppress subscription overwrites after local mutations
 let mutationCooldownUntil = 0;
@@ -526,8 +526,8 @@ function scheduleFreshFetch() {
   scheduledFetchTimer = setTimeout(() => {
     scheduledFetchTimer = null;
     mutationCooldownUntil = 0; // Clear cooldown so subscription callback works
-    if (window.parent && typeof window.parent.getMci === 'function') {
-      window.parent.getMci();
+    if (window.parent && typeof window.parent.getInfra === 'function') {
+      window.parent.getInfra();
     }
   }, MUTATION_COOLDOWN_MS + 500); // Fetch slightly after cooldown ends
 }
@@ -636,7 +636,7 @@ document.addEventListener('DOMContentLoaded', function() {
       centralData = receivedData;
       
       // Update local data
-      mciData = centralData.mciData || [];
+      infraData = centralData.infraData || [];
       vmData = centralData.vmData || [];
       resourceData = centralData.resourceData || {};
       
@@ -650,7 +650,7 @@ document.addEventListener('DOMContentLoaded', function() {
       // Update UI components
       updateStatistics();
       updateCharts();
-      updateMciTable();
+      updateInfraTable();
       updateVmTable();
       updateAllResourceTables();
     });
@@ -659,7 +659,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (window.parent.cloudBaristaCentralData) {
       console.log('Using existing central data...');
       const centralData = window.parent.cloudBaristaCentralData;
-      mciData = centralData.mciData || [];
+      infraData = centralData.infraData || [];
       vmData = centralData.vmData || [];
       resourceData = centralData.resourceData || {};
       
@@ -672,11 +672,11 @@ document.addEventListener('DOMContentLoaded', function() {
       
       updateStatistics();
       updateCharts();
-      updateMciTable();
+      updateInfraTable();
       updateVmTable();
       updateAllResourceTables();
       
-      // Force update resource counts even if no MCI data
+      // Force update resource counts even if no Infra data
       updateResourceCounts();
     } else {
       // No central data available yet
@@ -710,30 +710,30 @@ function initializeCharts() {
   // Destroy existing charts before creating new ones to prevent memory leaks
   destroyAllCharts();
   
-  // Combined MCI & VM Status Chart with dynamic colors based on status
+  // Combined Infra & VM Status Chart with dynamic colors based on status
   const combinedStatusCtx = document.getElementById('combinedStatusChart').getContext('2d');
   
   // Helper function to get chart colors from index.js functions
   function getChartColors(status, type = 'vm') {
     if (window.parent && window.parent.getVmStatusColor) {
       const colors = window.parent.getVmStatusColor(status);
-      if (type === 'mci') {
-        return colors.fill + 'CC'; // 80% opacity for MCI
+      if (type === 'infra') {
+        return colors.fill + 'CC'; // 80% opacity for Infra
       } else {
         return colors.fill + '99'; // 60% opacity for VM
       }
     }
     // Fallback colors if parent function not available
     const fallbackColors = {
-      'Preparing': type === 'mci' ? 'rgba(247, 147, 26, 0.8)' : 'rgba(247, 147, 26, 0.6)',
-      'Registering': type === 'mci' ? 'rgba(20, 184, 166, 0.8)' : 'rgba(20, 184, 166, 0.6)',  // teal-500
-      'Creating': type === 'mci' ? 'rgba(59, 130, 246, 0.8)' : 'rgba(59, 130, 246, 0.6)',
-      'Running': type === 'mci' ? 'rgba(16, 185, 129, 0.8)' : 'rgba(16, 185, 129, 0.6)',
-      'Suspended': type === 'mci' ? 'rgba(245, 158, 11, 0.8)' : 'rgba(245, 158, 11, 0.6)',
-      'Terminating': type === 'mci' ? 'rgba(239, 68, 68, 0.8)' : 'rgba(239, 68, 68, 0.6)',
-      'Terminated': type === 'mci' ? 'rgba(220, 38, 38, 0.8)' : 'rgba(220, 38, 38, 0.6)',
-      'Failed': type === 'mci' ? 'rgba(185, 28, 28, 0.8)' : 'rgba(185, 28, 28, 0.6)',
-      'Other': type === 'mci' ? 'rgba(156, 163, 175, 0.8)' : 'rgba(156, 163, 175, 0.6)'
+      'Preparing': type === 'infra' ? 'rgba(247, 147, 26, 0.8)' : 'rgba(247, 147, 26, 0.6)',
+      'Registering': type === 'infra' ? 'rgba(20, 184, 166, 0.8)' : 'rgba(20, 184, 166, 0.6)',  // teal-500
+      'Creating': type === 'infra' ? 'rgba(59, 130, 246, 0.8)' : 'rgba(59, 130, 246, 0.6)',
+      'Running': type === 'infra' ? 'rgba(16, 185, 129, 0.8)' : 'rgba(16, 185, 129, 0.6)',
+      'Suspended': type === 'infra' ? 'rgba(245, 158, 11, 0.8)' : 'rgba(245, 158, 11, 0.6)',
+      'Terminating': type === 'infra' ? 'rgba(239, 68, 68, 0.8)' : 'rgba(239, 68, 68, 0.6)',
+      'Terminated': type === 'infra' ? 'rgba(220, 38, 38, 0.8)' : 'rgba(220, 38, 38, 0.6)',
+      'Failed': type === 'infra' ? 'rgba(185, 28, 28, 0.8)' : 'rgba(185, 28, 28, 0.6)',
+      'Other': type === 'infra' ? 'rgba(156, 163, 175, 0.8)' : 'rgba(156, 163, 175, 0.6)'
     };
     return fallbackColors[status] || fallbackColors['Other'];
   }
@@ -746,9 +746,9 @@ function initializeCharts() {
       labels: statusLabels,
       datasets: [
         {
-          label: 'MCI Count',
+          label: 'Infra Count',
           data: [0, 0, 0, 0, 0, 0, 0, 0, 0],
-          backgroundColor: statusLabels.map(status => getChartColors(status, 'mci')),
+          backgroundColor: statusLabels.map(status => getChartColors(status, 'infra')),
           borderColor: 'rgba(52, 58, 64, 1)',        // Dark gray for legend
           legendColor: 'rgba(52, 58, 64, 0.8)',      // Dark gray for legend icon
         },
@@ -970,9 +970,9 @@ async function refreshDashboard() {
   
   try {
     // Trigger data update from parent window (Map)
-    if (window.parent && typeof window.parent.getMci === 'function') {
+    if (window.parent && typeof window.parent.getInfra === 'function') {
       console.log('Requesting data update from Map...');
-      window.parent.getMci();
+      window.parent.getInfra();
       
       // Also trigger K8s data load
       if (typeof window.parent.loadK8sClusterData === 'function') {
@@ -989,7 +989,7 @@ async function refreshDashboard() {
       const centralData = window.parent.cloudBaristaCentralData;
       
       // Update local data references
-      mciData = centralData.mciData || [];
+      infraData = centralData.infraData || [];
       vmData = centralData.vmData || [];
       resourceData = centralData.resourceData || {};
       
@@ -1004,7 +1004,7 @@ async function refreshDashboard() {
       updateStatistics();
       updateCharts();
       updateK8sCharts();
-      updateMciTable();
+      updateInfraTable();
       updateVmTable();
       updateAllResourceTables();
       if (selectedK8sClusterId) {
@@ -1063,8 +1063,8 @@ function updateConnectionStatus(status) {}
 // Load namespace list — no-op: namespace managed by Map settings
 async function loadNamespaces() {}
 
-// Load MCI data
-async function loadMciData() {
+// Load Infra data
+async function loadInfraData() {
   if (!dashboardConfig.namespace) {
     throw new Error('No namespace selected');
   }
@@ -1077,7 +1077,7 @@ async function loadMciData() {
     password: 'default' 
   };
   
-  const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${dashboardConfig.namespace}/mci`;
+  const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${dashboardConfig.namespace}/infra`;
   
   try {
     const response = await axios.get(url, {
@@ -1088,25 +1088,25 @@ async function loadMciData() {
       timeout: 600000
     });
     
-    mciData = response.data.mci || [];
+    infraData = response.data.infra || [];
     
-    // Extract VM data from MCI data
+    // Extract VM data from Infra data
     vmData = [];
-    mciData.forEach(mci => {
-      if (mci.vm && Array.isArray(mci.vm)) {
-        mci.vm.forEach(vm => {
+    infraData.forEach(infra => {
+      if (infra.vm && Array.isArray(infra.vm)) {
+        infra.vm.forEach(vm => {
           vmData.push({
             ...vm,
-            mciId: mci.id,
-            mciStatus: mci.status
+            infraId: infra.id,
+            infraStatus: infra.status
           });
         });
       }
     });
     
-    console.log(`Loaded ${mciData.length} MCIs with ${vmData.length} VMs`);
+    console.log(`Loaded ${infraData.length} Infras with ${vmData.length} VMs`);
   } catch (error) {
-    console.error('Error loading MCI data:', error);
+    console.error('Error loading Infra data:', error);
     throw error;
   }
 }
@@ -1156,8 +1156,8 @@ async function loadResourceOverview() {
   updateResourceDisplay();
 }
 
-// Function to parse and normalize MCI status
-function normalizeMciStatus(status) {
+// Function to parse and normalize Infra status
+function normalizeInfraStatus(status) {
   if (!status) return 'Unknown';
   
   // Convert to string and trim
@@ -1212,29 +1212,29 @@ function normalizeMciStatus(status) {
 
 // Update statistics cards
 function updateStatistics() {
-  const totalMci = mciData.length;
+  const totalInfra = infraData.length;
   
   // Handle complex status counting with improved parsing
-  let runningMci = 0;
-  let failedMci = 0;
-  let creatingMci = 0;
-  let preparingMci = 0;
+  let runningInfra = 0;
+  let failedInfra = 0;
+  let creatingInfra = 0;
+  let preparingInfra = 0;
   
-  mciData.forEach(mci => {
-    const normalizedStatus = normalizeMciStatus(mci.status);
+  infraData.forEach(infra => {
+    const normalizedStatus = normalizeInfraStatus(infra.status);
     
     switch (normalizedStatus) {
       case 'Running':
-        runningMci++;
+        runningInfra++;
         break;
       case 'Creating':
-        creatingMci++;
+        creatingInfra++;
         break;
       case 'Preparing':
-        preparingMci++;
+        preparingInfra++;
         break;
       case 'Failed':
-        failedMci++;
+        failedInfra++;
         break;
     }
   });
@@ -1307,8 +1307,8 @@ function updateStatistics() {
   });
   
   document.getElementById('totalRegionCount').textContent = regions.size;
-  document.getElementById('runningMciCount').textContent = runningMci;
-  document.getElementById('failedMciCount').textContent = failedMci;
+  document.getElementById('runningInfraCount').textContent = runningInfra;
+  document.getElementById('failedInfraCount').textContent = failedInfra;
   document.getElementById('totalVmCount').textContent = totalVm;
   document.getElementById('totalProviderCount').textContent = providers.size;
 
@@ -1442,7 +1442,7 @@ function updateCharts() {
       return;
     }
     
-    // Update MCI & VM Status Chart with efficient data processing
+    // Update Infra & VM Status Chart with efficient data processing
     updateCombinedStatusChart();
     
     // Update Provider & Regional Distribution Chart (VMs + Nodes)
@@ -1460,7 +1460,7 @@ function updateCharts() {
 
 // Separate function for combined status chart update
 function updateCombinedStatusChart() {
-  const mciStatusCounts = {
+  const infraStatusCounts = {
     'Running': 0,
     'Registering': 0,
     'Creating': 0,
@@ -1484,13 +1484,13 @@ function updateCombinedStatusChart() {
     'Other': 0
   };
   
-  // Count MCI statuses
-  mciData.forEach(mci => {
-    const normalizedStatus = categorizeStatus(mci.status);
-    if (mciStatusCounts.hasOwnProperty(normalizedStatus)) {
-      mciStatusCounts[normalizedStatus]++;
+  // Count Infra statuses
+  infraData.forEach(infra => {
+    const normalizedStatus = categorizeStatus(infra.status);
+    if (infraStatusCounts.hasOwnProperty(normalizedStatus)) {
+      infraStatusCounts[normalizedStatus]++;
     } else {
-      mciStatusCounts['Other']++;
+      infraStatusCounts['Other']++;
     }
   });
   
@@ -1506,28 +1506,28 @@ function updateCombinedStatusChart() {
   
   // Prepare data for combined chart
   const statusLabels = ['Preparing', 'Registering', 'Creating', 'Running', 'Suspended', 'Terminating', 'Terminated', 'Failed', 'Other'];
-  const mciDataArray = statusLabels.map(label => mciStatusCounts[label] || 0);
+  const infraDataArray = statusLabels.map(label => infraStatusCounts[label] || 0);
   const vmDataArray = statusLabels.map(label => vmStatusCounts[label] || 0);
   
   // Check if there's any data to display
-  const hasMciData = mciDataArray.some(count => count > 0);
+  const hasInfraData = infraDataArray.some(count => count > 0);
   const hasVmData = vmDataArray.some(count => count > 0);
   
   // Only update if data has changed (performance optimization)
-  const currentMciData = JSON.stringify(charts.combinedStatus.data.datasets[0].data);
+  const currentInfraData = JSON.stringify(charts.combinedStatus.data.datasets[0].data);
   const currentVmData = JSON.stringify(charts.combinedStatus.data.datasets[1].data);
-  const newMciData = JSON.stringify(mciDataArray);
+  const newInfraData = JSON.stringify(infraDataArray);
   const newVmData = JSON.stringify(vmDataArray);
   
-  if (currentMciData === newMciData && currentVmData === newVmData) {
+  if (currentInfraData === newInfraData && currentVmData === newVmData) {
     return; // No data change, skip update
   }
   
   // Update combined chart - show "No Data" if no data
-  if (!hasMciData && !hasVmData) {
+  if (!hasInfraData && !hasVmData) {
     charts.combinedStatus.data.labels = ['No Data'];
     charts.combinedStatus.data.datasets[0].data = [1];
-    charts.combinedStatus.data.datasets[0].label = 'No MCIs';
+    charts.combinedStatus.data.datasets[0].label = 'No Infras';
     charts.combinedStatus.data.datasets[0].backgroundColor = ['#e9ecef'];
     charts.combinedStatus.data.datasets[1].data = [1];
     charts.combinedStatus.data.datasets[1].label = 'No VMs';
@@ -1537,30 +1537,30 @@ function updateCombinedStatusChart() {
     function getChartColors(status, type = 'vm') {
       if (window.parent && window.parent.getVmStatusColor) {
         const colors = window.parent.getVmStatusColor(status);
-        if (type === 'mci') {
-          return colors.fill + 'CC'; // 80% opacity for MCI
+        if (type === 'infra') {
+          return colors.fill + 'CC'; // 80% opacity for Infra
         } else {
           return colors.fill + '99'; // 60% opacity for VM
         }
       }
       // Fallback colors if parent function not available
       const fallbackColors = {
-        'Preparing': type === 'mci' ? 'rgba(247, 147, 26, 0.8)' : 'rgba(247, 147, 26, 0.6)',
-        'Creating': type === 'mci' ? 'rgba(59, 130, 246, 0.8)' : 'rgba(59, 130, 246, 0.6)',
-        'Running': type === 'mci' ? 'rgba(16, 185, 129, 0.8)' : 'rgba(16, 185, 129, 0.6)',
-        'Suspended': type === 'mci' ? 'rgba(245, 158, 11, 0.8)' : 'rgba(245, 158, 11, 0.6)',
-        'Terminating': type === 'mci' ? 'rgba(239, 68, 68, 0.8)' : 'rgba(239, 68, 68, 0.6)',
-        'Terminated': type === 'mci' ? 'rgba(220, 38, 38, 0.8)' : 'rgba(220, 38, 38, 0.6)',
-        'Failed': type === 'mci' ? 'rgba(185, 28, 28, 0.8)' : 'rgba(185, 28, 28, 0.6)',
-        'Other': type === 'mci' ? 'rgba(156, 163, 175, 0.8)' : 'rgba(156, 163, 175, 0.6)'
+        'Preparing': type === 'infra' ? 'rgba(247, 147, 26, 0.8)' : 'rgba(247, 147, 26, 0.6)',
+        'Creating': type === 'infra' ? 'rgba(59, 130, 246, 0.8)' : 'rgba(59, 130, 246, 0.6)',
+        'Running': type === 'infra' ? 'rgba(16, 185, 129, 0.8)' : 'rgba(16, 185, 129, 0.6)',
+        'Suspended': type === 'infra' ? 'rgba(245, 158, 11, 0.8)' : 'rgba(245, 158, 11, 0.6)',
+        'Terminating': type === 'infra' ? 'rgba(239, 68, 68, 0.8)' : 'rgba(239, 68, 68, 0.6)',
+        'Terminated': type === 'infra' ? 'rgba(220, 38, 38, 0.8)' : 'rgba(220, 38, 38, 0.6)',
+        'Failed': type === 'infra' ? 'rgba(185, 28, 28, 0.8)' : 'rgba(185, 28, 28, 0.6)',
+        'Other': type === 'infra' ? 'rgba(156, 163, 175, 0.8)' : 'rgba(156, 163, 175, 0.6)'
       };
       return fallbackColors[status] || fallbackColors['Other'];
     }
     
     charts.combinedStatus.data.labels = statusLabels;
-    charts.combinedStatus.data.datasets[0].data = mciDataArray;
-    charts.combinedStatus.data.datasets[0].label = 'MCI Count';
-    charts.combinedStatus.data.datasets[0].backgroundColor = statusLabels.map(status => getChartColors(status, 'mci'));
+    charts.combinedStatus.data.datasets[0].data = infraDataArray;
+    charts.combinedStatus.data.datasets[0].label = 'Infra Count';
+    charts.combinedStatus.data.datasets[0].backgroundColor = statusLabels.map(status => getChartColors(status, 'infra'));
     charts.combinedStatus.data.datasets[1].data = vmDataArray;
     charts.combinedStatus.data.datasets[1].label = 'VM Count';
     charts.combinedStatus.data.datasets[1].backgroundColor = statusLabels.map(status => getChartColors(status, 'vm'));
@@ -1979,33 +1979,33 @@ function updateK8sCharts() {
   }
 }
 
-// Update MCI table
-function updateMciTable() {
+// Update Infra table
+function updateInfraTable() {
   // Check if data has changed before updating
-  if (!hasDataChanged('mciTable', mciData)) {
-    console.log('[Performance] MCI table: Skipping update - no changes detected');
+  if (!hasDataChanged('infraTable', infraData)) {
+    console.log('[Performance] Infra table: Skipping update - no changes detected');
     return;
   }
 
-  const tbody = document.getElementById('mciTableBody');
-  destroyDataTable('mciTable');
+  const tbody = document.getElementById('infraTableBody');
+  destroyDataTable('infraTable');
   tbody.innerHTML = '';
 
   // Update count badge
-  const countBadge = document.getElementById('mciCountBadge');
+  const countBadge = document.getElementById('infraCountBadge');
   if (countBadge) {
-    countBadge.textContent = mciData.length;
+    countBadge.textContent = infraData.length;
   }
 
-  mciData.forEach(mci => {
+  infraData.forEach(infra => {
     const row = document.createElement('tr');
     
-    // Get provider distribution for this MCI
+    // Get provider distribution for this Infra
     const providers = new Set();
     let vmCount = 0;
-    if (mci.vm && Array.isArray(mci.vm)) {
-      vmCount = mci.vm.length;
-      mci.vm.forEach(vm => {
+    if (infra.vm && Array.isArray(infra.vm)) {
+      vmCount = infra.vm.length;
+      infra.vm.forEach(vm => {
         if (vm.connectionConfig && vm.connectionConfig.providerName) {
           providers.add(vm.connectionConfig.providerName);
         }
@@ -2014,7 +2014,7 @@ function updateMciTable() {
     
     const providerList = Array.from(providers).join(', ');
     
-    // Helper function to truncate text and add tooltip for MCI table
+    // Helper function to truncate text and add tooltip for Infra table
     const truncateWithTooltip = (text, maxLength = 20) => {
       if (text === null || text === undefined) return text;
       text = String(text);
@@ -2025,8 +2025,8 @@ function updateMciTable() {
     
     // Normalize status for CSS class
     let statusClass = 'unknown';
-    if (mci.status) {
-      const status = mci.status.toLowerCase();
+    if (infra.status) {
+      const status = infra.status.toLowerCase();
       if (status.includes('running') || status === 'running') {
         statusClass = 'running';
       } else if (status.includes('creating') || status === 'creating') {
@@ -2049,27 +2049,27 @@ function updateMciTable() {
     }
     
     row.innerHTML = `
-      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(mci.id)}" onchange="toggleRowSelect('mci', '${_escapeHtml(mci.id)}', this)"></td>
-      <td title="${mci.id}"><strong><a class="item-id-link" onclick="viewMciDetails('${_escapeHtml(mci.id)}')">${smartTruncate(mci.id, 'id')}</a></strong></td>
-      <td><span class="status-badge status-${statusClass}">${mci.status}</span></td>
+      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(infra.id)}" onchange="toggleRowSelect('infra', '${_escapeHtml(infra.id)}', this)"></td>
+      <td title="${infra.id}"><strong><a class="item-id-link" onclick="viewInfraDetails('${_escapeHtml(infra.id)}')">${smartTruncate(infra.id, 'id')}</a></strong></td>
+      <td><span class="status-badge status-${statusClass}">${infra.status}</span></td>
       <td title="${providerList || 'N/A'}">${smartTruncate(providerList || 'N/A', 'provider')}</td>
       <td>${vmCount}</td>
-      <td title="${mci.targetAction || 'None'}">${smartTruncate(mci.targetAction || 'None', 'default')}</td>
-      <td title="${mci.description || 'N/A'}">${smartTruncate(mci.description || 'N/A', 'description')}</td>
+      <td title="${infra.targetAction || 'None'}">${smartTruncate(infra.targetAction || 'None', 'default')}</td>
+      <td title="${infra.description || 'N/A'}">${smartTruncate(infra.description || 'N/A', 'description')}</td>
     `;
     
-    // Add click event to select MCI
+    // Add click event to select Infra
     row.style.cursor = 'pointer';
     row.addEventListener('click', function(e) {
       // Don't trigger when clicking on checkboxes or links
       if (e.target.closest('.select-cell') || e.target.closest('.item-id-link')) {
         return;
       }
-      selectMci(mci.id);
+      selectInfra(infra.id);
     });
     
-    // Highlight selected MCI
-    if (selectedMciId === mci.id) {
+    // Highlight selected Infra
+    if (selectedInfraId === infra.id) {
       row.classList.add('table-active');
     }
     
@@ -2077,12 +2077,12 @@ function updateMciTable() {
   });
 
   // Restore selection state and reinitialize
-  restoreSelectionState('mci');
-  initDataTable('mciTable');
+  restoreSelectionState('infra');
+  initDataTable('infraTable');
 }
-function selectMci(mciId) {
-  selectedMciId = mciId;
-  console.log(`Selected MCI: ${mciId}`);
+function selectInfra(infraId) {
+  selectedInfraId = infraId;
+  console.log(`Selected Infra: ${infraId}`);
   
   // Debug: Check if sync function exists
   console.log(`[DEBUG] In iframe, trying to access parent window`);
@@ -2091,17 +2091,17 @@ function selectMci(mciId) {
     // Try to access parent window function
     if (window.parent && window.parent !== window) {
       console.log(`[DEBUG] Parent window exists, checking for sync function`);
-      if (window.parent.syncMciSelectionFromDashboard && typeof window.parent.syncMciSelectionFromDashboard === 'function') {
-        console.log(`[DEBUG] Calling parent sync function with:`, mciId);
-        window.parent.syncMciSelectionFromDashboard(mciId);
+      if (window.parent.syncInfraSelectionFromDashboard && typeof window.parent.syncInfraSelectionFromDashboard === 'function') {
+        console.log(`[DEBUG] Calling parent sync function with:`, infraId);
+        window.parent.syncInfraSelectionFromDashboard(infraId);
       } else {
         console.log(`[DEBUG] Parent sync function not found`);
       }
     } else {
       console.log(`[DEBUG] No parent window found, trying direct access`);
-      if (window.syncMciSelectionFromDashboard && typeof window.syncMciSelectionFromDashboard === 'function') {
-        console.log(`[DEBUG] Calling direct sync function with:`, mciId);
-        window.syncMciSelectionFromDashboard(mciId);
+      if (window.syncInfraSelectionFromDashboard && typeof window.syncInfraSelectionFromDashboard === 'function') {
+        console.log(`[DEBUG] Calling direct sync function with:`, infraId);
+        window.syncInfraSelectionFromDashboard(infraId);
       } else {
         console.log(`[DEBUG] Direct sync function not available`);
       }
@@ -2110,8 +2110,8 @@ function selectMci(mciId) {
     console.log(`[DEBUG] Error during sync:`, error);
   }
   
-  // Update MCI table highlighting
-  updateMciTable();
+  // Update Infra table highlighting
+  updateInfraTable();
   
   // Update VM section header - use safer selector approach
   const vmTable = document.getElementById('vmTable');
@@ -2119,30 +2119,30 @@ function selectMci(mciId) {
   const vmHeader = vmContentCard ? vmContentCard.querySelector('h5') : null;
   
   if (vmHeader) {
-    vmHeader.innerHTML = `<i class="fas fa-server me-2"></i> Virtual Machine Details - ${mciId} <span class="badge badge-secondary ml-2" id="vmCountBadge">0</span>`;
+    vmHeader.innerHTML = `<i class="fas fa-server me-2"></i> Virtual Machine Details - ${infraId} <span class="badge badge-secondary ml-2" id="vmCountBadge">0</span>`;
   } else {
-    console.warn('VM header not found in selectMci, trying alternative selector');
+    console.warn('VM header not found in selectInfra, trying alternative selector');
     // Fallback: try to find the header directly
     const directHeader = document.querySelector('#vmCountBadge');
     if (directHeader && directHeader.parentElement) {
-      directHeader.parentElement.innerHTML = `<i class="fas fa-server me-2"></i>Virtual Machine Details - ${mciId} <span class="badge badge-secondary ml-2" id="vmCountBadge">0</span>`;
+      directHeader.parentElement.innerHTML = `<i class="fas fa-server me-2"></i>Virtual Machine Details - ${infraId} <span class="badge badge-secondary ml-2" id="vmCountBadge">0</span>`;
     }
   }
   
-  // Update VM table to show only VMs from selected MCI
+  // Update VM table to show only VMs from selected Infra
   updateVmTable();
   
   // Update show all button visibility
   updateShowAllButton();
 }
 
-// Show all VMs (clear MCI selection)
+// Show all VMs (clear Infra selection)
 function showAllVms() {
-  selectedMciId = null;
-  console.log('Showing all VMs, selectedMciId set to:', selectedMciId);
+  selectedInfraId = null;
+  console.log('Showing all VMs, selectedInfraId set to:', selectedInfraId);
   
-  // Update MCI table highlighting
-  updateMciTable();
+  // Update Infra table highlighting
+  updateInfraTable();
   
   // Update VM section header - use safer selector approach
   const vmTable = document.getElementById('vmTable');
@@ -2170,23 +2170,23 @@ function showAllVms() {
 // Update show all button visibility
 function updateShowAllButton() {
   const showAllBtn = document.getElementById('showAllBtn');
-  console.log('updateShowAllButton called, selectedMciId:', selectedMciId, 'showAllBtn:', showAllBtn);
+  console.log('updateShowAllButton called, selectedInfraId:', selectedInfraId, 'showAllBtn:', showAllBtn);
   if (showAllBtn) {
-    showAllBtn.style.display = selectedMciId ? 'inline-block' : 'none';
+    showAllBtn.style.display = selectedInfraId ? 'inline-block' : 'none';
     console.log('Show All button display set to:', showAllBtn.style.display);
   }
 }
 
 // Update VM table
 function updateVmTable() {
-  // Filter VMs based on selected MCI for data comparison
+  // Filter VMs based on selected Infra for data comparison
   let filteredVms = vmData;
-  if (selectedMciId) {
-    filteredVms = vmData.filter(vm => vm.mciId === selectedMciId);
+  if (selectedInfraId) {
+    filteredVms = vmData.filter(vm => vm.infraId === selectedInfraId);
   }
   
   // Check if data has changed before updating
-  const dataKey = selectedMciId ? `vm-table-${selectedMciId}` : 'vm-table-all';
+  const dataKey = selectedInfraId ? `vm-table-${selectedInfraId}` : 'vm-table-all';
   if (!hasDataChanged(dataKey, filteredVms)) {
     console.log(`[Performance] VM table (${dataKey}): Skipping update - no changes detected`);
     return;
@@ -2200,13 +2200,13 @@ function updateVmTable() {
     vmCountElement.textContent = filteredVms.length;
   }
   
-  if (filteredVms.length === 0 && selectedMciId) {
-    // Show message when no VMs found for selected MCI
+  if (filteredVms.length === 0 && selectedInfraId) {
+    // Show message when no VMs found for selected Infra
     const row = document.createElement('tr');
     row.innerHTML = `
       <td colspan="9" class="text-center text-muted py-4">
         <i class="fas fa-info-circle me-2"></i>
-        No VMs found for selected MCI: ${selectedMciId}
+        No VMs found for selected Infra: ${selectedInfraId}
       </td>
     `;
     tbody.appendChild(row);
@@ -2255,9 +2255,9 @@ function updateVmTable() {
     }
     
     row.innerHTML = `
-      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(vm.id)}" data-mci-id="${_escapeHtml(vm.mciId)}" onchange="toggleRowSelect('vm', '${_escapeHtml(vm.id)}', this)"></td>
-      <td title="${vm.id}"><strong><a class="item-id-link" onclick="viewVmDetails('${_escapeHtml(vm.mciId)}', '${_escapeHtml(vm.id)}')">${smartTruncate(vm.id, 'id')}</a></strong></td>
-      <td title="${vm.mciId}">${smartTruncate(vm.mciId, 'id')}</td>
+      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(vm.id)}" data-infra-id="${_escapeHtml(vm.infraId)}" onchange="toggleRowSelect('vm', '${_escapeHtml(vm.id)}', this)"></td>
+      <td title="${vm.id}"><strong><a class="item-id-link" onclick="viewVmDetails('${_escapeHtml(vm.infraId)}', '${_escapeHtml(vm.id)}')">${smartTruncate(vm.id, 'id')}</a></strong></td>
+      <td title="${vm.infraId}">${smartTruncate(vm.infraId, 'id')}</td>
       <td><span class="status-badge status-${statusClass}">${vm.status || 'Unknown'}</span></td>
       <td title="${provider}">${smartTruncate(provider, 'provider')}</td>
       <td title="${region}">${smartTruncate(region, 'region')}</td>
@@ -2266,13 +2266,13 @@ function updateVmTable() {
       <td title="${privateIp}">${smartTruncate(privateIp, 'ip')}</td>
     `;
     
-    // Add click event to select MCI when clicking on VM row (but not on checkboxes)
+    // Add click event to select Infra when clicking on VM row (but not on checkboxes)
     row.addEventListener('click', function(event) {
       if (event.target.closest('.select-cell') || event.target.closest('.item-id-link')) {
         return;
       }
-      if (vm.mciId && selectedMciId !== vm.mciId) {
-        selectMci(vm.mciId);
+      if (vm.infraId && selectedInfraId !== vm.infraId) {
+        selectInfra(vm.infraId);
       }
     });
     
@@ -2364,9 +2364,9 @@ function updateResourceDisplay() {
   `;
 }
 
-// Control MCI actions
-async function controlMci(mciId, action) {
-  if (!confirm(`Are you sure you want to ${action} MCI: ${mciId}?`)) {
+// Control Infra actions
+async function controlInfra(infraId, action) {
+  if (!confirm(`Are you sure you want to ${action} Infra: ${infraId}?`)) {
     return;
   }
   
@@ -2381,7 +2381,7 @@ async function controlMci(mciId, action) {
   // Get current namespace from parent window's namespace element
   const currentNamespace = window.parent?.configNamespace || 'default';
   
-  const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${currentNamespace}/control/mci/${mciId}?action=${action}`;
+  const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${currentNamespace}/control/infra/${infraId}?action=${action}`;
   
   try {
     showRefreshIndicator(true);
@@ -2394,7 +2394,7 @@ async function controlMci(mciId, action) {
       timeout: 600000
     });
     
-    showSuccessMessage(`MCI ${action} command sent successfully!`);
+    showSuccessMessage(`Infra ${action} command sent successfully!`);
     
     // Refresh data after a delay to allow the action to take effect
     setTimeout(() => {
@@ -2402,15 +2402,15 @@ async function controlMci(mciId, action) {
     }, 2000);
     
   } catch (error) {
-    console.error(`Error controlling MCI ${mciId}:`, error);
-    showErrorMessage(`Failed to ${action} MCI: ${error.response?.data?.message || error.message}`);
+    console.error(`Error controlling Infra ${infraId}:`, error);
+    showErrorMessage(`Failed to ${action} Infra: ${error.response?.data?.message || error.message}`);
   } finally {
     showRefreshIndicator(false);
   }
 }
 
 // Control VM actions
-async function controlVm(mciId, vmId, action) {
+async function controlVm(infraId, vmId, action) {
   if (!confirm(`Are you sure you want to ${action} VM: ${vmId}?`)) {
     return;
   }
@@ -2426,7 +2426,7 @@ async function controlVm(mciId, vmId, action) {
   // Get current namespace from parent window's namespace element
   const currentNamespace = window.parent?.configNamespace || 'default';
   
-  const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${currentNamespace}/control/mci/${mciId}/vm/${vmId}?action=${action}`;
+  const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${currentNamespace}/control/infra/${infraId}/vm/${vmId}?action=${action}`;
   
   try {
     showRefreshIndicator(true);
@@ -2454,20 +2454,20 @@ async function controlVm(mciId, vmId, action) {
   }
 }
 
-// View MCI details
-async function viewMciDetails(mciId) {
-  const mci = mciData.find(m => m.id === mciId);
-  if (!mci) {
-    showErrorMessage('MCI not found');
+// View Infra details
+async function viewInfraDetails(infraId) {
+  const infra = infraData.find(m => m.id === infraId);
+  if (!infra) {
+    showErrorMessage('Infra not found');
     return;
   }
   
-  showJsonDetailsPopup(`🖥️ MCI Details: ${mciId}`, mci);
+  showJsonDetailsPopup(`🖥️ Infra Details: ${infraId}`, infra);
 }
 
 // View VM details
-async function viewVmDetails(mciId, vmId) {
-  const vm = vmData.find(v => v.mciId === mciId && v.id === vmId);
+async function viewVmDetails(infraId, vmId) {
+  const vm = vmData.find(v => v.infraId === infraId && v.id === vmId);
   if (!vm) {
     showErrorMessage('VM not found');
     return;
@@ -2476,8 +2476,8 @@ async function viewVmDetails(mciId, vmId) {
   showJsonDetailsPopup(`💻 VM Details: ${vmId}`, vm);
 }
 
-// Show create MCI modal
-function showCreateMciModal() {
+// Show create Infra modal
+function showCreateInfraModal() {
   // Switch to Map view and Provision tab directly
   if (window.parent && window.parent !== window) {
     // If in iframe, call parent's functions
@@ -2490,7 +2490,7 @@ function showCreateMciModal() {
       window.parent.$('#provision-tab').tab('show');
     }
     
-    showInfoMessage('Switched to Map view for MCI creation. Check the Provision tab.');
+    showInfoMessage('Switched to Map view for Infra creation. Check the Provision tab.');
   } else {
     // If not in iframe, redirect to index.html
     window.location.href = 'index.html';
@@ -2498,25 +2498,25 @@ function showCreateMciModal() {
 }
 
 // Refresh specific lists
-function refreshMciList() {
+function refreshInfraList() {
   showRefreshIndicator(true);
   
-  loadMciData().then(() => {
+  loadInfraData().then(() => {
     updateStatistics();
     updateCharts();
-    updateMciTable();
+    updateInfraTable();
     updateVmTable();
-    showSuccessMessage('MCI list refreshed!', 1500);
+    showSuccessMessage('Infra list refreshed!', 1500);
   }).catch(error => {
-    console.error('Error refreshing MCI list:', error);
-    showErrorMessage('Failed to refresh MCI list: ' + (error.response?.data?.message || error.message));
+    console.error('Error refreshing Infra list:', error);
+    showErrorMessage('Failed to refresh Infra list: ' + (error.response?.data?.message || error.message));
   }).finally(() => {
     showRefreshIndicator(false);
   });
 }
 
 function refreshVmList() {
-  refreshMciList(); // VM data comes from MCI data
+  refreshInfraList(); // VM data comes from Infra data
 }
 
 // Auto-refresh functionality
@@ -2625,13 +2625,13 @@ function setupEventListeners() {
 window.refreshDashboard = refreshDashboard;
 window.showSettings = showSettings;
 window.saveSettings = saveSettings;
-window.controlMci = controlMci;
+window.controlInfra = controlInfra;
 window.controlVm = controlVm;
-window.deleteMci = deleteMci;
-window.viewMciDetails = viewMciDetails;
+window.deleteInfra = deleteInfra;
+window.viewInfraDetails = viewInfraDetails;
 window.viewVmDetails = viewVmDetails;
-window.showCreateMciModal = showCreateMciModal;
-window.refreshMciList = refreshMciList;
+window.showCreateInfraModal = showCreateInfraModal;
+window.refreshInfraList = refreshInfraList;
 window.refreshVmList = refreshVmList;
 window.showAllVms = showAllVms;
 
@@ -3655,9 +3655,9 @@ function updateVpnTable() {
   vpnData.forEach(vpn => {
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(vpn.id || 'N/A')}" data-mci-id="${_escapeHtml(vpn.mciId || 'N/A')}" onchange="toggleRowSelect('vpn', '${_escapeHtml(vpn.id || 'N/A')}', this)"></td>
-      <td title="${vpn.mciId || 'N/A'}">${smartTruncate(vpn.mciId || 'N/A', 'id')}</td>
-      <td title="${vpn.id || 'N/A'}"><a class="item-id-link" onclick="viewVpnDetails('${_escapeHtml(vpn.mciId || '')}', '${_escapeHtml(vpn.id || '')}')">${smartTruncate(vpn.id || 'N/A', 'id')}</a></td>
+      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(vpn.id || 'N/A')}" data-infra-id="${_escapeHtml(vpn.infraId || 'N/A')}" onchange="toggleRowSelect('vpn', '${_escapeHtml(vpn.id || 'N/A')}', this)"></td>
+      <td title="${vpn.infraId || 'N/A'}">${smartTruncate(vpn.infraId || 'N/A', 'id')}</td>
+      <td title="${vpn.id || 'N/A'}"><a class="item-id-link" onclick="viewVpnDetails('${_escapeHtml(vpn.infraId || '')}', '${_escapeHtml(vpn.id || '')}')">${smartTruncate(vpn.id || 'N/A', 'id')}</a></td>
       <td><span class="status-badge status-${(vpn.status || 'unknown').toLowerCase()}">${vpn.status || 'Unknown'}</span></td>
       <td title="${vpn.vpnSites ? vpn.vpnSites.length : 0}">${vpn.vpnSites ? vpn.vpnSites.length : 0} sites</td>
       <td title="${vpn.connectionConfig?.providerName || 'N/A'}">${smartTruncate(vpn.connectionConfig?.providerName || 'N/A', 'provider')}</td>
@@ -3682,8 +3682,8 @@ function refreshResourceList(resourceType) {
   }
   
   // Trigger refresh from parent window
-  if (window.parent && window.parent.getMci) {
-    window.parent.getMci();
+  if (window.parent && window.parent.getInfra) {
+    window.parent.getInfra();
   }
   
   // Show loading indicator
@@ -3731,7 +3731,7 @@ function getResourceEmoji(resourceType) {
     'dataDisk': '💾',
     'customImage': '🖼️',
     'connection': '🔗',
-    'mci': '🖥️',
+    'infra': '🖥️',
     'vm': '💻',
     'k8sCluster': '☸️',
     'k8sNodeGroup': '📦'
@@ -3811,7 +3811,7 @@ function showJsonDetailsPopup(title, data) {
 function deleteResource(resourceType, resourceId, parameters = {}) {
   // Instead of duplicating logic, use the existing async deleteResource function
   const resourceTypeMap = {
-    'MCI': 'mci',
+    'Infra': 'infra',
     'VM': 'vm', 
     'K8s Cluster': 'k8sCluster',
     'K8s Node Group': 'k8sNodeGroup',
@@ -4336,8 +4336,8 @@ function deleteNodeGroup(nodeGroupId, clusterId = null) {
 function refreshNodeGroupList() {
   console.log('Refreshing node group list...');
   // Node groups are part of cluster data, so refresh clusters
-  if (window.parent && typeof window.parent.getMci === 'function') {
-    window.parent.getMci();
+  if (window.parent && typeof window.parent.getInfra === 'function') {
+    window.parent.getInfra();
   }
   showSuccessMessage('Node group list refreshed!', 1500);
 }
@@ -4381,7 +4381,7 @@ function scrollToSection(sectionId) {
   // If not found, try alternative IDs (for backward compatibility)
   if (!element) {
     const alternativeMap = {
-      'mciTable': 'mciTable',
+      'infraTable': 'infraTable',
       'vmTable': 'vmTable',
       'providerRegionChart': 'providerRegionChart'
     };
@@ -4474,7 +4474,7 @@ function performCleanup() {
   
   // Clear central data reference
   centralData = {};
-  mciData = [];
+  infraData = [];
   vmData = [];
   resourceData = {};
   
@@ -4493,7 +4493,7 @@ window.clearConnectionTabSelection = clearConnectionTabSelection;
 
 // Export delete functions to global scope
 window.deleteResource = deleteResource;
-window.deleteMci = deleteMci;
+window.deleteInfra = deleteInfra;
 window.deleteVm = deleteVm;
 window.deleteK8sCluster = deleteK8sCluster;
 window.deleteK8sNodeGroup = deleteK8sNodeGroup;
@@ -4597,7 +4597,7 @@ function initializeDataTables() {
 
   const tableConfigs = [
     {
-      id: 'mciTable',
+      id: 'infraTable',
       config: {
         pageLength: 25,
         autoWidth: false,
@@ -4945,7 +4945,7 @@ function initDataTable(tableId) {
   if (typeof $ === 'undefined' || !$.fn.DataTable) return;
   try {
     const knownTables = {
-      'mciTable': true, 'vmTable': true, 'vNetTable': true,
+      'infraTable': true, 'vmTable': true, 'vNetTable': true,
       'securityGroupTable': true, 'sshKeyTable': true,
       'k8sClusterTable': true, 'vpnTable': true,
       'k8sNodeGroupTable': true, 'dataDiskTable': true, 'customImageTable': true
@@ -4999,7 +4999,7 @@ function refreshDataTable(tableId) {
 // Map tableType to DataTable element ID
 function getDataTableId(tableType) {
   const map = {
-    'mci': 'mciTable', 'vm': 'vmTable', 'vNet': 'vNetTable',
+    'infra': 'infraTable', 'vm': 'vmTable', 'vNet': 'vNetTable',
     'securityGroup': 'securityGroupTable', 'sshKey': 'sshKeyTable',
     'k8sCluster': 'k8sClusterTable', 'vpn': 'vpnTable',
     'k8sNodeGroup': 'k8sNodeGroupTable', 'dataDisk': 'dataDiskTable', 'customImage': 'customImageTable'
@@ -5045,7 +5045,7 @@ const tableSelections = {};
 // Table config lookup
 function getTableConfig(tableType) {
   const configs = {
-    mci:           { tableId: 'mciTable',           bodyId: 'mciTableBody' },
+    infra:           { tableId: 'infraTable',           bodyId: 'infraTableBody' },
     vm:            { tableId: 'vmTable',             bodyId: 'vmTableBody' },
     k8sCluster:    { tableId: 'k8sClusterTable',    bodyId: 'k8sClusterTableBody' },
     k8sNodeGroup:  { tableId: 'k8sNodeGroupTable',  bodyId: 'k8sNodeGroupTableBody' },
@@ -5265,12 +5265,12 @@ function injectToolbar(tableType, bulkActionsHtml) {
 // Setup all table enhancements (called once)
 function setupTableEnhancements() {
   const configs = {
-    mci: `
-      <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('mci')" title="View Details"><i class="fas fa-eye"></i> View</button>
-      <button class="btn btn-sm btn-outline-success" onclick="bulkControlMci('resume')" title="Resume"><i class="fas fa-play"></i> Resume</button>
-      <button class="btn btn-sm btn-outline-warning" onclick="bulkControlMci('suspend')" title="Suspend"><i class="fas fa-pause"></i> Suspend</button>
-      <button class="btn btn-sm btn-outline-info" onclick="bulkControlMci('restart')" title="Restart"><i class="fas fa-sync-alt"></i> Restart</button>
-      <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('mci')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
+    infra: `
+      <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('infra')" title="View Details"><i class="fas fa-eye"></i> View</button>
+      <button class="btn btn-sm btn-outline-success" onclick="bulkControlInfra('resume')" title="Resume"><i class="fas fa-play"></i> Resume</button>
+      <button class="btn btn-sm btn-outline-warning" onclick="bulkControlInfra('suspend')" title="Suspend"><i class="fas fa-pause"></i> Suspend</button>
+      <button class="btn btn-sm btn-outline-info" onclick="bulkControlInfra('restart')" title="Restart"><i class="fas fa-sync-alt"></i> Restart</button>
+      <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('infra')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
     `,
     vm: `
       <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('vm')" title="View Details"><i class="fas fa-eye"></i> View</button>
@@ -5328,11 +5328,11 @@ function bulkViewDetails(tableType) {
   const itemId = selected[0];
 
   switch (tableType) {
-    case 'mci': viewMciDetails(itemId); break;
+    case 'infra': viewInfraDetails(itemId); break;
     case 'vm': {
       const cb = document.querySelector(`#vmTableBody .row-select-checkbox[data-item-id="${CSS.escape(itemId)}"]`);
-      const mciId = cb ? cb.getAttribute('data-mci-id') : null;
-      if (mciId) viewVmDetails(mciId, itemId);
+      const infraId = cb ? cb.getAttribute('data-infra-id') : null;
+      if (infraId) viewVmDetails(infraId, itemId);
       break;
     }
     case 'k8sCluster': viewK8sClusterDetails(itemId); break;
@@ -5349,8 +5349,8 @@ function bulkViewDetails(tableType) {
     case 'dataDisk': viewResourceDetails('dataDisk', itemId); break;
     case 'vpn': {
       const cb = document.querySelector(`#vpnTableBody .row-select-checkbox[data-item-id="${CSS.escape(itemId)}"]`);
-      const mciId = cb ? cb.getAttribute('data-mci-id') : null;
-      if (mciId) viewVpnDetails(mciId, itemId);
+      const infraId = cb ? cb.getAttribute('data-infra-id') : null;
+      if (infraId) viewVpnDetails(infraId, itemId);
       break;
     }
   }
@@ -5367,13 +5367,13 @@ async function runInBatches(tasks, concurrency = 10) {
   return results;
 }
 
-// Bulk control MCI (resume/suspend/restart)
-async function bulkControlMci(action) {
-  const selected = getSelectedItems('mci');
+// Bulk control Infra (resume/suspend/restart)
+async function bulkControlInfra(action) {
+  const selected = getSelectedItems('infra');
   if (selected.length === 0) return;
 
   const result = await Swal.fire({
-    title: `${action.charAt(0).toUpperCase() + action.slice(1)} ${selected.length} MCI(s)?`,
+    title: `${action.charAt(0).toUpperCase() + action.slice(1)} ${selected.length} Infra(s)?`,
     text: `Selected: ${selected.join(', ')}`,
     icon: 'question',
     showCancelButton: true,
@@ -5385,19 +5385,19 @@ async function bulkControlMci(action) {
   const ns = window.parent?.configNamespace || 'default';
 
   showRefreshIndicator(true);
-  const tasks = selected.map(mciId => () =>
-    axios.get(`http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${ns}/control/mci/${mciId}?action=${action}`, {
+  const tasks = selected.map(infraId => () =>
+    axios.get(`http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${ns}/control/infra/${infraId}?action=${action}`, {
       auth: { username: parentConfig.username, password: parentConfig.password },
       timeout: 600000
     })
   );
   const results = await runInBatches(tasks, 10);
   const successCount = results.filter(r => r.status === 'fulfilled').length;
-  results.filter(r => r.status === 'rejected').forEach(r => console.error(`Failed to ${action} MCI:`, r.reason));
+  results.filter(r => r.status === 'rejected').forEach(r => console.error(`Failed to ${action} Infra:`, r.reason));
 
   showRefreshIndicator(false);
-  showSuccessMessage(`${action} sent for ${successCount}/${selected.length} MCI(s)`);
-  clearTableSelection('mci');
+  showSuccessMessage(`${action} sent for ${successCount}/${selected.length} Infra(s)`);
+  clearTableSelection('infra');
   // Activate cooldown then schedule delayed re-fetch for fresh data
   startMutationCooldown();
   scheduleFreshFetch();
@@ -5423,9 +5423,9 @@ async function bulkControlVm(action) {
   showRefreshIndicator(true);
   const tasks = selected.map(vmId => {
     const cb = document.querySelector(`#vmTableBody .row-select-checkbox[data-item-id="${CSS.escape(vmId)}"]`);
-    const mciId = cb ? cb.getAttribute('data-mci-id') : null;
-    if (!mciId) return null;
-    return () => axios.get(`http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${ns}/control/mci/${mciId}/vm/${vmId}?action=${action}`, {
+    const infraId = cb ? cb.getAttribute('data-infra-id') : null;
+    if (!infraId) return null;
+    return () => axios.get(`http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${ns}/control/infra/${infraId}/vm/${vmId}?action=${action}`, {
       auth: { username: parentConfig.username, password: parentConfig.password },
       timeout: 600000
     });
@@ -5448,7 +5448,7 @@ async function bulkDeleteItems(tableType) {
   if (selected.length === 0) return;
 
   const typeLabels = {
-    mci: 'MCI', vm: 'VM', k8sCluster: 'K8s Cluster', k8sNodeGroup: 'K8s Node Group',
+    infra: 'Infra', vm: 'VM', k8sCluster: 'K8s Cluster', k8sNodeGroup: 'K8s Node Group',
     vNet: 'vNet', securityGroup: 'Security Group', sshKey: 'SSH Key',
     customImage: 'Custom Image', dataDisk: 'Data Disk', vpn: 'VPN'
   };
@@ -5478,14 +5478,14 @@ async function bulkDeleteItems(tableType) {
   for (const itemId of selected) {
     let endpoint = '';
     switch (tableType) {
-      case 'mci':
-        endpoint = `/ns/${ns}/mci/${itemId}?option=terminate`;
+      case 'infra':
+        endpoint = `/ns/${ns}/infra/${itemId}?option=terminate`;
         break;
       case 'vm': {
         const cb = document.querySelector(`#vmTableBody .row-select-checkbox[data-item-id="${CSS.escape(itemId)}"]`);
-        const mciId = cb ? cb.getAttribute('data-mci-id') : null;
-        if (!mciId) { errors.push(`VM ${itemId}: unknown MCI`); continue; }
-        endpoint = `/ns/${ns}/mci/${mciId}/vm/${itemId}`;
+        const infraId = cb ? cb.getAttribute('data-infra-id') : null;
+        if (!infraId) { errors.push(`VM ${itemId}: unknown Infra`); continue; }
+        endpoint = `/ns/${ns}/infra/${infraId}/vm/${itemId}`;
         break;
       }
       case 'k8sCluster':
@@ -5515,9 +5515,9 @@ async function bulkDeleteItems(tableType) {
         break;
       case 'vpn': {
         const cb = document.querySelector(`#vpnTableBody .row-select-checkbox[data-item-id="${CSS.escape(itemId)}"]`);
-        const mciId = cb ? cb.getAttribute('data-mci-id') : null;
-        if (!mciId) { errors.push(`VPN ${itemId}: unknown MCI`); continue; }
-        endpoint = `/ns/${ns}/mci/${mciId}/vpn/${itemId}`;
+        const infraId = cb ? cb.getAttribute('data-infra-id') : null;
+        if (!infraId) { errors.push(`VPN ${itemId}: unknown Infra`); continue; }
+        endpoint = `/ns/${ns}/infra/${infraId}/vpn/${itemId}`;
         break;
       }
       default:
@@ -5560,13 +5560,13 @@ async function bulkDeleteItems(tableType) {
 
   if (deletedIds.size > 0) {
     switch (tableType) {
-      case 'mci':
-        mciData = mciData.filter(m => !deletedIds.has(m.id));
+      case 'infra':
+        infraData = infraData.filter(m => !deletedIds.has(m.id));
         vmData = vmData.filter(v => {
-          const mciId = v.mciId || (v.id && v.id.split('-')[0]);
-          return !deletedIds.has(mciId);
+          const infraId = v.infraId || (v.id && v.id.split('-')[0]);
+          return !deletedIds.has(infraId);
         });
-        updateMciTable();
+        updateInfraTable();
         updateVmTable();
         break;
       case 'vm':
@@ -5643,7 +5643,7 @@ window.toggleRowSelect = toggleRowSelect;
 window.toggleSelectAll = toggleSelectAll;
 window.filterTableRows = filterTableRows;
 window.bulkViewDetails = bulkViewDetails;
-window.bulkControlMci = bulkControlMci;
+window.bulkControlInfra = bulkControlInfra;
 window.bulkControlVm = bulkControlVm;
 window.bulkDeleteItems = bulkDeleteItems;
 window.clearTableSelection = clearTableSelection;

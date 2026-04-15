@@ -245,7 +245,7 @@ CB-MapUI provides three main interfaces for managing multi-cloud infrastructure:
 **Geographic visualization of multi-cloud infrastructure**
 
 - **Interactive Map**: Click on the map to select deployment locations
-- **Visual MCI Polygons**: Multi-Cloud Infrastructure displayed as geographic polygons
+- **Visual Infra Polygons**: Multi-Cloud Infrastructure displayed as geographic polygons
 - **Real-time Status**: Color-coded VM status indicators
 - **Location-based Provisioning**: Click map locations for intelligent VM recommendations
 - **Lifecycle Management**: Control VMs directly from map interface
@@ -266,17 +266,17 @@ CB-MapUI provides three main interfaces for managing multi-cloud infrastructure:
 
 **Features:**
 - **Statistics Cards**: Real-time infrastructure metrics
-  - Total MCIs, VMs, Kubernetes clusters
+  - Total Infras, VMs, Kubernetes clusters
   - Status distribution (Running, Failed, Suspended)
   - Resource counts (vNets, Security Groups, SSH Keys)
   
 - **Interactive Charts**:
-  - Combined status overview (MCI + VM + K8s)
+  - Combined status overview (Infra + VM + K8s)
   - Provider and region distribution
   - Kubernetes cluster and node group status
   
 - **Resource Tables**:
-  - MCI/VM management with inline controls
+  - Infra/VM management with inline controls
   - Kubernetes cluster and node group operations
   - Network resources (vNet, Security Groups, SSH Keys)
   - Custom images and data disks
@@ -332,11 +332,11 @@ When you first access CB-MapUI, configure the connection settings:
 
 > 💡 **Auto-detection**: TB Hostname is automatically set to match your browser's address
 
-### Creating Your First MCI
+### Creating Your First Infra
 
 1. **Navigate to Map View** or **Dashboard View**
-2. **Click "Create MCI"** button
-3. **Configure MCI**:
+2. **Click "Create Infra"** button
+3. **Configure Infra**:
    - Select recommendation policy (location-based, cost, performance)
    - For location-based: Click desired regions on the map
    - Review recommended VM specifications
@@ -375,16 +375,16 @@ CB-MapUI Architecture
 
 **Map View Rendering Cycle:**
 
-1. **API Polling**: Periodically fetch MCI/VM data from CB-Tumblebug
+1. **API Polling**: Periodically fetch Infra/VM data from CB-Tumblebug
 2. **Geolocation Parsing**: Extract VM geographic coordinates (longitude, latitude)
-3. **Convex Hull Generation**: Group VMs into MCI polygons
+3. **Convex Hull Generation**: Group VMs into Infra polygons
 4. **Map Rendering**: Draw polygons on OpenLayers map with status indicators
 5. **Event Handling**: Capture user interactions for resource management
 
 **Key Implementation Details:**
 
 - **`index.js`**: Core logic using OpenLayers for map operations
-  - `getMci()`: Fetches MCI and VM information via REST API
+  - `getInfra()`: Fetches Infra and VM information via REST API
   - `tileLayer.on('postrender')`: OpenLayers rendering loop for polygon updates
   - Real-time status synchronization with visual indicators
   

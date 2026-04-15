@@ -213,7 +213,7 @@ limitations under the License.
     /* Table cell text overflow handling - Applied to all resource tables */
     /* Remove global max-width constraint to allow flexible column widths */
     #vmTable td,
-    #mciTable td,
+    #infraTable td,
     #vNetTable td,
     #securityGroupTable td,
     #sshKeyTable td,
@@ -235,19 +235,19 @@ limitations under the License.
       max-width: 120px;
     }
 
-    #vmTable th:nth-child(3), /* MCI ID */
+    #vmTable th:nth-child(3), /* Infra ID */
     #vmTable td:nth-child(3) {
       max-width: 120px;
     }
 
-    /* MCI Table - only constrain ID and description columns */
-    #mciTable th:nth-child(2), /* MCI ID */
-    #mciTable td:nth-child(2) {
+    /* Infra Table - only constrain ID and description columns */
+    #infraTable th:nth-child(2), /* Infra ID */
+    #infraTable td:nth-child(2) {
       max-width: 150px;
     }
 
-    #mciTable th:nth-child(7), /* Description */
-    #mciTable td:nth-child(7) {
+    #infraTable th:nth-child(7), /* Description */
+    #infraTable td:nth-child(7) {
       max-width: 200px;
     }
 
@@ -398,7 +398,7 @@ limitations under the License.
 
     /* Add tooltip for truncated text */
     #vmTable td[title],
-    #mciTable td[title],
+    #infraTable td[title],
     #vNetTable td[title],
     #securityGroupTable td[title],
     #sshKeyTable td[title],
@@ -799,21 +799,21 @@ limitations under the License.
       </div>
 
       <div class="col-md-2 col-sm-6">
-        <div class="stat-card success" style="cursor: pointer;" onclick="scrollToSection('mciTable')" title="Click to view MCI details">
+        <div class="stat-card success" style="cursor: pointer;" onclick="scrollToSection('infraTable')" title="Click to view Infra details">
           <div class="text-center">
             <i class="fas fa-play-circle stat-icon text-success"></i>
-            <h3 class="stat-number" id="runningMciCount">0</h3>
-            <p class="stat-label">Running MCIs</p>
+            <h3 class="stat-number" id="runningInfraCount">0</h3>
+            <p class="stat-label">Running Infras</p>
           </div>
         </div>
       </div>
 
       <div class="col-md-2 col-sm-6">
-        <div class="stat-card danger" style="cursor: pointer;" onclick="scrollToSection('mciTable')" title="Click to view MCI details">
+        <div class="stat-card danger" style="cursor: pointer;" onclick="scrollToSection('infraTable')" title="Click to view Infra details">
           <div class="text-center">
             <i class="fas fa-exclamation-triangle stat-icon text-danger"></i>
-            <h3 class="stat-number" id="failedMciCount">0</h3>
-            <p class="stat-label">Failed MCIs</p>
+            <h3 class="stat-number" id="failedInfraCount">0</h3>
+            <p class="stat-label">Failed Infras</p>
           </div>
         </div>
       </div>
@@ -845,7 +845,7 @@ limitations under the License.
     <div class="row">
       <div class="col-md-4">
         <div class="content-card">
-          <h5><i class="fas fa-chart-bar"></i> MCI & VM Status</h5>
+          <h5><i class="fas fa-chart-bar"></i> Infra & VM Status</h5>
           <div class="chart-container">
             <canvas id="combinedStatusChart"></canvas>
           </div>
@@ -1259,30 +1259,30 @@ limitations under the License.
       </div>
     </div>
 
-    <!-- MCI Management Table -->
+    <!-- Infra Management Table -->
     <div class="row">
       <div class="col-12">
         <div class="content-card">
           <div class="d-flex justify-content-between align-items-center mb-3">
             <h5>
               <i class="fas fa-list"></i> Multi-Cloud Infrastructure 
-              <span class="badge badge-secondary ml-2" id="mciCountBadge">0</span>
+              <span class="badge badge-secondary ml-2" id="infraCountBadge">0</span>
             </h5>
             <div>
-              <button class="btn btn-primary btn-sm" onclick="refreshMciList()">
+              <button class="btn btn-primary btn-sm" onclick="refreshInfraList()">
                 <i class="fas fa-sync-alt"></i> Refresh
               </button>
-              <button class="btn btn-success btn-sm" onclick="showCreateMciModal()">
-                <i class="fas fa-plus"></i> Create MCI
+              <button class="btn btn-success btn-sm" onclick="showCreateInfraModal()">
+                <i class="fas fa-plus"></i> Create Infra
               </button>
             </div>
           </div>
           <div class="table-responsive table-container">
-            <table class="table table-hover" id="mciTable">
+            <table class="table table-hover" id="infraTable">
               <thead>
                 <tr>
-                  <th class="select-all-th"><input type="checkbox" class="select-all-checkbox select-checkbox" onchange="toggleSelectAll('mci', this)"></th>
-                  <th>MCI ID</th>
+                  <th class="select-all-th"><input type="checkbox" class="select-all-checkbox select-checkbox" onchange="toggleSelectAll('infra', this)"></th>
+                  <th>Infra ID</th>
                   <th>Status</th>
                   <th>Provider</th>
                   <th>VMs</th>
@@ -1290,7 +1290,7 @@ limitations under the License.
                   <th>Description</th>
                 </tr>
               </thead>
-              <tbody id="mciTableBody">
+              <tbody id="infraTableBody">
                 <!-- Data will be populated by JavaScript -->
               </tbody>
             </table>
@@ -1323,7 +1323,7 @@ limitations under the License.
                 <tr>
                   <th class="select-all-th"><input type="checkbox" class="select-all-checkbox select-checkbox" onchange="toggleSelectAll('vm', this)"></th>
                   <th>VM ID</th>
-                  <th>MCI ID</th>
+                  <th>Infra ID</th>
                   <th>Status</th>
                   <th>Provider</th>
                   <th>Region</th>
@@ -1644,7 +1644,7 @@ limitations under the License.
               <thead>
                 <tr>
                   <th class="select-all-th"><input type="checkbox" class="select-all-checkbox select-checkbox" onchange="toggleSelectAll('vpn', this)"></th>
-                  <th>MCI ID</th>
+                  <th>Infra ID</th>
                   <th>VPN ID</th>
                   <th>Status</th>
                   <th>VPN Sites</th>

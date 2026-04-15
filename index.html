@@ -361,11 +361,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     }
 
     /* Context menu styles for SweetAlert */
-    .swal2-mci-context {
+    .swal2-infra-context {
       font-family: inherit !important;
     }
 
-    .swal2-mci-context .btn-context {
+    .swal2-infra-context .btn-context {
       width: 100% !important;
       padding: 10px 8px !important;
       font-size: 1.1rem !important;
@@ -375,43 +375,43 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       transition: all 0.2s ease !important;
     }
 
-    .swal2-mci-context .btn-context:hover {
+    .swal2-infra-context .btn-context:hover {
       transform: translateY(-1px) !important;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
     }
 
-    .swal2-mci-context .btn-context:focus {
+    .swal2-infra-context .btn-context:focus {
       outline: none !important;
       box-shadow: none !important;
     }
 
-    .swal2-mci-context .btn-success {
+    .swal2-infra-context .btn-success {
       background-color: #28a745 !important;
       border-color: #28a745 !important;
     }
 
-    .swal2-mci-context .btn-info {
+    .swal2-infra-context .btn-info {
       background-color: #17a2b8 !important;
       border-color: #17a2b8 !important;
     }
 
-    .swal2-mci-context .btn-warning {
+    .swal2-infra-context .btn-warning {
       background-color: #ffc107 !important;
       border-color: #ffc107 !important;
       color: #212529 !important;
     }
 
-    .swal2-mci-context .btn-primary {
+    .swal2-infra-context .btn-primary {
       background-color: #007bff !important;
       border-color: #007bff !important;
     }
 
-    .swal2-mci-context .btn-danger {
+    .swal2-infra-context .btn-danger {
       background-color: #dc3545 !important;
       border-color: #dc3545 !important;
     }
 
-    .swal2-mci-context .btn-secondary {
+    .swal2-infra-context .btn-secondary {
       background-color: #6c757d !important;
       border-color: #6c757d !important;
     }
@@ -474,7 +474,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             <div class="card mb-2">
               <div class="card-header">🚀 MC-Infra Recommendation</div>
               <div class="card-body d-flex flex-column">
-                <form id="mci-configuration-form">
+                <form id="infra-configuration-form">
 
                   <!-- Recommendation Policy Field -->
                   <div class="form-group">
@@ -642,7 +642,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                         🧮 GPU Config
                     </div>
                     <div id="collapseAccelerator" class="collapse" aria-labelledby="headingAccelerator"
-                      data-parent="#mci-configuration-form">
+                      data-parent="#infra-configuration-form">
                       <div class="px-0 py-0">
 
                         <!-- Accelerator Model Field -->
@@ -743,14 +743,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             </div>
 
             <!-- MC-Infra Configuration Review Card -->
-            <div class="card mb-2" id="mci-review-card" style="display: none;">
+            <div class="card mb-2" id="infra-review-card" style="display: none;">
               <div class="card-header">📋 MC-Infra Configuration</div>
               <div class="card-body">
-                <div id="subgroup-list" class="list-group">
-                  <!-- Dynamic SubGroup items will be added here -->
+                <div id="nodegroup-list" class="list-group">
+                  <!-- Dynamic NodeGroup items will be added here -->
                 </div>
-                <div class="text-center mt-2" id="no-subgroups" style="color: #6c757d; font-style: italic;">
-                  No SubGroups configured yet. Click on the map to add locations.
+                <div class="text-center mt-2" id="no-nodegroups" style="color: #6c757d; font-style: italic;">
+                  No NodeGroups configured yet. Click on the map to add locations.
                 </div>
               </div>
             </div>
@@ -762,7 +762,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             <div class="card mb-2">
               <div class="card-header">🕹️ MC-Infra Control</div>
               <div class="card-body d-flex flex-column">
-                <form id="mci-control-form">
+                <form id="infra-control-form">
 
                   <!-- X-Request-Id list -->
                   <div class="form-group">
@@ -778,14 +778,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                     </div>
                   </div>
 
-                  <!-- MCI ID Field -->
+                  <!-- Infra ID Field -->
                   <div class="form-group">
                     <div class="input-group">
                       <div class="input-group-prepend">
-                        <span class="input-group-text">🏗️ MCI ID</span>
+                        <span class="input-group-text">🏗️ Infra ID</span>
                       </div>
-                      <select id="mciid" name="mciid" class="form-control" aria-label="MCI ID"
-                        aria-describedby="mciidLabel">
+                      <select id="infraid" name="infraid" class="form-control" aria-label="Infra ID"
+                        aria-describedby="infraidLabel">
                         <!-- Options will be filled dynamically -->
                       </select>
                     </div>
@@ -820,16 +820,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <!-- Control Actions Button (success) -->
                   <div class="form-group">
                     <button type="button" id="controlActionsBtn" onClick="showActionsMenu();"
-                      class="btn btn-success w-100">🕹️ Control MCI</button>
+                      class="btn btn-success w-100">🕹️ Control Infra</button>
                   </div>
 
                   <!-- Status Field (success) -->
                   <div class="form-group">
-                    <button type="button" id="statusBtn" onClick="statusMCI();" class="btn btn-success w-100">📊 Get
+                    <button type="button" id="statusBtn" onClick="statusInfra();" class="btn btn-success w-100">📊 Get
                       Status</button>
                   </div>
 
-                  <!-- MCI Access Field (success) -->
+                  <!-- Infra Access Field (success) -->
                   <div class="form-group dropdown">
                     <button class="btn btn-success dropdown-toggle w-100" type="button" id="accessDropdown"
                       data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -849,7 +849,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
                   <!-- File Transfer Field (Warning) -->
                   <div class="form-group">
-                    <button type="button" id="filetransfer" onClick="transferFileToMci();"
+                    <button type="button" id="filetransfer" onClick="transferFileToInfra();"
                       class="btn btn-warning w-100">💾 Remote File Transfer</button>
                   </div>
 
@@ -859,10 +859,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                       class="btn btn-warning w-100">📸 Snapshot Management</button>
                   </div>
 
-                  <!-- Scale Out SubGroup Field -->
+                  <!-- Scale Out NodeGroup Field -->
                   <div class="form-group">
-                    <button type="button" id="scaleOutBtn" onClick="scaleOutSubGroupWithSelection();"
-                      class="btn btn-info w-100">⬆️ ScaleOut SubGroup</button>
+                    <button type="button" id="scaleOutBtn" onClick="scaleOutNodeGroupWithSelection();"
+                      class="btn btn-info w-100">⬆️ ScaleOut NodeGroup</button>
                   </div>
 
 
@@ -878,10 +878,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                       class="btn btn-info w-100">⚖️ Control L4 NLB</button>
                   </div>
 
-                  <!-- Delete MCI Field (secondary) -->
+                  <!-- Delete Infra Field (secondary) -->
                   <div class="form-group">
-                    <button type="button" id="deleteMciBtn" onClick="executeAction('delete');"
-                      class="btn btn-secondary w-100">🛑 Delete MCI</button>
+                    <button type="button" id="deleteInfraBtn" onClick="executeAction('delete');"
+                      class="btn btn-secondary w-100">🛑 Delete Infra</button>
                   </div>
 
                 </form>
@@ -1095,9 +1095,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               <span class="legend-item inactive" data-node-type="zone" onclick="toggleLegendItem('zone')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle Zone nodes (auto-enables CSP, Region)"><span style="display:inline-block;width:12px;height:12px;background:#32cd32;border-radius:2px;margin-right:4px;"></span>Zone</span>
               <span style="color:#ccc;">|</span>
               <!-- Infrastructure (toggleable, default ON) -->
-              <span class="legend-item active" data-node-type="mci" onclick="toggleLegendItem('mci')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle MCI nodes (enables SubGroup, VM)"><span style="display:inline-block;width:12px;height:12px;background:#007bff;border-radius:2px;margin-right:4px;"></span>MCI</span>
-              <span class="legend-item active" data-node-type="subgroup" onclick="toggleLegendItem('subgroup')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle SubGroup nodes (requires MCI)"><span style="display:inline-block;width:12px;height:12px;background:#6610f2;border-radius:2px;margin-right:4px;"></span>SubGroup</span>
-              <span class="legend-item active" data-node-type="vm" onclick="toggleLegendItem('vm')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle VM nodes (requires SubGroup)"><span style="display:inline-block;width:12px;height:12px;background:#28a745;border-radius:50%;margin-right:4px;"></span>VM</span>
+              <span class="legend-item active" data-node-type="infra" onclick="toggleLegendItem('infra')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle Infra nodes (enables NodeGroup, VM)"><span style="display:inline-block;width:12px;height:12px;background:#007bff;border-radius:2px;margin-right:4px;"></span>Infra</span>
+              <span class="legend-item active" data-node-type="nodegroup" onclick="toggleLegendItem('nodegroup')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle NodeGroup nodes (requires Infra)"><span style="display:inline-block;width:12px;height:12px;background:#6610f2;border-radius:2px;margin-right:4px;"></span>NodeGroup</span>
+              <span class="legend-item active" data-node-type="vm" onclick="toggleLegendItem('vm')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle VM nodes (requires NodeGroup)"><span style="display:inline-block;width:12px;height:12px;background:#28a745;border-radius:50%;margin-right:4px;"></span>VM</span>
               <span class="legend-item active" data-node-type="gpu" onclick="toggleLegendItem('gpu')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle GPU nodes (attached to VMs)"><span style="display:inline-block;width:12px;height:12px;background:#ff6b6b;transform:skewX(-10deg);border-radius:2px;margin-right:4px;"></span>GPU</span>
               <span style="color:#ccc;">|</span>
               <!-- Network resources (toggleable, default ON) -->
