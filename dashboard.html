@@ -212,7 +212,7 @@ limitations under the License.
 
     /* Table cell text overflow handling - Applied to all resource tables */
     /* Remove global max-width constraint to allow flexible column widths */
-    #vmTable td,
+    #nodeTable td,
     #infraTable td,
     #vNetTable td,
     #securityGroupTable td,
@@ -229,14 +229,14 @@ limitations under the License.
 
     /* Specific column width constraints for long content only */
     /* Note: nth-child indices account for checkbox column at position 1 */
-    /* VM Table - only constrain ID columns and very long content */
-    #vmTable th:nth-child(2), /* VM ID */
-    #vmTable td:nth-child(2) {
+    /* Node Table - only constrain ID columns and very long content */
+    #nodeTable th:nth-child(2), /* Node ID */
+    #nodeTable td:nth-child(2) {
       max-width: 120px;
     }
 
-    #vmTable th:nth-child(3), /* Infra ID */
-    #vmTable td:nth-child(3) {
+    #nodeTable th:nth-child(3), /* Infra ID */
+    #nodeTable td:nth-child(3) {
       max-width: 120px;
     }
 
@@ -397,7 +397,7 @@ limitations under the License.
     }
 
     /* Add tooltip for truncated text */
-    #vmTable td[title],
+    #nodeTable td[title],
     #infraTable td[title],
     #vNetTable td[title],
     #securityGroupTable td[title],
@@ -819,11 +819,11 @@ limitations under the License.
       </div>
 
       <div class="col-md-2 col-sm-6">
-        <div class="stat-card info" style="cursor: pointer;" onclick="scrollToSection('vmTable')" title="Click to view VM details">
+        <div class="stat-card info" style="cursor: pointer;" onclick="scrollToSection('nodeTable')" title="Click to view Node details">
           <div class="text-center">
             <i class="fas fa-desktop stat-icon text-info"></i>
-            <h3 class="stat-number" id="totalVmCount">0</h3>
-            <p class="stat-label">Total VMs</p>
+            <h3 class="stat-number" id="totalNodeCount">0</h3>
+            <p class="stat-label">Total Nodes</p>
           </div>
         </div>
       </div>
@@ -845,7 +845,7 @@ limitations under the License.
     <div class="row">
       <div class="col-md-4">
         <div class="content-card">
-          <h5><i class="fas fa-chart-bar"></i> Infra & VM Status</h5>
+          <h5><i class="fas fa-chart-bar"></i> Infra & Node Status</h5>
           <div class="chart-container">
             <canvas id="combinedStatusChart"></canvas>
           </div>
@@ -863,7 +863,7 @@ limitations under the License.
 
       <div class="col-md-4">
         <div class="content-card">
-          <h5><i class="fas fa-chart-bar"></i> Regions in Use (VM & Node)</h5>
+          <h5><i class="fas fa-chart-bar"></i> Regions in Use (Node & K8s Node)</h5>
           <div class="chart-container">
             <canvas id="providerRegionChart"></canvas>
           </div>
@@ -1285,7 +1285,7 @@ limitations under the License.
                   <th>Infra ID</th>
                   <th>Status</th>
                   <th>Provider</th>
-                  <th>VMs</th>
+                  <th>Nodes</th>
                   <th>Target Action</th>
                   <th>Description</th>
                 </tr>
@@ -1299,30 +1299,30 @@ limitations under the License.
       </div>
     </div>
 
-    <!-- VM Details Table -->
+    <!-- Node Details Table -->
     <div class="row">
       <div class="col-12">
         <div class="content-card">
           <div class="d-flex justify-content-between align-items-center mb-3">
             <h5>
               <i class="fas fa-server me-2"></i> Virtual Machine Details 
-              <span class="badge badge-secondary ml-2" id="vmCountBadge">0</span>
+              <span class="badge badge-secondary ml-2" id="nodeCountBadge">0</span>
             </h5>
             <div>
-              <button class="btn btn-outline-secondary btn-sm mr-2" onclick="showAllVms()" id="showAllBtn">
-                <i class="fas fa-list"></i> Show All VMs
+              <button class="btn btn-outline-secondary btn-sm mr-2" onclick="showAllNodes()" id="showAllBtn">
+                <i class="fas fa-list"></i> Show All Nodes
               </button>
-              <button class="btn btn-primary btn-sm" onclick="refreshVmList()">
+              <button class="btn btn-primary btn-sm" onclick="refreshNodeList()">
                 <i class="fas fa-sync-alt"></i> Refresh
               </button>
             </div>
           </div>
           <div class="table-responsive table-container">
-            <table class="table table-hover" id="vmTable">
+            <table class="table table-hover" id="nodeTable">
               <thead>
                 <tr>
-                  <th class="select-all-th"><input type="checkbox" class="select-all-checkbox select-checkbox" onchange="toggleSelectAll('vm', this)"></th>
-                  <th>VM ID</th>
+                  <th class="select-all-th"><input type="checkbox" class="select-all-checkbox select-checkbox" onchange="toggleSelectAll('node', this)"></th>
+                  <th>Node ID</th>
                   <th>Infra ID</th>
                   <th>Status</th>
                   <th>Provider</th>
@@ -1332,7 +1332,7 @@ limitations under the License.
                   <th>Private IP</th>
                 </tr>
               </thead>
-              <tbody id="vmTableBody">
+              <tbody id="nodeTableBody">
                 <!-- Data will be populated by JavaScript -->
               </tbody>
             </table>

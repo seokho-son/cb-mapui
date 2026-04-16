@@ -47,14 +47,14 @@ async function deleteResourceAsync(resourceType, resourceId, additionalParams = 
     switch (resourceType) {
       case 'infra':
         endpoint = `/ns/${currentNamespace}/infra/${resourceId}?option=terminate`;
-        confirmMessage = `Are you sure you want to delete Infra "${resourceId}" and terminate all its VMs?`;
+        confirmMessage = `Are you sure you want to delete Infra "${resourceId}" and terminate all its Nodes?`;
         successMessage = `Delete request for Infra "${resourceId}" has been accepted.`;
         break;
         
-      case 'vm':
-        endpoint = `/ns/${currentNamespace}/infra/${additionalParams.infraId}/vm/${resourceId}`;
-        confirmMessage = `Are you sure you want to delete VM "${resourceId}" from Infra "${additionalParams.infraId}"?`;
-        successMessage = `Delete request for VM "${resourceId}" has been accepted.`;
+      case 'node':
+        endpoint = `/ns/${currentNamespace}/infra/${additionalParams.infraId}/node/${resourceId}`;
+        confirmMessage = `Are you sure you want to delete Node "${resourceId}" from Infra "${additionalParams.infraId}"?`;
+        successMessage = `Delete request for Node "${resourceId}" has been accepted.`;
         break;
         
       case 'k8sCluster':
@@ -246,9 +246,9 @@ function refreshResourceData(resourceType, additionalParams) {
         }
         break;
         
-      case 'vm':
-        if (typeof loadVmData === 'function') {
-          loadVmData();
+      case 'node':
+        if (typeof loadNodeData === 'function') {
+          loadNodeData();
         }
         break;
         
@@ -307,8 +307,8 @@ async function deleteInfra(infraId, nsId = null) {
   return await deleteResourceAsync('infra', infraId, { nsId });
 }
 
-async function deleteVm(vmId, infraId, nsId = null) {
-  return await deleteResourceAsync('vm', vmId, { infraId, nsId });
+async function deleteNode(nodeId, infraId, nsId = null) {
+  return await deleteResourceAsync('node', nodeId, { infraId, nsId });
 }
 
 async function deleteK8sCluster(clusterId, nsId = null) {
@@ -500,12 +500,12 @@ const dashboardConfig = {
 
 // Global variables
 let infraData = [];
-let vmData = [];
+let nodeData = [];
 let resourceData = {};
 let centralData = {}; // Global centralData variable
 let refreshTimer = null;
 let charts = {};
-let selectedInfraId = null; // Track selected Infra for VM filtering
+let selectedInfraId = null; // Track selected Infra for Node filtering
 
 // Mutation cooldown: suppress subscription overwrites after local mutations
 let mutationCooldownUntil = 0;
@@ -637,7 +637,7 @@ document.addEventListener('DOMContentLoaded', function() {
       
       // Update local data
       infraData = centralData.infraData || [];
-      vmData = centralData.vmData || [];
+      nodeData = centralData.nodeData || [];
       resourceData = centralData.resourceData || {};
       
       // Update connection status based on data freshness
@@ -651,7 +651,7 @@ document.addEventListener('DOMContentLoaded', function() {
       updateStatistics();
       updateCharts();
       updateInfraTable();
-      updateVmTable();
+      updateNodeTable();
       updateAllResourceTables();
     });
     
@@ -660,7 +660,7 @@ document.addEventListener('DOMContentLoaded', function() {
       console.log('Using existing central data...');
       const centralData = window.parent.cloudBaristaCentralData;
       infraData = centralData.infraData || [];
-      vmData = centralData.vmData || [];
+      nodeData = centralData.nodeData || [];
       resourceData = centralData.resourceData || {};
       
       // Update connection status based on data availability
@@ -673,7 +673,7 @@ document.addEventListener('DOMContentLoaded', function() {
       updateStatistics();
       updateCharts();
       updateInfraTable();
-      updateVmTable();
+      updateNodeTable();
       updateAllResourceTables();
       
       // Force update resource counts even if no Infra data
@@ -710,17 +710,17 @@ function initializeCharts() {
   // Destroy existing charts before creating new ones to prevent memory leaks
   destroyAllCharts();
   
-  // Combined Infra & VM Status Chart with dynamic colors based on status
+  // Combined Infra & Node Status Chart with dynamic colors based on status
   const combinedStatusCtx = document.getElementById('combinedStatusChart').getContext('2d');
   
   // Helper function to get chart colors from index.js functions
-  function getChartColors(status, type = 'vm') {
-    if (window.parent && window.parent.getVmStatusColor) {
-      const colors = window.parent.getVmStatusColor(status);
+  function getChartColors(status, type = 'node') {
+    if (window.parent && window.parent.getNodeStatusColor) {
+      const colors = window.parent.getNodeStatusColor(status);
       if (type === 'infra') {
         return colors.fill + 'CC'; // 80% opacity for Infra
       } else {
-        return colors.fill + '99'; // 60% opacity for VM
+        return colors.fill + '99'; // 60% opacity for Node
       }
     }
     // Fallback colors if parent function not available
@@ -753,9 +753,9 @@ function initializeCharts() {
           legendColor: 'rgba(52, 58, 64, 0.8)',      // Dark gray for legend icon
         },
         {
-          label: 'VM Count',
+          label: 'Node Count',
           data: [0, 0, 0, 0, 0, 0, 0, 0, 0],
-          backgroundColor: statusLabels.map(status => getChartColors(status, 'vm')),
+          backgroundColor: statusLabels.map(status => getChartColors(status, 'node')),
           // Use fixed color for legend (will be overridden during updates)
           borderColor: 'rgba(108, 117, 125, 1)',     // Light gray for legend
           legendColor: 'rgba(108, 117, 125, 0.8)',   // Light gray for legend icon
@@ -835,7 +835,7 @@ function initializeCharts() {
           },
           title: {
             display: true,
-            text: 'Resource Count (VMs + Nodes)'
+            text: 'Resource Count (Nodes + K8s Nodes)'
           }
         }
       },
@@ -855,7 +855,7 @@ function initializeCharts() {
               return 'Provider: ' + tooltipItems[0].label;
             },
             label: function(context) {
-              return context.dataset.label + ': ' + context.parsed.y + ' Resources (VMs + Nodes)';
+              return context.dataset.label + ': ' + context.parsed.y + ' Resources (Nodes + K8s Nodes)';
             }
           }
         }
@@ -990,7 +990,7 @@ async function refreshDashboard() {
       
       // Update local data references
       infraData = centralData.infraData || [];
-      vmData = centralData.vmData || [];
+      nodeData = centralData.nodeData || [];
       resourceData = centralData.resourceData || {};
       
       // Update connection status based on data availability
@@ -1005,7 +1005,7 @@ async function refreshDashboard() {
       updateCharts();
       updateK8sCharts();
       updateInfraTable();
-      updateVmTable();
+      updateNodeTable();
       updateAllResourceTables();
       if (selectedK8sClusterId) {
         updateK8sNodeGroupTable();
@@ -1090,13 +1090,13 @@ async function loadInfraData() {
     
     infraData = response.data.infra || [];
     
-    // Extract VM data from Infra data
-    vmData = [];
+    // Extract Node data from Infra data
+    nodeData = [];
     infraData.forEach(infra => {
-      if (infra.vm && Array.isArray(infra.vm)) {
-        infra.vm.forEach(vm => {
-          vmData.push({
-            ...vm,
+      if (infra.node && Array.isArray(infra.node)) {
+        infra.node.forEach(nd => {
+          nodeData.push({
+            ...nd,
             infraId: infra.id,
             infraStatus: infra.status
           });
@@ -1104,7 +1104,7 @@ async function loadInfraData() {
       }
     });
     
-    console.log(`Loaded ${infraData.length} Infras with ${vmData.length} VMs`);
+    console.log(`Loaded ${infraData.length} Infras with ${nodeData.length} Nodes`);
   } catch (error) {
     console.error('Error loading Infra data:', error);
     throw error;
@@ -1239,15 +1239,15 @@ function updateStatistics() {
     }
   });
   
-  const totalVm = vmData.length;
+  const totalNode = nodeData.length;
   
   // Get unique providers from both VMs and K8s clusters
   const providers = new Set();
   
-  // Add providers from VMs
-  vmData.forEach(vm => {
-    if (vm.connectionConfig && vm.connectionConfig.providerName) {
-      providers.add(vm.connectionConfig.providerName);
+  // Add providers from Nodes
+  nodeData.forEach(nd => {
+    if (nd.connectionConfig && nd.connectionConfig.providerName) {
+      providers.add(nd.connectionConfig.providerName);
     }
   });
   
@@ -1263,23 +1263,23 @@ function updateStatistics() {
     }
   });
 
-  // Calculate total unique regions from VMs and K8s clusters
+  // Calculate total unique regions from Nodes and K8s clusters
   const regions = new Set();
   
-  // Add regions from VMs
-  vmData.forEach(vm => {
+  // Add regions from Nodes
+  nodeData.forEach(nd => {
     let region = null;
     
     // Extract region information - try multiple sources
     // Note: JSON field is lowercase 'region' (from Go struct tag `json:"region"`)
-    if (vm.region && vm.region.region) {
-      region = vm.region.region;
-    } else if (vm.location && vm.location.region) {
-      region = vm.location.region;
-    } else if (vm.connectionConfig && vm.connectionConfig.regionZoneInfo && vm.connectionConfig.regionZoneInfo.region) {
-      region = vm.connectionConfig.regionZoneInfo.region;
-    } else if (vm.regionZoneInfoList && vm.regionZoneInfoList.length > 0 && vm.regionZoneInfoList[0].regionName) {
-      region = vm.regionZoneInfoList[0].regionName;
+    if (nd.region && nd.region.region) {
+      region = nd.region.region;
+    } else if (nd.location && nd.location.region) {
+      region = nd.location.region;
+    } else if (nd.connectionConfig && nd.connectionConfig.regionZoneInfo && nd.connectionConfig.regionZoneInfo.region) {
+      region = nd.connectionConfig.regionZoneInfo.region;
+    } else if (nd.regionZoneInfoList && nd.regionZoneInfoList.length > 0 && nd.regionZoneInfoList[0].regionName) {
+      region = nd.regionZoneInfoList[0].regionName;
     }
     
     if (region) {
@@ -1309,7 +1309,7 @@ function updateStatistics() {
   document.getElementById('totalRegionCount').textContent = regions.size;
   document.getElementById('runningInfraCount').textContent = runningInfra;
   document.getElementById('failedInfraCount').textContent = failedInfra;
-  document.getElementById('totalVmCount').textContent = totalVm;
+  document.getElementById('totalNodeCount').textContent = totalNode;
   document.getElementById('totalProviderCount').textContent = providers.size;
 
   // Update resource counts from central data
@@ -1442,10 +1442,10 @@ function updateCharts() {
       return;
     }
     
-    // Update Infra & VM Status Chart with efficient data processing
+    // Update Infra & Node Status Chart with efficient data processing
     updateCombinedStatusChart();
     
-    // Update Provider & Regional Distribution Chart (VMs + Nodes)
+    // Update Provider & Regional Distribution Chart (Nodes + K8s Nodes)
     updateProviderRegionChart();
     
     // Update K8s Charts
@@ -1472,7 +1472,7 @@ function updateCombinedStatusChart() {
     'Other': 0
   };
   
-  const vmStatusCounts = {
+  const nodeStatusCounts = {
     'Running': 0,
     'Registering': 0,
     'Creating': 0,
@@ -1494,53 +1494,53 @@ function updateCombinedStatusChart() {
     }
   });
   
-  // Count VM statuses
-  vmData.forEach(vm => {
-    const normalizedStatus = categorizeStatus(vm.status);
-    if (vmStatusCounts.hasOwnProperty(normalizedStatus)) {
-      vmStatusCounts[normalizedStatus]++;
+  // Count Node statuses
+  nodeData.forEach(nd => {
+    const normalizedStatus = categorizeStatus(nd.status);
+    if (nodeStatusCounts.hasOwnProperty(normalizedStatus)) {
+      nodeStatusCounts[normalizedStatus]++;
     } else {
-      vmStatusCounts['Other']++;
+      nodeStatusCounts['Other']++;
     }
   });
   
   // Prepare data for combined chart
   const statusLabels = ['Preparing', 'Registering', 'Creating', 'Running', 'Suspended', 'Terminating', 'Terminated', 'Failed', 'Other'];
   const infraDataArray = statusLabels.map(label => infraStatusCounts[label] || 0);
-  const vmDataArray = statusLabels.map(label => vmStatusCounts[label] || 0);
+  const nodeDataArray = statusLabels.map(label => nodeStatusCounts[label] || 0);
   
   // Check if there's any data to display
   const hasInfraData = infraDataArray.some(count => count > 0);
-  const hasVmData = vmDataArray.some(count => count > 0);
+  const hasNodeData = nodeDataArray.some(count => count > 0);
   
   // Only update if data has changed (performance optimization)
   const currentInfraData = JSON.stringify(charts.combinedStatus.data.datasets[0].data);
-  const currentVmData = JSON.stringify(charts.combinedStatus.data.datasets[1].data);
+  const currentNodeData = JSON.stringify(charts.combinedStatus.data.datasets[1].data);
   const newInfraData = JSON.stringify(infraDataArray);
-  const newVmData = JSON.stringify(vmDataArray);
+  const newNodeData = JSON.stringify(nodeDataArray);
   
-  if (currentInfraData === newInfraData && currentVmData === newVmData) {
+  if (currentInfraData === newInfraData && currentNodeData === newNodeData) {
     return; // No data change, skip update
   }
   
   // Update combined chart - show "No Data" if no data
-  if (!hasInfraData && !hasVmData) {
+  if (!hasInfraData && !hasNodeData) {
     charts.combinedStatus.data.labels = ['No Data'];
     charts.combinedStatus.data.datasets[0].data = [1];
     charts.combinedStatus.data.datasets[0].label = 'No Infras';
     charts.combinedStatus.data.datasets[0].backgroundColor = ['#e9ecef'];
     charts.combinedStatus.data.datasets[1].data = [1];
-    charts.combinedStatus.data.datasets[1].label = 'No VMs';
+    charts.combinedStatus.data.datasets[1].label = 'No Nodes';
     charts.combinedStatus.data.datasets[1].backgroundColor = ['#f8f9fa'];
   } else {
     // Use helper function defined in initializeCharts for consistent colors
-    function getChartColors(status, type = 'vm') {
-      if (window.parent && window.parent.getVmStatusColor) {
-        const colors = window.parent.getVmStatusColor(status);
+    function getChartColors(status, type = 'node') {
+      if (window.parent && window.parent.getNodeStatusColor) {
+        const colors = window.parent.getNodeStatusColor(status);
         if (type === 'infra') {
           return colors.fill + 'CC'; // 80% opacity for Infra
         } else {
-          return colors.fill + '99'; // 60% opacity for VM
+          return colors.fill + '99'; // 60% opacity for Node
         }
       }
       // Fallback colors if parent function not available
@@ -1561,9 +1561,9 @@ function updateCombinedStatusChart() {
     charts.combinedStatus.data.datasets[0].data = infraDataArray;
     charts.combinedStatus.data.datasets[0].label = 'Infra Count';
     charts.combinedStatus.data.datasets[0].backgroundColor = statusLabels.map(status => getChartColors(status, 'infra'));
-    charts.combinedStatus.data.datasets[1].data = vmDataArray;
-    charts.combinedStatus.data.datasets[1].label = 'VM Count';
-    charts.combinedStatus.data.datasets[1].backgroundColor = statusLabels.map(status => getChartColors(status, 'vm'));
+    charts.combinedStatus.data.datasets[1].data = nodeDataArray;
+    charts.combinedStatus.data.datasets[1].label = 'Node Count';
+    charts.combinedStatus.data.datasets[1].backgroundColor = statusLabels.map(status => getChartColors(status, 'node'));
   }
   charts.combinedStatus.update('none'); // Disable animation for better performance
 }
@@ -1578,11 +1578,11 @@ function updateProviderRegionChart() {
     k8sData = window.parent.cloudBaristaCentralData.k8sCluster || [];
   }
   
-  // Check if we have any data at all (VM or K8s)
-  const hasVmData = vmData && vmData.length > 0;
+  // Check if we have any data at all (Node or K8s)
+  const hasNodeData = nodeData && nodeData.length > 0;
   const hasK8sData = k8sData && k8sData.length > 0;
   
-  if (!hasVmData && !hasK8sData) {
+  if (!hasNodeData && !hasK8sData) {
     // Only update if different from current state
     if (charts.providerRegion.data.labels[0] !== 'No Data') {
       charts.providerRegion.data.labels = ['No Data'];
@@ -1596,29 +1596,29 @@ function updateProviderRegionChart() {
     return;
   }
   
-  // Collect VM data by provider and region
-  if (hasVmData) {
-    vmData.forEach(vm => {
+  // Collect Node data by provider and region
+  if (hasNodeData) {
+    nodeData.forEach(nd => {
       let provider = null;
       let region = null;
       
       // Extract provider information
-      if (vm.connectionConfig && vm.connectionConfig.providerName) {
-        provider = vm.connectionConfig.providerName;
-      } else if (vm.location && vm.location.cloudType) {
-        provider = vm.location.cloudType;
+      if (nd.connectionConfig && nd.connectionConfig.providerName) {
+        provider = nd.connectionConfig.providerName;
+      } else if (nd.location && nd.location.cloudType) {
+        provider = nd.location.cloudType;
       }
       
       // Extract region information - try multiple sources
       // Note: JSON field is lowercase 'region' (from Go struct tag `json:"region"`)
-      if (vm.region && vm.region.region) {
-        region = vm.region.region;
-      } else if (vm.location && vm.location.region) {
-        region = vm.location.region;
-      } else if (vm.connectionConfig && vm.connectionConfig.regionZoneInfo && vm.connectionConfig.regionZoneInfo.region) {
-        region = vm.connectionConfig.regionZoneInfo.region;
-      } else if (vm.regionZoneInfoList && vm.regionZoneInfoList.length > 0 && vm.regionZoneInfoList[0].regionName) {
-        region = vm.regionZoneInfoList[0].regionName;
+      if (nd.region && nd.region.region) {
+        region = nd.region.region;
+      } else if (nd.location && nd.location.region) {
+        region = nd.location.region;
+      } else if (nd.connectionConfig && nd.connectionConfig.regionZoneInfo && nd.connectionConfig.regionZoneInfo.region) {
+        region = nd.connectionConfig.regionZoneInfo.region;
+      } else if (nd.regionZoneInfoList && nd.regionZoneInfoList.length > 0 && nd.regionZoneInfoList[0].regionName) {
+        region = nd.regionZoneInfoList[0].regionName;
       }
       
       // Skip VMs without proper provider/region info
@@ -2003,11 +2003,11 @@ function updateInfraTable() {
     // Get provider distribution for this Infra
     const providers = new Set();
     let vmCount = 0;
-    if (infra.vm && Array.isArray(infra.vm)) {
-      vmCount = infra.vm.length;
-      infra.vm.forEach(vm => {
-        if (vm.connectionConfig && vm.connectionConfig.providerName) {
-          providers.add(vm.connectionConfig.providerName);
+    if (infra.node && Array.isArray(infra.node)) {
+      vmCount = infra.node.length;
+      infra.node.forEach(nd => {
+        if (nd.connectionConfig && nd.connectionConfig.providerName) {
+          providers.add(nd.connectionConfig.providerName);
         }
       });
     }
@@ -2113,55 +2113,55 @@ function selectInfra(infraId) {
   // Update Infra table highlighting
   updateInfraTable();
   
-  // Update VM section header - use safer selector approach
-  const vmTable = document.getElementById('vmTable');
-  const vmContentCard = vmTable ? vmTable.closest('.content-card') : null;
+  // Update Node section header - use safer selector approach
+  const nodeTable = document.getElementById('nodeTable');
+  const vmContentCard = nodeTable ? nodeTable.closest('.content-card') : null;
   const vmHeader = vmContentCard ? vmContentCard.querySelector('h5') : null;
   
   if (vmHeader) {
-    vmHeader.innerHTML = `<i class="fas fa-server me-2"></i> Virtual Machine Details - ${infraId} <span class="badge badge-secondary ml-2" id="vmCountBadge">0</span>`;
+    vmHeader.innerHTML = `<i class="fas fa-server me-2"></i> Node Details - ${infraId} <span class="badge badge-secondary ml-2" id="nodeCountBadge">0</span>`;
   } else {
-    console.warn('VM header not found in selectInfra, trying alternative selector');
+    console.warn('Node header not found in selectInfra, trying alternative selector');
     // Fallback: try to find the header directly
-    const directHeader = document.querySelector('#vmCountBadge');
+    const directHeader = document.querySelector('#nodeCountBadge');
     if (directHeader && directHeader.parentElement) {
-      directHeader.parentElement.innerHTML = `<i class="fas fa-server me-2"></i>Virtual Machine Details - ${infraId} <span class="badge badge-secondary ml-2" id="vmCountBadge">0</span>`;
+      directHeader.parentElement.innerHTML = `<i class="fas fa-server me-2"></i>Node Details - ${infraId} <span class="badge badge-secondary ml-2" id="nodeCountBadge">0</span>`;
     }
   }
   
-  // Update VM table to show only VMs from selected Infra
-  updateVmTable();
+  // Update Node table to show only Nodes from selected Infra
+  updateNodeTable();
   
   // Update show all button visibility
   updateShowAllButton();
 }
 
 // Show all VMs (clear Infra selection)
-function showAllVms() {
+function showAllNodes() {
   selectedInfraId = null;
-  console.log('Showing all VMs, selectedInfraId set to:', selectedInfraId);
+  console.log('Showing all Nodes, selectedInfraId set to:', selectedInfraId);
   
   // Update Infra table highlighting
   updateInfraTable();
   
-  // Update VM section header - use safer selector approach
-  const vmTable = document.getElementById('vmTable');
-  const vmContentCard = vmTable ? vmTable.closest('.content-card') : null;
+  // Update Node section header - use safer selector approach
+  const nodeTable = document.getElementById('nodeTable');
+  const vmContentCard = nodeTable ? nodeTable.closest('.content-card') : null;
   const vmHeader = vmContentCard ? vmContentCard.querySelector('h5') : null;
   
   if (vmHeader) {
-    vmHeader.innerHTML = `<i class="fas fa-server me-2"></i> Virtual Machine Details <span class="badge badge-secondary ml-2" id="vmCountBadge">0</span>`;
+    vmHeader.innerHTML = `<i class="fas fa-server me-2"></i> Node Details <span class="badge badge-secondary ml-2" id="nodeCountBadge">0</span>`;
   } else {
-    console.warn('VM header not found, trying alternative selector');
+    console.warn('Node header not found, trying alternative selector');
     // Fallback: try to find the header directly
-    const directHeader = document.querySelector('#vmCountBadge');
+    const directHeader = document.querySelector('#nodeCountBadge');
     if (directHeader && directHeader.parentElement) {
-      directHeader.parentElement.innerHTML = `<i class="fas fa-server me-2"></i> Virtual Machine Details <span class="badge badge-secondary ml-2" id="vmCountBadge">0</span>`;
+      directHeader.parentElement.innerHTML = `<i class="fas fa-server me-2"></i> Node Details <span class="badge badge-secondary ml-2" id="nodeCountBadge">0</span>`;
     }
   }
   
-  // Update VM table to show all VMs
-  updateVmTable();
+  // Update Node table to show all Nodes
+  updateNodeTable();
   
   // Update show all button visibility
   updateShowAllButton();
@@ -2177,50 +2177,50 @@ function updateShowAllButton() {
   }
 }
 
-// Update VM table
-function updateVmTable() {
-  // Filter VMs based on selected Infra for data comparison
-  let filteredVms = vmData;
+// Update Node table
+function updateNodeTable() {
+  // Filter Nodes based on selected Infra for data comparison
+  let filteredNodes = nodeData;
   if (selectedInfraId) {
-    filteredVms = vmData.filter(vm => vm.infraId === selectedInfraId);
+    filteredNodes = nodeData.filter(nd => nd.infraId === selectedInfraId);
   }
   
   // Check if data has changed before updating
-  const dataKey = selectedInfraId ? `vm-table-${selectedInfraId}` : 'vm-table-all';
-  if (!hasDataChanged(dataKey, filteredVms)) {
-    console.log(`[Performance] VM table (${dataKey}): Skipping update - no changes detected`);
+  const dataKey = selectedInfraId ? `node-table-${selectedInfraId}` : 'node-table-all';
+  if (!hasDataChanged(dataKey, filteredNodes)) {
+    console.log(`[Performance] Node table (${dataKey}): Skipping update - no changes detected`);
     return;
   }
 
-  const tbody = document.getElementById('vmTableBody');
-  destroyDataTable('vmTable');
+  const tbody = document.getElementById('nodeTableBody');
+  destroyDataTable('nodeTable');
   tbody.innerHTML = '';
-  const vmCountElement = document.getElementById('vmCountBadge');
+  const vmCountElement = document.getElementById('nodeCountBadge');
   if (vmCountElement) {
-    vmCountElement.textContent = filteredVms.length;
+    vmCountElement.textContent = filteredNodes.length;
   }
   
-  if (filteredVms.length === 0 && selectedInfraId) {
+  if (filteredNodes.length === 0 && selectedInfraId) {
     // Show message when no VMs found for selected Infra
     const row = document.createElement('tr');
     row.innerHTML = `
       <td colspan="9" class="text-center text-muted py-4">
         <i class="fas fa-info-circle me-2"></i>
-        No VMs found for selected Infra: ${selectedInfraId}
+        No Nodes found for selected Infra: ${selectedInfraId}
       </td>
     `;
     tbody.appendChild(row);
     return;
   }
   
-  filteredVms.forEach(vm => {
+  filteredNodes.forEach(nd => {
     const row = document.createElement('tr');
     
-    const provider = vm.connectionConfig ? vm.connectionConfig.providerName : 'Unknown';
-    const region = vm.region ? vm.region.region : (vm.location ? vm.location.region : 'N/A');
-    const spec = vm.specId || 'N/A';
-    const publicIp = vm.publicIP || 'N/A';
-    const privateIp = vm.privateIP || 'N/A';
+    const provider = nd.connectionConfig ? nd.connectionConfig.providerName : 'Unknown';
+    const region = nd.region ? nd.region.region : (nd.location ? nd.location.region : 'N/A');
+    const spec = nd.specId || 'N/A';
+    const publicIp = nd.publicIP || 'N/A';
+    const privateIp = nd.privateIP || 'N/A';
     
     // Helper function to truncate text and add tooltip
     const truncateWithTooltip = (text, maxLength = 20) => {
@@ -2231,8 +2231,8 @@ function updateVmTable() {
     
     // Normalize status for CSS class
     let statusClass = 'unknown';
-    if (vm.status) {
-      const status = vm.status.toLowerCase();
+    if (nd.status) {
+      const status = nd.status.toLowerCase();
       if (status.includes('running') || status === 'running') {
         statusClass = 'running';
       } else if (status.includes('creating') || status === 'creating') {
@@ -2255,10 +2255,10 @@ function updateVmTable() {
     }
     
     row.innerHTML = `
-      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(vm.id)}" data-infra-id="${_escapeHtml(vm.infraId)}" onchange="toggleRowSelect('vm', '${_escapeHtml(vm.id)}', this)"></td>
-      <td title="${vm.id}"><strong><a class="item-id-link" onclick="viewVmDetails('${_escapeHtml(vm.infraId)}', '${_escapeHtml(vm.id)}')">${smartTruncate(vm.id, 'id')}</a></strong></td>
-      <td title="${vm.infraId}">${smartTruncate(vm.infraId, 'id')}</td>
-      <td><span class="status-badge status-${statusClass}">${vm.status || 'Unknown'}</span></td>
+      <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(nd.id)}" data-infra-id="${_escapeHtml(nd.infraId)}" onchange="toggleRowSelect('node', '${_escapeHtml(nd.id)}', this)"></td>
+      <td title="${nd.id}"><strong><a class="item-id-link" onclick="viewNodeDetails('${_escapeHtml(nd.infraId)}', '${_escapeHtml(nd.id)}')">${smartTruncate(nd.id, 'id')}</a></strong></td>
+      <td title="${nd.infraId}">${smartTruncate(nd.infraId, 'id')}</td>
+      <td><span class="status-badge status-${statusClass}">${nd.status || 'Unknown'}</span></td>
       <td title="${provider}">${smartTruncate(provider, 'provider')}</td>
       <td title="${region}">${smartTruncate(region, 'region')}</td>
       <td title="${spec}">${smartTruncate(spec, 'spec')}</td>
@@ -2266,13 +2266,13 @@ function updateVmTable() {
       <td title="${privateIp}">${smartTruncate(privateIp, 'ip')}</td>
     `;
     
-    // Add click event to select Infra when clicking on VM row (but not on checkboxes)
+    // Add click event to select Infra when clicking on Node row (but not on checkboxes)
     row.addEventListener('click', function(event) {
       if (event.target.closest('.select-cell') || event.target.closest('.item-id-link')) {
         return;
       }
-      if (vm.infraId && selectedInfraId !== vm.infraId) {
-        selectInfra(vm.infraId);
+      if (nd.infraId && selectedInfraId !== nd.infraId) {
+        selectInfra(nd.infraId);
       }
     });
     
@@ -2282,8 +2282,8 @@ function updateVmTable() {
   });
 
   // Restore selection state and reinitialize
-  restoreSelectionState('vm');
-  initDataTable('vmTable');
+  restoreSelectionState('node');
+  initDataTable('nodeTable');
 }
 
 // Update resource display
@@ -2409,9 +2409,9 @@ async function controlInfra(infraId, action) {
   }
 }
 
-// Control VM actions
-async function controlVm(infraId, vmId, action) {
-  if (!confirm(`Are you sure you want to ${action} VM: ${vmId}?`)) {
+// Control Node actions
+async function controlNode(infraId, nodeId, action) {
+  if (!confirm(`Are you sure you want to ${action} Node: ${nodeId}?`)) {
     return;
   }
   
@@ -2426,7 +2426,7 @@ async function controlVm(infraId, vmId, action) {
   // Get current namespace from parent window's namespace element
   const currentNamespace = window.parent?.configNamespace || 'default';
   
-  const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${currentNamespace}/control/infra/${infraId}/vm/${vmId}?action=${action}`;
+  const url = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${currentNamespace}/control/infra/${infraId}/node/${nodeId}?action=${action}`;
   
   try {
     showRefreshIndicator(true);
@@ -2439,7 +2439,7 @@ async function controlVm(infraId, vmId, action) {
       timeout: 600000
     });
     
-    showSuccessMessage(`VM ${action} command sent successfully!`);
+    showSuccessMessage(`Node ${action} command sent successfully!`);
     
     // Refresh data after a delay
     setTimeout(() => {
@@ -2447,8 +2447,8 @@ async function controlVm(infraId, vmId, action) {
     }, 2000);
     
   } catch (error) {
-    console.error(`Error controlling VM ${vmId}:`, error);
-    showErrorMessage(`Failed to ${action} VM: ${error.response?.data?.message || error.message}`);
+    console.error(`Error controlling Node ${nodeId}:`, error);
+    showErrorMessage(`Failed to ${action} Node: ${error.response?.data?.message || error.message}`);
   } finally {
     showRefreshIndicator(false);
   }
@@ -2465,15 +2465,15 @@ async function viewInfraDetails(infraId) {
   showJsonDetailsPopup(`🖥️ Infra Details: ${infraId}`, infra);
 }
 
-// View VM details
-async function viewVmDetails(infraId, vmId) {
-  const vm = vmData.find(v => v.infraId === infraId && v.id === vmId);
-  if (!vm) {
-    showErrorMessage('VM not found');
+// View Node details
+async function viewNodeDetails(infraId, nodeId) {
+  const nd = nodeData.find(v => v.infraId === infraId && v.id === nodeId);
+  if (!nd) {
+    showErrorMessage('Node not found');
     return;
   }
   
-  showJsonDetailsPopup(`💻 VM Details: ${vmId}`, vm);
+  showJsonDetailsPopup(`💻 Node Details: ${nodeId}`, nd);
 }
 
 // Show create Infra modal
@@ -2505,7 +2505,7 @@ function refreshInfraList() {
     updateStatistics();
     updateCharts();
     updateInfraTable();
-    updateVmTable();
+    updateNodeTable();
     showSuccessMessage('Infra list refreshed!', 1500);
   }).catch(error => {
     console.error('Error refreshing Infra list:', error);
@@ -2515,8 +2515,8 @@ function refreshInfraList() {
   });
 }
 
-function refreshVmList() {
-  refreshInfraList(); // VM data comes from Infra data
+function refreshNodeList() {
+  refreshInfraList(); // Node data comes from Infra data
 }
 
 // Auto-refresh functionality
@@ -2626,14 +2626,14 @@ window.refreshDashboard = refreshDashboard;
 window.showSettings = showSettings;
 window.saveSettings = saveSettings;
 window.controlInfra = controlInfra;
-window.controlVm = controlVm;
+window.controlNode = controlNode;
 window.deleteInfra = deleteInfra;
 window.viewInfraDetails = viewInfraDetails;
-window.viewVmDetails = viewVmDetails;
+window.viewNodeDetails = viewNodeDetails;
 window.showCreateInfraModal = showCreateInfraModal;
 window.refreshInfraList = refreshInfraList;
-window.refreshVmList = refreshVmList;
-window.showAllVms = showAllVms;
+window.refreshNodeList = refreshNodeList;
+window.showAllNodes = showAllNodes;
 
 // Resource table management functions
 function updateAllResourceTables() {
@@ -3732,7 +3732,7 @@ function getResourceEmoji(resourceType) {
     'customImage': '🖼️',
     'connection': '🔗',
     'infra': '🖥️',
-    'vm': '💻',
+    'node': '💻',
     'k8sCluster': '☸️',
     'k8sNodeGroup': '📦'
   };
@@ -3812,7 +3812,7 @@ function deleteResource(resourceType, resourceId, parameters = {}) {
   // Instead of duplicating logic, use the existing async deleteResource function
   const resourceTypeMap = {
     'Infra': 'infra',
-    'VM': 'vm', 
+    'Node': 'node',
     'K8s Cluster': 'k8sCluster',
     'K8s Node Group': 'k8sNodeGroup',
     'vNet': 'vNet',
@@ -4382,7 +4382,7 @@ function scrollToSection(sectionId) {
   if (!element) {
     const alternativeMap = {
       'infraTable': 'infraTable',
-      'vmTable': 'vmTable',
+      'nodeTable': 'nodeTable',
       'providerRegionChart': 'providerRegionChart'
     };
     const alternativeId = alternativeMap[sectionId];
@@ -4475,7 +4475,7 @@ function performCleanup() {
   // Clear central data reference
   centralData = {};
   infraData = [];
-  vmData = [];
+  nodeData = [];
   resourceData = {};
   
   console.log('[Performance] Final cleanup completed');
@@ -4494,7 +4494,7 @@ window.clearConnectionTabSelection = clearConnectionTabSelection;
 // Export delete functions to global scope
 window.deleteResource = deleteResource;
 window.deleteInfra = deleteInfra;
-window.deleteVm = deleteVm;
+window.deleteNode = deleteNode;
 window.deleteK8sCluster = deleteK8sCluster;
 window.deleteK8sNodeGroup = deleteK8sNodeGroup;
 window.deleteVNet = deleteVNet;
@@ -4631,7 +4631,7 @@ function initializeDataTables() {
       }
     },
     {
-      id: 'vmTable',
+      id: 'nodeTable',
       config: {
         pageLength: 25,
         autoWidth: false,
@@ -4945,7 +4945,7 @@ function initDataTable(tableId) {
   if (typeof $ === 'undefined' || !$.fn.DataTable) return;
   try {
     const knownTables = {
-      'infraTable': true, 'vmTable': true, 'vNetTable': true,
+      'infraTable': true, 'nodeTable': true, 'vNetTable': true,
       'securityGroupTable': true, 'sshKeyTable': true,
       'k8sClusterTable': true, 'vpnTable': true,
       'k8sNodeGroupTable': true, 'dataDiskTable': true, 'customImageTable': true
@@ -4999,7 +4999,7 @@ function refreshDataTable(tableId) {
 // Map tableType to DataTable element ID
 function getDataTableId(tableType) {
   const map = {
-    'infra': 'infraTable', 'vm': 'vmTable', 'vNet': 'vNetTable',
+    'infra': 'infraTable', 'node': 'nodeTable', 'vNet': 'vNetTable',
     'securityGroup': 'securityGroupTable', 'sshKey': 'sshKeyTable',
     'k8sCluster': 'k8sClusterTable', 'vpn': 'vpnTable',
     'k8sNodeGroup': 'k8sNodeGroupTable', 'dataDisk': 'dataDiskTable', 'customImage': 'customImageTable'
@@ -5046,7 +5046,7 @@ const tableSelections = {};
 function getTableConfig(tableType) {
   const configs = {
     infra:           { tableId: 'infraTable',           bodyId: 'infraTableBody' },
-    vm:            { tableId: 'vmTable',             bodyId: 'vmTableBody' },
+    node:            { tableId: 'nodeTable',             bodyId: 'nodeTableBody' },
     k8sCluster:    { tableId: 'k8sClusterTable',    bodyId: 'k8sClusterTableBody' },
     k8sNodeGroup:  { tableId: 'k8sNodeGroupTable',  bodyId: 'k8sNodeGroupTableBody' },
     vNet:          { tableId: 'vNetTable',           bodyId: 'vNetTableBody' },
@@ -5272,12 +5272,12 @@ function setupTableEnhancements() {
       <button class="btn btn-sm btn-outline-info" onclick="bulkControlInfra('restart')" title="Restart"><i class="fas fa-sync-alt"></i> Restart</button>
       <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('infra')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
     `,
-    vm: `
-      <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('vm')" title="View Details"><i class="fas fa-eye"></i> View</button>
+    node: `
+      <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('node')" title="View Details"><i class="fas fa-eye"></i> View</button>
       <button class="btn btn-sm btn-outline-success" onclick="bulkControlVm('resume')" title="Resume"><i class="fas fa-play"></i> Resume</button>
       <button class="btn btn-sm btn-outline-warning" onclick="bulkControlVm('suspend')" title="Suspend"><i class="fas fa-pause"></i> Suspend</button>
       <button class="btn btn-sm btn-outline-info" onclick="bulkControlVm('restart')" title="Restart"><i class="fas fa-sync-alt"></i> Restart</button>
-      <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('vm')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
+      <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('node')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
     `,
     k8sCluster: `
       <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('k8sCluster')" title="View Details"><i class="fas fa-eye"></i> View</button>
@@ -5329,10 +5329,10 @@ function bulkViewDetails(tableType) {
 
   switch (tableType) {
     case 'infra': viewInfraDetails(itemId); break;
-    case 'vm': {
-      const cb = document.querySelector(`#vmTableBody .row-select-checkbox[data-item-id="${CSS.escape(itemId)}"]`);
+    case 'node': {
+      const cb = document.querySelector(`#nodeTableBody .row-select-checkbox[data-item-id="${CSS.escape(itemId)}"]`);
       const infraId = cb ? cb.getAttribute('data-infra-id') : null;
-      if (infraId) viewVmDetails(infraId, itemId);
+      if (infraId) viewNodeDetails(infraId, itemId);
       break;
     }
     case 'k8sCluster': viewK8sClusterDetails(itemId); break;
@@ -5403,13 +5403,13 @@ async function bulkControlInfra(action) {
   scheduleFreshFetch();
 }
 
-// Bulk control VM (resume/suspend/restart)
+// Bulk control Node (resume/suspend/restart)
 async function bulkControlVm(action) {
-  const selected = getSelectedItems('vm');
+  const selected = getSelectedItems('node');
   if (selected.length === 0) return;
 
   const result = await Swal.fire({
-    title: `${action.charAt(0).toUpperCase() + action.slice(1)} ${selected.length} VM(s)?`,
+    title: `${action.charAt(0).toUpperCase() + action.slice(1)} ${selected.length} Node(s)?`,
     text: `Selected: ${selected.join(', ')}`,
     icon: 'question',
     showCancelButton: true,
@@ -5421,22 +5421,22 @@ async function bulkControlVm(action) {
   const ns = window.parent?.configNamespace || 'default';
 
   showRefreshIndicator(true);
-  const tasks = selected.map(vmId => {
-    const cb = document.querySelector(`#vmTableBody .row-select-checkbox[data-item-id="${CSS.escape(vmId)}"]`);
+  const tasks = selected.map(nodeId => {
+    const cb = document.querySelector(`#nodeTableBody .row-select-checkbox[data-item-id="${CSS.escape(nodeId)}"]`);
     const infraId = cb ? cb.getAttribute('data-infra-id') : null;
     if (!infraId) return null;
-    return () => axios.get(`http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${ns}/control/infra/${infraId}/vm/${vmId}?action=${action}`, {
+    return () => axios.get(`http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${ns}/control/infra/${infraId}/node/${nodeId}?action=${action}`, {
       auth: { username: parentConfig.username, password: parentConfig.password },
       timeout: 600000
     });
   }).filter(Boolean);
   const results = await runInBatches(tasks, 10);
   const successCount = results.filter(r => r.status === 'fulfilled').length;
-  results.filter(r => r.status === 'rejected').forEach(r => console.error(`Failed to ${action} VM:`, r.reason));
+  results.filter(r => r.status === 'rejected').forEach(r => console.error(`Failed to ${action} Node:`, r.reason));
 
   showRefreshIndicator(false);
-  showSuccessMessage(`${action} sent for ${successCount}/${selected.length} VM(s)`);
-  clearTableSelection('vm');
+  showSuccessMessage(`${action} sent for ${successCount}/${selected.length} Node(s)`);
+  clearTableSelection('node');
   // Activate cooldown then schedule delayed re-fetch for fresh data
   startMutationCooldown();
   scheduleFreshFetch();
@@ -5448,7 +5448,7 @@ async function bulkDeleteItems(tableType) {
   if (selected.length === 0) return;
 
   const typeLabels = {
-    infra: 'Infra', vm: 'VM', k8sCluster: 'K8s Cluster', k8sNodeGroup: 'K8s Node Group',
+    infra: 'Infra', node: 'Node', k8sCluster: 'K8s Cluster', k8sNodeGroup: 'K8s Node Group',
     vNet: 'vNet', securityGroup: 'Security Group', sshKey: 'SSH Key',
     customImage: 'Custom Image', dataDisk: 'Data Disk', vpn: 'VPN'
   };
@@ -5481,11 +5481,11 @@ async function bulkDeleteItems(tableType) {
       case 'infra':
         endpoint = `/ns/${ns}/infra/${itemId}?option=terminate`;
         break;
-      case 'vm': {
-        const cb = document.querySelector(`#vmTableBody .row-select-checkbox[data-item-id="${CSS.escape(itemId)}"]`);
+      case 'node': {
+        const cb = document.querySelector(`#nodeTableBody .row-select-checkbox[data-item-id="${CSS.escape(itemId)}"]`);
         const infraId = cb ? cb.getAttribute('data-infra-id') : null;
-        if (!infraId) { errors.push(`VM ${itemId}: unknown Infra`); continue; }
-        endpoint = `/ns/${ns}/infra/${infraId}/vm/${itemId}`;
+        if (!infraId) { errors.push(`Node ${itemId}: unknown Infra`); continue; }
+        endpoint = `/ns/${ns}/infra/${infraId}/node/${itemId}`;
         break;
       }
       case 'k8sCluster':
@@ -5562,16 +5562,16 @@ async function bulkDeleteItems(tableType) {
     switch (tableType) {
       case 'infra':
         infraData = infraData.filter(m => !deletedIds.has(m.id));
-        vmData = vmData.filter(v => {
+        nodeData = nodeData.filter(v => {
           const infraId = v.infraId || (v.id && v.id.split('-')[0]);
           return !deletedIds.has(infraId);
         });
         updateInfraTable();
-        updateVmTable();
+        updateNodeTable();
         break;
-      case 'vm':
-        vmData = vmData.filter(v => !deletedIds.has(v.id));
-        updateVmTable();
+      case 'node':
+        nodeData = nodeData.filter(v => !deletedIds.has(v.id));
+        updateNodeTable();
         break;
       case 'k8sCluster':
         if (centralData?.k8sCluster) {

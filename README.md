@@ -266,17 +266,17 @@ CB-MapUI provides three main interfaces for managing multi-cloud infrastructure:
 
 **Features:**
 - **Statistics Cards**: Real-time infrastructure metrics
-  - Total Infras, VMs, Kubernetes clusters
+  - Total Infras, Nodes, Kubernetes clusters
   - Status distribution (Running, Failed, Suspended)
   - Resource counts (vNets, Security Groups, SSH Keys)
   
 - **Interactive Charts**:
-  - Combined status overview (Infra + VM + K8s)
+  - Combined status overview (Infra + Node + K8s)
   - Provider and region distribution
   - Kubernetes cluster and node group status
   
 - **Resource Tables**:
-  - Infra/VM management with inline controls
+  - Infra/Node management with inline controls
   - Kubernetes cluster and node group operations
   - Network resources (vNet, Security Groups, SSH Keys)
   - Custom images and data disks
@@ -375,9 +375,9 @@ CB-MapUI Architecture
 
 **Map View Rendering Cycle:**
 
-1. **API Polling**: Periodically fetch Infra/VM data from CB-Tumblebug
-2. **Geolocation Parsing**: Extract VM geographic coordinates (longitude, latitude)
-3. **Convex Hull Generation**: Group VMs into Infra polygons
+1. **API Polling**: Periodically fetch Infra/Node data from CB-Tumblebug
+2. **Geolocation Parsing**: Extract Node geographic coordinates (longitude, latitude)
+3. **Convex Hull Generation**: Group Nodes into Infra polygons
 4. **Map Rendering**: Draw polygons on OpenLayers map with status indicators
 5. **Event Handling**: Capture user interactions for resource management
 

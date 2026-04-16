@@ -35,7 +35,7 @@ const GRAPH_CONFIG = {
     namespace: '#e8eaed',    // Very light gray - namespace container
     infra: '#007bff',
     nodegroup: '#6610f2',   // Indigo - distinct from subnet
-    vm: '#28a745',         // Green - VM nodes
+    node: '#28a745',       // Green - Node
     gpu: '#ff6b6b',        // Coral red - GPU/Accelerator (AI workload emphasis)
     vnet: '#e6a700',       // Dark Gold - parent network
     subnet: '#ffc107',     // Yellow/Gold - child of vnet
@@ -58,7 +58,7 @@ const GRAPH_CONFIG = {
     namespace: 'round-rectangle',
     infra: 'round-rectangle',
     nodegroup: 'round-rectangle',
-    vm: 'ellipse',
+    node: 'ellipse',
     gpu: 'rhomboid',        // Parallelogram shape - distinct for GPU
     vnet: 'diamond',
     subnet: 'diamond',
@@ -125,8 +125,8 @@ const GRAPH_CONFIG = {
         zone: 3,
         infra: 4,
         nodegroup: 3,
-        vm: 2,
-        gpu: 2,   // Same level as VM (attached to VM)
+        node: 2,
+        gpu: 2,   // Same level as Node (attached to Node)
         vnet: 2,
         subnet: 1,
         securityGroup: 1,
@@ -167,8 +167,8 @@ const nodeTypeVisibility = {
   // Infrastructure (toggleable)
   infra: true,
   nodegroup: true,
-  vm: true,
-  gpu: true,  // GPU nodes attached to VMs (enabled by default for AI workload visibility)
+  node: true,
+  gpu: true,  // GPU nodes attached to Nodes (enabled by default for AI workload visibility)
   // Network resources
   vnet: true,
   subnet: false,  // Disabled by default (child of VNet)
@@ -197,9 +197,9 @@ const nodeTypeDependencies = {
   csp: ['cspRoot'],
   // Network hierarchy: subnet -> vnet
   subnet: ['vnet'],
-  // Infrastructure hierarchy: gpu -> vm -> nodegroup -> infra
-  gpu: ['vm', 'nodegroup', 'infra'],
-  vm: ['nodegroup', 'infra'],
+  // Infrastructure hierarchy: gpu -> node -> nodegroup -> infra
+  gpu: ['node', 'nodegroup', 'infra'],
+  node: ['nodegroup', 'infra'],
   nodegroup: ['infra']
 };
 
@@ -210,9 +210,9 @@ const nodeTypeChildren = {
   csp: ['region', 'zone'],
   region: ['zone'],
   vnet: ['subnet'],
-  infra: ['nodegroup', 'vm', 'gpu'],
-  nodegroup: ['vm', 'gpu'],
-  vm: ['gpu']
+  infra: ['nodegroup', 'node', 'gpu'],
+  nodegroup: ['node', 'gpu'],
+  node: ['gpu']
 };
 
 /**
@@ -231,7 +231,7 @@ function getNodeMaxWidth(type) {
     case 'nodegroup':
     case 'region':
       return 140;
-    case 'vm':
+    case 'node':
     case 'zone':
       return 130;
     case 'gpu':
@@ -629,7 +629,7 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
           'z-index': 999
         }
       },
-      // Status-based text colors for VM and Infra (text-outline stays black for contrast)
+      // Status-based text colors for Node and Infra (text-outline stays black for contrast)
       // Running states - Green
       {
         selector: 'node[status="Running"]',
@@ -644,7 +644,7 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
           'color': '#3b82f6'  // blue-500
         }
       },
-      // Registering state - Teal (registering existing CSP VM)
+      // Registering state - Teal (registering existing CSP Node)
       {
         selector: 'node[status="Registering"]',
         style: {
@@ -1256,7 +1256,7 @@ export function infraDataToGraph(infraList, namespace) {
           type: 'customImage',
           color: GRAPH_CONFIG.nodeColors.customImage,
           fullId: img.id,
-          sourceVmId: img.sourceVmId || '',
+          sourceNodeId: img.sourceNodeId || '',
           status: img.status || '',
           originalData: img
         }
@@ -1309,17 +1309,17 @@ export function infraDataToGraph(infraList, namespace) {
       }
     });
 
-    // Process VMs
-    if (infra.vm && Array.isArray(infra.vm)) {
-      // Group VMs by nodeGroupId
+    // Process Nodes
+    if (infra.node && Array.isArray(infra.node)) {
+      // Group Nodes by nodeGroupId
       const nodeGroups = {};
       
-      infra.vm.forEach(vm => {
-        const sgId = vm.nodeGroupId || 'default';
+      infra.node.forEach(nd => {
+        const sgId = nd.nodeGroupId || 'default';
         if (!nodeGroups[sgId]) {
           nodeGroups[sgId] = [];
         }
-        nodeGroups[sgId].push(vm);
+        nodeGroups[sgId].push(nd);
       });
 
       // Always create nodegroup nodes (even if only 1 nodegroup)
@@ -1340,7 +1340,7 @@ export function infraDataToGraph(infraList, namespace) {
         dataDisks: new Set()
       };
 
-      Object.entries(nodeGroups).forEach(([nodeGroupId, vms]) => {
+      Object.entries(nodeGroups).forEach(([nodeGroupId, groupNodes]) => {
         const nodeGroupNodeId = `nodegroup-${infra.id}-${nodeGroupId}`;
         nodeGroupNodeIds.push(nodeGroupNodeId);  // Track for sibling edges
         
@@ -1353,7 +1353,7 @@ export function infraDataToGraph(infraList, namespace) {
               parent: infraId,
               type: 'nodegroup',
               color: GRAPH_CONFIG.nodeColors.nodegroup,
-              originalData: { id: nodeGroupId, type: 'nodegroup', infraId: infra.id }
+              originalData: { id: nodeGroupId, type: 'nodegroup', infraId: infra.id, nodeCount: groupNodes.length }
             }
           });
         }
@@ -1369,84 +1369,84 @@ export function infraDataToGraph(infraList, namespace) {
           dataDisks: new Set()
         };
 
-        // Track VM node IDs for invisible sibling edges within nodegroup
-        const vmNodeIds = [];
+        // Track Node IDs for invisible sibling edges within nodegroup
+        const computeNodeIds = [];
 
-        vms.forEach(vm => {
-          // Include Infra ID in VM node ID to ensure uniqueness across Infras
-          const vmNodeId = `vm-${infra.id}-${vm.id}`;
-          vmNodeIds.push(vmNodeId);  // Track for sibling edges
+        groupNodes.forEach(nd => {
+          // Include Infra ID in Node ID to ensure uniqueness across Infras
+          const computeNodeId = `node-${infra.id}-${nd.id}`;
+          computeNodeIds.push(computeNodeId);  // Track for sibling edges
           
-          // Skip VM node creation if visibility disabled
-          if (!nodeTypeVisibility.vm) return;
+          // Skip Node creation if visibility disabled
+          if (!nodeTypeVisibility.node) return;
           
-          // Debug: Log dataDiskIds for each VM
-          if (vm.dataDiskIds && vm.dataDiskIds.length > 0) {
-            console.debug(`[ResourceGraph] VM ${vm.id} has dataDiskIds:`, vm.dataDiskIds);
+          // Debug: Log dataDiskIds for each Node
+          if (nd.dataDiskIds && nd.dataDiskIds.length > 0) {
+            console.debug(`[ResourceGraph] Node ${nd.id} has dataDiskIds:`, nd.dataDiskIds);
           }
           
-          // VM node - parent is nodegroup if visible, otherwise Infra
-          const vmParent = nodeTypeVisibility.nodegroup ? nodeGroupNodeId : infraId;
+          // Node - parent is nodegroup if visible, otherwise Infra
+          const nodeParent = nodeTypeVisibility.nodegroup ? nodeGroupNodeId : infraId;
 
-          // Determine VM icon based on GPU/accelerator availability
+          // Determine Node icon based on GPU/accelerator availability
           // Note: spec/image fields contain summary info (not specSummary/imageSummary)
-          const vmSpec = vm.spec || vm.specSummary || {};
-          const hasGpu = vmSpec.acceleratorType?.toLowerCase() === 'gpu' ||
-                        vmSpec.acceleratorModel ||
-                        vmSpec.acceleratorCount > 0;
+          const nodeSpec = nd.spec || nd.specSummary || {};
+          const hasGpu = nodeSpec.acceleratorType?.toLowerCase() === 'gpu' ||
+                        nodeSpec.acceleratorModel ||
+                        nodeSpec.acceleratorCount > 0;
 
-          // VM label: "💻 vm-name" (GPU indicator removed - separate GPU node exists)
-          const vmName = vm.name || vm.id;
-          const vmLabelText = vmName;
+          // Node label: "💻 node-name" (GPU indicator removed - separate GPU node exists)
+          const ndName = nd.name || nd.id;
+          const ndLabelText = ndName;
 
           nodes.push({
             data: {
-              id: vmNodeId,
-              label: formatLabel('💻', vmLabelText, getMaxCharsPerLine('vm')),
-              parent: vmParent,
-              type: 'vm',
-              status: vm.status,
-              color: GRAPH_CONFIG.nodeColors.vm,
-              publicIP: vm.publicIP,
-              privateIP: vm.privateIP,
+              id: computeNodeId,
+              label: formatLabel('💻', ndLabelText, getMaxCharsPerLine('node')),
+              parent: nodeParent,
+              type: 'node',
+              status: nd.status,
+              color: GRAPH_CONFIG.nodeColors.node,
+              publicIP: nd.publicIP,
+              privateIP: nd.privateIP,
               hasGpu: hasGpu,
-              originalData: vm
+              originalData: nd
             }
           });
 
-          // Create GPU node if VM has GPU and gpu visibility is enabled
+          // Create GPU node if Node has GPU and gpu visibility is enabled
           if (hasGpu && nodeTypeVisibility.gpu) {
-            const gpuNodeId = `gpu-${infra.id}-${vm.id}`;
+            const gpuNodeId = `gpu-${infra.id}-${nd.id}`;
 
             // GPU label: model name only (details available in View Details)
-            const gpuLabel = vmSpec.acceleratorModel || 'GPU';
+            const gpuLabel = nodeSpec.acceleratorModel || 'GPU';
 
             nodes.push({
               data: {
                 id: gpuNodeId,
                 label: gpuLabel,  // No icon, model + details on separate lines
-                parent: vmParent,  // Same parent as VM (nodegroup or Infra)
+                parent: nodeParent,  // Same parent as Node (nodegroup or Infra)
                 type: 'gpu',
                 color: GRAPH_CONFIG.nodeColors.gpu,
-                acceleratorModel: vmSpec.acceleratorModel,
-                acceleratorCount: vmSpec.acceleratorCount,
-                acceleratorMemoryGB: vmSpec.acceleratorMemoryGB,
-                acceleratorType: vmSpec.acceleratorType,
+                acceleratorModel: nodeSpec.acceleratorModel,
+                acceleratorCount: nodeSpec.acceleratorCount,
+                acceleratorMemoryGB: nodeSpec.acceleratorMemoryGB,
+                acceleratorType: nodeSpec.acceleratorType,
                 originalData: {
                   id: gpuNodeId,
                   type: 'gpu',
-                  vmId: vm.id,
-                  vmName: vm.name,
-                  ...vmSpec
+                  nodeId: nd.id,
+                  ndName: nd.name,
+                  ...nodeSpec
                 }
               }
             });
 
-            // Create edge from VM to GPU (tight coupling)
+            // Create edge from Node to GPU (tight coupling)
             edges.push({
               data: {
-                id: `edge-${vmNodeId}-${gpuNodeId}`,
-                source: vmNodeId,
+                id: `edge-${computeNodeId}-${gpuNodeId}`,
+                source: computeNodeId,
                 target: gpuNodeId,
                 relationship: 'has-gpu',
                 type: 'gpu-link'  // Mark for special styling if needed
@@ -1455,16 +1455,16 @@ export function infraDataToGraph(infraList, namespace) {
           }
 
           // Create edge to CSP/Region/Zone if location info exists
-          createLocationEdge(vmNodeId, vm, locationEdgeSet);
+          createLocationEdge(computeNodeId, nd, locationEdgeSet);
 
           // Collect subnet connections for consolidation
           // Collect VNet and Subnet connections for consolidation (only if visibility enabled)
-          if (vm.subnetId && nodeTypeVisibility.vnet) {
-            const isSubnetUnknown = vm.subnetId === 'unknown';
-            const isVNetUnknown = !vm.vNetId || vm.vNetId === 'unknown';
+          if (nd.subnetId && nodeTypeVisibility.vnet) {
+            const isSubnetUnknown = nd.subnetId === 'unknown';
+            const isVNetUnknown = !nd.vNetId || nd.vNetId === 'unknown';
             
             // Determine VNet node ID
-            const vnetNodeId = isVNetUnknown ? 'vnet-unknown' : `vnet-${vm.vNetId}`;
+            const vnetNodeId = isVNetUnknown ? 'vnet-unknown' : `vnet-${nd.vNetId}`;
             
             // Create VNet node if unknown (known VNets are created from vNetList)
             if (isVNetUnknown && !resourceSet.has(vnetNodeId)) {
@@ -1487,17 +1487,17 @@ export function infraDataToGraph(infraList, namespace) {
             nodeGroupEdges.vNets.add(vnetNodeId);
             
             // Subnet node ID includes VNet ID for uniqueness (same subnet ID can exist in different VNets)
-            const vnetIdForSubnet = isVNetUnknown ? 'unknown' : vm.vNetId;
+            const vnetIdForSubnet = isVNetUnknown ? 'unknown' : nd.vNetId;
             const subnetNodeId = isSubnetUnknown 
               ? 'subnet-unknown'  // Single shared node for all unknown subnets
-              : `subnet-${vnetIdForSubnet}-${vm.subnetId}`;
+              : `subnet-${vnetIdForSubnet}-${nd.subnetId}`;
             
             // Create subnet node only if it doesn't exist and subnet visibility is enabled
             if (nodeTypeVisibility.subnet && !resourceSet.has(subnetNodeId)) {
               resourceSet.add(subnetNodeId);
               const subnetText = isSubnetUnknown 
                 ? 'Subnet (unknown)'
-                : vm.subnetId;
+                : nd.subnetId;
               
               nodes.push({
                 data: {
@@ -1507,9 +1507,9 @@ export function infraDataToGraph(infraList, namespace) {
                   type: 'subnet',
                   color: GRAPH_CONFIG.nodeColors.subnet,
                   isUnknown: isSubnetUnknown,
-                  fullId: vm.subnetId,
+                  fullId: nd.subnetId,
                   vNetId: vnetIdForSubnet,
-                  originalData: { id: vm.subnetId, vNetId: vnetIdForSubnet, type: 'subnet' }
+                  originalData: { id: nd.subnetId, vNetId: vnetIdForSubnet, type: 'subnet' }
                 }
               });
             }
@@ -1517,8 +1517,8 @@ export function infraDataToGraph(infraList, namespace) {
           }
 
           // Collect SecurityGroup connections for consolidation (only if visibility enabled)
-          if (nodeTypeVisibility.securityGroup && vm.securityGroupIds && Array.isArray(vm.securityGroupIds)) {
-            vm.securityGroupIds.forEach(sgId => {
+          if (nodeTypeVisibility.securityGroup && nd.securityGroupIds && Array.isArray(nd.securityGroupIds)) {
+            nd.securityGroupIds.forEach(sgId => {
               if (!sgId) return;
               
               const sgNodeId = `sg-${sgId}`;
@@ -1545,13 +1545,13 @@ export function infraDataToGraph(infraList, namespace) {
           }
 
           // Collect SSHKey connections for consolidation (only if visibility enabled)
-          if (vm.sshKeyId && nodeTypeVisibility.sshKey) {
-            const isUnknown = vm.sshKeyId === 'unknown';
-            const sshKeyNodeId = `sshkey-${vm.sshKeyId}`;  // Shared node for unknown
+          if (nd.sshKeyId && nodeTypeVisibility.sshKey) {
+            const isUnknown = nd.sshKeyId === 'unknown';
+            const sshKeyNodeId = `sshkey-${nd.sshKeyId}`;  // Shared node for unknown
             
             if (!resourceSet.has(sshKeyNodeId)) {
               resourceSet.add(sshKeyNodeId);
-              const sshText = isUnknown ? 'SSHKey (unknown)' : vm.sshKeyId;
+              const sshText = isUnknown ? 'SSHKey (unknown)' : nd.sshKeyId;
               nodes.push({
                 data: {
                   id: sshKeyNodeId,
@@ -1559,9 +1559,9 @@ export function infraDataToGraph(infraList, namespace) {
                   parent: nsId,
                   type: 'sshKey',
                   color: GRAPH_CONFIG.nodeColors.sshKey,
-                  fullId: vm.sshKeyId,
+                  fullId: nd.sshKeyId,
                   isUnknown: isUnknown,
-                  originalData: { id: vm.sshKeyId, type: 'sshKey' }
+                  originalData: { id: nd.sshKeyId, type: 'sshKey' }
                 }
               });
             }
@@ -1569,9 +1569,9 @@ export function infraDataToGraph(infraList, namespace) {
           }
 
           // Collect Spec connections for consolidation (only if spec visibility enabled)
-          if (vm.specId && nodeTypeVisibility.spec) {
-            const isUnknown = vm.specId === 'unknown';
-            const specNodeId = `spec-${vm.specId}`;  // Shared node for unknown
+          if (nd.specId && nodeTypeVisibility.spec) {
+            const isUnknown = nd.specId === 'unknown';
+            const specNodeId = `spec-${nd.specId}`;  // Shared node for unknown
 
             if (!resourceSet.has(specNodeId)) {
               resourceSet.add(specNodeId);
@@ -1579,15 +1579,15 @@ export function infraDataToGraph(infraList, namespace) {
               const specText = isUnknown
                 ? 'Spec (unknown)'
                 : (() => {
-                    const specParts = vm.specId.split('+');
+                    const specParts = nd.specId.split('+');
                     return specParts.length === 3
                       ? `${specParts[0]}/${specParts[2]}`
-                      : vm.specId;
+                      : nd.specId;
                   })();
 
               // Determine icon based on GPU availability
               // Note: spec field contains summary info (not specSummary)
-              const specData = vm.spec || vm.specSummary || {};
+              const specData = nd.spec || nd.specSummary || {};
               const specHasGpu = specData.acceleratorType?.toLowerCase() === 'gpu' ||
                                 specData.acceleratorModel ||
                                 specData.acceleratorCount > 0;
@@ -1599,12 +1599,12 @@ export function infraDataToGraph(infraList, namespace) {
                   label: formatLabel(specIcon, specText, getMaxCharsPerLine('spec')),
                   type: 'spec',
                   color: GRAPH_CONFIG.nodeColors.spec,
-                  fullId: vm.specId,
+                  fullId: nd.specId,
                   isUnknown: isUnknown,
                   hasGpu: specHasGpu,
                   // Include spec data for detailed view
                   originalData: {
-                    id: vm.specId,
+                    id: nd.specId,
                     type: 'spec',
                     ...specData
                   }
@@ -1616,25 +1616,25 @@ export function infraDataToGraph(infraList, namespace) {
 
           // Collect Image connections for consolidation
           // Note: resourceType can be "image" (public) or "customImage" (user snapshot)
-          if (vm.imageId) {
-            const isUnknown = vm.imageId === 'unknown';
-            const imageData = vm.image || vm.imageSummary || {};
+          if (nd.imageId) {
+            const isUnknown = nd.imageId === 'unknown';
+            const imageData = nd.image || nd.imageSummary || {};
             const isCustomImage = imageData.resourceType === 'customImage';
 
             // Determine which node type to connect based on resourceType
             // customImage nodes use 'customimg-' prefix, image nodes use 'image-' prefix
             if (isCustomImage && nodeTypeVisibility.customImage) {
               // Connect to customImage node
-              const customImageNodeId = `customimg-${vm.imageId}`;
+              const customImageNodeId = `customimg-${nd.imageId}`;
 
-              // Create customImage node if it doesn't exist (VM references unknown customImage)
+              // Create customImage node if it doesn't exist (Node references unknown customImage)
               if (!resourceSet.has(customImageNodeId)) {
                 resourceSet.add(customImageNodeId);
                 customImageNodeIds.push(customImageNodeId);
 
                 const imageLabel = isUnknown
                   ? 'CustomImage (unknown)'
-                  : (imageData.osDistribution || imageData.osType || vm.imageId);
+                  : (imageData.osDistribution || imageData.osType || nd.imageId);
 
                 nodes.push({
                   data: {
@@ -1643,10 +1643,10 @@ export function infraDataToGraph(infraList, namespace) {
                     parent: nsId,
                     type: 'customImage',
                     color: GRAPH_CONFIG.nodeColors.customImage,
-                    fullId: vm.imageId,
+                    fullId: nd.imageId,
                     isUnknown: isUnknown,
                     originalData: {
-                      id: vm.imageId,
+                      id: nd.imageId,
                       type: 'customImage',
                       ...imageData
                     }
@@ -1657,7 +1657,7 @@ export function infraDataToGraph(infraList, namespace) {
 
             } else if (nodeTypeVisibility.image) {
               // Connect to regular image node (public CSP image)
-              const imageNodeId = `image-${vm.imageId}`;
+              const imageNodeId = `image-${nd.imageId}`;
 
               if (!resourceSet.has(imageNodeId)) {
                 resourceSet.add(imageNodeId);
@@ -1665,7 +1665,7 @@ export function infraDataToGraph(infraList, namespace) {
 
                 const imageLabel = isUnknown
                   ? 'Image (unknown)'
-                  : (imageData.osDistribution || imageData.osType || vm.imageId);
+                  : (imageData.osDistribution || imageData.osType || nd.imageId);
 
                 nodes.push({
                   data: {
@@ -1673,10 +1673,10 @@ export function infraDataToGraph(infraList, namespace) {
                     label: formatLabel('🖼️', imageLabel, getMaxCharsPerLine('image')),
                     type: 'image',
                     color: GRAPH_CONFIG.nodeColors.image,
-                    fullId: vm.imageId,
+                    fullId: nd.imageId,
                     isUnknown: isUnknown,
                     originalData: {
-                      id: vm.imageId,
+                      id: nd.imageId,
                       type: 'image',
                       ...imageData
                     }
@@ -1687,10 +1687,10 @@ export function infraDataToGraph(infraList, namespace) {
             }
           }
 
-          // DataDisk connections - always individual (each VM has its own disks)
-          // No nodegroup/Infra level consolidation - each VM connects directly to its disks
-          if (nodeTypeVisibility.dataDisk && vm.dataDiskIds && Array.isArray(vm.dataDiskIds) && vm.dataDiskIds.length > 0) {
-            vm.dataDiskIds.forEach(diskId => {
+          // DataDisk connections - always individual (each Node has its own disks)
+          // No nodegroup/Infra level consolidation - each Node connects directly to its disks
+          if (nodeTypeVisibility.dataDisk && nd.dataDiskIds && Array.isArray(nd.dataDiskIds) && nd.dataDiskIds.length > 0) {
+            nd.dataDiskIds.forEach(diskId => {
               if (!diskId) return;
               
               const isUnknown = diskId === 'unknown';
@@ -1699,7 +1699,7 @@ export function infraDataToGraph(infraList, namespace) {
               // Check if disk exists in namespace-level dataDiskMap
               const diskData = dataDiskMap.get(diskId);
               
-              // Create node only if not already created (from namespace-level or previous VM)
+              // Create node only if not already created (from namespace-level or previous Node)
               if (!resourceSet.has(diskNodeId)) {
                 resourceSet.add(diskNodeId);
                 const diskText = isUnknown ? 'Disk (unknown)' : diskId;
@@ -1721,30 +1721,30 @@ export function infraDataToGraph(infraList, namespace) {
               
               edges.push({
                 data: {
-                  id: `edge-${vmNodeId}-${diskNodeId}`,
-                  source: vmNodeId,
+                  id: `edge-${computeNodeId}-${diskNodeId}`,
+                  source: computeNodeId,
                   target: diskNodeId,
                   relationship: 'attached'
                 }
               });
             });
           }
-        }); // end vms.forEach
+        }); // end nodes.forEach
 
         // VMs within NodeGroup rely on tiling for compact layout (no invisible edges)
 
         // Check if all VMs in nodegroup share the same resources
-        const allVmsShareVNet = nodeGroupEdges.vNets.size === 1 && vms.every(vm => vm.vNetId || vm.subnetId);
-        const allVmsShareSubnet = nodeGroupEdges.subnets.size === 1 && vms.every(vm => vm.subnetId);
-        const allVmsShareSG = nodeGroupEdges.securityGroups.size > 0 && 
-          vms.every(vm => vm.securityGroupIds && vm.securityGroupIds.length > 0);
-        const allVmsShareSSHKey = nodeGroupEdges.sshKeys.size === 1 && vms.every(vm => vm.sshKeyId);
-        const allVmsShareSpec = nodeGroupEdges.specs.size === 1 && vms.every(vm => vm.specId);
-        const allVmsShareImage = nodeGroupEdges.images.size === 1 && vms.every(vm => vm.imageId);
+        const allNodesShareVNet = nodeGroupEdges.vNets.size === 1 && nodes.every(nd => nd.vNetId || nd.subnetId);
+        const allNodesShareSubnet = nodeGroupEdges.subnets.size === 1 && nodes.every(nd => nd.subnetId);
+        const allNodesShareSG = nodeGroupEdges.securityGroups.size > 0 && 
+          nodes.every(nd => nd.securityGroupIds && nd.securityGroupIds.length > 0);
+        const allNodesShareSSHKey = nodeGroupEdges.sshKeys.size === 1 && nodes.every(nd => nd.sshKeyId);
+        const allNodesShareSpec = nodeGroupEdges.specs.size === 1 && nodes.every(nd => nd.specId);
+        const allNodesShareImage = nodeGroupEdges.images.size === 1 && nodes.every(nd => nd.imageId);
 
         // Create edges from nodegroup if all VMs share the same target, else from individual VMs
         // VNet edges
-        if (allVmsShareVNet) {
+        if (allNodesShareVNet) {
           nodeGroupEdges.vNets.forEach(target => infraEdges.vNets.add(target));
           
           if (!hasSingleNodeGroup) {
@@ -1761,14 +1761,14 @@ export function infraDataToGraph(infraList, namespace) {
           }
         } else {
           // Create individual edges from VMs to VNet
-          vms.forEach(vm => {
-            const vmNodeId = `vm-${infra.id}-${vm.id}`;
-            const isVNetUnknown = !vm.vNetId || vm.vNetId === 'unknown';
-            const vnetNodeId = isVNetUnknown ? 'vnet-unknown' : `vnet-${vm.vNetId}`;
+          nodes.forEach(nd => {
+            const computeNodeId = `node-${infra.id}-${nd.id}`;
+            const isVNetUnknown = !nd.vNetId || nd.vNetId === 'unknown';
+            const vnetNodeId = isVNetUnknown ? 'vnet-unknown' : `vnet-${nd.vNetId}`;
             edges.push({
               data: {
-                id: `edge-${vmNodeId}-${vnetNodeId}`,
-                source: vmNodeId,
+                id: `edge-${computeNodeId}-${vnetNodeId}`,
+                source: computeNodeId,
                 target: vnetNodeId,
                 relationship: 'uses'
               }
@@ -1777,7 +1777,7 @@ export function infraDataToGraph(infraList, namespace) {
         }
 
         // Subnet edges
-        if (allVmsShareSubnet) {
+        if (allNodesShareSubnet) {
           // Add to Infra-level tracking for further consolidation
           nodeGroupEdges.subnets.forEach(target => infraEdges.subnets.add(target));
           
@@ -1796,19 +1796,19 @@ export function infraDataToGraph(infraList, namespace) {
           }
         } else {
           // Create individual edges from VMs to Subnet
-          vms.forEach(vm => {
-            if (vm.subnetId) {
-              const vmNodeId = `vm-${infra.id}-${vm.id}`;
-              const isSubnetUnknown = vm.subnetId === 'unknown';
-              const isVNetUnknown = !vm.vNetId || vm.vNetId === 'unknown';
-              const vnetIdForSubnet = isVNetUnknown ? 'unknown' : vm.vNetId;
+          nodes.forEach(nd => {
+            if (nd.subnetId) {
+              const computeNodeId = `node-${infra.id}-${nd.id}`;
+              const isSubnetUnknown = nd.subnetId === 'unknown';
+              const isVNetUnknown = !nd.vNetId || nd.vNetId === 'unknown';
+              const vnetIdForSubnet = isVNetUnknown ? 'unknown' : nd.vNetId;
               const subnetNodeId = isSubnetUnknown 
                 ? 'subnet-unknown' 
-                : `subnet-${vnetIdForSubnet}-${vm.subnetId}`;
+                : `subnet-${vnetIdForSubnet}-${nd.subnetId}`;
               edges.push({
                 data: {
-                  id: `edge-${vmNodeId}-${subnetNodeId}`,
-                  source: vmNodeId,
+                  id: `edge-${computeNodeId}-${subnetNodeId}`,
+                  source: computeNodeId,
                   target: subnetNodeId,
                   relationship: 'uses'
                 }
@@ -1818,7 +1818,7 @@ export function infraDataToGraph(infraList, namespace) {
         }
 
         // SecurityGroup edges
-        if (allVmsShareSG && nodeGroupEdges.securityGroups.size <= 2) {
+        if (allNodesShareSG && nodeGroupEdges.securityGroups.size <= 2) {
           nodeGroupEdges.securityGroups.forEach(target => infraEdges.securityGroups.add(target));
           
           if (!hasSingleNodeGroup) {
@@ -1834,15 +1834,15 @@ export function infraDataToGraph(infraList, namespace) {
             });
           }
         } else {
-          vms.forEach(vm => {
-            if (vm.securityGroupIds && Array.isArray(vm.securityGroupIds)) {
-              const vmNodeId = `vm-${infra.id}-${vm.id}`;
-              vm.securityGroupIds.forEach(sgId => {
+          nodes.forEach(nd => {
+            if (nd.securityGroupIds && Array.isArray(nd.securityGroupIds)) {
+              const computeNodeId = `node-${infra.id}-${nd.id}`;
+              nd.securityGroupIds.forEach(sgId => {
                 if (sgId) {
                   edges.push({
                     data: {
-                      id: `edge-${vmNodeId}-sg-${sgId}`,
-                      source: vmNodeId,
+                      id: `edge-${computeNodeId}-sg-${sgId}`,
+                      source: computeNodeId,
                       target: `sg-${sgId}`,
                       relationship: 'protected-by'
                     }
@@ -1854,7 +1854,7 @@ export function infraDataToGraph(infraList, namespace) {
         }
 
         // SSHKey edges
-        if (allVmsShareSSHKey) {
+        if (allNodesShareSSHKey) {
           nodeGroupEdges.sshKeys.forEach(target => infraEdges.sshKeys.add(target));
           
           if (!hasSingleNodeGroup) {
@@ -1870,14 +1870,14 @@ export function infraDataToGraph(infraList, namespace) {
             });
           }
         } else {
-          vms.forEach(vm => {
-            if (vm.sshKeyId && vm.sshKeyId !== 'unknown') {
-              const vmNodeId = `vm-${infra.id}-${vm.id}`;
+          nodes.forEach(nd => {
+            if (nd.sshKeyId && nd.sshKeyId !== 'unknown') {
+              const computeNodeId = `node-${infra.id}-${nd.id}`;
               edges.push({
                 data: {
-                  id: `edge-${vmNodeId}-sshkey-${vm.sshKeyId}`,
-                  source: vmNodeId,
-                  target: `sshkey-${vm.sshKeyId}`,
+                  id: `edge-${computeNodeId}-sshkey-${nd.sshKeyId}`,
+                  source: computeNodeId,
+                  target: `sshkey-${nd.sshKeyId}`,
                   relationship: 'uses'
                 }
               });
@@ -1886,7 +1886,7 @@ export function infraDataToGraph(infraList, namespace) {
         }
 
         // Spec edges
-        if (allVmsShareSpec) {
+        if (allNodesShareSpec) {
           nodeGroupEdges.specs.forEach(target => infraEdges.specs.add(target));
           
           if (!hasSingleNodeGroup) {
@@ -1902,14 +1902,14 @@ export function infraDataToGraph(infraList, namespace) {
             });
           }
         } else {
-          vms.forEach(vm => {
-            if (vm.specId && vm.specId !== 'unknown') {
-              const vmNodeId = `vm-${infra.id}-${vm.id}`;
+          nodes.forEach(nd => {
+            if (nd.specId && nd.specId !== 'unknown') {
+              const computeNodeId = `node-${infra.id}-${nd.id}`;
               edges.push({
                 data: {
-                  id: `edge-${vmNodeId}-spec-${vm.specId}`,
-                  source: vmNodeId,
-                  target: `spec-${vm.specId}`,
+                  id: `edge-${computeNodeId}-spec-${nd.specId}`,
+                  source: computeNodeId,
+                  target: `spec-${nd.specId}`,
                   relationship: 'instance-of'
                 }
               });
@@ -1918,7 +1918,7 @@ export function infraDataToGraph(infraList, namespace) {
         }
 
         // Image edges
-        if (allVmsShareImage) {
+        if (allNodesShareImage) {
           nodeGroupEdges.images.forEach(target => infraEdges.images.add(target));
           
           if (!hasSingleNodeGroup) {
@@ -1934,16 +1934,16 @@ export function infraDataToGraph(infraList, namespace) {
             });
           }
         } else {
-          vms.forEach(vm => {
-            if (vm.imageId && vm.imageId !== 'unknown') {
-              const vmNodeId = `vm-${infra.id}-${vm.id}`;
-              const vmImageData = vm.image || vm.imageSummary || {};
-              const isCustomImage = vmImageData.resourceType === 'customImage';
+          nodes.forEach(nd => {
+            if (nd.imageId && nd.imageId !== 'unknown') {
+              const computeNodeId = `node-${infra.id}-${nd.id}`;
+              const ndImageData = nd.image || nd.imageSummary || {};
+              const isCustomImage = ndImageData.resourceType === 'customImage';
 
               // Determine target node based on resourceType
               const targetNodeId = isCustomImage
-                ? `customimg-${vm.imageId}`
-                : `image-${vm.imageId}`;
+                ? `customimg-${nd.imageId}`
+                : `image-${nd.imageId}`;
 
               // Only create edge if target visibility is enabled
               const shouldCreateEdge = isCustomImage
@@ -1953,8 +1953,8 @@ export function infraDataToGraph(infraList, namespace) {
               if (shouldCreateEdge) {
                 edges.push({
                   data: {
-                    id: `edge-${vmNodeId}-${isCustomImage ? 'customimg' : 'image'}-${vm.imageId}`,
-                    source: vmNodeId,
+                    id: `edge-${computeNodeId}-${isCustomImage ? 'customimg' : 'image'}-${nd.imageId}`,
+                    source: computeNodeId,
                     target: targetNodeId,
                     relationship: 'based-on'
                   }
@@ -2133,7 +2133,7 @@ export function infraDataToGraph(infraList, namespace) {
   
   // Count visible edges per node (excluding invisible sibling edges and location edges)
   const visibleEdgeCount = new Map();
-  const locationEdgeTypes = ['location', 'vm-location', 'vnet-location', 'sg-location', 'sshkey-location', 'disk-location', 'ns-anchor'];
+  const locationEdgeTypes = ['location', 'node-location', 'vnet-location', 'sg-location', 'sshkey-location', 'disk-location', 'ns-anchor'];
   
   edges.forEach(edge => {
     // Skip invisible edges and location edges (they connect to CSP/Region/Zone which is everywhere)
@@ -2169,7 +2169,7 @@ export function infraDataToGraph(infraList, namespace) {
   // Isolated resource groups (no visible edges) would float away from main cluster.
   // Connect first node of each isolated group to the most connected node (hub).
   
-  // Find the hub node (most visible connections, preferring Infra/NodeGroup/VM)
+  // Find the hub node (most visible connections, preferring Infra/NodeGroup/Node)
   let hubNodeId = null;
   let hubConnectionCount = 0;
   
@@ -2215,9 +2215,9 @@ export function infraDataToGraph(infraList, namespace) {
   }
 
   // ========== Group Unused Resources ==========
-  // Find resources not connected to Infra/NodeGroup/VM and group them under "Unused Resources"
+  // Find resources not connected to Infra/NodeGroup/Node and group them under "Unused Resources"
   if (nodeTypeVisibility.unusedGroup) {
-    const infraTypes = new Set(['infra', 'nodegroup', 'vm']);
+    const infraTypes = new Set(['infra', 'nodegroup', 'node']);
     const resourceTypes = new Set(['vnet', 'subnet', 'securityGroup', 'sshKey', 'dataDisk']);
     const nodeMap = new Map(nodes.map(n => [n.data.id, n]));
     
@@ -2531,7 +2531,7 @@ export function focusOnNeighbors(node, reset = false) {
   const neighborDescendants = filteredNeighbors.descendants();
   
   // Get neighbors of parent nodes (for consolidated edges), excluding invisible edges
-  // When edges are consolidated at NodeGroup/Infra level, VM/NodeGroup nodes need to show parent's connections
+  // When edges are consolidated at NodeGroup/Infra level, Node/NodeGroup nodes need to show parent's connections
   let parentNeighbors = cy.collection();
   parents.forEach(parent => {
     const parentVisibleEdges = parent.connectedEdges().filter(edge => !edge.data('invisible'));
@@ -2968,9 +2968,9 @@ function showNodeInfo(node) {
  */
 function buildSummaryContent(type, originalData, data) {
   switch (type) {
-    case 'vm':
+    case 'node':
       // Build Spec Summary section
-      // Note: VM data uses 'spec' field (not 'specSummary')
+      // Note: Node data uses 'spec' field (not 'specSummary')
       const specInfo = originalData.spec || originalData.specSummary || {};
       const hasGpuSpec = specInfo.acceleratorType?.toLowerCase() === 'gpu' ||
                          specInfo.acceleratorModel ||
@@ -2994,7 +2994,7 @@ function buildSummaryContent(type, originalData, data) {
       }
 
       // Build Image Summary section
-      // Note: VM data uses 'image' field (not 'imageSummary')
+      // Note: Node data uses 'image' field (not 'imageSummary')
       const imageInfo = originalData.image || originalData.imageSummary || {};
       let imageSection = '';
       if (imageInfo.osType || imageInfo.osDistribution || imageInfo.cspImageName) {
@@ -3030,7 +3030,7 @@ function buildSummaryContent(type, originalData, data) {
           <p><strong>Name:</strong> ${originalData.name || 'N/A'}</p>
           <p><strong>ID:</strong> ${originalData.id || 'N/A'}</p>
           <p><strong>Status:</strong> <span style="color: ${getStatusColor(originalData.status)}">${originalData.status || 'N/A'}</span></p>
-          <p><strong>VMs:</strong> ${originalData.vm?.length || 0}</p>
+          <p><strong>Nodes:</strong> ${originalData.node?.length || 0}</p>
           <p><strong>Description:</strong> ${originalData.description || 'N/A'}</p>
           <p><strong>Install Mon Agent:</strong> ${originalData.installMonAgent || 'N/A'}</p>
         </div>
@@ -3100,12 +3100,12 @@ function buildSummaryContent(type, originalData, data) {
       return `
         <div style="text-align: left;">
           <p><strong>ID:</strong> ${originalData.id || 'N/A'}</p>
-          <p>📷 <strong>Type:</strong> Custom Image (VM Snapshot)</p>
+          <p>📷 <strong>Type:</strong> Custom Image (Node Snapshot)</p>
           ${originalData.osDistribution ? `<p>🖼️ <strong>OS:</strong> ${originalData.osDistribution}</p>` :
             originalData.osType ? `<p>🖼️ <strong>OS:</strong> ${originalData.osType}</p>` : ''}
           ${originalData.osArchitecture ? `<p>🏗️ <strong>Architecture:</strong> ${originalData.osArchitecture}</p>` : ''}
           ${originalData.cspImageName ? `<p>☁️ <strong>CSP Image:</strong> ${originalData.cspImageName}</p>` : ''}
-          ${originalData.sourceVmId ? `<p>💻 <strong>Source VM:</strong> ${originalData.sourceVmId}</p>` : ''}
+          ${originalData.sourceNodeId ? `<p>💻 <strong>Source Node:</strong> ${originalData.sourceNodeId}</p>` : ''}
           ${originalData.status ? `<p>📊 <strong>Status:</strong> ${originalData.status}</p>` : ''}
           ${originalData.connectionName ? `<p>🔗 <strong>Connection:</strong> ${originalData.connectionName}</p>` : ''}
         </div>
@@ -3121,7 +3121,7 @@ function buildSummaryContent(type, originalData, data) {
             ${originalData.acceleratorCount ? `<p style="margin: 4px 0;"><strong>Count:</strong> ${originalData.acceleratorCount}</p>` : ''}
             ${originalData.acceleratorMemoryGB ? `<p style="margin: 4px 0;"><strong>Memory:</strong> ${originalData.acceleratorMemoryGB} GB</p>` : ''}
           </div>
-          ${originalData.vmName ? `<p style="margin-top: 10px;">💻 <strong>Attached to VM:</strong> ${originalData.vmName}</p>` : ''}
+          ${originalData.ndName ? `<p style="margin-top: 10px;">💻 <strong>Attached to Node:</strong> ${originalData.ndName}</p>` : ''}
           ${originalData.cspSpecName ? `<p>🖥️ <strong>Spec:</strong> ${originalData.cspSpecName}</p>` : ''}
           ${originalData.costPerHour ? `<p>💰 <strong>Cost:</strong> $${originalData.costPerHour}/hr</p>` : ''}
         </div>
@@ -3168,7 +3168,7 @@ function buildSummaryContent(type, originalData, data) {
         <div style="text-align: left;">
           <p><strong>Name:</strong> ${originalData.name || data.label || 'N/A'}</p>
           <p><strong>ID:</strong> ${originalData.id || data.id || 'N/A'}</p>
-          <p><strong>VMs:</strong> ${originalData.vmCount || 'N/A'}</p>
+          <p><strong>Nodes:</strong> ${originalData.nodeCount || 'N/A'}</p>
         </div>
       `;
 
@@ -3294,7 +3294,7 @@ function getTypeEmoji(type) {
     namespace: '📁',
     infra: '🖥️',
     nodegroup: '📦',
-    vm: '💻',
+    node: '💻',
     gpu: '🧮',
     vnet: '🌐',
     subnet: '🔀',
@@ -3330,12 +3330,12 @@ function showContextMenu(node, position) {
   ];
 
   // Type-specific menu items
-  if (type === 'vm' && originalData.publicIP) {
+  if (type === 'node' && originalData.publicIP) {
     menuItems.push({ label: '🔗 Copy Public IP', action: () => copyToClipboard(originalData.publicIP) });
   }
 
   if (type === 'infra') {
-    menuItems.push({ label: '📋 Show VMs', action: () => highlightInfraVms(node) });
+    menuItems.push({ label: '📋 Show Nodes', action: () => highlightInfraNodes(node) });
   }
 
   // Create menu element
@@ -3453,13 +3453,13 @@ function copyToClipboard(text) {
   });
 }
 
-function highlightInfraVms(infraNode) {
-  const vms = infraNode.descendants().filter('[type="vm"]');
-  if (vms.length > 0) {
+function highlightInfraNodes(infraNode) {
+  const nodes = infraNode.descendants().filter('[type="node"]');
+  if (nodes.length > 0) {
     cy.elements().addClass('faded');
-    vms.removeClass('faded').addClass('highlighted');
+    nodes.removeClass('faded').addClass('highlighted');
     infraNode.removeClass('faded');
-    cy.fit(vms, 30);
+    cy.fit(nodes, 30);
   }
 }
 
@@ -3490,7 +3490,7 @@ function showTooltip(node, position) {
   if (status) {
     tooltipText += ` (${status})`;
   }
-  if (type === 'vm' && originalData.publicIP) {
+  if (type === 'node' && originalData.publicIP) {
     tooltipText += `\n${originalData.publicIP}`;
   }
   // GPU node: show accelerator details in tooltip

@@ -45,7 +45,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 const DEBUG_CONFIG = {
   ENABLE_PERFORMANCE_LOGS: false,  // Map performance related logs
   ENABLE_API_RESPONSE_LOGS: false, // API response logs 
-  ENABLE_VM_DEBUG_LOGS: false,     // Detailed VM structure logs
+  ENABLE_NODE_DEBUG_LOGS: false,     // Detailed Node structure logs
   ENABLE_RESOURCE_LOGS: false,     // Resource loading logs
   ENABLE_MAP_OPERATION_LOGS: false // Map operation logs
 };
@@ -54,7 +54,7 @@ const DEBUG_CONFIG = {
 const debugLog = {
   performance: (...args) => DEBUG_CONFIG.ENABLE_PERFORMANCE_LOGS && console.log('[Performance]', ...args),
   api: (...args) => DEBUG_CONFIG.ENABLE_API_RESPONSE_LOGS && console.log('[API]', ...args),
-  vm: (...args) => DEBUG_CONFIG.ENABLE_VM_DEBUG_LOGS && console.log('[VM Debug]', ...args),
+  node: (...args) => DEBUG_CONFIG.ENABLE_NODE_DEBUG_LOGS && console.log('[Node Debug]', ...args),
   resource: (...args) => DEBUG_CONFIG.ENABLE_RESOURCE_LOGS && console.log('[Resource]', ...args),
   mapOp: (...args) => DEBUG_CONFIG.ENABLE_MAP_OPERATION_LOGS && console.log('[Map]', ...args)
 };
@@ -430,7 +430,7 @@ function showMapSettings() {
       window.useGenericCspIcons = useGenericCspIcons;
       // Clear cached generic styles so they can be regenerated if needed
       Object.keys(cspGenericStyles).forEach(k => delete cspGenericStyles[k]);
-      Object.keys(vmGenericCloudStyleCache).forEach(k => delete vmGenericCloudStyleCache[k]);
+      Object.keys(nodeGenericCloudStyleCache).forEach(k => delete nodeGenericCloudStyleCache[k]);
       // Force map re-render to apply icon change
       map.render();
       const view = map.getView();
@@ -615,7 +615,7 @@ function clearCircle(option) {
     debugLog.mapOp("Circle configuration cleared");
   }
   latLonInputPairIdx = 0;
-  vmNodeGroupReqeustFromSpecList = [];
+  nodeGroupRequestFromSpecList = [];
   recommendedSpecList = [];
   cspPointsCircle = [];
   geoCspPointsCircle = [];
@@ -633,15 +633,15 @@ function writeLatLonInputPair(idx, lat, lon) {
   var lonf = lon.toFixed(4);
 
   //document.getElementById("latLonInputPairArea").innerHTML +=
-  `VM ${idx + 1}: (${latf}, ${lonf}) / `;
+  `Node ${idx + 1}: (${latf}, ${lonf}) / `;
   if (idx == 0) {
     debugLog.mapOp("Started Infra configuration");
   }
-  debugLog.mapOp(`VM-${idx + 1} Location: ${latf}, ${lonf} | Best Spec: `);
+  debugLog.mapOp(`Node-${idx + 1} Location: ${latf}, ${lonf} | Best Spec: `);
 }
 
 var latLonInputPairIdx = 0;
-var vmNodeGroupReqeustFromSpecList = new Array();
+var nodeGroupRequestFromSpecList = new Array();
 var recommendedSpecList = new Array();
 
 // ========== LABEL RECOMMENDATION SYSTEM ==========
@@ -1376,7 +1376,7 @@ function createStyle(src) {
 var pnt = new Point([-68, -50]);
 
 addIconToMap("img/icon-vm.png", pnt, "001");
-var iconStyleVm = new Style({
+var iconStyleNode = new Style({
   image: new Icon({
     crossOrigin: "anonymous",
     src: "img/icon-vm.png",
@@ -1554,15 +1554,15 @@ function getGenericCloudStyle(csp) {
   return cspGenericStyles[csp];
 }
 
-// Cache for VM overlay generic cloud styles keyed by "csp:scale"
-// Separate from cspGenericStyles because scale varies per VM
-const vmGenericCloudStyleCache = {};
-function getVmGenericCloudStyle(csp, scale) {
+// Cache for Node overlay generic cloud styles keyed by "csp:scale"
+// Separate from cspGenericStyles because scale varies per Node
+const nodeGenericCloudStyleCache = {};
+function getNodeGenericCloudStyle(csp, scale) {
   const key = `${csp}:${scale}`;
-  if (!vmGenericCloudStyleCache[key]) {
+  if (!nodeGenericCloudStyleCache[key]) {
     const platform = resolveCloudPlatform(csp);
     const color = cspGenericColors[platform] || cspGenericColors[csp] || CSP_GENERIC_FALLBACK_COLOR;
-    vmGenericCloudStyleCache[key] = new Style({
+    nodeGenericCloudStyleCache[key] = new Style({
       image: new Icon({
         img: createCloudCanvas(color),
         scale: scale,
@@ -1572,7 +1572,7 @@ function getVmGenericCloudStyle(csp, scale) {
       }),
     });
   }
-  return vmGenericCloudStyleCache[key];
+  return nodeGenericCloudStyleCache[key];
 }
 
 // Get the appropriate CSP style based on current icon mode
@@ -1672,7 +1672,7 @@ function resolveCloudPlatform(providerName) {
   return lower;
 }
 
-// Provider Icon Mapping for VM visualization (using existing cspIconImg)
+// Provider Icon Mapping for Node visualization (using existing cspIconImg)
 function getProviderIcon(providerName) {
   if (useGenericCspIcons) return null; // signal to use generic style instead
   const provider = providerName?.toLowerCase();
@@ -1699,8 +1699,8 @@ function getContrastColor(hexColor) {
   return luminance > 0.5 ? "#000000" : "#ffffff";
 }
 
-// Unified VM/Infra Status Color Mapping with improved visibility and contrasting borders
-function getVmStatusColor(status) {
+// Unified Node/Infra Status Color Mapping with improved visibility and contrasting borders
+function getNodeStatusColor(status) {
   // Handle both exact status and status that includes keywords (for backward compatibility)
   const statusStr = status?.toString().toLowerCase() || '';
   
@@ -1714,7 +1714,7 @@ function getVmStatusColor(status) {
   else if (status === "Creating" || statusStr.includes("creating")) {
     fillColor = "#3b82f6"; // blue-500 - bright blue for creation progress
   }
-  // Registering state - Teal (registering existing CSP VM)
+  // Registering state - Teal (registering existing CSP Node))
   else if (status === "Registering" || statusStr.includes("registering")) {
     fillColor = "#14b8a6"; // teal-500 - teal for registration progress
   }
@@ -1728,9 +1728,9 @@ function getVmStatusColor(status) {
   else if (status === "Prepared" || statusStr.includes("Prepared")) {
     fillColor = "#ea580c"; // orange-600 - darker orange for prepared state
   }
-  // Empty state - Gray (Infra exists but has no VMs)
+  // Empty state - Gray (Infra exists but has no Nodes)
   else if (status === "Empty" || statusStr.includes("Empty")) {
-    fillColor = "#9ca3af"; // gray-400 - gray for empty Infra (no VMs)
+    fillColor = "#9ca3af"; // gray-400 - gray for empty Infra (no Nodes)
   }
   // Suspended/Paused states - Yellow/Orange shades (paused but recoverable)
   else if (status === "Suspended" || statusStr.includes("suspended")) {
@@ -1771,7 +1771,7 @@ function getVmStatusColor(status) {
 
 // Legacy function for Infra status - returns only fill color for backward compatibility
 function changeColorStatus(status) {
-  const colorObj = getVmStatusColor(status);
+  const colorObj = getNodeStatusColor(status);
   return typeof colorObj === 'object' ? colorObj.fill : colorObj;
 }
 
@@ -2064,7 +2064,7 @@ function changeSizeStatus(status) {
   } else if (status.includes("NLB")) {
     return 1.5;
   } else if (status.includes("Failed")) {
-    return 2.2; // Make Failed VMs more visible with medium-large size
+    return 2.2; // Make Failed Nodes more visible with medium-large size
   } else if (status.includes("Partial")) {
     return 2.4;
   } else if (status.includes("Running")) {
@@ -2086,12 +2086,12 @@ function changeSizeStatus(status) {
   }
 }
 
-// Create VM icon style with status badge and provider icon
-function createVmStyleWithStatusBadge(vmStatus, providerName = null, baseScale = 1.0, vmCoords = null, commandStatus = "None") {
-  const statusColors = getVmStatusColor(vmStatus);
+// Create Node icon style with status badge and provider icon
+function createNodeStyleWithStatusBadge(nodeStatus, providerName = null, baseScale = 1.0, nodeCoords = null, commandStatus = "None") {
+  const statusColors = getNodeStatusColor(nodeStatus);
   
   const styles = [
-    // Main VM icon (center)
+    // Main Node icon (center)
     new Style({
       image: new Icon({
         crossOrigin: "anonymous",
@@ -2170,8 +2170,8 @@ function createVmStyleWithStatusBadge(vmStatus, providerName = null, baseScale =
   return styles;
 }
 
-// Create individual VM point with offset for status badge
-function createVmPointWithOffset(coordinates, offsetX = 0.008, offsetY = 0.008) {
+// Create individual Node point with offset for status badge
+function createNodePointWithOffset(coordinates, offsetX = 0.008, offsetY = 0.008) {
   return new Point([coordinates[0] + offsetX, coordinates[1] + offsetY]);
 }
 
@@ -2190,9 +2190,9 @@ function changeSizeByName(status) {
 }
 
 /**
- * Compute inter-Infra offset for VMs at shared locations.
- * When multiple Infras have VMs at the same region, each Infra gets a directional
- * offset so their VM icons don't fully overlap.
+ * Compute inter-Infra offset for Nodes at shared locations.
+ * When multiple Infras have Nodes at the same region, each Infra gets a directional
+ * offset so their Node icons don't fully overlap.
  * @param {number} infraIndex - This Infra's index at the shared location (0-based)
  * @param {number} totalInfras - Total Infras sharing this location
  * @returns {{ox: number, oy: number}} offset in coordinate units
@@ -2210,12 +2210,12 @@ function getInfraLocationOffset(infraIndex, totalInfras) {
   };
 }
 
-function returnAdjustmentPoint(index, totalVMs) {
+function returnAdjustmentPoint(index, totalNodes) {
   // Initialize coordinates
   let ax = 0.0;
   let ay = 0.0;
 
-  // First VM (index 0) is placed at center
+  // First Node (index 0) is placed at center
   if (index === 0) {
     ax = 0;
     ay = 0;
@@ -2223,13 +2223,13 @@ function returnAdjustmentPoint(index, totalVMs) {
     // Circle radius
     const radius = 0.75;
 
-    // Calculate angle step (divide 360° by total VMs)
-    const angleStep = 2 * Math.PI / totalVMs;
+    // Calculate angle step (divide 360° by total Nodes))
+    const angleStep = 2 * Math.PI / totalNodes;
 
     // Start at 12 o'clock position
     const startAngle = 3 * Math.PI / 2;
 
-    // Calculate angle for current VM
+    // Calculate angle for current Node
     const angle = startAngle + (angleStep * index);
 
     // Convert polar coordinates to Cartesian
@@ -2273,28 +2273,28 @@ function makeTria(ip1, ip2, ip3) {
   // makeTria is legacy/unused — kept for reference
 }
 
-// Build VM dot geometry data for an Infra entry in infraRenderMap
-function makePolyDot(infraEntry, vmPoints, vmStatuses = [], vmProviders = [], vmCommandStatuses = []) {
+// Build Node dot geometry data for an Infra entry in infraRenderMap
+function makePolyDot(infraEntry, nodePoints, nodeStatuses = [], nodeProviders = [], nodeCommandStatuses = []) {
   var resourcePoints = [];
-  for (i = 0; i < vmPoints.length; i++) {
-    resourcePoints.push(vmPoints[i]);
+  for (i = 0; i < nodePoints.length; i++) {
+    resourcePoints.push(nodePoints[i]);
   }
   infraEntry.geometryPoints = {
     geometry: new MultiPoint(resourcePoints),
-    vmPoints: vmPoints,
-    vmStatuses: vmStatuses,
-    vmProviders: vmProviders,
-    vmCommandStatuses: vmCommandStatuses
+    nodePoints: nodePoints,
+    nodeStatuses: nodeStatuses,
+    nodeProviders: nodeProviders,
+    nodeCommandStatuses: nodeCommandStatuses
   };
 }
 
 // Build polygon geometry for an Infra entry in infraRenderMap
-function makePolyArray(infraEntry, vmPoints) {
+function makePolyArray(infraEntry, nodePoints) {
   var resourcePoints = [];
-  for (i = 0; i < vmPoints.length; i++) {
-    resourcePoints.push(vmPoints[i]);
+  for (i = 0; i < nodePoints.length; i++) {
+    resourcePoints.push(nodePoints[i]);
   }
-  resourcePoints.push(vmPoints[0]);
+  resourcePoints.push(nodePoints[0]);
   infraEntry.geometry = new Polygon([resourcePoints]);
   infraEntry.geo = new Polygon([resourcePoints]);
 }
@@ -2403,10 +2403,10 @@ function outputAlert(jsonData, type) {
   const jsonString = JSON.stringify(jsonData, null, 2);
   const isLargeData = jsonString.length > 50000; // 50KB threshold
   
-  // Check if it's Infra data with many VMs
-  const hasLargeVmList = jsonData?.nodeGroups?.some(nodeGroup => 
-    nodeGroup?.vms && Array.isArray(nodeGroup.vms) && nodeGroup.vms.length > 20
-  ) || (Array.isArray(jsonData?.vm) && jsonData.vm.length > 20);
+  // Check if it's Infra data with many Nodes
+  const hasLargeNodeList = jsonData?.nodeGroups?.some(nodeGroup => 
+    nodeGroup?.nodes && Array.isArray(nodeGroup.nodes) && nodeGroup.nodes.length > 20
+  ) || (Array.isArray(jsonData?.node) && jsonData.node.length > 20);
   
   // Store jsonData for copy/base64 functions
   window._currentJsonOutput = jsonData;
@@ -2422,7 +2422,7 @@ function outputAlert(jsonData, type) {
     useToJSON: true,
     quotesOnKeys: false,
     quotesOnValues: false,
-    open: isLargeData || hasLargeVmList ? 1 : 2  // More conservative opening for large data
+    open: isLargeData || hasLargeNodeList ? 1 : 2  // More conservative opening for large data
   };
   
   // Toolbar HTML with Copy, Base64 toggle, and Save buttons
@@ -2509,7 +2509,7 @@ function outputAlert(jsonData, type) {
         const container = document.getElementById("json-output");
         if (container) {
           // Show loading message for large data
-          if (isLargeData || hasLargeVmList) {
+          if (isLargeData || hasLargeNodeList) {
             container.innerHTML = '<div style="color: #888; padding: 10px;">Loading large dataset... Please wait.</div>';
             
             // Delay rendering for large data to improve UX
@@ -3072,8 +3072,8 @@ function displayJsonData(jsonData, type) {
   outputAlert(jsonData, type);
 }
 
-// Handle Infra without VMs (preparing, prepared, empty states)
-function handleInfraWithoutVms(infraItem) {
+// Handle Infra without Nodes (preparing, prepared, empty states)
+function handleInfraWithoutNodes(infraItem) {
   // Get current map extent to position Infras in upper-left area
   var mapView = map.getView();
   var mapExtent = mapView.calculateExtent(map.getSize());
@@ -3170,20 +3170,20 @@ function getInfra() {
         if (obj.infra) {
           window.cloudBaristaCentralData.infraData = obj.infra;
           
-          // Extract VM data from Infra data
-          const allVms = [];
+          // Extract Node data from Infra data
+          const allNodes = [];
           obj.infra.forEach(infra => {
-            if (infra.vm && Array.isArray(infra.vm)) {
-              infra.vm.forEach(vm => {
-                allVms.push({
-                  ...vm,
+            if (infra.node && Array.isArray(infra.node)) {
+              infra.node.forEach(nd => {
+                allNodes.push({
+                  ...nd,
                   infraId: infra.id,
                   infraName: infra.name
                 });
               });
             }
           });
-          window.cloudBaristaCentralData.vmData = allVms;
+          window.cloudBaristaCentralData.nodeData = allNodes;
           
           // Load VPN data from the Infras we just fetched (reusing Infra data)
           loadVpnDataFromInfras();
@@ -3216,12 +3216,12 @@ function getInfra() {
 
           // First pass: assign Infra index per shared location
           for (let item of obj.infra) {
-            if (item.vm == null || item.vm.length === 0) continue;
+            if (item.node == null || item.node.length === 0) continue;
             const seenLocations = new Set();
-            for (const vm of item.vm) {
-              if (!vm.location || vm.location.longitude === undefined || vm.location.latitude === undefined) continue;
+            for (const nd of item.node) {
+              if (!nd.location || nd.location.longitude === undefined || nd.location.latitude === undefined) continue;
               // Round to ~0.5 degree to group nearby regions
-              const locKey = Math.round(vm.location.longitude * 2) / 2 + ',' + Math.round(vm.location.latitude * 2) / 2;
+              const locKey = Math.round(nd.location.longitude * 2) / 2 + ',' + Math.round(nd.location.latitude * 2) / 2;
               if (!seenLocations.has(locKey)) {
                 seenLocations.add(locKey);
                 const idx = locationInfraCounter.get(locKey) || 0;
@@ -3244,10 +3244,10 @@ function getInfra() {
               continue;
             }
 
-            // Handle Infra without VMs (preparing, prepared, empty, failed states)
-            if (item.vm == null || item.vm.length === 0) {
+            // Handle Infra without Nodes (preparing, prepared, empty, failed states)
+            if (item.node == null || item.node.length === 0) {
               if (item.status === "Preparing" || item.status === "Prepared" || item.status === "Failed" || item.status.includes("Empty")) {
-                handleInfraWithoutVms(item);
+                handleInfraWithoutNodes(item);
               }
               continue;
             }
@@ -3255,16 +3255,16 @@ function getInfra() {
             var vmGeo = [];
 
             // Build intra-Infra location groups: VMs within same ~0.5° grid get spread out
-            // Key: "roundedLon,roundedLat" → array of VM indices in that cell
+            // Key: "roundedLon,roundedLat" → array of Node indices in that cell
             const intraLocGroups = new globalThis.Map();
-            for (let vi = 0; vi < item.vm.length; vi++) {
-              const v = item.vm[vi];
+            for (let vi = 0; vi < item.node.length; vi++) {
+              const v = item.node[vi];
               if (!v.location || v.location.longitude === undefined || v.location.latitude === undefined) continue;
               const gKey = Math.round(v.location.longitude * 2) / 2 + ',' + Math.round(v.location.latitude * 2) / 2;
               if (!intraLocGroups.has(gKey)) intraLocGroups.set(gKey, []);
               intraLocGroups.get(gKey).push(vi);
             }
-            // Build per-VM lookup: vmIndex → { indexInGroup, groupSize }
+            // Build per-Node lookup: nodeIndex → { indexInGroup, groupSize }
             const vmGroupInfo = new globalThis.Map();
             for (const [, indices] of intraLocGroups) {
               for (let gi = 0; gi < indices.length; gi++) {
@@ -3273,17 +3273,17 @@ function getInfra() {
             }
 
             var validateNum = 0;
-            for (j = 0; j < item.vm.length; j++) {
-              const vm = item.vm[j];
-              if (!vm.location || vm.location.longitude === undefined || vm.location.latitude === undefined) {
-                console.warn(`VM ${vm.id || j}: missing location data, skipping`);
+            for (j = 0; j < item.node.length; j++) {
+              const nd = item.node[j];
+              if (!nd.location || nd.location.longitude === undefined || nd.location.latitude === undefined) {
+                console.warn(`Node ${nd.id || j}: missing location data, skipping`);
                 continue;
               }
 
-              // Compute inter-Infra offset for this VM's location
-              const vmLocKey = Math.round(vm.location.longitude * 2) / 2 + ',' + Math.round(vm.location.latitude * 2) / 2;
-              const infraIdxAtLoc = infraLocationIndex.get(item.id + ':' + vmLocKey) || 0;
-              const totalInfrasAtLoc = locationInfraCounter.get(vmLocKey) || 1;
+              // Compute inter-Infra offset for this Node's location
+              const nodeLocKey = Math.round(nd.location.longitude * 2) / 2 + ',' + Math.round(nd.location.latitude * 2) / 2;
+              const infraIdxAtLoc = infraLocationIndex.get(item.id + ':' + nodeLocKey) || 0;
+              const totalInfrasAtLoc = locationInfraCounter.get(nodeLocKey) || 1;
               const infraOff = getInfraLocationOffset(infraIdxAtLoc, totalInfrasAtLoc);
               const infraOffX = (infraOff.ox / zoomLevel) * radius;
               const infraOffY = (infraOff.oy / zoomLevel) * radius;
@@ -3298,13 +3298,13 @@ function getInfra() {
               }
 
               vmGeo.push([
-                vm.location.longitude * 1 + infraOffX + intraOffX,
-                vm.location.latitude * 1 + infraOffY + intraOffY,
+                nd.location.longitude * 1 + infraOffX + intraOffX,
+                nd.location.latitude * 1 + infraOffY + intraOffY,
               ]);
               validateNum++;
             }
-            if (item.vm.length == 1 && item.vm[0].location && item.vm[0].location.longitude !== undefined && item.vm[0].location.latitude !== undefined) {
-              const singleVm = item.vm[0];
+            if (item.node.length == 1 && item.node[0].location && item.node[0].location.longitude !== undefined && item.node[0].location.latitude !== undefined) {
+              const singleVm = item.node[0];
               const sLocKey = Math.round(singleVm.location.longitude * 2) / 2 + ',' + Math.round(singleVm.location.latitude * 2) / 2;
               const sIdx = infraLocationIndex.get(item.id + ':' + sLocKey) || 0;
               const sTotal = locationInfraCounter.get(sLocKey) || 1;
@@ -3325,25 +3325,25 @@ function getInfra() {
                 singleVm.location.latitude * 1 + sOffY + Math.random() * 0.001,
               ]);
             }
-            if (validateNum == item.vm.length) {
-              var vmStatuses = [];
-              var vmProviders = [];
-              var vmCommandStatuses = [];
-              var vmPoints = [];
+            if (validateNum == item.node.length) {
+              var nodeStatuses = [];
+              var nodeProviders = [];
+              var nodeCommandStatuses = [];
+              var nodePoints = [];
               
-              for (let vmIndex = 0; vmIndex < item.vm.length; vmIndex++) {
-                const vm = item.vm[vmIndex];
+              for (let nodeIndex = 0; nodeIndex < item.node.length; nodeIndex++) {
+                const nd = item.node[nodeIndex];
                 
-                if (vmIndex === 0) {
-                  debugLog.vm(`VM ${vm.id || 'unknown'} structure:`, vm);
+                if (nodeIndex === 0) {
+                  debugLog.node(`Node ${nd.id || 'unknown'} structure:`, nd);
                 }
                 
-                vmStatuses.push(vm.status || "Undefined");
+                nodeStatuses.push(nd.status || "Undefined");
                 
                 let commandStatus = "None";
-                if (vm.commandStatus) {
-                  const queuedCmd = vm.commandStatus.find(cmd => cmd.status === "Queued");
-                  const handlingCmd = vm.commandStatus.find(cmd => cmd.status === "Handling");
+                if (nd.commandStatus) {
+                  const queuedCmd = nd.commandStatus.find(cmd => cmd.status === "Queued");
+                  const handlingCmd = nd.commandStatus.find(cmd => cmd.status === "Handling");
                   
                   if (handlingCmd) {
                     commandStatus = "Handling";
@@ -3351,54 +3351,54 @@ function getInfra() {
                     commandStatus = "Queued";
                   }
                 }
-                vmCommandStatuses.push(commandStatus);
+                nodeCommandStatuses.push(commandStatus);
                 
-                if (vmIndex === 0 && vm.commandStatus) {
-                  debugLog.vm(`VM ${vm.id || 'unknown'} commandStatus:`, vm.commandStatus);
-                  debugLog.vm(`VM ${vm.id} command status:`, commandStatus);
+                if (nodeIndex === 0 && nd.commandStatus) {
+                  debugLog.node(`Node ${nd.id || 'unknown'} commandStatus:`, nd.commandStatus);
+                  debugLog.node(`Node ${nd.id} command status:`, commandStatus);
                 }
                 
                 let provider = "unknown";
                 
-                if (vmIndex === 0) {
-                  debugLog.vm(`VM ${vm.id}: connectionName =`, vm.connectionName);
-                  debugLog.vm(`VM ${vm.id}: connectionConfig =`, vm.connectionConfig);
+                if (nodeIndex === 0) {
+                  debugLog.node(`Node ${nd.id}: connectionName =`, nd.connectionName);
+                  debugLog.node(`Node ${nd.id}: connectionConfig =`, nd.connectionConfig);
                 }
                 
-                if (vm.connectionConfig && vm.connectionConfig.providerName) {
-                  provider = vm.connectionConfig.providerName;
-                  if (vmIndex === 0) debugLog.vm(`VM ${vm.id}: found provider in connectionConfig = ${provider}`);
-                } else if (vm.connectionName) {
-                  provider = vm.connectionName.split('-')[0];
-                  if (vmIndex === 0) debugLog.vm(`VM ${vm.id}: extracted provider from connectionName = ${provider}`);
+                if (nd.connectionConfig && nd.connectionConfig.providerName) {
+                  provider = nd.connectionConfig.providerName;
+                  if (nodeIndex === 0) debugLog.node(`Node ${nd.id}: found provider in connectionConfig = ${provider}`);
+                } else if (nd.connectionName) {
+                  provider = nd.connectionName.split('-')[0];
+                  if (nodeIndex === 0) debugLog.node(`Node ${nd.id}: extracted provider from connectionName = ${provider}`);
                 } else {
-                  if (vmIndex === 0) {
-                    debugLog.vm(`VM ${vm.id}: no provider info found, using unknown`);
-                    debugLog.vm(`VM ${vm.id}: available properties:`, Object.keys(vm));
+                  if (nodeIndex === 0) {
+                    debugLog.node(`Node ${nd.id}: no provider info found, using unknown`);
+                    debugLog.node(`Node ${nd.id}: available properties:`, Object.keys(nd));
                   }
                 }
                 
-                vmProviders.push(provider);
+                nodeProviders.push(provider);
 
-                // Compute inter-Infra offset for this VM's location
-                const vmLocKey2 = Math.round(vm.location.longitude * 2) / 2 + ',' + Math.round(vm.location.latitude * 2) / 2;
-                const infraIdx2 = infraLocationIndex.get(item.id + ':' + vmLocKey2) || 0;
-                const totalInfras2 = locationInfraCounter.get(vmLocKey2) || 1;
+                // Compute inter-Infra offset for this Node's location
+                const nodeLocKey2 = Math.round(nd.location.longitude * 2) / 2 + ',' + Math.round(nd.location.latitude * 2) / 2;
+                const infraIdx2 = infraLocationIndex.get(item.id + ':' + nodeLocKey2) || 0;
+                const totalInfras2 = locationInfraCounter.get(nodeLocKey2) || 1;
                 const infraOff2 = getInfraLocationOffset(infraIdx2, totalInfras2);
                 const infraOffX2 = (infraOff2.ox / zoomLevel) * radius;
                 const infraOffY2 = (infraOff2.oy / zoomLevel) * radius;
                 
                 // Compute intra-Infra offset: spread VMs sharing the same location group
-                const gInfo2 = vmGroupInfo.get(vmIndex);
+                const gInfo2 = vmGroupInfo.get(nodeIndex);
                 let intraOffX2 = 0, intraOffY2 = 0;
                 if (gInfo2 && gInfo2.groupSize > 1 && gInfo2.indexInGroup > 0) {
                   const adj2 = returnAdjustmentPoint(gInfo2.indexInGroup, gInfo2.groupSize);
                   intraOffX2 = (adj2.ax / zoomLevel) * radius;
                   intraOffY2 = (adj2.ay / zoomLevel) * radius;
                 }
-                vmPoints.push([
-                  vm.location.longitude * 1 + infraOffX2 + intraOffX2,
-                  vm.location.latitude * 1 + infraOffY2 + intraOffY2,
+                nodePoints.push([
+                  nd.location.longitude * 1 + infraOffX2 + intraOffX2,
+                  nd.location.latitude * 1 + infraOffY2 + intraOffY2,
                 ]);
               }
 
@@ -3420,8 +3420,8 @@ function getInfra() {
                 isLocationless: false
               };
 
-              // Build VM dots and polygon geometry into the entry
-              makePolyDot(infraEntry, vmGeo, vmStatuses, vmProviders, vmCommandStatuses);
+              // Build Node dots and polygon geometry into the entry
+              makePolyDot(infraEntry, vmGeo, nodeStatuses, nodeProviders, nodeCommandStatuses);
               vmGeo = convexHull(vmGeo);
               makePolyArray(infraEntry, vmGeo);
 
@@ -4566,7 +4566,7 @@ function showFinalInfraConfirmation(createInfraReq, url, totalCost, totalNodeSca
       costDetailsHtml +
       "<hr>" +
       nodeGroupReqString +
-      "<br><br><input type='checkbox' id='hold-checkbox'> Hold VM provisioning of the Infra" +
+      "<br><br><input type='checkbox' id='hold-checkbox'> Hold Node provisioning of the Infra" +
       "<br><input type='checkbox' id='monitoring-checkbox'> Deploy a monitoring agent" +
       "<br><input type='checkbox' id='postcommand-checkbox'> Add post-deployment commands",
     showCancelButton: true,
@@ -4900,7 +4900,7 @@ function showPostCommandDialog(createInfraReq, infraCreationUrl, username, passw
         <strong>🔧 Image Building Workflow:</strong><br>
         1️⃣ Create Infra infrastructure<br>
         2️⃣ Execute post-deployment commands (setup software)<br>
-        3️⃣ Create custom snapshots from VMs<br>
+        3️⃣ Create custom snapshots from Nodes<br>
         4️⃣ Wait for images to become Available<br>
         5️⃣ Cleanup infrastructure (optional)
       </p>
@@ -5006,7 +5006,7 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
     var warnings = [];
     var errors = [];
     var infos = [];
-    var vmDetailsList = [];
+    var nodeDetailsList = [];
     var resourceSummary = {
       totalEstimatedTime: "N/A",
       totalResources: 0,
@@ -5019,11 +5019,11 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
     if (reviewData) {
       // Extract Infra-level information (prioritize backend-calculated values)
       if (reviewData.infraName) infos.push(`Infra Name: ${reviewData.infraName}`);
-      // Use backend-calculated totalVmCount if available, fallback to frontend calculation
-      if (reviewData.totalVmCount) {
-        infos.push(`NodeGroups: ${reviewData.totalVmCount}`);
+      // Use backend-calculated totalNodeCount if available, fallback to frontend calculation
+      if (reviewData.totalNodeCount) {
+        infos.push(`NodeGroups: ${reviewData.totalNodeCount}`);
         // Update totalNodeScale with backend value if available
-        totalNodeScale = reviewData.totalVmCount;
+        totalNodeScale = reviewData.totalNodeCount;
       } else {
         infos.push(`NodeGroups: ${totalNodeScale} (frontend calculated)`);
       }
@@ -5083,51 +5083,51 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
         }
       }
       
-      // Parse VM review results in detail and group by NodeGroup
-      if (reviewData.vmReviews && Array.isArray(reviewData.vmReviews)) {
-        resourceSummary.totalResources = reviewData.vmReviews.length;
+      // Parse Node review results in detail and group by NodeGroup
+      if (reviewData.nodeReviews && Array.isArray(reviewData.nodeReviews)) {
+        resourceSummary.totalResources = reviewData.nodeReviews.length;
         
-        // Group VMs by NodeGroup name for better organization
+        // Group Nodes by NodeGroup name for better organization
         var nodeGroupVMs = {};
         
-        reviewData.vmReviews.forEach((vmReview, index) => {
-          var vmDetails = {
+        reviewData.nodeReviews.forEach((nodeReview, index) => {
+          var nodeDetails = {
             index: index + 1,
-            name: vmReview.vmName || `VM-${index + 1}`,
-            nodeGroupName: vmReview.nodeGroupName || vmReview.vmName || `VM-${index + 1}`,
-            nodeGroupSize: vmReview.nodeGroupSize || 1,
-            status: vmReview.status || "Unknown",
-            message: vmReview.message || "",
-            canCreate: vmReview.canCreate || false,
-            estimatedCost: vmReview.estimatedCost || "Unknown",
+            name: nodeReview.nodeName || `Node-${index + 1}`,
+            nodeGroupName: nodeReview.nodeGroupName || nodeReview.nodeName || `Node-${index + 1}`,
+            nodeGroupSize: nodeReview.nodeGroupSize || 1,
+            status: nodeReview.status || "Unknown",
+            message: nodeReview.message || "",
+            canCreate: nodeReview.canCreate || false,
+            estimatedCost: nodeReview.estimatedCost || "Unknown",
             issues: [],
             info: [],
             validations: {}
           };
           
-          // VM basic information with enhanced NodeGroup details
-          if (vmReview.nodeGroupSize) {
-            var actualVMs = parseInt(vmReview.nodeGroupSize) || 1;
-            vmDetails.info.push(`NodeGroup Size: ${vmReview.nodeGroupSize} VM${actualVMs > 1 ? 's' : ''}`);
-            if (actualVMs > 1) {
-              vmDetails.info.push(`Total VMs in NodeGroup: ${actualVMs} instances`);
+          // Node basic information with enhanced NodeGroup details
+          if (nodeReview.nodeGroupSize) {
+            var actualNodes = parseInt(nodeReview.nodeGroupSize) || 1;
+            nodeDetails.info.push(`NodeGroup Size: ${nodeReview.nodeGroupSize} Node${actualNodes > 1 ? 's' : ''}`);
+            if (actualNodes > 1) {
+              nodeDetails.info.push(`Total Nodes in NodeGroup: ${actualNodes} instances`);
             }
           }
-          if (vmReview.connectionName) vmDetails.info.push(`Connection: ${vmReview.connectionName}`);
-          if (vmReview.providerName) vmDetails.info.push(`Provider: ${vmReview.providerName}`);
-          if (vmReview.regionName) vmDetails.info.push(`Region: ${vmReview.regionName}`);
+          if (nodeReview.connectionName) nodeDetails.info.push(`Connection: ${nodeReview.connectionName}`);
+          if (nodeReview.providerName) nodeDetails.info.push(`Provider: ${nodeReview.providerName}`);
+          if (nodeReview.regionName) nodeDetails.info.push(`Region: ${nodeReview.regionName}`);
           
-          // Group VMs by NodeGroup name
-          var groupKey = vmDetails.nodeGroupName;
+          // Group Nodes by NodeGroup name
+          var groupKey = nodeDetails.nodeGroupName;
           if (!nodeGroupVMs[groupKey]) {
             nodeGroupVMs[groupKey] = [];
           }
-          nodeGroupVMs[groupKey].push(vmDetails);
+          nodeGroupVMs[groupKey].push(nodeDetails);
           
           // Spec validation details
-          if (vmReview.specValidation) {
-            var sv = vmReview.specValidation;
-            vmDetails.validations.spec = {
+          if (nodeReview.specValidation) {
+            var sv = nodeReview.specValidation;
+            nodeDetails.validations.spec = {
               resourceId: sv.resourceId,
               resourceName: sv.resourceName,
               isAvailable: sv.isAvailable,
@@ -5137,14 +5137,14 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
             };
             
             if (!sv.isAvailable) {
-              vmDetails.issues.push(`Spec Issue: ${sv.message || 'Spec not available'}`);
+              nodeDetails.issues.push(`Spec Issue: ${sv.message || 'Spec not available'}`);
             }
           }
           
           // Image validation details
-          if (vmReview.imageValidation) {
-            var iv = vmReview.imageValidation;
-            vmDetails.validations.image = {
+          if (nodeReview.imageValidation) {
+            var iv = nodeReview.imageValidation;
+            nodeDetails.validations.image = {
               resourceId: iv.resourceId,
               resourceName: iv.resourceName,
               isAvailable: iv.isAvailable,
@@ -5154,36 +5154,36 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
             };
             
             if (!iv.isAvailable) {
-              vmDetails.issues.push(`Image Issue: ${iv.message || 'Image not available'}`);
+              nodeDetails.issues.push(`Image Issue: ${iv.message || 'Image not available'}`);
             }
           }
           
-          // VM-level errors, warnings, and info
-          if (vmReview.errors && Array.isArray(vmReview.errors)) {
-            vmReview.errors.forEach(error => {
-              vmDetails.issues.push(`Error: ${error}`);
-              errors.push(`VM ${index + 1} (${vmDetails.name}): ${error}`);
+          // Node-level errors, warnings, and info
+          if (nodeReview.errors && Array.isArray(nodeReview.errors)) {
+            nodeReview.errors.forEach(error => {
+              nodeDetails.issues.push(`Error: ${error}`);
+              errors.push(`Node ${index + 1} (${nodeDetails.name}): ${error}`);
               validationStatus = "error";
             });
           }
           
-          if (vmReview.warnings && Array.isArray(vmReview.warnings)) {
-            vmReview.warnings.forEach(warning => {
-              vmDetails.issues.push(`Warning: ${warning}`);
-              warnings.push(`VM ${index + 1} (${vmDetails.name}): ${warning}`);
+          if (nodeReview.warnings && Array.isArray(nodeReview.warnings)) {
+            nodeReview.warnings.forEach(warning => {
+              nodeDetails.issues.push(`Warning: ${warning}`);
+              warnings.push(`Node ${index + 1} (${nodeDetails.name}): ${warning}`);
             });
           }
           
-          if (vmReview.info && Array.isArray(vmReview.info)) {
-            vmReview.info.forEach(info => {
-              vmDetails.info.push(info);
+          if (nodeReview.info && Array.isArray(nodeReview.info)) {
+            nodeReview.info.forEach(info => {
+              nodeDetails.info.push(info);
             });
           }
           
-          // Don't add individual VMs to vmDetailsList anymore, we'll use nodeGroupVMs
+          // Don't add individual VMs to nodeDetailsList anymore, we'll use nodeGroupVMs
         });
         
-        // Convert nodeGroupVMs to organized vmDetailsList
+        // Convert nodeGroupVMs to organized nodeDetailsList
         Object.keys(nodeGroupVMs).forEach(groupName => {
           var groupVMs = nodeGroupVMs[groupName];
           // Add NodeGroup as a single entry with consolidated information
@@ -5191,10 +5191,10 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
             var representativeVM = groupVMs[0];
             var nodeGroupSize = parseInt(representativeVM.nodeGroupSize) || 1;
             
-            // Find corresponding VM configuration from createInfraReq for additional spec details
-            var vmConfig = null;
+            // Find corresponding Node configuration from createInfraReq for additional spec details
+            var nodeConfig = null;
             if (createInfraReq && createInfraReq.nodeGroups) {
-              vmConfig = createInfraReq.nodeGroups.find(vm => vm.name === groupName);
+              nodeConfig = createInfraReq.nodeGroups.find(nd => nd.name === groupName);
             }
             
             var groupDetails = {
@@ -5210,11 +5210,11 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
               info: representativeVM.info,
               validations: representativeVM.validations,
               vmInstances: groupVMs.length,
-              // Add VM configuration details
-              vmConfig: vmConfig
+              // Add Node configuration details
+              nodeConfig: nodeConfig
             };
             
-            // Calculate total cost for NodeGroup if cost per VM is available
+            // Calculate total cost for NodeGroup if cost per Node is available
             if (representativeVM.estimatedCost && representativeVM.estimatedCost !== 'Unknown') {
               var costMatch = String(representativeVM.estimatedCost).match(/\$?([\d.]+)/);
               if (costMatch) {
@@ -5224,7 +5224,7 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
               }
             }
             
-            vmDetailsList.push(groupDetails);
+            nodeDetailsList.push(groupDetails);
           }
         });
       }
@@ -5292,15 +5292,15 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
       };
       
       infos.forEach(info => {
-        if (info.includes('Infra Name:') || info.includes('Total VM Count:') || info.includes('Estimated Cost:')) {
+        if (info.includes('Infra Name:') || info.includes('Total Node Count:') || info.includes('Estimated Cost:')) {
           // Special handling for estimated cost
           if (info.includes('Estimated Cost:')) {
             const costValue = info.split(': ')[1];
             if (costValue && (costValue.includes('unavailable') || costValue.includes('Cost estimation'))) {
               // Parse cost unavailability messages
               if (costValue.includes('unavailable for all')) {
-                const vmCount = costValue.match(/\d+/);
-                structuredInfo.basic.push(`Estimated Cost: Not available (${vmCount ? vmCount[0] : 'all'} VMs)`);
+                const ndCount = costValue.match(/\d+/);
+                structuredInfo.basic.push(`Estimated Cost: Not available (${ndCount ? ndCount[0] : 'all'} Nodes)`);
               } else if (costValue.includes('unavailable')) {
                 structuredInfo.basic.push(`Estimated Cost: Not available`);
               } else {
@@ -5461,7 +5461,7 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
                     
                     // Sort basic info (excluding Message)
                     basicInfoWithoutMessage.sort((a, b) => {
-                      const order = ['Infra Name', 'Total VM Count', 'Estimated Cost'];
+                      const order = ['Infra Name', 'Total Node Count', 'Estimated Cost'];
                       const indexA = order.indexOf(a.label);
                       const indexB = order.indexOf(b.label);
                       
@@ -5550,7 +5550,7 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
             <th style="border: 1px solid #ddd; padding: 8px; text-align: left; color: #333;">Count/Details</th>
           </tr>
           <tr>
-            <td style="border: 1px solid #ddd; padding: 8px; color: #666;">Total VMs</td>
+            <td style="border: 1px solid #ddd; padding: 8px; color: #666;">Total Nodes</td>
             <td style="border: 1px solid #ddd; padding: 8px; color: #333;"><strong>${resourceSummary.totalResources}</strong></td>
           </tr>
           ${Object.keys(resourceSummary.providerBreakdown).length > 0 ? `
@@ -5575,39 +5575,39 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
       </div>
     `;
 
-    // Build detailed VM information HTML with enhanced NodeGroup validation details
-    var vmDetailsHtml = "";
-    if (vmDetailsList.length > 0) {
-      vmDetailsHtml = vmDetailsList.map(vm => {
-        var statusIcon = vm.canCreate ? '✅' : '❌';
-        var statusColor = vm.canCreate ? '#28a745' : '#dc3545';
+    // Build detailed Node information HTML with enhanced NodeGroup validation details
+    var nodeDetailsHtml = "";
+    if (nodeDetailsList.length > 0) {
+      nodeDetailsHtml = nodeDetailsList.map(nd => {
+        var statusIcon = nd.canCreate ? '✅' : '❌';
+        var statusColor = nd.canCreate ? '#28a745' : '#dc3545';
         var bgColor = '#f8f9fa';
         
         // NodeGroup-specific display
         var nodeGroupIndicator = '';
-        var vmTitle = '';
-        if (vm.isNodeGroup) {
+        var nodeTitle = '';
+        if (nd.isNodeGroup) {
           nodeGroupIndicator = `
             <div style="display: inline-flex; align-items: center; margin-left: 10px; padding: 2px 8px; background: #f0f8ff; border: 1px solid #007bff; border-radius: 12px; font-size: 0.8em; color: #007bff;">
-             🖥️ X ${vm.nodeGroupSize}
+             🖥️ X ${nd.nodeGroupSize}
             </div>
           `;
-          vmTitle = `${vm.name}`;
+          nodeTitle = `${nd.name}`;
         } else {
-          vmTitle = `${vm.name} (VM #${vm.index})`;
+          nodeTitle = `${nd.name} (Node #${nd.index})`;
         }
         
         return `
         <div style="margin: 10px 0; padding: 12px; border: 1px solid #ddd; border-radius: 5px; background-color: ${bgColor};">
           <div style="display: flex; align-items: center; margin-bottom: 10px; flex-wrap: wrap;">
             <label style="display: flex; align-items: center; margin-right: 8px; cursor: pointer;">
-              <input type="checkbox" class="nodegroup-checkbox" data-nodegroup-name="${vm.name}" style="margin-right: 6px; transform: scale(1.1);" checked onchange="updateReviewButtonState()">
+              <input type="checkbox" class="nodegroup-checkbox" data-nodegroup-name="${nd.name}" style="margin-right: 6px; transform: scale(1.1);" checked onchange="updateReviewButtonState()">
             </label>
             <span style="font-size: 1em; margin-right: 8px;">${statusIcon}</span>
-            <h6 style="margin: 0; color: ${statusColor}; font-size: 1em;">${vmTitle}</h6>
+            <h6 style="margin: 0; color: ${statusColor}; font-size: 1em;">${nodeTitle}</h6>
             ${nodeGroupIndicator}
-            ${vm.estimatedCost !== 'Unknown' && vm.estimatedCost !== 'Cost estimation unavailable' ? 
-              `<span style="margin-left: auto; padding: 3px 8px; background: #28a745; color: white; border-radius: 14px; font-size: 0.8em;">💰 ${vm.estimatedCost}</span>` : 
+            ${nd.estimatedCost !== 'Unknown' && nd.estimatedCost !== 'Cost estimation unavailable' ? 
+              `<span style="margin-left: auto; padding: 3px 8px; background: #28a745; color: white; border-radius: 14px; font-size: 0.8em;">💰 ${nd.estimatedCost}</span>` : 
               `<span style="margin-left: auto; padding: 3px 8px; background: #ffc107; color: white; border-radius: 14px; font-size: 0.8em;">⚠️ Cost N/A</span>`
             }
           </div>
@@ -5616,38 +5616,38 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
             <div style="margin-bottom: 4px;">
               <strong style="font-size: 0.9em;">Status:</strong> 
               <span style="color: ${statusColor}; font-weight: bold; font-size: 0.9em;">
-                ${vm.status}
+                ${nd.status}
               </span>
             </div>
-            ${vm.message ? `<div style="margin-left: 0; color: #666; font-size: 0.8em; line-height: 1.4; word-wrap: break-word; white-space: normal;">(${vm.message})</div>` : ''}
+            ${nd.message ? `<div style="margin-left: 0; color: #666; font-size: 0.8em; line-height: 1.4; word-wrap: break-word; white-space: normal;">(${nd.message})</div>` : ''}
           </div>
           
-          ${vm.isNodeGroup ? `
+          ${nd.isNodeGroup ? `
           <div style="margin: 8px 0; padding: 8px; background: #f0f8ff; border-radius: 4px; border-left: 3px solid #007bff;">
             
             ${(() => {
-              // Extract Provider and Region from VM info
+              // Extract Provider and Region from Node info
               var provider = '';
               var region = '';
-              if (vm.info && Array.isArray(vm.info)) {
-                vm.info.forEach(info => {
+              if (nd.info && Array.isArray(nd.info)) {
+                nd.info.forEach(info => {
                   if (info.includes('Provider:')) provider = info.split(': ')[1] || '';
                   if (info.includes('Region:')) region = info.split(': ')[1] || '';
                 });
               }
               
-              // Extract spec details from vmConfig if available
+              // Extract spec details from nodeConfig if available
               var specDetails = '';
-              if (vm.vmConfig) {
+              if (nd.nodeConfig) {
                 var specs = [];
                 
                 // Try to find detailed spec info from recommendedSpecList if available
                 var detailedSpec = null;
-                if (vm.vmConfig.specId && typeof recommendedSpecList !== 'undefined' && Array.isArray(recommendedSpecList)) {
+                if (nd.nodeConfig.specId && typeof recommendedSpecList !== 'undefined' && Array.isArray(recommendedSpecList)) {
                   detailedSpec = recommendedSpecList.find(spec => 
-                    spec.id === vm.vmConfig.specId || 
-                    spec.name === vm.vmConfig.specId ||
-                    vm.vmConfig.specId.includes(spec.id)
+                    spec.id === nd.nodeConfig.specId || 
+                    spec.name === nd.nodeConfig.specId ||
+                    nd.nodeConfig.specId.includes(spec.id)
                   );
                 }
                 
@@ -5666,35 +5666,35 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
                     }
                     specs.push(`⚡ <strong>Accelerator:</strong> ${acceleratorInfo}`);
                   }
-                } else if (vm.vmConfig.specId) {
+                } else if (nd.nodeConfig.specId) {
                   // Fallback: Try to extract vCPU and memory from spec name if available
-                  var specMatch = vm.vmConfig.specId.match(/([0-9]+)vcpu_([0-9.]+)gb/i);
+                  var specMatch = nd.nodeConfig.specId.match(/([0-9]+)vcpu_([0-9.]+)gb/i);
                   if (specMatch) {
                     specs.push(`💻 <strong>vCPU:</strong> ${specMatch[1]}`);
                     specs.push(`🧠 <strong>Memory:</strong> ${specMatch[2]} GB`);
                   } else {
                     // Show spec ID as fallback
-                    specs.push(`🖥️ <strong>Spec:</strong> ${vm.vmConfig.specId.split('+').pop() || vm.vmConfig.specId}`);
+                    specs.push(`🖥️ <strong>Spec:</strong> ${nd.nodeConfig.specId.split('+').pop() || nd.nodeConfig.specId}`);
                   }
                 }
                 
                 // Add RootDisk information if available
-                if (vm.vmConfig.rootDiskSize && vm.vmConfig.rootDiskSize > 0) {
-                  specs.push(`💽 <strong>Root Disk:</strong> ${vm.vmConfig.rootDiskSize} GB`);
+                if (nd.nodeConfig.rootDiskSize && nd.nodeConfig.rootDiskSize > 0) {
+                  specs.push(`💽 <strong>Root Disk:</strong> ${nd.nodeConfig.rootDiskSize} GB`);
                 } else {
                   // Show default if 0 or not specified
                   specs.push(`💽 <strong>Root Disk:</strong> Default`);
                 }
                 
                 // Add RootDisk type if available
-                if (vm.vmConfig.rootDiskType && vm.vmConfig.rootDiskType !== 'default') {
-                  specs.push(`📀 <strong>Disk Type:</strong> ${vm.vmConfig.rootDiskType}`);
+                if (nd.nodeConfig.rootDiskType && nd.nodeConfig.rootDiskType !== 'default') {
+                  specs.push(`📀 <strong>Disk Type:</strong> ${nd.nodeConfig.rootDiskType}`);
                 }
                 
                 // Check for accelerator/GPU information from spec name if not found in detailed spec
-                if (!detailedSpec && vm.vmConfig.specId && 
-                    (vm.vmConfig.specId.toLowerCase().includes('gpu') || 
-                     vm.vmConfig.specId.toLowerCase().includes('accelerator'))) {
+                if (!detailedSpec && nd.nodeConfig.specId && 
+                    (nd.nodeConfig.specId.toLowerCase().includes('gpu') || 
+                     nd.nodeConfig.specId.toLowerCase().includes('accelerator'))) {
                   specs.push(`⚡ <strong>Accelerator:</strong> GPU-enabled`);
                 }
                 
@@ -5726,47 +5726,47 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
             })()}
           </div>` : ''}
           
-          ${vm.validations && (vm.validations.spec || vm.validations.image) ? `
+          ${nd.validations && (nd.validations.spec || nd.validations.image) ? `
           <div style="margin: 10px 0; padding: 8px; background: #f1f3f4; border-radius: 4px; border-left: 3px solid #007bff;">
             <strong style="color: #495057; font-size: 0.95em;">🔍 Resource Validation</strong>
-            ${vm.validations.spec ? `
-            <div style="margin: 6px 0; padding: 6px; background: ${vm.validations.spec.isAvailable ? '#e8f5e8' : '#ffe8e8'}; border-radius: 4px;">
-              <div style="font-size: 0.9em;"><strong>🖥️ Spec:</strong> ${vm.validations.spec.resourceId || 'N/A'}</div>
+            ${nd.validations.spec ? `
+            <div style="margin: 6px 0; padding: 6px; background: ${nd.validations.spec.isAvailable ? '#e8f5e8' : '#ffe8e8'}; border-radius: 4px;">
+              <div style="font-size: 0.9em;"><strong>🖥️ Spec:</strong> ${nd.validations.spec.resourceId || 'N/A'}</div>
               <div style="font-size: 0.8em; color: #666; line-height: 1.4;">
-                Status: ${vm.validations.spec.status || 'Unknown'} | 
-                Available: ${vm.validations.spec.isAvailable ? 'Yes' : 'No'}
-                ${vm.validations.spec.message ? `<div style="margin-top: 4px; word-wrap: break-word; white-space: normal;">📝 ${vm.validations.spec.message}</div>` : ''}
+                Status: ${nd.validations.spec.status || 'Unknown'} | 
+                Available: ${nd.validations.spec.isAvailable ? 'Yes' : 'No'}
+                ${nd.validations.spec.message ? `<div style="margin-top: 4px; word-wrap: break-word; white-space: normal;">📝 ${nd.validations.spec.message}</div>` : ''}
               </div>
             </div>` : ''}
-            ${vm.validations.image ? `
-            <div style="margin: 6px 0; padding: 6px; background: ${vm.validations.image.isAvailable ? '#e8f5e8' : '#ffe8e8'}; border-radius: 4px;">
-              <div style="font-size: 0.9em;"><strong>💿 Image:</strong> ${vm.validations.image.resourceId || 'N/A'}</div>
+            ${nd.validations.image ? `
+            <div style="margin: 6px 0; padding: 6px; background: ${nd.validations.image.isAvailable ? '#e8f5e8' : '#ffe8e8'}; border-radius: 4px;">
+              <div style="font-size: 0.9em;"><strong>💿 Image:</strong> ${nd.validations.image.resourceId || 'N/A'}</div>
               <div style="font-size: 0.8em; color: #666; line-height: 1.4;">
-                Status: ${vm.validations.image.status || 'Unknown'} | 
-                Available: ${vm.validations.image.isAvailable ? 'Yes' : 'No'}
-                ${vm.validations.image.message ? `<div style="margin-top: 4px; word-wrap: break-word; white-space: normal;">📝 ${vm.validations.image.message}</div>` : ''}
+                Status: ${nd.validations.image.status || 'Unknown'} | 
+                Available: ${nd.validations.image.isAvailable ? 'Yes' : 'No'}
+                ${nd.validations.image.message ? `<div style="margin-top: 4px; word-wrap: break-word; white-space: normal;">📝 ${nd.validations.image.message}</div>` : ''}
               </div>
             </div>` : ''}
           </div>` : ''}
           
-          ${vm.issues.length > 0 ? `
+          ${nd.issues.length > 0 ? `
           <div style="margin: 10px 0; padding: 8px; background: #ffe6e6; border-radius: 4px; border-left: 3px solid #dc3545;">
             <strong style="color: #dc3545; font-size: 0.95em;">⚠️ Issues Found</strong>
             <ul style="margin: 5px 0; padding-left: 20px; color: #dc3545; font-size: 0.85em;">
-              ${vm.issues.map(issue => `<li>${issue}</li>`).join('')}
+              ${nd.issues.map(issue => `<li>${issue}</li>`).join('')}
             </ul>
           </div>` : ''}
           
-          ${vm.info.length > 0 ? `
+          ${nd.info.length > 0 ? `
           <details style="margin-top: 10px;">
             <summary style="cursor: pointer; font-size: 0.9em; color: #6c757d; font-weight: bold;">📋 View Additional Details</summary>
             <div style="margin: 8px 0; padding: 8px; background: #f8f9fa; border-radius: 4px;">
               <ul style="margin: 0; padding-left: 20px; font-size: 0.85em; color: #6c757d;">
-                ${vm.info.filter(info => 
+                ${nd.info.filter(info => 
                   !info.includes('Provider:') && 
                   !info.includes('Region:') && 
                   !info.includes('NodeGroup Size:') &&
-                  !info.includes('Total VMs in NodeGroup:')
+                  !info.includes('Total Nodes in NodeGroup:')
                 ).map(info => `<li style="margin: 2px 0;">${info}</li>`).join('')}
               </ul>
             </div>
@@ -5848,7 +5848,7 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
                   </label>
                 </div>
               </div>
-              ${vmDetailsHtml.length > 0 ? vmDetailsHtml : '<p style="color: #666; font-style: italic; font-size: 0.9em;">No NodeGroup details available</p>'}
+              ${nodeDetailsHtml.length > 0 ? nodeDetailsHtml : '<p style="color: #666; font-style: italic; font-size: 0.9em;">No NodeGroup details available</p>'}
             </div>
           </details>
           
@@ -5881,17 +5881,17 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
                   <span style="color: #999; font-weight: 500;">📊 Deploy a monitoring agent (temporarily disabled)</span>
                 </label>
                 <div style="margin-left: 24px; margin-top: 4px; color: #999; font-size: 0.8em;">
-                  Install CB-Dragonfly monitoring agent on all VMs for performance monitoring.
+                  Install CB-Dragonfly monitoring agent on all Nodes for performance monitoring.
                 </div>
               </div>
 
               <div style="margin: 8px 0;">
                 <label style="display: flex; align-items: center; cursor: pointer; font-size: 0.9em;">
                   <input type="checkbox" id="hold-checkbox" style="margin-right: 8px; transform: scale(1.2);">
-                  <span style="color: #333; font-weight: 500;">⏸️ Hold VM provisioning of the Infra</span>
+                  <span style="color: #333; font-weight: 500;">⏸️ Hold Node provisioning of the Infra</span>
                 </label>
                 <div style="margin-left: 24px; margin-top: 4px; color: #666; font-size: 0.8em;">
-                  Create Infra structure without deploying VMs immediately. Use "Continue" action when ready.
+                  Create Infra structure without deploying Nodes immediately. Use "Continue" action when ready.
                 </div>
               </div>
 
@@ -5902,7 +5902,7 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
                   <span style="color: #333; font-weight: 500;">🚀 Add post-deployment commands</span>
                 </label>
                 <div style="margin-left: 24px; margin-top: 4px; color: #666; font-size: 0.8em;">
-                  Execute custom commands on all VMs after successful deployment.
+                  Execute custom commands on all Nodes after successful deployment.
                 </div>
               </div>
               
@@ -5912,7 +5912,7 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
                   <span style="color: #333; font-weight: 500;">📦 Build Cloud-Agnostic Custom Image</span>
                 </label>
                 <div style="margin-left: 24px; margin-top: 4px; color: #666; font-size: 0.8em;">
-                  Create custom images from deployed VMs and optionally cleanup infrastructure.
+                  Create custom images from deployed Nodes and optionally cleanup infrastructure.
                 </div>
               </div>
             </div>
@@ -6175,8 +6175,8 @@ function reviewWithSelectedNodeGroups(selectedNodeGroups) {
   var password = configPassword;
   var namespace = configNamespace;
   
-  // Get current createInfraReq from global vmNodeGroupReqeustFromSpecList
-  if (vmNodeGroupReqeustFromSpecList.length === 0) {
+  // Get current createInfraReq from global nodeGroupRequestFromSpecList
+  if (nodeGroupRequestFromSpecList.length === 0) {
     Swal.fire({
       icon: "error",
       title: "No Configuration Found",
@@ -6185,12 +6185,12 @@ function reviewWithSelectedNodeGroups(selectedNodeGroups) {
     return;
   }
   
-  // Filter VM requests to include only selected NodeGroups
-  var filteredVmRequests = vmNodeGroupReqeustFromSpecList.filter(vmReq => {
-    return selectedNodeGroups.includes(vmReq.name);
+  // Filter Node requests to include only selected NodeGroups
+  var filteredNodeRequests = nodeGroupRequestFromSpecList.filter(nodeReq => {
+    return selectedNodeGroups.includes(nodeReq.name);
   });
   
-  if (filteredVmRequests.length === 0) {
+  if (filteredNodeRequests.length === 0) {
     Swal.fire({
       icon: "warning",
       title: "No NodeGroups Selected",
@@ -6202,7 +6202,7 @@ function reviewWithSelectedNodeGroups(selectedNodeGroups) {
   // Create modified Infra request with filtered VMs
   var modifiedCreateInfraReq = JSON.parse(JSON.stringify(createInfraReqTmplt));
   modifiedCreateInfraReq.name = "mc-" + generateInfraName();
-  modifiedCreateInfraReq.nodeGroups = filteredVmRequests;
+  modifiedCreateInfraReq.nodeGroups = filteredNodeRequests;
   
   // Calculate costs and details for selected NodeGroups
   let totalCost = 0;
@@ -6210,15 +6210,15 @@ function reviewWithSelectedNodeGroups(selectedNodeGroups) {
   let costDetailsHtml = "";
   let nodeGroupReqString = "";
   
-  filteredVmRequests.forEach(vmReq => {
-    totalNodeScale += parseInt(vmReq.nodeGroupSize || 1);
-    nodeGroupReqString += `<b>${vmReq.name}</b> (${vmReq.nodeGroupSize || 1} VMs)<br>`;
+  filteredNodeRequests.forEach(nodeReq => {
+    totalNodeScale += parseInt(nodeReq.nodeGroupSize || 1);
+    nodeGroupReqString += `<b>${nodeReq.name}</b> (${nodeReq.nodeGroupSize || 1} Nodes)<br>`;
   });
   
   costDetailsHtml = `
     <div style="text-align: left; margin: 10px 0;">
-      <strong>Selected NodeGroups: ${filteredVmRequests.length}</strong><br>
-      <strong>Total VMs: ${totalNodeScale}</strong><br>
+      <strong>Selected NodeGroups: ${filteredNodeRequests.length}</strong><br>
+      <strong>Total Nodes: ${totalNodeScale}</strong><br>
       <div style="font-size: 0.9em; color: #666; margin-top: 5px;">
         ${nodeGroupReqString}
       </div>
@@ -6235,7 +6235,7 @@ function reviewWithSelectedNodeGroups(selectedNodeGroups) {
         <div style="margin: 20px 0;">
           <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite;"></div>
         </div>
-        <p>Validating configuration with ${filteredVmRequests.length} selected NodeGroups...</p>
+        <p>Validating configuration with ${filteredNodeRequests.length} selected NodeGroups...</p>
       </div>
       <style>
         @keyframes spin {
@@ -6259,7 +6259,7 @@ function createInfra() {
   var scrollableCol = document.querySelector('.scrollable-column');
   if (scrollableCol) scrollableCol.scrollTop = 0;
 
-  if (vmNodeGroupReqeustFromSpecList.length != 0) {
+  if (nodeGroupRequestFromSpecList.length != 0) {
     var hostname = configHostname;
     var port = configPort;
     var username = configUsername;
@@ -6270,7 +6270,7 @@ function createInfra() {
 
     var createInfraReq = createInfraReqTmplt;
     createInfraReq.name = "mc-" + generateInfraName();
-    createInfraReq.nodeGroups = vmNodeGroupReqeustFromSpecList;
+    createInfraReq.nodeGroups = nodeGroupRequestFromSpecList;
     let totalCost = 0;
     let totalNodeScale = 0;
 
@@ -6351,9 +6351,9 @@ function createInfra() {
     });
   } else {
     console.log(
-      "To create a Infra, VMs should be configured! Click the Map to add a config for VM request."
+      "To create a Infra, Nodes should be configured! Click the Map to add a config for Node request."
     );
-    errorAlert("Please configure Infra first\n(Click the Map to add VMs)");
+    errorAlert("Please configure Infra first\n(Click the Map to add Nodes)");
   }
 }
 window.createInfra = createInfra;
@@ -6385,13 +6385,13 @@ async function checkK8sNodeImageDesignation(providerName, hostname, port, userna
 
 // K8s Cluster creation function (supports single and multi-cluster creation)
 function createK8sCluster() {
-  if (vmNodeGroupReqeustFromSpecList.length < 1) {
+  if (nodeGroupRequestFromSpecList.length < 1) {
     errorAlert("Please configure at least one NodeGroup to create K8s Cluster(s)");
     return;
   }
 
-  const isMultiCluster = vmNodeGroupReqeustFromSpecList.length > 1;
-  const nodeGroup = vmNodeGroupReqeustFromSpecList[0];
+  const isMultiCluster = nodeGroupRequestFromSpecList.length > 1;
+  const nodeGroup = nodeGroupRequestFromSpecList[0];
   const spec = recommendedSpecList[0];
   
   // Generate random names for K8s resources
@@ -6407,7 +6407,7 @@ function createK8sCluster() {
   // For multi-cluster, use namePrefix approach (simplified dialog)
   if (isMultiCluster) {
     // Build cluster configuration summary
-    const clusterSummary = vmNodeGroupReqeustFromSpecList.map((sg, idx) => {
+    const clusterSummary = nodeGroupRequestFromSpecList.map((sg, idx) => {
       const sp = recommendedSpecList[idx];
       return `<tr>
         <td>${idx + 1}</td>
@@ -6418,7 +6418,7 @@ function createK8sCluster() {
     }).join('');
 
     Swal.fire({
-      title: `Create ${vmNodeGroupReqeustFromSpecList.length} K8s Clusters`,
+      title: `Create ${nodeGroupRequestFromSpecList.length} K8s Clusters`,
       html: `
         <div style="text-align: left; padding: 15px;">
           <div style="margin-bottom: 15px;">
@@ -6430,7 +6430,7 @@ function createK8sCluster() {
             </div>
           </div>
           <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px; max-height: 200px; overflow-y: auto;">
-            <strong>Clusters to create (${vmNodeGroupReqeustFromSpecList.length}):</strong>
+            <strong>Clusters to create (${nodeGroupRequestFromSpecList.length}):</strong>
             <table style="width: 100%; font-size: 0.85em; margin-top: 8px;">
               <tr style="background: #e9ecef;"><th>#</th><th>Provider</th><th>Region</th><th>Spec</th></tr>
               ${clusterSummary}
@@ -6442,7 +6442,7 @@ function createK8sCluster() {
         </div>
       `,
       showCancelButton: true,
-      confirmButtonText: `Create ${vmNodeGroupReqeustFromSpecList.length} Clusters`,
+      confirmButtonText: `Create ${nodeGroupRequestFromSpecList.length} Clusters`,
       cancelButtonText: "Cancel",
       preConfirm: () => {
         const namePrefix = document.getElementById('k8sNamePrefix').value.trim();
@@ -6457,7 +6457,7 @@ function createK8sCluster() {
         const { namePrefix } = result.value;
         
         // Build multi-cluster request
-        const clusters = vmNodeGroupReqeustFromSpecList.map((sg, idx) => {
+        const clusters = nodeGroupRequestFromSpecList.map((sg, idx) => {
           const clusterReq = {
             imageId: sg.imageId || "default",
             specId: sg.specId
@@ -6770,7 +6770,7 @@ window.createK8sCluster = createK8sCluster;
 
 // Add NodeGroup to existing K8s Cluster function (supports single and multi-NodeGroup)
 function addNodeGroupToK8sCluster() {
-  if (vmNodeGroupReqeustFromSpecList.length < 1) {
+  if (nodeGroupRequestFromSpecList.length < 1) {
     errorAlert("Please configure at least one NodeGroup to add NodeGroup(s) to K8s Cluster");
     return;
   }
@@ -6795,7 +6795,7 @@ function addNodeGroupToK8sCluster() {
       return;
     }
 
-    const isMultiNodeGroup = vmNodeGroupReqeustFromSpecList.length > 1;
+    const isMultiNodeGroup = nodeGroupRequestFromSpecList.length > 1;
 
     if (isMultiNodeGroup) {
       // Multi-NodeGroup: Each NodeGroup maps to a compatible cluster
@@ -6813,7 +6813,7 @@ function addNodeGroupToK8sCluster() {
 
 // Single NodeGroup dialog (original behavior)
 function showSingleNodeGroupDialog(clusters, hostname, port, username, password, namespace) {
-  const nodeGroup = vmNodeGroupReqeustFromSpecList[0];
+  const nodeGroup = nodeGroupRequestFromSpecList[0];
   const spec = recommendedSpecList[0];
   const k8sNodeGroupRandomName = "ng-" + generateRandomString();
   const nodeGroupProvider = spec.providerName;
@@ -7029,7 +7029,7 @@ function showMultiNodeGroupDialog(clusters, hostname, port, username, password, 
   const nodeGroupPrefix = "ng-" + generateRandomString();
   
   // Build mapping of NodeGroups to compatible clusters
-  const nodeGroupMappings = vmNodeGroupReqeustFromSpecList.map((sg, idx) => {
+  const nodeGroupMappings = nodeGroupRequestFromSpecList.map((sg, idx) => {
     const spec = recommendedSpecList[idx];
     const provider = spec?.providerName || '';
     const region = spec?.regionName || '';
@@ -7068,7 +7068,7 @@ function showMultiNodeGroupDialog(clusters, hostname, port, username, password, 
   }).join('');
 
   Swal.fire({
-    title: `Add ${vmNodeGroupReqeustFromSpecList.length} NodeGroups`,
+    title: `Add ${nodeGroupRequestFromSpecList.length} NodeGroups`,
     html: `
       <div style="text-align: left; padding: 10px;">
         <div style="margin-bottom: 15px;">
@@ -7089,7 +7089,7 @@ function showMultiNodeGroupDialog(clusters, hostname, port, username, password, 
       </div>
     `,
     showCancelButton: true,
-    confirmButtonText: `Add ${vmNodeGroupReqeustFromSpecList.length} NodeGroups`,
+    confirmButtonText: `Add ${nodeGroupRequestFromSpecList.length} NodeGroups`,
     cancelButtonText: "Cancel",
     preConfirm: () => {
       const prefix = document.getElementById('ngNamePrefix').value.trim();
@@ -7100,7 +7100,7 @@ function showMultiNodeGroupDialog(clusters, hostname, port, username, password, 
       
       // Collect cluster selections
       const selections = [];
-      for (let i = 0; i < vmNodeGroupReqeustFromSpecList.length; i++) {
+      for (let i = 0; i < nodeGroupRequestFromSpecList.length; i++) {
         const sel = document.getElementById(`clusterSelect_${i}`);
         if (sel && sel.value) {
           selections.push({ idx: i, clusterId: sel.value });
@@ -7129,7 +7129,7 @@ async function executeMultiNodeGroupAddition(selections, prefix, hostname, port,
 
   try {
     for (const sel of selections) {
-      const sg = vmNodeGroupReqeustFromSpecList[sel.idx];
+      const sg = nodeGroupRequestFromSpecList[sel.idx];
       const ngName = `${prefix}-${sel.idx + 1}`;
       
       const nodeGroupReq = {
@@ -7298,29 +7298,29 @@ let workloadConfigurations = {
 let k8sClusterInfo = null;
 
 // Global variable to track current workload type
-let currentWorkloadType = 'vm'; // default to VM
+let currentWorkloadType = 'node'; // default to VM/Node mode (not k8s)
 
 // Helper function to check current workload type
 function getCurrentWorkloadType() {
   // First try to get from radio buttons
-  const vmModeInput = document.getElementById("vmMode");
+  const nodeModeInput = document.getElementById("nodeMode");
   const k8sModeInput = document.getElementById("k8sMode");
   
   // Debug: uncomment if workload type debugging needed
   // console.log('getCurrentWorkloadType() called');
-  // console.log('vmModeInput:', vmModeInput);
+  // console.log('nodeModeInput:', nodeModeInput);
   // console.log('k8sModeInput:', k8sModeInput);
-  // console.log('vmModeInput.checked:', vmModeInput?.checked);
+  // console.log('nodeModeInput.checked:', nodeModeInput?.checked);
   // console.log('k8sModeInput.checked:', k8sModeInput?.checked);
   
   if (k8sModeInput && k8sModeInput.checked) {
     console.log('Returning k8s from radio button');
     currentWorkloadType = 'k8s';
     return 'k8s';
-  } else if (vmModeInput && vmModeInput.checked) {
-    console.log('Returning vm from radio button');
-    currentWorkloadType = 'vm';
-    return 'vm';
+  } else if (nodeModeInput && nodeModeInput.checked) {
+    console.log('Returning node mode from radio button');
+    currentWorkloadType = 'node';
+    return 'node';
   }
   
   // Fallback to global variable
@@ -7393,24 +7393,24 @@ function updateProvidersForK8s(k8sInfo) {
   updateProviderDropdownText();
 }
 
-// Function to toggle between MC-Infra (VM) and K8s-Infra
+// Function to toggle between MC-Infra (Node) and K8s-Infra
 async function toggleWorkloadType() {
-  const vmModeInput = document.getElementById("vmMode");
+  const nodeModeInput = document.getElementById("nodeMode");
   const k8sModeInput = document.getElementById("k8sMode");
   const isK8sMode = k8sModeInput && k8sModeInput.checked;
   
   // Update global workload type
-  currentWorkloadType = isK8sMode ? 'k8s' : 'vm';
+  currentWorkloadType = isK8sMode ? 'k8s' : 'node';
   console.log('toggleWorkloadType: currentWorkloadType set to', currentWorkloadType);
   
   // Save current configuration before switching
   if (isK8sMode) {
-    // Switching from VM to K8s - save VM config
+    // Switching from Node to K8s - save Node config
     workloadConfigurations.vmInfra.minVCPU = document.getElementById("minVCPU").value || "1";
     workloadConfigurations.vmInfra.minRAM = document.getElementById("minRAM").value || "0.5";
     workloadConfigurations.vmInfra.diskSize = document.getElementById("diskSize").value || "";
     
-    // Store current VM provider selection
+    // Store current Node provider selection
     workloadConfigurations.vmInfra.selectedProviders = getSelectedProviders();
     workloadConfigurations.vmInfra.allSelected = document.getElementById("provider-all")?.checked || false;
     
@@ -7433,17 +7433,17 @@ async function toggleWorkloadType() {
     workloadConfigurations.k8sInfra.isActive = true;
     
   } else {
-    // Switching from K8s to VM - save K8s config
+    // Switching from K8s to Node - save Node config
     workloadConfigurations.k8sInfra.minVCPU = document.getElementById("minVCPU").value || "4";
     workloadConfigurations.k8sInfra.minRAM = document.getElementById("minRAM").value || "16";
     workloadConfigurations.k8sInfra.diskSize = document.getElementById("diskSize").value || "100";
     
-    // Apply VM configuration (restore previous or defaults)
+    // Apply Node configuration (restore previous or defaults)
     document.getElementById("minVCPU").value = workloadConfigurations.vmInfra.minVCPU;
     document.getElementById("minRAM").value = workloadConfigurations.vmInfra.minRAM;
     document.getElementById("diskSize").value = workloadConfigurations.vmInfra.diskSize;
     
-    // Restore VM provider selection
+    // Restore Node provider selection
     if (workloadConfigurations.vmInfra.allSelected) {
       const allCheckbox = document.getElementById("provider-all");
       if (allCheckbox) {
@@ -7480,10 +7480,10 @@ async function toggleWorkloadType() {
     workloadConfigurations.vmInfra.isActive = true;
     workloadConfigurations.k8sInfra.isActive = false;
     
-    // No alert needed for VM mode as requested
+    // No alert needed for Node mode as requested
   }
   
-  console.log('Workload Type Changed:', isK8sMode ? 'K8s-Infra' : 'MC-Infra (VM)');
+  console.log('Workload Type Changed:', isK8sMode ? 'K8s-Infra' : 'MC-Infra (Node)');
   console.log('Current Configuration:', workloadConfigurations);
 }
 window.toggleWorkloadType = toggleWorkloadType;
@@ -8535,7 +8535,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
               var createInfraReqVm = $.extend({}, createInfraReqVmTmplt);
               var recommendedSpec = selectedSpec;
 
-              createInfraReqVm.name = "g" + (vmNodeGroupReqeustFromSpecList.length + 1).toString();
+              createInfraReqVm.name = "g" + (nodeGroupRequestFromSpecList.length + 1).toString();
 
               var osImage = document.getElementById("osImage");
               var diskSize = document.getElementById("diskSize");
@@ -8664,13 +8664,13 @@ function getRecommendedSpec(idx, latitude, longitude) {
               // Fetch and populate Zone dropdown using the new availableZonesForSpec API (GET method)
               populateZoneSelect('zoneSelect', 'zoneLoadingSpinner', selectedSpec.id, '', 'zoneStatusMessage');
 
-              // Focus on the VM count input for better user experience
-              const vmCountInput = document.getElementById('vmCount');
+              // Focus on the Node count input for better user experience
+              const vmCountInput = document.getElementById('ndCount');
               if (vmCountInput) {
                 vmCountInput.focus();
               }
 
-              // Add input validation feedback for VM count
+              // Add input validation feedback for Node count
               if (vmCountInput) {
                 vmCountInput.addEventListener('input', function() {
                   const value = parseInt(this.value, 10);
@@ -8746,10 +8746,10 @@ function getRecommendedSpec(idx, latitude, longitude) {
             //back(disabled section)ground color
             backdrop: `rgba(0, 0, 0, 0.08)`,
             preConfirm: () => {
-              // vmCount input validation
-              const vmCountInput = document.getElementById('vmCount');
-              let vmCount = parseInt(vmCountInput.value, 10);
-              if (isNaN(vmCount) || vmCount < 1 || vmCount > 100) {
+              // ndCount input validation
+              const vmCountInput = document.getElementById('ndCount');
+              let ndCount = parseInt(vmCountInput.value, 10);
+              if (isNaN(ndCount) || ndCount < 1 || ndCount > 100) {
                 Swal.showValidationMessage('Enter a valid number between 1 and 100');
                 return false;
               }
@@ -8782,7 +8782,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 return false;
               }
 
-              return vmCount;
+              return ndCount;
             },
 
 
@@ -8837,13 +8837,13 @@ function getRecommendedSpec(idx, latitude, longitude) {
               // Check if we're editing an existing NodeGroup or adding a new one
               if (window.editingNodeGroupIndex >= 0) {
                 // Update existing NodeGroup
-                vmNodeGroupReqeustFromSpecList[window.editingNodeGroupIndex] = createInfraReqVm;
+                nodeGroupRequestFromSpecList[window.editingNodeGroupIndex] = createInfraReqVm;
                 recommendedSpecList[window.editingNodeGroupIndex] = recommendedSpec;
                 console.log(`Updated NodeGroup at index ${window.editingNodeGroupIndex}`);
                 window.editingNodeGroupIndex = -1; // Reset editing mode
               } else {
                 // Add new NodeGroup
-                vmNodeGroupReqeustFromSpecList.push(createInfraReqVm);
+                nodeGroupRequestFromSpecList.push(createInfraReqVm);
                 recommendedSpecList.push(recommendedSpec);
               }
               
@@ -8877,7 +8877,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 console.log('Failed to activate provision tab:', error);
               }
             } else {
-              console.log("VM configuration failed for this location");
+              console.log("Node configuration failed for this location");
               latLonInputPairIdx--;
               cspPointsCircle.pop();
               if (cspPointsCircle.length > 0) {
@@ -9165,10 +9165,10 @@ const POPUP_STYLES = `
 `;
 
 /**
- * Build HTML for NodeGroup Configuration popup with spec, image, and VM settings.
+ * Build HTML for NodeGroup Configuration popup with spec, image, and Node settings.
  * Creates a modern, compact layout with grouped sections.
- * @param {Object} spec - VM specification object with provider, region, CPU, memory, etc.
- * @param {Object} vm - VM configuration object with imageId, zone, labels, etc.
+ * @param {Object} spec - Node specification object with provider, region, CPU, memory, etc.
+ * @param {Object} nodeConf - Node configuration object with imageId, zone, labels, etc.
  * @param {Object} options - Optional configuration parameters
  * @param {boolean} options.isEdit - Whether this is edit mode (vs new spec selection)
  * @param {string} options.imageSelectHTML - Custom HTML for image selection input
@@ -9176,9 +9176,9 @@ const POPUP_STYLES = `
  * @param {Object} options.validationResult - Validation result object
  * @returns {string} Complete HTML string for the popup content
  */
-function buildSpecConfigPopupHtml(spec, vm, options = {}) {
+function buildSpecConfigPopupHtml(spec, nodeConf, options = {}) {
   const isEdit = options.isEdit || false;
-  const imageSelectHTML = options.imageSelectHTML || `<span class="popup-value-sm">${vm.imageId || 'N/A'}</span>`;
+  const imageSelectHTML = options.imageSelectHTML || `<span class="popup-value-sm">${nodeConf.imageId || 'N/A'}</span>`;
   const costPerHour = spec.costPerHour || 'N/A';
   const hasGpu = spec.acceleratorType === "gpu" || spec.acceleratorModel;
   
@@ -9206,7 +9206,7 @@ function buildSpecConfigPopupHtml(spec, vm, options = {}) {
           <div class="popup-col">
             <div class="popup-field">
               <label class="popup-label">📝 NodeGroup Name</label>
-              <input type="text" id="editNodeGroupName" class="popup-input" value="${vm.name || ''}" placeholder="Enter name">
+              <input type="text" id="editNodeGroupName" class="popup-input" value="${nodeConf.name || ''}" placeholder="Enter name">
             </div>
           </div>
         </div>
@@ -9315,14 +9315,14 @@ function buildSpecConfigPopupHtml(spec, vm, options = {}) {
       <div class="popup-row">
         <div class="popup-col">
           <div class="popup-field">
-            ${isEdit ? `<span class="popup-value-sm">${vm.imageId || 'N/A'}</span>` : imageSelectHTML}
+            ${isEdit ? `<span class="popup-value-sm">${nodeConf.imageId || 'N/A'}</span>` : imageSelectHTML}
           </div>
         </div>
       </div>
     </div>
   `;
   
-  // 🏷️ Configuration Section (Disk Type, Disk Size, Labels, VM Count)
+  // 🏷️ Configuration Section (Disk Type, Disk Size, Labels, Node Count)
   const labelsInputId = isEdit ? 'editVmLabels' : 'vmLabels';
   const currentLabelsValue = options.currentLabels || '';
   
@@ -9339,7 +9339,7 @@ function buildSpecConfigPopupHtml(spec, vm, options = {}) {
         <div class="popup-col">
           <div class="popup-field">
             <label class="popup-label">Disk Size (GB)</label>
-            <input type="text" id="${isEdit ? 'editRootDiskSize' : 'rootDiskSizeCustom'}" class="popup-input" value="${vm.rootDiskSize > 0 ? vm.rootDiskSize : ''}" placeholder="Default">
+            <input type="text" id="${isEdit ? 'editRootDiskSize' : 'rootDiskSizeCustom'}" class="popup-input" value="${nodeConf.rootDiskSize > 0 ? nodeConf.rootDiskSize : ''}" placeholder="Default">
           </div>
         </div>
         <div class="popup-col popup-col-2">
@@ -9354,9 +9354,9 @@ function buildSpecConfigPopupHtml(spec, vm, options = {}) {
       <div class="popup-row">
         <div class="popup-col">
           <div class="popup-field">
-            <label class="popup-label">VM Count (1-1000)</label>
-            <input type="number" id="${isEdit ? 'editVmCount' : 'vmCount'}" class="popup-input" 
-                   min="1" max="1000" value="${vm.nodeGroupSize || '1'}">
+            <label class="popup-label">Node Count (1-1000)</label>
+            <input type="number" id="${isEdit ? 'editVmCount' : 'ndCount'}" class="popup-input" 
+                   min="1" max="1000" value="${nodeConf.nodeGroupSize || '1'}">
           </div>
         </div>
       </div>
@@ -9376,7 +9376,7 @@ function updateNodeGroupReview() {
   // Clear existing items
   nodegroupList.innerHTML = '';
   
-  if (vmNodeGroupReqeustFromSpecList.length === 0) {
+  if (nodeGroupRequestFromSpecList.length === 0) {
     reviewCard.style.display = 'none';
     return;
   }
@@ -9386,9 +9386,9 @@ function updateNodeGroupReview() {
   noNodeGroups.style.display = 'none';
   
   // Add each NodeGroup item
-  vmNodeGroupReqeustFromSpecList.forEach((vm, index) => {
+  nodeGroupRequestFromSpecList.forEach((nodeConf, index) => {
     const spec = recommendedSpecList[index];
-    const nodegroupItem = createNodeGroupItem(vm, spec, index);
+    const nodegroupItem = createNodeGroupItem(nodeConf, spec, index);
     nodegroupList.appendChild(nodegroupItem);
   });
   
@@ -9397,23 +9397,23 @@ function updateNodeGroupReview() {
   actionButtonsContainer.className = 'mt-3 pt-3 border-top';
   
   // Check if NodeGroups exist for K8s operations (now supports multi-cluster)
-  const hasNodeGroups = vmNodeGroupReqeustFromSpecList.length >= 1;
-  const hasOneNodeGroup = vmNodeGroupReqeustFromSpecList.length === 1;
+  const hasNodeGroups = nodeGroupRequestFromSpecList.length >= 1;
+  const hasOneNodeGroup = nodeGroupRequestFromSpecList.length === 1;
   
   // Get current workload type
   const workloadType = getCurrentWorkloadType();
   console.log('Current workload type:', workloadType);
-  console.log('VM radio:', document.getElementById('vmMode'));
+  console.log('Node radio:', document.getElementById('nodeMode'));
   console.log('K8s radio:', document.getElementById('k8sMode'));
-  console.log('VM checked:', document.getElementById('vmMode')?.checked);
+  console.log('Node checked:', document.getElementById('nodeMode')?.checked);
   console.log('K8s checked:', document.getElementById('k8sMode')?.checked);
   
   // Generate buttons based on workload type
   let buttonsHtml = '<div class="d-flex flex-column" style="gap: 8px;">';
   
-  if (workloadType === 'vm') {
-    console.log('Generating VM buttons...');
-    // VM workload buttons
+  if (workloadType === 'node') {
+    console.log('Generating Node buttons...');
+    // Node workload buttons
     buttonsHtml += `
       <button type="button" onClick="createInfra();" class="btn btn-success btn-sm" style="font-size: 0.85rem; padding: 8px 12px;">
         🚀 Create Infra
@@ -9437,12 +9437,12 @@ function updateNodeGroupReview() {
         <small class="text-muted d-block mb-2">Kubernetes Cluster</small>
         <button type="button" onClick="createK8sCluster();" class="btn btn-primary btn-sm ${!hasNodeGroups ? 'disabled' : ''}" 
                 style="font-size: 0.85rem; padding: 8px 12px; width: 100%; margin-bottom: 4px;" ${!hasNodeGroups ? 'disabled' : ''}>
-          ☸️ Create K8s Cluster${vmNodeGroupReqeustFromSpecList.length > 1 ? 's (' + vmNodeGroupReqeustFromSpecList.length + ')' : ''}
+          ☸️ Create K8s Cluster${nodeGroupRequestFromSpecList.length > 1 ? 's (' + nodeGroupRequestFromSpecList.length + ')' : ''}
         </button>
         <div class="d-flex" style="gap: 4px;">
           <button type="button" onClick="addNodeGroupToK8sCluster();" class="btn btn-outline-primary btn-sm ${!hasNodeGroups ? 'disabled' : ''}" 
                   style="font-size: 0.75rem; padding: 6px 8px; flex: 1;" ${!hasNodeGroups ? 'disabled' : ''}>
-            ➕ Add NodeGroup${vmNodeGroupReqeustFromSpecList.length > 1 ? 's' : ''} to K8s Cluster
+            ➕ Add NodeGroup${nodeGroupRequestFromSpecList.length > 1 ? 's' : ''} to K8s Cluster
           </button>
           <button type="button" onClick="clearCircle('clearText');" class="btn btn-outline-secondary btn-sm" 
                   style="font-size: 0.7rem; padding: 6px 8px; min-width: 60px;">
@@ -9452,8 +9452,8 @@ function updateNodeGroupReview() {
       </div>
     `;
   } else {
-    console.log('Generating default VM buttons (fallback)...');
-    // Default fallback to VM buttons
+    console.log('Generating default Node buttons (fallback)...');
+    // Default fallback to Node buttons
     buttonsHtml += `
       <button type="button" onClick="createInfra();" class="btn btn-success btn-sm" style="font-size: 0.85rem; padding: 8px 12px;">
         🚀 Create Infra
@@ -9491,7 +9491,7 @@ function updateNodeGroupReview() {
   }, 100);
 }
 
-function createNodeGroupItem(vm, spec, index) {
+function createNodeGroupItem(nodeConf, spec, index) {
   const item = document.createElement('div');
   item.className = 'list-group-item p-2 mb-2 border rounded';
   item.style.backgroundColor = '#f8f9fa';
@@ -9508,15 +9508,15 @@ function createNodeGroupItem(vm, spec, index) {
   const zoneTextColor = getContrastTextColor(zoneColor);
   
   // Build zone badge HTML if zone is specified
-  const zoneBadge = vm.zone 
-    ? `<span class="badge mr-1" style="background-color: ${zoneColor}; color: ${zoneTextColor}; font-size: 0.7rem;">${vm.zone}</span>`
+  const zoneBadge = nodeConf.zone 
+    ? `<span class="badge mr-1" style="background-color: ${zoneColor}; color: ${zoneTextColor}; font-size: 0.7rem;">${nodeConf.zone}</span>`
     : '';
   
   item.innerHTML = `
     <div class="d-flex align-items-start justify-content-between">
       <div class="flex-grow-1" style="min-width: 0;">
         <div class="d-flex align-items-center mb-1 flex-wrap">
-          <span class="badge mr-1" style="background-color: #343a40; color: white; font-size: 0.75rem;">💻 ${vm.name || `NodeGroup-${index + 1}`} ⨉ ${vm.nodeGroupSize}</span>
+          <span class="badge mr-1" style="background-color: #343a40; color: white; font-size: 0.75rem;">💻 ${nodeConf.name || `NodeGroup-${index + 1}`} ⨉ ${nodeConf.nodeGroupSize}</span>
           <span class="badge mr-1" style="background-color: ${providerColor}; color: ${providerTextColor}; font-size: 0.7rem;">
             ${useGenericCspIcons ? 'Cloud' : (spec?.providerName || 'Unknown').toUpperCase()}
           </span>
@@ -9526,8 +9526,8 @@ function createNodeGroupItem(vm, spec, index) {
           ${zoneBadge}
         </div>
         <div class="small text-muted" style="font-size: 0.7rem; line-height: 1.2;">
-          <div style="margin-bottom: 2px;"><strong>Spec:</strong> ${spec?.cspSpecName || vm.specId}</div>
-          <div style="margin-bottom: 2px;"><strong>Image:</strong> ${vm.imageId}</div>
+          <div style="margin-bottom: 2px;"><strong>Spec:</strong> ${spec?.cspSpecName || nodeConf.specId}</div>
+          <div style="margin-bottom: 2px;"><strong>Image:</strong> ${nodeConf.imageId}</div>
           <div><strong>vCPU:</strong> ${spec?.vCPU || 'N/A'} | <strong>Memory:</strong> ${spec?.memoryGiB || 'N/A'}GB | <strong>Cost:</strong> $${spec?.costPerHour || 'N/A'}/h</div>
           ${(spec?.acceleratorModel && spec.acceleratorModel !== '' && spec.acceleratorModel !== 'N/A') ? `<div style="margin-top: 2px;"><span style="color: #e74c3c; font-weight: bold;">⚡GPU: ${spec.acceleratorModel} (${spec.acceleratorCount || 'N/A'}, ${spec.acceleratorMemoryGB || 'N/A'}GB)</span></div>` : ''}
         </div>
@@ -9685,11 +9685,11 @@ function getContrastTextColor(color) {
 }
 
 function editNodeGroup(index) {
-  const vm = vmNodeGroupReqeustFromSpecList[index];
+  const nodeConf = nodeGroupRequestFromSpecList[index];
   const spec = recommendedSpecList[index];
   
-  if (!spec || !vm) {
-    console.error('Spec or VM not found for index:', index);
+  if (!spec || !nodeConf) {
+    console.error('Spec or Node config not found for index:', index);
     return;
   }
   
@@ -9697,21 +9697,21 @@ function editNodeGroup(index) {
   window.editingNodeGroupIndex = index;
   
   // Build zone options (will be populated after dialog opens)
-  const currentZone = vm.zone || '';
+  const currentZone = nodeConf.zone || '';
   
   // Parse current labels using common helper
-  const currentLabels = labelsToString(vm.label);
+  const currentLabels = labelsToString(nodeConf.label);
   
   Swal.fire({
     title: "✏️ Edit NodeGroup Configuration",
     width: 650,
-    html: buildSpecConfigPopupHtml(spec, vm, {
+    html: buildSpecConfigPopupHtml(spec, nodeConf, {
       isEdit: true,
       currentLabels: currentLabels
     }),
     didOpen: () => {
       // Use common helpers for dropdown population
-      populateRootDiskTypeSelect('editRootDiskTypeSelect', spec.providerName, vm.rootDiskType || 'default');
+      populateRootDiskTypeSelect('editRootDiskTypeSelect', spec.providerName, nodeConf.rootDiskType || 'default');
       populateZoneSelect('editZoneSelect', 'editZoneLoadingSpinner', spec.id, currentZone, null);
       
       // Setup label input listener for chip sync
@@ -9733,7 +9733,7 @@ function editNodeGroup(index) {
       const labelsText = document.getElementById('editVmLabels').value.trim();
       
       if (isNaN(count) || count < 1) {
-        Swal.showValidationMessage('Please provide valid VM count');
+        Swal.showValidationMessage('Please provide valid Node count');
         return false;
       }
       
@@ -9746,27 +9746,27 @@ function editNodeGroup(index) {
     window.editingNodeGroupIndex = -1; // Reset editing mode
     
     if (result.isConfirmed) {
-      // Update the VM configuration
-      vmNodeGroupReqeustFromSpecList[index].name = result.value.name;
-      vmNodeGroupReqeustFromSpecList[index].nodeGroupSize = result.value.count;
-      vmNodeGroupReqeustFromSpecList[index].rootDiskType = result.value.diskType;
-      vmNodeGroupReqeustFromSpecList[index].rootDiskSize = result.value.diskSize;
+      // Update the Node configuration
+      nodeGroupRequestFromSpecList[index].name = result.value.name;
+      nodeGroupRequestFromSpecList[index].nodeGroupSize = result.value.count;
+      nodeGroupRequestFromSpecList[index].rootDiskType = result.value.diskType;
+      nodeGroupRequestFromSpecList[index].rootDiskSize = result.value.diskSize;
       
       if (result.value.zone) {
-        vmNodeGroupReqeustFromSpecList[index].zone = result.value.zone;
+        nodeGroupRequestFromSpecList[index].zone = result.value.zone;
       } else {
-        delete vmNodeGroupReqeustFromSpecList[index].zone;
+        delete nodeGroupRequestFromSpecList[index].zone;
       }
       
       if (Object.keys(result.value.labels).length > 0) {
-        vmNodeGroupReqeustFromSpecList[index].label = result.value.labels;
+        nodeGroupRequestFromSpecList[index].label = result.value.labels;
         
         // Add used labels to recently used list
         Object.entries(result.value.labels).forEach(([key, value]) => {
           window.addToRecentLabels(`${key}=${value}`);
         });
       } else {
-        delete vmNodeGroupReqeustFromSpecList[index].label;
+        delete nodeGroupRequestFromSpecList[index].label;
       }
       
       updateNodeGroupReview();
@@ -9776,11 +9776,11 @@ function editNodeGroup(index) {
 }
 
 function removeNodeGroup(index) {
-  const vm = vmNodeGroupReqeustFromSpecList[index];
+  const nodeConf = nodeGroupRequestFromSpecList[index];
   
   Swal.fire({
     title: 'Remove NodeGroup?',
-    text: `Are you sure you want to remove "${vm.name || `NodeGroup-${index + 1}`}"?`,
+    text: `Are you sure you want to remove "${nodeConf.name || `NodeGroup-${index + 1}`}"?`,
     icon: 'warning',
     showCancelButton: true,
     confirmButtonText: 'Yes, Remove',
@@ -9789,7 +9789,7 @@ function removeNodeGroup(index) {
   }).then((result) => {
     if (result.isConfirmed) {
       // Remove from arrays
-      vmNodeGroupReqeustFromSpecList.splice(index, 1);
+      nodeGroupRequestFromSpecList.splice(index, 1);
       recommendedSpecList.splice(index, 1);
       
       // Remove corresponding coordinate point
@@ -10578,8 +10578,8 @@ async function showScheduleJobManagement() {
                 </div>
                 <div class="schedule-option-item">
                   <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="sched-option-vm" value="vm">
-                    <label class="form-check-label" for="sched-option-vm">vm</label>
+                    <input class="form-check-input" type="checkbox" id="sched-option-node" value="node">
+                    <label class="form-check-label" for="sched-option-node">node</label>
                   </div>
                 </div>
                 <div class="schedule-option-item">
@@ -10596,7 +10596,7 @@ async function showScheduleJobManagement() {
             <label>Infra Flag</label>
             <select id="sched-infraFlag" class="form-control form-control-sm">
               <option value="y">Single Infra</option>
-              <option value="n">Separate per VM</option>
+              <option value="n">Separate per Node</option>
             </select>
           </div>
         </div>
@@ -10733,7 +10733,7 @@ async function showScheduleJobManagement() {
           { id: 'sched-option-vnet', label: 'vNet' },
           { id: 'sched-option-sg', label: 'securityGroup' },
           { id: 'sched-option-sshkey', label: 'sshKey' },
-          { id: 'sched-option-vm', label: 'vm' },
+          { id: 'sched-option-node', label: 'node' },
           { id: 'sched-option-customimage', label: 'customImage' }
         ];
         
@@ -10759,7 +10759,7 @@ async function showScheduleJobManagement() {
         'sched-option-vnet',
         'sched-option-sg',
         'sched-option-sshkey',
-        'sched-option-vm',
+        'sched-option-node',
         'sched-option-customimage'
       ];
       
@@ -10960,7 +10960,7 @@ async function createScheduleJobFromModal() {
       { id: 'sched-option-vnet', value: 'vNet' },
       { id: 'sched-option-sg', value: 'securityGroup' },
       { id: 'sched-option-sshkey', value: 'sshKey' },
-      { id: 'sched-option-vm', value: 'vm' },
+      { id: 'sched-option-node', value: 'node' },
       { id: 'sched-option-customimage', value: 'customImage' }
     ];
     optionCheckboxes.forEach(opt => {
@@ -11065,7 +11065,7 @@ async function viewJobDetails(jobId) {
           }
           <tr><th style="background-color: #f8f9fa;">Infra Prefix</th><td>${job.infraNamePrefix || '-'}</td></tr>
           <tr><th style="background-color: #f8f9fa;">Option</th><td>${job.option || 'All Resources'}</td></tr>
-          <tr><th style="background-color: #f8f9fa;">Infra Flag</th><td>${job.infraFlag === 'y' ? 'Single Infra' : 'Separate per VM'}</td></tr>
+          <tr><th style="background-color: #f8f9fa;">Infra Flag</th><td>${job.infraFlag === 'y' ? 'Single Infra' : 'Separate per Node'}</td></tr>
           <tr><th style="background-color: #f8f9fa;">Interval</th><td><strong>${job.intervalSeconds}</strong> seconds (${Math.round(job.intervalSeconds/60)} minutes)</td></tr>
           <tr><th style="background-color: #f8f9fa;">Status</th><td>
             ${job.enabled ? '<span class="badge badge-success">🟢 Enabled</span>' : '<span class="badge badge-secondary">⚫ Disabled</span>'}
@@ -11525,7 +11525,7 @@ function updateInfraList() {
         }
       })
       .finally(function () {
-        updateVmAndIpListsFromInfra();
+        updateNodeAndIpListsFromInfra();
         updateResourceList(typeStringVNet);
         updateResourceList(typeStringSG);
         updateResourceList(typeStringSshKey);
@@ -11540,24 +11540,24 @@ document.getElementById("infraid").onmouseover = function () {
   updateInfraList();
 };
 document.getElementById("infraid").onchange = function () {
-  updateVmAndIpListsFromInfra();
+  updateNodeAndIpListsFromInfra();
 };
 
 function updateVmList() {
-  // This function is now deprecated as VM list is updated via updateVmAndIpListsFromInfra()
+  // This function is now deprecated as Node list is updated via updateNodeAndIpListsFromInfra()
   // Keeping for backward compatibility, but functionality moved to unified function
 }
 window.updateVmList = updateVmList;
 
-document.getElementById("vmid").addEventListener('change', function () {
-  // When VM is selected, auto-select corresponding IP
-  var selectedVmId = this.value;
+document.getElementById("nodeid").addEventListener('change', function () {
+  // When Node is selected, auto-select corresponding IP
+  var selectedNodeId = this.value;
   var pubipSelect = document.getElementById("pubip");
   
-  // Find and select the IP option that contains this VM ID
+  // Find and select the IP option that contains this Node ID
   for (let i = 0; i < pubipSelect.options.length; i++) {
     var optionText = pubipSelect.options[i].text;
-    if (optionText.includes(`(${selectedVmId},`)) {
+    if (optionText.includes(`(${selectedNodeId},`)) {
       pubipSelect.options[i].selected = true;
       break;
     }
@@ -11565,29 +11565,29 @@ document.getElementById("vmid").addEventListener('change', function () {
 });
 
 function updateIpList() {
-  // This function is now deprecated as IP list is updated via updateVmAndIpListsFromInfra()
+  // This function is now deprecated as IP list is updated via updateNodeAndIpListsFromInfra()
   // Keeping for backward compatibility, but functionality moved to unified function
 }
 window.updateIpList = updateIpList;
 
 function updateNodeGroupList() {
   // This function is now deprecated as NodeGroup selection is removed from UI
-  // NodeGroup information is now shown in VM ID dropdown as "vm-id (nodegroup-id)"
+  // NodeGroup information is now shown in Node ID dropdown as "node-id (nodegroup-id)"
 }
 window.updateNodeGroupList = updateNodeGroupList;
 
 // NodeGroup selection element no longer exists in UI
 
-// New unified function to update VM and IP lists from Infra data
-function updateVmAndIpListsFromInfra() {
-  var vmSelectElement = document.getElementById("vmid");
+// New unified function to update Node and IP lists from Infra data
+function updateNodeAndIpListsFromInfra() {
+  var nodeSelectElement = document.getElementById("nodeid");
   var ipSelectElement = document.getElementById("pubip");
-  var previousVmSelection = vmSelectElement.value;
+  var previousNodeSelection = nodeSelectElement.value;
   var previousIpSelection = ipSelectElement.value;
   
   // Clear existing options
-  while (vmSelectElement.options.length > 0) {
-    vmSelectElement.remove(0);
+  while (nodeSelectElement.options.length > 0) {
+    nodeSelectElement.remove(0);
   }
   while (ipSelectElement.options.length > 0) {
     ipSelectElement.remove(0);
@@ -11612,27 +11612,27 @@ function updateVmAndIpListsFromInfra() {
       },
     })
       .then((res) => {
-        if (res.data && res.data.vm) {
-          res.data.vm.forEach(vm => {
-            // Add VM option with NodeGroup info
-            var vmOption = document.createElement("option");
-            vmOption.value = vm.id;
-            vmOption.text = `${vm.id} (${vm.nodeGroupId || 'default'})`;
-            vmSelectElement.appendChild(vmOption);
+        if (res.data && res.data.node) {
+          res.data.node.forEach(nd => {
+            // Add Node option with NodeGroup info
+            var nodeOption = document.createElement("option");
+            nodeOption.value = nd.id;
+            nodeOption.text = `${nd.id} (${nd.nodeGroupId || 'default'})`;
+            nodeSelectElement.appendChild(nodeOption);
 
-            // Add IP option with VM and NodeGroup info
-            if (vm.publicIP && vm.publicIP.trim() !== "") {
+            // Add IP option with Node and NodeGroup info
+            if (nd.publicIP && nd.publicIP.trim() !== "") {
               var ipOption = document.createElement("option");
-              ipOption.value = vm.publicIP;
-              ipOption.text = `${vm.publicIP} (${vm.id}, ${vm.nodeGroupId || 'default'})`;
+              ipOption.value = nd.publicIP;
+              ipOption.text = `${nd.publicIP} (${nd.id}, ${nd.nodeGroupId || 'default'})`;
               ipSelectElement.appendChild(ipOption);
             }
           });
 
           // Restore previous selections if they still exist
-          for (let i = 0; i < vmSelectElement.options.length; i++) {
-            if (vmSelectElement.options[i].value === previousVmSelection) {
-              vmSelectElement.options[i].selected = true;
+          for (let i = 0; i < nodeSelectElement.options.length; i++) {
+            if (nodeSelectElement.options[i].value === previousNodeSelection) {
+              nodeSelectElement.options[i].selected = true;
               break;
             }
           }
@@ -11645,18 +11645,18 @@ function updateVmAndIpListsFromInfra() {
         }
       })
       .catch(function (error) {
-        console.error("Error updating VM and IP lists:", error);
+        console.error("Error updating Node and IP lists:", error);
       });
   }
 }
-window.updateVmAndIpListsFromInfra = updateVmAndIpListsFromInfra;
+window.updateNodeAndIpListsFromInfra = updateNodeAndIpListsFromInfra;
 
-// Helper function to extract NodeGroup ID from VM selection text
-function getNodeGroupIdFromVmSelection() {
-  var vmSelect = document.getElementById("vmid");
-  var selectedOption = vmSelect.options[vmSelect.selectedIndex];
+// Helper function to extract NodeGroup ID from Node selection text
+function getNodeGroupIdFromNodeSelection() {
+  var nodeSelect = document.getElementById("nodeid");
+  var selectedOption = nodeSelect.options[nodeSelect.selectedIndex];
   if (selectedOption && selectedOption.text) {
-    // Extract NodeGroup ID from text like "vm-id (nodegroup-id)"
+    // Extract NodeGroup ID from text like "node-id (nodegroup-id)"
     var match = selectedOption.text.match(/\(([^)]+)\)$/);
     if (match) {
       return match[1];
@@ -12294,7 +12294,7 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "echo '[INFO] After reboot, verify with: nvidia-smi'";
       break;
     case "RebootVM":
-      // Reboot VM - useful after GPU driver installation
+      // Reboot Node - useful after GPU driver installation
       defaultRemoteCommand[0] = "sudo reboot";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
@@ -12328,7 +12328,7 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "";
       break;
     case "PortForward-Add":
-      // Forward an external port on this VM to a target IP:port (e.g., OpenStack floating IP)
+      // Forward an external port on this Node to a target IP:port (e.g., OpenStack floating IP)
       // Fill in FLOATING_IP, EXT_PORT, TARGET_PORT in the parameter fields below the command
       defaultRemoteCommand[0] = "IFACE=$(ip route show 0.0.0.0/0 | grep -oE \"dev [^ ]+\" | cut -c5-) && sudo sysctl -w net.ipv4.ip_forward=1 && sudo iptables -t nat -A PREROUTING -i $IFACE -p tcp --dport <EXT_PORT> -j DNAT --to-destination <FLOATING_IP>:<TARGET_PORT> && sudo iptables -A FORWARD -p tcp -d <FLOATING_IP> --dport <TARGET_PORT> -j ACCEPT && sudo iptables -t nat -A POSTROUTING -j MASQUERADE && echo \"✅ Port forwarding :<EXT_PORT> → <FLOATING_IP>:<TARGET_PORT> activated\" && echo \"🌐 Access: http://$$Func(GetPublicIP(target=this)):<EXT_PORT>\"";
       defaultRemoteCommand[1] = "";
@@ -12374,45 +12374,45 @@ function setDefaultRemoteCommandsByApp(appName) {
       break;
     case "TelemetrySensor":
       // Setup GPU telemetry sensor (Node Exporter + GPU Exporter + Telegraf)
-      // Run on each GPU VM to expose aggregated metrics on port 9101
+      // Run on each GPU Node to expose aggregated metrics on port 9101
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/setup_gpu_sensor.sh | bash";
       defaultRemoteCommand[1] = "echo 'Telegraf gateway: $$Func(GetPublicIP(target=this)):9101'";
       defaultRemoteCommand[2] = "";
       break;
     case "TelemetryMonitor":
-      // Setup central monitoring (Prometheus + Grafana) on a monitoring VM
-      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU VM IPs
+      // Setup central monitoring (Prometheus + Grafana) on a monitoring Node
+      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU Node IPs
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/setup_monitoring.sh | bash -s -- $$Func(GetPublicIPs(separator=' ', label='accelerator=gpu'))";
       defaultRemoteCommand[1] = "echo 'Prometheus: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:9090/targets))'";
       defaultRemoteCommand[2] = "echo 'Grafana: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
       break;
     case "TelemetryExport":
     case "BenchmarkTelemetryExport":
-      // Export Prometheus metrics to CSV (run on the VM that hosts Prometheus, e.g., monitoring VM or benchmark manager)
-      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU VM IPs
+      // Export Prometheus metrics to CSV (run on the Node that hosts Prometheus, e.g., monitoring Node or benchmark manager)
+      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU Node IPs
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/export_metrics.sh | bash -s -- --minutes <EXPORT_MINUTES> --ips \"$$Func(GetPublicIPs(separator=',', label='accelerator=gpu'))\"";
       defaultRemoteCommand[1] = "ls -la ./metrics_export/";
       defaultRemoteCommand[2] = "";
       break;
     case "BenchmarkTarget":
       // All-in-one setup for benchmark target GPU VMs: vLLM + Model Serving + Telemetry Sensor
-      // Uses per-VM model assignment via $$Func(AssignTask(...)) from a predefined model list
+      // Uses per-Node model assignment via $$Func(AssignTask(...)) from a predefined model list
       // Assumes GPU driver is already installed (use 'Install GPU Driver' step first)
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/setupBenchmarkTarget.sh | bash -s -- $$Func(AssignTask(task='Qwen/Qwen2.5-1.5B-Instruct, meta-llama/Llama-3.2-3B-Instruct, mistralai/Mistral-7B-Instruct-v0.3, deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'))";
       defaultRemoteCommand[1] = "echo 'API: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:8000/v1))'";
       defaultRemoteCommand[2] = "echo 'Metrics: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:9101/metrics))'";
       break;
     case "BenchmarkManager":
-      // All-in-one setup for benchmark manager VM: Prometheus + Grafana + GuideLLM + Export Tools
-      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU VM IPs
+      // All-in-one setup for benchmark manager Node: Prometheus + Grafana + GuideLLM + Export Tools
+      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU Node IPs
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/setupBenchmarkManager.sh | bash -s -- $$Func(GetPublicIPs(separator=' ', label='accelerator=gpu'))";
       defaultRemoteCommand[1] = "echo 'Prometheus: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:9090/targets))'";
       defaultRemoteCommand[2] = "echo 'Grafana: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
       break;
     case "RunBenchmark":
-      // Run GuideLLM benchmark against target GPU VMs (runs on benchmark manager VM)
+      // Run GuideLLM benchmark against target GPU Nodes (runs on benchmark manager Node)
       // run_guidellm.sh supports multiple IPs natively: --ip <IP1> <IP2> ...
-      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU VM IPs
+      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU Node IPs
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/run_guidellm.sh | bash -s -- --ip $$Func(GetPublicIPs(separator=' ', label='accelerator=gpu')) --seconds 60";
       defaultRemoteCommand[1] = "ls -la ~/guidellm_bench/bench_*";
       defaultRemoteCommand[2] = "";
@@ -12476,7 +12476,7 @@ function setDefaultRemoteCommandsByApp(appName) {
       // Deploy llm-d on K8s cluster via helmfile (run on control plane)
       // Prerequisites: K8s with --llm-d mode, GPU workers joined
       // --hf-token required for gated models (Llama, Mistral, etc.)
-      // --nodeport 30080 exposes gateway externally via NodePort on VM public IP
+      // --nodeport 30080 exposes gateway externally via NodePort on Node public IP
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deploy-llm-d.sh | bash -s -- --hf-token <HF_TOKEN> --nodeport 30080";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
@@ -12484,7 +12484,7 @@ function setDefaultRemoteCommandsByApp(appName) {
     case "LlmdDeployWithModel":
       // Deploy llm-d with specific model via helmfile (run on control plane)
       // --replicas 1 --tp 1 for minimal single-GPU; adjust for multi-GPU
-      // --nodeport 30080 exposes gateway externally via NodePort on VM public IP
+      // --nodeport 30080 exposes gateway externally via NodePort on Node public IP
       // Replace <HF_TOKEN> with your Hugging Face token (required for gated models like Llama, Mistral)
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deploy-llm-d.sh | bash -s -- --hf-token <HF_TOKEN> --replicas 1 --tp 1 --nodeport 30080 --model $$Func(AssignTask(task='Qwen/Qwen3-32B, meta-llama/Llama-3.3-8B-Instruct, Qwen/Qwen3-8B, mistralai/Mistral-Small-3.2-24B-Instruct-2503'))";
       defaultRemoteCommand[1] = "";
@@ -12563,21 +12563,21 @@ function setDefaultRemoteCommandsByApp(appName) {
       break;
     case "DevStack-Install":
       // Install DevStack on bare-metal VMs (e.g., AWS m5.metal)
-      // CSP name is derived from Infra ID + VM ID for unique provider registration
-      // Location info is automatically populated from the VM's deployment location
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/1.installDevStack.sh -o /tmp/installDevStack.sh && bash /tmp/installDevStack.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetVmId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
+      // CSP name is derived from Infra ID + Node ID for unique provider registration
+      // Location info is automatically populated from the Node's deployment location
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/1.installDevStack.sh -o /tmp/installDevStack.sh && bash /tmp/installDevStack.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetNodeId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
       defaultRemoteCommand[1] = "echo 'DevStack installed. Horizon: $$Func(GetPublicIP(target=this, prefix=http://, postfix=/dashboard))'";
       defaultRemoteCommand[2] = "";
       break;
     case "DevStack-Info":
       // Get registration info from installed DevStack
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/2.getRegistrationInfo.sh -o /tmp/getRegistrationInfo.sh && bash /tmp/getRegistrationInfo.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetVmId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/2.getRegistrationInfo.sh -o /tmp/getRegistrationInfo.sh && bash /tmp/getRegistrationInfo.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetNodeId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
     case "DevStack-UpdateEndpoints":
       // Update OpenStack service catalog endpoints after public IP change (e.g., suspend/resume)
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/3.updateEndpoints.sh -o /tmp/updateEndpoints.sh && bash /tmp/updateEndpoints.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetVmId())";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/3.updateEndpoints.sh -o /tmp/updateEndpoints.sh && bash /tmp/updateEndpoints.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetNodeId())";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
@@ -12589,19 +12589,19 @@ function setDefaultRemoteCommandsByApp(appName) {
       break;
     case "Kolla-Install":
       // Install OpenStack via Kolla-Ansible (Docker-based, production-grade, survives reboot)
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/kolla/1.installKolla.sh -o /tmp/installKolla.sh && bash /tmp/installKolla.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetVmId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/kolla/1.installKolla.sh -o /tmp/installKolla.sh && bash /tmp/installKolla.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetNodeId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
       defaultRemoteCommand[1] = "echo 'Kolla-Ansible installed. Horizon: $$Func(GetPublicIP(target=this, prefix=http://, postfix=/))'";
       defaultRemoteCommand[2] = "";
       break;
     case "Kolla-Info":
       // Get registration info from Kolla-Ansible deployment
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/kolla/2.getRegistrationInfo.sh -o /tmp/getKollaInfo.sh && bash /tmp/getKollaInfo.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetVmId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/kolla/2.getRegistrationInfo.sh -o /tmp/getKollaInfo.sh && bash /tmp/getKollaInfo.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetNodeId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
     case "Kolla-UpdateEndpoints":
       // Update OpenStack service catalog endpoints after public IP change
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/kolla/3.updateEndpoints.sh -o /tmp/updateKollaEndpoints.sh && bash /tmp/updateKollaEndpoints.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetVmId())";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/kolla/3.updateEndpoints.sh -o /tmp/updateKollaEndpoints.sh && bash /tmp/updateKollaEndpoints.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetNodeId())";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
@@ -12864,12 +12864,12 @@ window.PLACEHOLDER_METADATA = {
     secret: false,
   },
   'TELEMETRY_GPU_VM_IPS': {
-    description: 'GPU VM public IPs (space-separated)',
+    description: 'GPU Node public IPs (space-separated)',
     hint: '104.42.74.157 3.96.201.235',
     secret: false,
   },
   'TELEMETRY_GPU_VM_IPS_CSV': {
-    description: 'GPU VM public IPs (comma-separated)',
+    description: 'GPU Node public IPs (comma-separated)',
     hint: '104.42.74.157,3.96.201.235',
     secret: false,
   },
@@ -12889,12 +12889,12 @@ window.PLACEHOLDER_METADATA = {
     secret: false,
   },
   'EXT_PORT': {
-    description: 'External port to expose on this VM',
+    description: 'External port to expose on this Node',
     hint: '80',
     secret: false,
   },
   'TARGET_PORT': {
-    description: 'Target port on the destination VM',
+    description: 'Target port on the destination Node',
     hint: '80',
     secret: false,
   },
@@ -13062,7 +13062,7 @@ window.predefinedScriptCategories = {
     description: 'Ollama-based LLM service deployment',
     scripts: [
       { value: 'Nvidia', label: '1. Install GPU Driver', step: 1 },
-      { value: 'RebootVM', label: '2. Reboot VM', step: 2 },
+      { value: 'RebootVM', label: '2. Reboot Node', step: 2 },
       { value: 'Nvidia-Status', label: '3. Check GPU Driver', step: 3 },
       { value: 'Ollama', label: '4. Install Ollama', step: 4 },
       { value: 'OllamaPull', label: '5. Pull LLM Model', step: 5 },
@@ -13075,7 +13075,7 @@ window.predefinedScriptCategories = {
     description: 'vLLM-based high-performance LLM service',
     scripts: [
       { value: 'Nvidia', label: '1. Install GPU Driver', step: 1, targetLabel: 'accelerator=gpu' },
-      { value: 'RebootVM', label: '2. Reboot VM', step: 2, targetLabel: 'accelerator=gpu' },
+      { value: 'RebootVM', label: '2. Reboot Node', step: 2, targetLabel: 'accelerator=gpu' },
       { value: 'Nvidia-Status', label: '3. Check GPU Driver', step: 3, targetLabel: 'accelerator=gpu' },
       { value: 'vLLM', label: '4. Install vLLM', step: 4, targetLabel: 'accelerator=gpu' },
       { value: 'vLLMServe', label: '5. Serve LLM Model', step: 5, targetLabel: 'accelerator=gpu' },
@@ -13091,7 +13091,7 @@ window.predefinedScriptCategories = {
     description: 'LLM benchmark environment (vLLM + GuideLLM + Monitoring)',
     scripts: [
       { value: 'Nvidia', label: '1. Install GPU Driver', step: 1, targetLabel: 'accelerator=gpu' },
-      { value: 'RebootVM', label: '2. Reboot VM', step: 2, targetLabel: 'accelerator=gpu' },
+      { value: 'RebootVM', label: '2. Reboot Node', step: 2, targetLabel: 'accelerator=gpu' },
       { value: 'Nvidia-Status', label: '3. Check GPU Driver', step: 3, targetLabel: 'accelerator=gpu' },
       { value: 'BenchmarkTarget', label: '4. Setup Benchmark Target (vLLM+Model+Telemetry)', step: 4, targetLabel: 'accelerator=gpu' },
       { value: 'BenchmarkManager', label: '5. Setup Benchmark Manager (Monitoring+Tools)', step: 5, targetLabel: 'role=benchmark', targetLabels: ['role=benchmark', 'role=observability'] },
@@ -13109,7 +13109,7 @@ window.predefinedScriptCategories = {
       { value: 'K8sGetJoinCommand',      label: '2. Get Join Command',                        step: 2,  targetLabel: 'role=control', syncMode: true },
       { value: 'K8sGetKubeconfig',       label: '3. Get Kubeconfig (Base64)',                 step: 3,  targetLabel: 'role=control', syncMode: true },
       { value: 'Nvidia',                 label: '4. Install GPU Driver (GPU worker only)',    step: 4,  targetLabel: 'accelerator=gpu', optional: true },
-      { value: 'RebootVM',               label: '5. Reboot VM (GPU worker only)',             step: 5,  targetLabel: 'role=node', optional: true },
+      { value: 'RebootVM',               label: '5. Reboot Node (GPU worker only)',             step: 5,  targetLabel: 'role=node', optional: true },
       { value: 'Nvidia-Status',          label: '6. Check GPU Driver (GPU worker only)',      step: 6,  targetLabel: 'accelerator=gpu', optional: true, syncMode: true },
       { value: 'K8sWorker-Deploy',       label: '7. Deploy Worker & Join Cluster',           step: 7,  targetLabel: 'role=node' },
       { value: 'K8sClusterStatus',       label: '8. Check Cluster Status',                   step: 8,  targetLabel: 'role=control', syncMode: true },
@@ -13189,7 +13189,7 @@ window.predefinedScriptCategories = {
     label: '🔧 Utility',
     description: 'Utility scripts and tools',
     scripts: [
-      { value: 'RebootVM', label: 'Reboot VM', step: 1 },
+      { value: 'RebootVM', label: 'Reboot Node', step: 1 },
       { value: 'Nginx', label: 'Install Web Server', step: 2 },
       { value: 'MvToWebRoot', label: 'Move files to web root (/var/www/html/)', step: 3 },
       { value: 'ExtractToWebRoot', label: 'Extract archive to web root (auto-detect format)', step: 4 },
@@ -13384,7 +13384,7 @@ window.switchScriptCategory = function(categoryKey) {
 // usePopupStyle: true for new POPUP_STYLES, false for legacy style
 window.generateLabelSelectorHtml = function (isOptional = false, usePopupStyle = false) {
   if (usePopupStyle) {
-    const hintText = isOptional ? '<span class="popup-hint">(Optional - filter VMs by labels)</span>' : '';
+    const hintText = isOptional ? '<span class="popup-hint">(Optional - filter Nodes by labels)</span>' : '';
     return `
       <div class="popup-section">
         <div class="popup-section-title">🏷️ Label Selector ${hintText}</div>
@@ -13405,7 +13405,7 @@ window.generateLabelSelectorHtml = function (isOptional = false, usePopupStyle =
         </div>
         <div id="labelMatchPreview" style="margin-top: 6px; padding: 6px; background: #e7f3ff; border-radius: 4px; display: none;">
           <span style="font-size: 0.75rem; color: #0066cc;">
-            <strong>Matching VMs:</strong> <span id="matchingVmCount">0</span> / <span id="totalVmCount">0</span>
+            <strong>Matching Nodes:</strong> <span id="matchingNodeCount">0</span> / <span id="totalNodeCount">0</span>
           </span>
           <div id="matchingVmList" style="margin-top: 4px; font-size: 0.7rem; color: #666; max-height: 50px; overflow-y: auto;"></div>
         </div>
@@ -13432,7 +13432,7 @@ window.generateLabelSelectorHtml = function (isOptional = false, usePopupStyle =
       </div>
       <div id="labelMatchPreview" style="margin-top: 8px; padding: 8px; background: #e7f3ff; border-radius: 5px; display: none;">
         <span style="font-size: 12px; color: #0066cc;">
-          <strong>Matching VMs:</strong> <span id="matchingVmCount">0</span> / <span id="totalVmCount">0</span>
+          <strong>Matching Nodes:</strong> <span id="matchingNodeCount">0</span> / <span id="totalNodeCount">0</span>
         </span>
         <div id="matchingVmList" style="margin-top: 5px; font-size: 11px; color: #666; max-height: 60px; overflow-y: auto;"></div>
       </div>
@@ -13464,22 +13464,22 @@ window.extractLabelsFromInfra = function(infraId) {
   const infraData = window.cloudBaristaCentralData?.infraData || [];
   const infra = infraData.find(m => m.id === infraId || m.name === infraId);
   
-  if (!infra || !infra.vm || infra.vm.length === 0) {
-    return { labels: {}, vmCount: 0, vms: [] };
+  if (!infra || !infra.node || infra.node.length === 0) {
+    return { labels: {}, ndCount: 0, nodes: [] };
   }
   
   const labelMap = {}; // key -> Set of values
-  const vms = [];
+  const nodes = [];
   
-  infra.vm.forEach(vm => {
-    vms.push({
-      id: vm.id,
-      name: vm.name || vm.id,
-      label: vm.label || {}
+  infra.node.forEach(nd => {
+    nodes.push({
+      id: nd.id,
+      name: nd.name || nd.id,
+      label: nodeConf.label || {}
     });
     
-    if (vm.label && typeof vm.label === 'object') {
-      Object.entries(vm.label).forEach(([key, value]) => {
+    if (nodeConf.label && typeof nodeConf.label === 'object') {
+      Object.entries(nodeConf.label).forEach(([key, value]) => {
         if (!labelMap[key]) {
           labelMap[key] = new Set();
         }
@@ -13494,7 +13494,7 @@ window.extractLabelsFromInfra = function(infraId) {
     labels[key] = Array.from(valueSet);
   });
   
-  return { labels, vmCount: infra.vm.length, vms };
+  return { labels, ndCount: infra.node.length, nodes };
 };
 
 // Update available labels display when Infra is selected
@@ -13502,14 +13502,14 @@ window.updateAvailableLabels = function(infraId) {
   const container = document.getElementById('availableLabelsContainer');
   if (!container) return;
   
-  const { labels, vmCount, vms } = extractLabelsFromInfra(infraId);
+  const { labels, ndCount, nodes } = extractLabelsFromInfra(infraId);
   
-  // Store vms data for preview
-  window._currentInfraVms = vms;
+  // Store nodes data for preview
+  window._currentInfraNodes = nodes;
   window._currentInfraLabels = labels;
   
   if (Object.keys(labels).length === 0) {
-    container.innerHTML = '<span style="color: #999; font-size: 12px;">No labels found in this Infra\'s VMs</span>';
+    container.innerHTML = '<span style="color: #999; font-size: 12px;">No labels found in this Infra\'s Nodes</span>';
     return;
   }
   
@@ -13557,7 +13557,7 @@ window.updateAvailableLabels = function(infraId) {
     </div>`;
   }
   
-  html += `<p style="margin: 10px 0 0 0; font-size: 11px; color: #666;">Total: ${Object.keys(labels).length} label keys, ${vmCount} VMs</p>`;
+  html += `<p style="margin: 10px 0 0 0; font-size: 11px; color: #666;">Total: ${Object.keys(labels).length} label keys, ${ndCount} Nodes</p>`;
   
   container.innerHTML = html;
   
@@ -13738,17 +13738,17 @@ window.addLabelToSelector = function(labelPair) {
 // Update preview of matching VMs
 window.updateLabelMatchPreview = function() {
   const previewDiv = document.getElementById('labelMatchPreview');
-  const matchingCountSpan = document.getElementById('matchingVmCount');
-  const totalCountSpan = document.getElementById('totalVmCount');
+  const matchingCountSpan = document.getElementById('matchingNodeCount');
+  const totalCountSpan = document.getElementById('totalNodeCount');
   const matchingListDiv = document.getElementById('matchingVmList');
   const labelInput = document.getElementById('labelSelector');
   
-  if (!previewDiv || !labelInput || !window._currentInfraVms) return;
+  if (!previewDiv || !labelInput || !window._currentInfraNodes) return;
   
-  const vms = window._currentInfraVms;
+  const nodes = window._currentInfraNodes;
   const labelSelector = labelInput.value.trim();
   
-  totalCountSpan.textContent = vms.length;
+  totalCountSpan.textContent = nodes.length;
   
   if (!labelSelector) {
     previewDiv.style.display = 'none';
@@ -13766,24 +13766,24 @@ window.updateLabelMatchPreview = function() {
   });
   
   // Find matching VMs - ALL label pairs must match (AND condition)
-  const matchingVms = vms.filter(vm => {
-    if (!vm.label || requiredLabelPairs.length === 0) return false;
+  const matchingNodes = nodes.filter(nd => {
+    if (!nodeConf.label || requiredLabelPairs.length === 0) return false;
     
-    // Every required label pair must exist in VM's labels
+    // Every required label pair must exist in Node's labels
     return requiredLabelPairs.every(({ key, value }) => {
-      return vm.label[key] === value;
+      return nodeConf.label[key] === value;
     });
   });
   
-  matchingCountSpan.textContent = matchingVms.length;
+  matchingCountSpan.textContent = matchingNodes.length;
   
-  if (matchingVms.length > 0) {
-    matchingListDiv.innerHTML = matchingVms.map(vm => 
-      `<span style="display: inline-block; padding: 2px 6px; margin: 2px; background: #d4edda; border-radius: 3px;">${escapeHtml(vm.name)}</span>`
+  if (matchingNodes.length > 0) {
+    matchingListDiv.innerHTML = matchingNodes.map(nd => 
+      `<span style="display: inline-block; padding: 2px 6px; margin: 2px; background: #d4edda; border-radius: 3px;">${escapeHtml(nd.name)}</span>`
     ).join('');
     previewDiv.style.background = '#d4edda';
   } else {
-    matchingListDiv.innerHTML = '<span style="color: #dc3545;">No VMs match the current selector</span>';
+    matchingListDiv.innerHTML = '<span style="color: #dc3545;">No Nodes match the current selector</span>';
     previewDiv.style.background = '#f8d7da';
   }
   
@@ -14137,7 +14137,7 @@ window.applyScriptSyncMode = function(scriptValue) {
 // Remote Command Result Viewer
 // ============================================================
 // Shows a formatted, human-readable view of remote command execution results.
-// Groups output by VM and command index for easy readability.
+// Groups output by Node and command index for easy readability.
 // Provides a "View Raw JSON" button to see the original JSON output.
 
 /**
@@ -14181,7 +14181,7 @@ function _escAndLinkify(text) {
 
 /**
  * Shows formatted remote command execution results in a SweetAlert window. 
- * Groups output by VM → Command for readability.
+ * Groups output by Node → Command for readability.
  * @param {Object} data - The API response with data.results[]
  */
 function showRemoteCmdResult(data, appliedDnsUrl) {
@@ -14191,22 +14191,22 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
   }
 
   const results = data.results;
-  const vmCount = results.length;
+  const ndCount = results.length;
   const TAIL_LINES = 10;
   const MAX_CMD_DISPLAY = 120; // Max chars for command preview in header
 
-  // --- Build per-VM tab content ---
-  const vmTabs = results.map((vm, vmIdx) => {
-    const vmLabel = vm.vmId || `vm-${vmIdx}`;
-    const vmIp = vm.vmIp || '';
-    const hasError = vm.error && vm.error.trim();
-    const cmdKeys = Object.keys(vm.command || {}).sort((a, b) => Number(a) - Number(b));
+  // --- Build per-Node tab content ---
+  const ndTabs = results.map((nd, ndIdx) => {
+    const ndLabel = nd.nodeId || `node-${ndIdx}`;
+    const ndIp = nd.nodeIp || '';
+    const hasError = nd.error && nd.error.trim();
+    const cmdKeys = Object.keys(nd.command || {}).sort((a, b) => Number(a) - Number(b));
 
     // Build command groups
     const cmdGroupsHtml = cmdKeys.map((key) => {
-      const cmdText = (vm.command[key] || '').trim();
-      const stdoutInfo = _tailLines(vm.stdout?.[key] || '', TAIL_LINES);
-      const stderrInfo = _tailLines(vm.stderr?.[key] || '', TAIL_LINES);
+      const cmdText = (nd.command[key] || '').trim();
+      const stdoutInfo = _tailLines(nd.stdout?.[key] || '', TAIL_LINES);
+      const stderrInfo = _tailLines(nd.stderr?.[key] || '', TAIL_LINES);
       const cmdIdx = Number(key) + 1;
 
       // Truncated command display (long curl commands, etc.)
@@ -14221,7 +14221,7 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
 
       // stdout block
       if (stdoutInfo) {
-        const blockId = `stdout-${vmIdx}-${key}`;
+        const blockId = `stdout-${ndIdx}-${key}`;
         html += `
           <div style="padding: 0;">
             <div style="background: #e8f5e9; padding: 3px 10px; font-size: 11px; color: #2e7d32; font-weight: 600; display: flex; justify-content: space-between; align-items: center;">
@@ -14249,7 +14249,7 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
 
       // stderr block (only if non-empty)
       if (stderrInfo) {
-        const blockId = `stderr-${vmIdx}-${key}`;
+        const blockId = `stderr-${ndIdx}-${key}`;
         html += `
           <div style="padding: 0;">
             <div style="background: #fff3e0; padding: 3px 10px; font-size: 11px; color: #e65100; font-weight: 600; display: flex; justify-content: space-between; align-items: center;">
@@ -14279,40 +14279,40 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
       return html;
     }).join('');
 
-    // VM-level error
-    const vmErrorHtml = hasError ? `
+    // Node-level error
+    const ndErrorHtml = hasError ? `
       <div style="margin-bottom: 8px; padding: 6px 10px; background: #ffebee; border-left: 4px solid #d32f2f; border-radius: 4px; font-size: 12px; color: #c62828;">
-        <b>Error:</b> ${window.escapeHtml(vm.error)}
+        <b>Error:</b> ${window.escapeHtml(nd.error)}
       </div>` : '';
 
-    return { vmLabel, vmIp, vmIdx, cmdGroupsHtml, vmErrorHtml, cmdCount: cmdKeys.length };
+    return { ndLabel, ndIp, ndIdx, cmdGroupsHtml, ndErrorHtml, cmdCount: cmdKeys.length };
   });
 
-  // --- Determine if we need VM tabs or single VM view ---
-  const buildVmContent = (vm) => `
+  // --- Determine if we need Node tabs or single Node view ---
+  const buildNodeContent = (nd) => `
     <div style="margin-bottom: 4px; font-size: 12px; color: #666;">
-      <span style="font-weight: 600; color: #333;">${window.escapeHtml(vm.vmLabel)}</span>
-      ${vm.vmIp ? `<span style="margin-left: 6px; color: #888;">(${window.escapeHtml(vm.vmIp)})</span>` : ''}
-      <span style="margin-left: 6px; color: #999;">${vm.cmdCount} command${vm.cmdCount > 1 ? 's' : ''}</span>
+      <span style="font-weight: 600; color: #333;">${window.escapeHtml(nd.ndLabel)}</span>
+      ${nd.ndIp ? `<span style="margin-left: 6px; color: #888;">(${window.escapeHtml(nd.ndIp)})</span>` : ''}
+      <span style="margin-left: 6px; color: #999;">${nd.cmdCount} command${nd.cmdCount > 1 ? 's' : ''}</span>
     </div>
-    ${vm.vmErrorHtml}
-    ${vm.cmdGroupsHtml}`;
+    ${nd.ndErrorHtml}
+    ${nd.cmdGroupsHtml}`;
 
   let bodyHtml;
-  if (vmCount === 1) {
-    bodyHtml = buildVmContent(vmTabs[0]);
+  if (ndCount === 1) {
+    bodyHtml = buildNodeContent(ndTabs[0]);
   } else {
-    // VM tab buttons
-    const tabBtns = vmTabs.map((vm, i) => `
+    // Node tab buttons
+    const tabBtns = ndTabs.map((nd, i) => `
       <button type="button" class="rcr-tab-btn${i === 0 ? ' rcr-tab-active' : ''}" data-idx="${i}"
         style="padding: 4px 10px; font-size: 11px; border: 1px solid #dee2e6; border-bottom: none; border-radius: 5px 5px 0 0; 
                cursor: pointer; background: ${i === 0 ? '#fff' : '#f1f3f5'}; color: ${i === 0 ? '#333' : '#888'}; font-weight: ${i === 0 ? '600' : '400'};">
-        ${window.escapeHtml(vm.vmLabel)} <span style="font-size: 10px; color: #999;">${window.escapeHtml(vm.vmIp)}</span>
+        ${window.escapeHtml(nd.ndLabel)} <span style="font-size: 10px; color: #999;">${window.escapeHtml(nd.ndIp)}</span>
       </button>`).join('');
 
-    const tabPanels = vmTabs.map((vm, i) => `
+    const tabPanels = ndTabs.map((nd, i) => `
       <div class="rcr-tab-panel" data-idx="${i}" style="display: ${i === 0 ? 'block' : 'none'}; padding: 10px 0 0 0;">
-        ${buildVmContent(vm)}
+        ${buildNodeContent(nd)}
       </div>`).join('');
 
     bodyHtml = `
@@ -14323,11 +14323,11 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
   }
 
   // --- Summary bar ---
-  const totalCmds = results.reduce((s, vm) => s + Object.keys(vm.command || {}).length, 0);
-  const hasAnyError = results.some(vm => (vm.error && vm.error.trim()));
-  const hasAnyStderr = results.some(vm => {
-    const keys = Object.keys(vm.stderr || {});
-    return keys.some(k => vm.stderr[k] && vm.stderr[k].trim());
+  const totalCmds = results.reduce((s, nd) => s + Object.keys(nd.command || {}).length, 0);
+  const hasAnyError = results.some(nd => (nd.error && nd.error.trim()));
+  const hasAnyStderr = results.some(nd => {
+    const keys = Object.keys(nd.stderr || {});
+    return keys.some(k => nd.stderr[k] && nd.stderr[k].trim());
   });
   const statusIcon = hasAnyError ? '⚠️' : (hasAnyStderr ? '⚡' : '✅');
   const statusColor = hasAnyError ? '#d32f2f' : (hasAnyStderr ? '#e65100' : '#2e7d32');
@@ -14347,7 +14347,7 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
       <div style="display: flex; align-items: center; gap: 10px;">
         <span style="font-size: 18px;">${statusIcon}</span>
         <span style="font-weight: 600; font-size: 13px; color: ${statusColor};">${statusText}</span>
-        <span style="font-size: 11px; color: #888;">${vmCount} VM${vmCount > 1 ? 's' : ''} · ${totalCmds} command${totalCmds > 1 ? 's' : ''}</span>
+        <span style="font-size: 11px; color: #888;">${ndCount} Node${ndCount > 1 ? 's' : ''} · ${totalCmds} command${totalCmds > 1 ? 's' : ''}</span>
       </div>
       <button type="button" id="rcr-raw-json-btn"
         style="padding: 4px 10px; font-size: 11px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
@@ -14431,7 +14431,7 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
     streamUrl,
     appliedDnsUrl: appliedDnsUrl || null,
     startTime: Date.now(),
-    vmState: {},        // { vmId: { status, stdoutLines: [], stderrLines: [], statusInfo: null } }
+    nodeState: {},        // { nodeId: { status, stdoutLines: [], stderrLines: [], statusInfo: null } }
     doneSummary: null,
     abortController: new AbortController(),
     rebuildCallback: null,   // set when modal is open, null when closed
@@ -14443,31 +14443,31 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
   window._cmdStreamSessions[xRequestId] = session;
   updateStreamingBadge();
 
-  const getOrCreateVm = (vmId) => {
-    if (!session.vmState[vmId]) {
-      session.vmState[vmId] = { status: 'Queued', stdoutLines: [], stderrLines: [], statusInfo: null };
+  const getOrCreateNode = (nodeId) => {
+    if (!session.nodeState[nodeId]) {
+      session.nodeState[nodeId] = { status: 'Queued', stdoutLines: [], stderrLines: [], statusInfo: null };
     }
-    return session.vmState[vmId];
+    return session.nodeState[nodeId];
   };
 
   // Start background SSE consumption
   consumeSSEStream(streamUrl, username, password, session.abortController, (event) => {
-    console.log('[SSE] Event received:', event.type, event.vmId || '', event);
-    if (event.type === 'CommandStatus' && event.vmId) {
-      const vm = getOrCreateVm(event.vmId);
-      vm.status = event.status?.status || vm.status;
-      vm.statusInfo = event.status || vm.statusInfo;
-    } else if (event.type === 'CommandLog' && event.vmId && event.log) {
-      const vm = getOrCreateVm(event.vmId);
+    console.log('[SSE] Event received:', event.type, event.nodeId || '', event);
+    if (event.type === 'CommandStatus' && event.nodeId) {
+      const nd = getOrCreateNode(event.nodeId);
+      nd.status = event.status?.status || nd.status;
+      nd.statusInfo = event.status || nd.statusInfo;
+    } else if (event.type === 'CommandLog' && event.nodeId && event.log) {
+      const nd = getOrCreateNode(event.nodeId);
       const line = event.log.line || '';
       if (event.log.stream === 'stdout') {
-        vm.stdoutLines.push(line);
+        nd.stdoutLines.push(line);
       } else if (event.log.stream === 'stderr') {
-        vm.stderrLines.push(line);
+        nd.stderrLines.push(line);
       }
     } else if (event.type === 'CommandDone') {
-      const totalVms = Object.keys(session.vmState).length;
-      session.doneSummary = event.summary || { totalVms, completedVms: 0, failedVms: 0, elapsedSeconds: 0 };
+      const totalNodes = Object.keys(session.nodeState).length;
+      session.doneSummary = event.summary || { totalNodes, completedNodes: 0, failedNodes: 0, elapsedSeconds: 0 };
       // Propagate server-side error from CommandDone summary
       if (event.summary && event.summary.error) {
         session.commandError = event.summary.error;
@@ -14500,7 +14500,7 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
     }
     const elapsed = (Date.now() - session.startTime) / 1000;
     // After 60 seconds with no events and no VMs, treat as connection issue
-    if (elapsed > 60 && Object.keys(session.vmState).length === 0) {
+    if (elapsed > 60 && Object.keys(session.nodeState).length === 0) {
       session.error = 'No events received within 60 seconds. The command may have failed silently.';
       removeSpinnerTask(session.spinnerId);
       clearInterval(session._waitingTimer);
@@ -14532,23 +14532,23 @@ function openStreamingSessionModal(xRequestId) {
     return `<span style="display:inline-block;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:600;color:#fff;background:${bg};">${window.escapeHtml(status)}</span>`;
   };
 
-  const renderVmPanel = (vmId) => {
-    const vm = session.vmState[vmId];
-    if (!vm) return '';
-    const stdoutText = vm.stdoutLines.join('\n');
-    const stderrText = vm.stderrLines.join('\n');
+  const renderNodePanel = (nodeId) => {
+    const nd = session.nodeState[nodeId];
+    if (!nd) return '';
+    const stdoutText = nd.stdoutLines.join('\n');
+    const stderrText = nd.stderrLines.join('\n');
 
     let html = `
       <div style="margin-bottom:4px;display:flex;align-items:center;gap:8px;">
-        <span style="font-weight:600;font-size:12px;color:#333;">${window.escapeHtml(vmId)}</span>
-        ${statusBadge(vm.status)}
-        ${vm.statusInfo && vm.statusInfo.elapsedTime ? `<span style="font-size:10px;color:#888;">${vm.statusInfo.elapsedTime}s</span>` : ''}
+        <span style="font-weight:600;font-size:12px;color:#333;">${window.escapeHtml(nodeId)}</span>
+        ${statusBadge(nd.status)}
+        ${nd.statusInfo && nd.statusInfo.elapsedTime ? `<span style="font-size:10px;color:#888;">${nd.statusInfo.elapsedTime}s</span>` : ''}
       </div>`;
 
     // Show error details when status is Failed/Timeout (e.g. SSH connection failure, command timeout)
-    if (['Failed', 'Timeout'].includes(vm.status) && vm.statusInfo) {
-      const errMsg = vm.statusInfo.errorMessage;
-      const summary = vm.statusInfo.resultSummary;
+    if (['Failed', 'Timeout'].includes(nd.status) && nd.statusInfo) {
+      const errMsg = nd.statusInfo.errorMessage;
+      const summary = nd.statusInfo.resultSummary;
       if (errMsg || summary) {
         html += `
       <div style="margin-bottom:4px;padding:8px;background:#ffebee;border-left:4px solid #d32f2f;border-radius:4px;">`;
@@ -14565,7 +14565,7 @@ function openStreamingSessionModal(xRequestId) {
     if (stdoutText) {
       html += `
       <div style="margin-bottom:4px;">
-        <div style="background:#e8f5e9;padding:2px 8px;font-size:10px;color:#2e7d32;font-weight:600;">stdout (${vm.stdoutLines.length} lines)</div>
+        <div style="background:#e8f5e9;padding:2px 8px;font-size:10px;color:#2e7d32;font-weight:600;">stdout (${nd.stdoutLines.length} lines)</div>
         <pre style="margin:0;padding:6px 8px;background:#1e1e1e;color:#d4d4d4;font-size:11px;line-height:1.4;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;">${_escAndLinkify(stdoutText)}</pre>
       </div>`;
     }
@@ -14573,7 +14573,7 @@ function openStreamingSessionModal(xRequestId) {
     if (stderrText) {
       html += `
       <div style="margin-bottom:4px;">
-        <div style="background:#fff3e0;padding:2px 8px;font-size:10px;color:#e65100;font-weight:600;">stderr (${vm.stderrLines.length} lines)</div>
+        <div style="background:#fff3e0;padding:2px 8px;font-size:10px;color:#e65100;font-weight:600;">stderr (${nd.stderrLines.length} lines)</div>
         <pre style="margin:0;padding:6px 8px;background:#2e1e1e;color:#ffab91;font-size:11px;line-height:1.4;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;">${_escAndLinkify(stderrText)}</pre>
       </div>`;
     }
@@ -14598,10 +14598,10 @@ function openStreamingSessionModal(xRequestId) {
     const container = popup.querySelector('#stream-body');
     if (!container) return;
 
-    const vmIds = Object.keys(session.vmState).sort();
-    const totalVms = vmIds.length;
-    const completedCount = vmIds.filter(id => ['Completed','Failed','Timeout','Cancelled','Interrupted'].includes(session.vmState[id].status)).length;
-    const handlingCount = vmIds.filter(id => session.vmState[id].status === 'Handling').length;
+    const nodeIds = Object.keys(session.nodeState).sort();
+    const totalNodes = nodeIds.length;
+    const completedCount = nodeIds.filter(id => ['Completed','Failed','Timeout','Cancelled','Interrupted'].includes(session.nodeState[id].status)).length;
+    const handlingCount = nodeIds.filter(id => session.nodeState[id].status === 'Handling').length;
     const isFinished = session.doneSummary !== null;
 
     const streamDnsLinkHtml = session.appliedDnsUrl ? `
@@ -14615,9 +14615,9 @@ function openStreamingSessionModal(xRequestId) {
       ${streamDnsLinkHtml}
       <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:#f8f9fa;border:1px solid #e0e0e0;border-radius:5px;margin-bottom:8px;">
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:16px;">${isFinished ? (session.commandError || session.doneSummary.failedVms > 0 ? '⚠️' : '✅') : '⏳'}</span>
+          <span style="font-size:16px;">${isFinished ? (session.commandError || session.doneSummary.failedNodes > 0 ? '⚠️' : '✅') : '⏳'}</span>
           <span style="font-size:12px;font-weight:600;color:#333;">${isFinished ? (session.commandError ? 'Failed' : 'Completed') : 'Streaming...'}</span>
-          <span style="font-size:10px;color:#888;">${completedCount}/${totalVms} VMs done${handlingCount > 0 ? ` · ${handlingCount} running` : ''}</span>
+          <span style="font-size:10px;color:#888;">${completedCount}/${totalNodes} Nodes done${handlingCount > 0 ? ` · ${handlingCount} running` : ''}</span>
           ${session.doneSummary ? `<span style="font-size:10px;color:#888;">· ${session.doneSummary.elapsedSeconds}s total</span>` : ''}
         </div>
         <span style="font-size:10px;color:#aaa;">Infra: ${window.escapeHtml(session.infraId)} | x-request-id: ${window.escapeHtml(xRequestId)}</span>
@@ -14630,19 +14630,19 @@ function openStreamingSessionModal(xRequestId) {
     }
 
     // Waiting state
-    if (vmIds.length === 0 && !isFinished) {
+    if (nodeIds.length === 0 && !isFinished) {
       if (session.commandError) {
         // Error before any VMs started (e.g., preprocessing failure)
         container.innerHTML = summaryHtml + `<div style="padding:16px;text-align:center;">
           <div style="margin-bottom:8px;padding:10px;background:#ffebee;border-left:4px solid #d32f2f;border-radius:4px;font-size:12px;color:#c62828;text-align:left;">
             <b>Command Failed:</b> ${window.escapeHtml(session.commandError)}
           </div>
-          <div style="font-size:11px;color:#888;">The command failed before reaching any VMs.</div>
+          <div style="font-size:11px;color:#888;">The command failed before reaching any Nodes.</div>
         </div>`;
       } else if (session.error) {
         // SSE transport error while waiting
         container.innerHTML = summaryHtml + `<div style="padding:16px;text-align:center;">
-          <div style="font-size:11px;color:#888;">No VM execution results available.</div>
+          <div style="font-size:11px;color:#888;">No Node execution results available.</div>
         </div>`;
       } else {
         // Still waiting for events
@@ -14655,7 +14655,7 @@ function openStreamingSessionModal(xRequestId) {
     }
 
     // Finished with error but no VMs processed
-    if (vmIds.length === 0 && isFinished) {
+    if (nodeIds.length === 0 && isFinished) {
       let errorHtml = '';
       if (session.commandError) {
         errorHtml = `<div style="margin-bottom:8px;padding:10px;background:#ffebee;border-left:4px solid #d32f2f;border-radius:4px;font-size:12px;color:#c62828;text-align:left;">
@@ -14664,32 +14664,32 @@ function openStreamingSessionModal(xRequestId) {
       }
       container.innerHTML = summaryHtml + `<div style="padding:16px;text-align:center;">
         ${errorHtml}
-        <div style="font-size:11px;color:#888;">No VM execution results available.</div>
+        <div style="font-size:11px;color:#888;">No Node execution results available.</div>
       </div>`;
       return;
     }
 
-    // VM panels with tabs
+    // Node panels with tabs
     let bodyHtml;
-    if (vmIds.length <= 1) {
-      bodyHtml = vmIds.map(id => renderVmPanel(id)).join('');
+    if (nodeIds.length <= 1) {
+      bodyHtml = nodeIds.map(id => renderNodePanel(id)).join('');
     } else {
-      const activeTab = popup.querySelector('.stream-tab-btn.stream-tab-active')?.dataset?.vmid || vmIds[0];
-      const tabBtns = vmIds.map(id => {
+      const activeTab = popup.querySelector('.stream-tab-btn.stream-tab-active')?.dataset?.nodeid || nodeIds[0];
+      const tabBtns = nodeIds.map(id => {
         const isActive = id === activeTab;
-        const vm = session.vmState[id];
-        const statusDot = vm.status === 'Handling' ? '🔵' : (vm.status === 'Completed' ? '🟢' : (vm.status === 'Failed' ? '🔴' : '⚪'));
-        return `<button type="button" class="stream-tab-btn${isActive ? ' stream-tab-active' : ''}" data-vmid="${window.escapeHtml(id)}"
+        const nd = session.nodeState[id];
+        const statusDot = nd.status === 'Handling' ? '🔵' : (nd.status === 'Completed' ? '🟢' : (nd.status === 'Failed' ? '🔴' : '⚪'));
+        return `<button type="button" class="stream-tab-btn${isActive ? ' stream-tab-active' : ''}" data-nodeid="${window.escapeHtml(id)}"
           style="padding:3px 8px;font-size:10px;border:1px solid #dee2e6;border-bottom:none;border-radius:4px 4px 0 0;cursor:pointer;
                  background:${isActive ? '#fff' : '#f1f3f5'};color:${isActive ? '#333' : '#888'};font-weight:${isActive ? '600' : '400'};">
           ${statusDot} ${window.escapeHtml(id)}
         </button>`;
       }).join('');
 
-      const tabPanels = vmIds.map(id => {
+      const tabPanels = nodeIds.map(id => {
         const isActive = id === activeTab;
-        return `<div class="stream-tab-panel" data-vmid="${window.escapeHtml(id)}" style="display:${isActive ? 'block' : 'none'};padding:8px 0 0 0;">
-          ${renderVmPanel(id)}
+        return `<div class="stream-tab-panel" data-nodeid="${window.escapeHtml(id)}" style="display:${isActive ? 'block' : 'none'};padding:8px 0 0 0;">
+          ${renderNodePanel(id)}
         </div>`;
       }).join('');
 
@@ -14705,7 +14705,7 @@ function openStreamingSessionModal(xRequestId) {
     // Tab click listeners
     container.querySelectorAll('.stream-tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        const vmid = btn.dataset.vmid;
+        const nodeid = btn.dataset.nodeid;
         container.querySelectorAll('.stream-tab-btn').forEach(b => {
           b.classList.remove('stream-tab-active');
           b.style.background = '#f1f3f5'; b.style.color = '#888'; b.style.fontWeight = '400';
@@ -14713,7 +14713,7 @@ function openStreamingSessionModal(xRequestId) {
         btn.classList.add('stream-tab-active');
         btn.style.background = '#fff'; btn.style.color = '#333'; btn.style.fontWeight = '600';
         container.querySelectorAll('.stream-tab-panel').forEach(p => {
-          p.style.display = p.dataset.vmid === vmid ? 'block' : 'none';
+          p.style.display = p.dataset.nodeid === nodeid ? 'block' : 'none';
         });
       });
     });
@@ -14775,18 +14775,18 @@ function showStreamingSessionList() {
 
   const rows = keys.map(reqId => {
     const s = sessions[reqId];
-    const vmIds = Object.keys(s.vmState);
-    const totalVms = vmIds.length;
-    const completedVms = vmIds.filter(id => ['Completed','Failed','Timeout','Cancelled','Interrupted'].includes(s.vmState[id].status)).length;
+    const nodeIds = Object.keys(s.nodeState);
+    const totalNodes = nodeIds.length;
+    const completedNodes = nodeIds.filter(id => ['Completed','Failed','Timeout','Cancelled','Interrupted'].includes(s.nodeState[id].status)).length;
     const isFinished = s.doneSummary !== null;
     const elapsed = ((Date.now() - s.startTime) / 1000).toFixed(0);
-    const statusIcon = isFinished ? (s.commandError || s.doneSummary.failedVms > 0 ? '⚠️' : '✅') : (s.error ? '❌' : '⏳');
+    const statusIcon = isFinished ? (s.commandError || s.doneSummary.failedNodes > 0 ? '⚠️' : '✅') : (s.error ? '❌' : '⏳');
     const statusText = isFinished ? (s.commandError ? 'Failed' : 'Done') : (s.error ? 'Error' : 'Running');
 
     return `<tr style="cursor:pointer;" onclick="openStreamingSessionModal('${window.escapeHtml(reqId)}')">
       <td style="padding:6px 8px;font-size:11px;">${statusIcon} ${statusText}</td>
       <td style="padding:6px 8px;font-size:11px;font-weight:600;">${window.escapeHtml(s.infraId)}</td>
-      <td style="padding:6px 8px;font-size:11px;">${completedVms}/${totalVms} VMs</td>
+      <td style="padding:6px 8px;font-size:11px;">${completedNodes}/${totalNodes} Nodes</td>
       <td style="padding:6px 8px;font-size:11px;color:#888;">${elapsed}s ago</td>
       <td style="padding:6px 8px;font-size:10px;color:#aaa;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${window.escapeHtml(reqId)}</td>
       <td style="padding:6px 8px;">
@@ -15139,21 +15139,21 @@ async function setBastionNode() {
   }
 
   // Load VMs in the current (target) Infra
-  let targetVmOptions = '<option value="">-- select VM --</option>';
+  let targetNodeOptions = '<option value="">-- select Node --</option>';
   try {
     const infraRes = await axios.get(
       `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}`,
       { auth: { username, password } }
     );
-    const vms = infraRes.data.vm || [];
-    vms.forEach(vm => {
-      const rawLabel = vm.publicIP ? `${vm.id} (${vm.publicIP})` : vm.id;
-      const escapedValue = window.escapeHtml(String(vm.id));
+    const nodes = infraRes.data.node || [];
+    nodes.forEach(nd => {
+      const rawLabel = nd.publicIP ? `${nd.id} (${nd.publicIP})` : nd.id;
+      const escapedValue = window.escapeHtml(String(nd.id));
       const escapedLabel = window.escapeHtml(String(rawLabel));
-      targetVmOptions += `<option value="${escapedValue}">${escapedLabel}</option>`;
+      targetNodeOptions += `<option value="${escapedValue}">${escapedLabel}</option>`;
     });
   } catch (err) {
-    console.error("Failed to fetch target Infra VMs:", err);
+    console.error("Failed to fetch target Infra Nodes:", err);
   }
 
   Swal.fire({
@@ -15163,9 +15163,9 @@ async function setBastionNode() {
     ${POPUP_STYLES}
     <div class="popup-container">
 
-      <!-- Target VM Section -->
+      <!-- Target Node Section -->
       <div class="popup-section">
-        <div class="popup-section-title">🎯 Target VM (needs bastion access)</div>
+        <div class="popup-section-title">🎯 Target Node (needs bastion access)</div>
         <div class="popup-row">
           <div class="popup-col">
             <div class="popup-field">
@@ -15181,8 +15181,8 @@ async function setBastionNode() {
           </div>
           <div class="popup-col" style="flex: 2;">
             <div class="popup-field">
-              <label class="popup-label">Target VM</label>
-              <select id="bastionTargetVmId" class="popup-select">${targetVmOptions}</select>
+              <label class="popup-label">Target Node</label>
+              <select id="bastionTargetNodeId" class="popup-select">${targetNodeOptions}</select>
             </div>
           </div>
         </div>
@@ -15196,7 +15196,7 @@ async function setBastionNode() {
             <div class="popup-field">
               <label class="popup-label">Namespace</label>
               <input type="text" id="bastionNsId" class="popup-input" value="${namespace}"
-                placeholder="${namespace}" title="Bastion VM's namespace (leave as-is for same namespace)">
+                placeholder="${namespace}" title="Bastion Node's namespace (leave as-is for same namespace)">
             </div>
           </div>
           <div class="popup-col" style="flex: 0 0 auto;">
@@ -15218,8 +15218,8 @@ async function setBastionNode() {
           </div>
           <div class="popup-col" style="flex: 2;">
             <div class="popup-field">
-              <label class="popup-label">Bastion VM</label>
-              <select id="bastionVmId" class="popup-select">
+              <label class="popup-label">Bastion Node</label>
+              <select id="bastionNodeId" class="popup-select">
                 <option value="">-- select Infra first --</option>
               </select>
             </div>
@@ -15227,7 +15227,7 @@ async function setBastionNode() {
         </div>
         <div class="popup-row">
           <div class="popup-col">
-            <span class="popup-hint">💡 For cross-namespace bastions (e.g. AWS VM in a shared-services namespace), change the namespace above and click Load Infras.</span>
+            <span class="popup-hint">💡 For cross-namespace bastions (e.g. AWS Node in a shared-services namespace), change the namespace above and click Load Infras.</span>
           </div>
         </div>
       </div>
@@ -15243,7 +15243,7 @@ async function setBastionNode() {
         if (!bastionNs) { return; }
         const infraSel = document.getElementById('bastionInfraId');
         infraSel.innerHTML = '<option value="">Loading...</option>';
-        document.getElementById('bastionVmId').innerHTML = '<option value="">-- select Infra first --</option>';
+        document.getElementById('bastionNodeId').innerHTML = '<option value="">-- select Infra first --</option>';
         try {
           const res = await axios.get(
             `http://${hostname}:${port}/tumblebug/ns/${bastionNs}/infra?option=id`,
@@ -15267,84 +15267,84 @@ async function setBastionNode() {
       document.getElementById('bastionInfraId').addEventListener('change', async () => {
         const bastionNs = document.getElementById('bastionNsId').value.trim();
         const bastionInfra = document.getElementById('bastionInfraId').value;
-        const vmSel = document.getElementById('bastionVmId');
+        const nodeSel = document.getElementById('bastionNodeId');
         if (!bastionInfra) {
-          vmSel.innerHTML = '<option value="">-- select Infra first --</option>';
+          nodeSel.innerHTML = '<option value="">-- select Infra first --</option>';
           return;
         }
-        vmSel.innerHTML = '<option value="">Loading...</option>';
+        nodeSel.innerHTML = '<option value="">Loading...</option>';
         try {
           const res = await axios.get(
             `http://${hostname}:${port}/tumblebug/ns/${bastionNs}/infra/${bastionInfra}`,
             { auth: { username, password } }
           );
-          const vms = res.data.vm || [];
+          const nodes = res.data.node || [];
           // Only show VMs — no auto-select placeholder (auto-select is not supported)
-          vmSel.innerHTML = '<option value="">-- select VM --</option>';
-          vms.forEach(vm => {
-            const hasPublic = !!vm.publicIP;
+          nodeSel.innerHTML = '<option value="">-- select Node --</option>';
+          nodes.forEach(nd => {
+            const hasPublic = !!nd.publicIP;
             const opt = document.createElement('option');
-            opt.value = String(vm.id);
-            opt.textContent = hasPublic ? `${vm.id}  ✅ ${vm.publicIP}` : `${vm.id}  (no public IP)`;
+            opt.value = String(nd.id);
+            opt.textContent = hasPublic ? `${nd.id}  ✅ ${nd.publicIP}` : `${nd.id}  (no public IP)`;
             if (!hasPublic) opt.style.color = '#aaa';
-            vmSel.appendChild(opt);
+            nodeSel.appendChild(opt);
           });
         } catch (err) {
-          vmSel.innerHTML = '<option value="">Failed to load</option>';
-          console.error("Failed to load bastion VMs:", err);
+          nodeSel.innerHTML = '<option value="">Failed to load</option>';
+          console.error("Failed to load bastion Nodes:", err);
         }
       });
     },
     preConfirm: () => {
-      const targetVmId = document.getElementById('bastionTargetVmId').value;
+      const targetNodeId = document.getElementById('bastionTargetNodeId').value;
       const bastionNsId = document.getElementById('bastionNsId').value.trim();
       const bastionInfraId = document.getElementById('bastionInfraId').value;
-      const bastionVmId = document.getElementById('bastionVmId').value; // may be empty → auto-select
-      if (!targetVmId) {
-        Swal.showValidationMessage("Please select a target VM");
+      const bastionNodeId = document.getElementById('bastionNodeId').value; // may be empty → auto-select
+      if (!targetNodeId) {
+        Swal.showValidationMessage("Please select a target Node");
         return false;
       }
       if (!bastionInfraId) {
         Swal.showValidationMessage("Please load Infras and select a bastion Infra");
         return false;
       }
-      return { targetVmId, bastionNsId, bastionInfraId, bastionVmId };
+      return { targetNodeId, bastionNsId, bastionInfraId, bastionNodeId };
     },
   }).then(async (result) => {
     if (!result.isConfirmed || !result.value) return;
 
-    const { targetVmId, bastionNsId, bastionInfraId, bastionVmId } = result.value;
+    const { targetNodeId, bastionNsId, bastionInfraId, bastionNodeId } = result.value;
 
     // Build URL based on how many components differ
     let url;
     const sameBastionNs = bastionNsId === namespace;
     const sameBastionInfra = bastionInfraId === infraid;
 
-    if (sameBastionNs && sameBastionInfra && bastionVmId) {
+    if (sameBastionNs && sameBastionInfra && bastionNodeId) {
       // Same NS, same Infra
-      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/vm/${targetVmId}/bastion/${bastionVmId}`;
-    } else if (sameBastionNs && bastionVmId) {
+      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionNodeId}`;
+    } else if (sameBastionNs && bastionNodeId) {
       // Same NS, different Infra
-      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/vm/${targetVmId}/bastion/${bastionInfraId}/${bastionVmId}`;
-    } else if (sameBastionNs && !bastionVmId) {
-      // Same NS, different Infra, auto-select VM
-      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/vm/${targetVmId}/bastion/${bastionInfraId}/`;
-    } else if (bastionVmId) {
-      // Cross-NS with explicit VM
-      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/vm/${targetVmId}/bastion/${bastionNsId}/${bastionInfraId}/${bastionVmId}`;
+      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionInfraId}/${bastionNodeId}`;
+    } else if (sameBastionNs && !bastionNodeId) {
+      // Same NS, different Infra, auto-select Node
+      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionInfraId}/`;
+    } else if (bastionNodeId) {
+      // Cross-NS with explicit Node
+      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionNsId}/${bastionInfraId}/${bastionNodeId}`;
     } else {
-      // Cross-NS, auto-select VM — not supported via URL params; fall back to explicit auto-select call
-      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/vm/${targetVmId}/bastion/${bastionNsId}/${bastionInfraId}/`;
+      // Cross-NS, auto-select Node — not supported via URL params; fall back to explicit auto-select call
+      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionNsId}/${bastionInfraId}/`;
     }
 
-    // Remove trailing slash if bastionVmId is empty (auto-select not available via 3-segment route)
-    // For auto-select, use the existing same-Infra route which auto-picks a public-IP VM in bastionInfraId
-    if (!bastionVmId) {
-      // Use bastionInfraId route without VM ID — not directly supported; show guidance
+    // Remove trailing slash if bastionNodeId is empty (auto-select not available via 3-segment route)
+    // For auto-select, use the existing same-Infra route which auto-picks a public-IP Node in bastionInfraId
+    if (!bastionNodeId) {
+      // Use bastionInfraId route without Node ID — not directly supported; show guidance
       Swal.fire({
         icon: 'info',
-        title: 'Auto-select requires a VM ID',
-        text: `Please select a specific bastion VM. Auto-selection across Infra/namespaces is not supported via the UI — select a VM with a ✅ public IP from the list.`,
+        title: 'Auto-select requires a Node ID',
+        text: `Please select a specific bastion Node. Auto-selection across Infra/namespaces is not supported via the UI — select a Node with a ✅ public IP from the list.`,
         confirmButtonText: 'OK'
       });
       return;
@@ -15380,8 +15380,8 @@ async function executeRemoteCmd() {
   var password = config.password;
   var namespace = configNamespace;
   var infraid = getSelectedInfraId();
-  var nodegroupid = getNodeGroupIdFromVmSelection();
-  var vmid = document.getElementById("vmid").value;
+  var nodegroupid = getNodeGroupIdFromNodeSelection();
+  var nodeid = document.getElementById("nodeid").value;
   let _appliedDnsUrl = null; // set when Apply DNS succeeds
 
   if (!namespace) {
@@ -15425,15 +15425,15 @@ async function executeRemoteCmd() {
     <div style="display: flex; align-items: center; margin-bottom: 15px;">
       <div style="margin-right: 10px;">
         <input type="radio" id="infraOption" name="selectOption" value="Infra" checked>
-        <label for="infraOption">Infra (all VMs)</label>
+        <label for="infraOption">Infra (all Nodes)</label>
       </div>
       <div style="margin-right: 10px;">
         <input type="radio" id="nodeGroupOption" name="selectOption" value="NodeGroup" ${nodegroupid ? '' : 'disabled'}>
         <label for="nodeGroupOption">NodeGroup: <span style="color:green;">${nodegroupid || 'N/A'}</span></label>
       </div>
       <div>
-        <input type="radio" id="vmOption" name="selectOption" value="VM" ${vmid ? '' : 'disabled'}>
-        <label for="vmOption">VM: <span style="color:red;">${vmid || 'N/A'}</span></label>
+        <input type="radio" id="nodeOption" name="selectOption" value="Node" ${nodeid ? '' : 'disabled'}>
+        <label for="nodeOption">Node: <span style="color:red;">${nodeid || 'N/A'}</span></label>
       </div>
     </div>`;
 
@@ -15461,17 +15461,17 @@ async function executeRemoteCmd() {
               <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; min-height: 32px;">
                 <label class="popup-inline" style="cursor: pointer;">
                   <input type="radio" id="infraOption" name="selectOption" value="Infra" checked>
-                  <span class="popup-badge" style="background: #0d6efd; color: white;">All VMs</span>
+                  <span class="popup-badge" style="background: #0d6efd; color: white;">All Nodes</span>
                 </label>
                 <label class="popup-inline" style="cursor: pointer; ${nodegroupid ? '' : 'opacity: 0.5;'}">
                   <input type="radio" id="nodeGroupOption" name="selectOption" value="NodeGroup" ${nodegroupid ? '' : 'disabled'}>
                   <span class="popup-badge" style="background: #28a745; color: white;">NodeGroup</span>
                   <span style="font-size: 0.75rem; color: #666;">${nodegroupid || 'N/A'}</span>
                 </label>
-                <label class="popup-inline" style="cursor: pointer; ${vmid ? '' : 'opacity: 0.5;'}">
-                  <input type="radio" id="vmOption" name="selectOption" value="VM" ${vmid ? '' : 'disabled'}>
-                  <span class="popup-badge" style="background: #dc3545; color: white;">VM</span>
-                  <span style="font-size: 0.75rem; color: #666;">${vmid || 'N/A'}</span>
+                <label class="popup-inline" style="cursor: pointer; ${nodeid ? '' : 'opacity: 0.5;'}">
+                  <input type="radio" id="nodeOption" name="selectOption" value="Node" ${nodeid ? '' : 'disabled'}>
+                  <span class="popup-badge" style="background: #dc3545; color: white;">Node</span>
+                  <span style="font-size: 0.75rem; color: #666;">${nodeid || 'N/A'}</span>
                 </label>
               </div>
             </div>
@@ -15703,7 +15703,7 @@ async function executeRemoteCmd() {
         const radioValue = radioEl ? radioEl.value : 'Infra';
         let uploadUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/transferFile/infra/${infraId}`;
         if (radioValue === 'NodeGroup') uploadUrl += `?nodeGroupId=${encodeURIComponent(nodegroupid)}`;
-        else if (radioValue === 'VM') uploadUrl += `?vmId=${encodeURIComponent(vmid)}`;
+        else if (radioValue === 'Node') uploadUrl += `?nodeId=${encodeURIComponent(nodeid)}`;
 
         const btn = document.getElementById('rcUploadBtn');
         btn.disabled = true;
@@ -15715,7 +15715,7 @@ async function executeRemoteCmd() {
         let failed = 0;
 
         // Upload in batches of CONCURRENCY
-        const vmFailDetails = []; // { fileName, vmId, error }
+        const nodeFailDetails = []; // { fileName, nodeId, error }
         for (let i = 0; i < files.length; i += CONCURRENCY) {
           const batch = files.slice(i, i + CONCURRENCY);
           await Promise.all(batch.map(async (file) => {
@@ -15729,13 +15729,13 @@ async function executeRemoteCmd() {
                   'Content-Type': 'multipart/form-data',
                 },
               });
-              // Check per-VM results inside the response body
+              // Check per-Node results inside the response body
               const results = res.data?.results || [];
-              const vmFails = results.filter(r => r.error && r.error.trim());
-              if (vmFails.length > 0) {
-                vmFails.forEach(r => vmFailDetails.push({ fileName: file.name, vmId: r.vmId || '?', error: r.error }));
+              const nodeFails = results.filter(r => r.error && r.error.trim());
+              if (nodeFails.length > 0) {
+                nodeFails.forEach(r => nodeFailDetails.push({ fileName: file.name, nodeId: r.nodeId || '?', error: r.error }));
                 failed++;
-                console.warn(`RC upload VM-level failure for ${file.name}:`, vmFails);
+                console.warn(`RC upload Node-level failure for ${file.name}:`, nodeFails);
               } else {
                 succeeded++;
               }
@@ -15751,9 +15751,9 @@ async function executeRemoteCmd() {
         btn.disabled = false;
         const color = failed === 0 ? '#198754' : '#fd7e14';
         let statusMsg = `<span style="color:${color};">✅ ${succeeded} uploaded${failed > 0 ? `, ❌ ${failed} failed` : ''} (${files.length} total)</span>`;
-        if (vmFailDetails.length > 0) {
-          const detailLines = vmFailDetails.map(d =>
-            `<div style="margin-top:2px;">• ${window.escapeHtml(d.fileName)} → VM <b>${window.escapeHtml(d.vmId)}</b>: ${window.escapeHtml(d.error)}</div>`
+        if (nodeFailDetails.length > 0) {
+          const detailLines = nodeFailDetails.map(d =>
+            `<div style="margin-top:2px;">• ${window.escapeHtml(d.fileName)} → Node <b>${window.escapeHtml(d.nodeId)}</b>: ${window.escapeHtml(d.error)}</div>`
           ).join('');
           statusMsg += `<div style="margin-top:4px; color:#dc3545; font-size:0.75rem;">${detailLines}</div>`;
         }
@@ -15860,9 +15860,9 @@ async function executeRemoteCmd() {
         } else if (radioValue === "NodeGroup") {
           var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/infra/${selectedInfraId}?nodeGroupId=${encodeURIComponent(nodegroupid)}`;
           console.log("Performing remote command for NodeGroup:", nodegroupid, "in Infra:", selectedInfraId);
-        } else if (radioValue === "VM") {
-          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/infra/${selectedInfraId}?vmId=${encodeURIComponent(vmid)}`;
-          console.log("Performing remote command for VM:", vmid, "in Infra:", selectedInfraId);
+        } else if (radioValue === "Node") {
+          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/infra/${selectedInfraId}?nodeId=${encodeURIComponent(nodeid)}`;
+          console.log("Performing remote command for Node:", nodeid, "in Infra:", selectedInfraId);
         }
 
         // Get label selector value and add to URL if provided
@@ -15987,8 +15987,8 @@ async function transferFileToInfra() {
   var password = config.password;
   var namespace = configNamespace;
   var infraid = infraidElement.value;
-  var nodegroupid = getNodeGroupIdFromVmSelection();
-  var vmid = document.getElementById("vmid").value;
+  var nodegroupid = getNodeGroupIdFromNodeSelection();
+  var nodeid = document.getElementById("nodeid").value;
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -16019,7 +16019,7 @@ async function transferFileToInfra() {
     `<option value="${window.escapeHtml(m)}" ${m === infraid ? 'selected' : ''}>${window.escapeHtml(m)}</option>`
   ).join('');
 
-  // Fetch VM list for the selected Infra (for download target)
+  // Fetch Node list for the selected Infra (for download target)
   let vmListOptions = [];
   const fetchVmList = async (targetInfraId) => {
     try {
@@ -16027,25 +16027,25 @@ async function transferFileToInfra() {
       const vmRes = await axios.get(vmListUrl, {
         auth: { username: username, password: password }
       });
-      if (vmRes.data && vmRes.data.vm) {
-        return vmRes.data.vm.map(vm => ({
-          id: vm.id,
-          nodeGroupId: vm.nodeGroupId || 'default',
-          publicIP: vm.publicIP || ''
+      if (vmRes.data && vmRes.data.node) {
+        return vmRes.data.node.map(nd => ({
+          id: nd.id,
+          nodeGroupId: nd.nodeGroupId || 'default',
+          publicIP: nd.publicIP || ''
         }));
       }
     } catch (err) {
-      console.error("Failed to fetch VM list:", err);
+      console.error("Failed to fetch Node list:", err);
     }
     return [];
   };
 
   vmListOptions = await fetchVmList(infraid || infraListOptions[0]);
 
-  const buildVmOptionsHtml = (vms) => {
-    if (vms.length === 0) return '<option value="">No VMs available</option>';
-    return vms.map(vm =>
-      `<option value="${window.escapeHtml(vm.id)}" ${vm.id === vmid ? 'selected' : ''}>${window.escapeHtml(vm.id)} (${window.escapeHtml(vm.nodeGroupId)}) ${vm.publicIP ? '- ' + window.escapeHtml(vm.publicIP) : ''}</option>`
+  const buildNodeOptionsHtml = (nodes) => {
+    if (nodes.length === 0) return '<option value="">No Nodes available</option>';
+    return nodes.map(nd =>
+      `<option value="${window.escapeHtml(nd.id)}" ${nd.id === nodeid ? 'selected' : ''}>${window.escapeHtml(nd.id)} (${window.escapeHtml(nd.nodeGroupId)}) ${nd.publicIP ? '- ' + window.escapeHtml(nd.publicIP) : ''}</option>`
     ).join('');
   };
 
@@ -16065,11 +16065,11 @@ async function transferFileToInfra() {
             <div style="display: flex; gap: 8px;">
               <button type="button" id="uploadModeBtn" class="popup-badge" onclick="switchFileTransferMode('upload')"
                 style="padding: 8px 20px; font-size: 0.9rem; cursor: pointer; border: 2px solid #28a745; background: #28a745; color: white; border-radius: 6px; flex: 1; text-align: center;">
-                ⬆️ Upload to VM
+                ⬆️ Upload to Node
               </button>
               <button type="button" id="downloadModeBtn" class="popup-badge" onclick="switchFileTransferMode('download')"
                 style="padding: 8px 20px; font-size: 0.9rem; cursor: pointer; border: 2px solid #0d6efd; background: #f8f9fa; color: #333; border-radius: 6px; flex: 1; text-align: center;">
-                ⬇️ Download from VM
+                ⬇️ Download from Node
               </button>
             </div>
           </div>
@@ -16095,27 +16095,27 @@ async function transferFileToInfra() {
               <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; min-height: 32px;">
                 <label class="popup-inline" style="cursor: pointer;">
                   <input type="radio" id="infraOption" name="selectOption" value="Infra" checked>
-                  <span class="popup-badge" style="background: #0d6efd; color: white;">All VMs</span>
+                  <span class="popup-badge" style="background: #0d6efd; color: white;">All Nodes</span>
                 </label>
                 <label class="popup-inline" style="cursor: pointer; ${nodegroupid ? '' : 'opacity: 0.5;'}">
                   <input type="radio" id="nodeGroupOption" name="selectOption" value="NodeGroup" ${nodegroupid ? '' : 'disabled'}>
                   <span class="popup-badge" style="background: #28a745; color: white;">NodeGroup</span>
                   <span style="font-size: 0.75rem; color: #666;">${nodegroupid || 'N/A'}</span>
                 </label>
-                <label class="popup-inline" style="cursor: pointer; ${vmid ? '' : 'opacity: 0.5;'}">
-                  <input type="radio" id="vmOption" name="selectOption" value="VM" ${vmid ? '' : 'disabled'}>
-                  <span class="popup-badge" style="background: #dc3545; color: white;">VM</span>
-                  <span style="font-size: 0.75rem; color: #666;">${vmid || 'N/A'}</span>
+                <label class="popup-inline" style="cursor: pointer; ${nodeid ? '' : 'opacity: 0.5;'}">
+                  <input type="radio" id="nodeOption" name="selectOption" value="Node" ${nodeid ? '' : 'disabled'}>
+                  <span class="popup-badge" style="background: #dc3545; color: white;">Node</span>
+                  <span style="font-size: 0.75rem; color: #666;">${nodeid || 'N/A'}</span>
                 </label>
               </div>
             </div>
           </div>
-          <!-- Download: VM selector -->
+          <!-- Download: Node selector -->
           <div id="downloadTargetVm" class="popup-col" style="flex: 2; display: none;">
             <div class="popup-field">
-              <label class="popup-label">VM</label>
-              <select id="downloadVmSelector" class="popup-select">
-                ${buildVmOptionsHtml(vmListOptions)}
+              <label class="popup-label">Node</label>
+              <select id="downloadNodeSelector" class="popup-select">
+                ${buildNodeOptionsHtml(vmListOptions)}
               </select>
             </div>
           </div>
@@ -16137,7 +16137,7 @@ async function transferFileToInfra() {
           <div class="popup-row">
             <div class="popup-col" style="flex: 1;">
               <div class="popup-field">
-                <label class="popup-label">Target Path on VM</label>
+                <label class="popup-label">Target Path on Node</label>
                 <input type="text" id="targetPathInput" class="popup-input" value="/home/cb-user/" placeholder="/home/cb-user/">
               </div>
             </div>
@@ -16159,8 +16159,8 @@ async function transferFileToInfra() {
             </div>
           </div>
           <div style="font-size: 0.7rem; color: #666; padding: 4px 8px; background: #fff3cd; border-radius: 4px;">
-            📝 File(s) will be uploaded to the specified path on all targeted VMs via SCP through bastion hosts. Multiple files can be selected.<br>
-            🔧 If a post-transfer command is provided, it will be executed on each VM after successful file transfer (e.g., move file to a privileged location).
+            📝 File(s) will be uploaded to the specified path on all targeted Nodes via SCP through bastion hosts. Multiple files can be selected.<br>
+            🔧 If a post-transfer command is provided, it will be executed on each Node after successful file transfer (e.g., move file to a privileged location).
           </div>
         </div>
       </div>
@@ -16172,13 +16172,13 @@ async function transferFileToInfra() {
           <div class="popup-row">
             <div class="popup-col" style="flex: 1;">
               <div class="popup-field">
-                <label class="popup-label">Source Path on VM (full file path)</label>
+                <label class="popup-label">Source Path on Node (full file path)</label>
                 <input type="text" id="sourcePathInput" class="popup-input" value="" placeholder="/home/cb-user/result.json">
               </div>
             </div>
           </div>
           <div style="font-size: 0.7rem; color: #666; padding: 4px 8px; background: #d1ecf1; border-radius: 4px;">
-            📝 The file will be downloaded from the selected VM via SCP through bastion host. Max file size: 200MB.
+            📝 The file will be downloaded from the selected Node via SCP through bastion host. Max file size: 200MB.
           </div>
         </div>
       </div>
@@ -16236,12 +16236,12 @@ async function transferFileToInfra() {
       hiddenInput.value = 'upload';
       Swal.getPopup().appendChild(hiddenInput);
 
-      // Update VM list when Infra selector changes
+      // Update Node list when Infra selector changes
       document.getElementById('infraSelector').addEventListener('change', async (e) => {
         const selectedInfra = e.target.value;
-        const newVmList = await fetchVmList(selectedInfra);
-        const vmSelector = document.getElementById('downloadVmSelector');
-        vmSelector.innerHTML = buildVmOptionsHtml(newVmList);
+        const newNodeList = await fetchVmList(selectedInfra);
+        const nodeSelector = document.getElementById('downloadNodeSelector');
+        nodeSelector.innerHTML = buildNodeOptionsHtml(newNodeList);
       });
 
       // Favorites for post-transfer command (persisted via localStorage)
@@ -16374,14 +16374,14 @@ async function transferFileToInfra() {
         const postTransferCmd = document.getElementById('postTransferCmd').value.trim();
         return { mode, selectedInfra, files, targetPath, postTransferCmd };
       } else {
-        const selectedVm = document.getElementById('downloadVmSelector').value;
+        const selectedVm = document.getElementById('downloadNodeSelector').value;
         const sourcePath = document.getElementById('sourcePathInput').value;
         if (!selectedVm) {
-          Swal.showValidationMessage('Please select a VM.');
+          Swal.showValidationMessage('Please select a Node.');
           return false;
         }
         if (!sourcePath) {
-          Swal.showValidationMessage('Please specify the source file path on the VM.');
+          Swal.showValidationMessage('Please specify the source file path on the Node.');
           return false;
         }
         return { mode, selectedInfra, selectedVm, sourcePath };
@@ -16399,12 +16399,12 @@ async function transferFileToInfra() {
         let url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/${endpoint}/infra/${selectedInfra}`;
         if (radioValue === 'NodeGroup') {
           url += `?nodeGroupId=${encodeURIComponent(nodegroupid)}`;
-        } else if (radioValue === 'VM') {
-          url += `?vmId=${encodeURIComponent(vmid)}`;
+        } else if (radioValue === 'Node') {
+          url += `?nodeId=${encodeURIComponent(nodeid)}`;
         }
 
         const totalFiles = files.length;
-        const scopeLabel = radioValue === 'NodeGroup' ? nodegroupid : radioValue === 'VM' ? vmid : selectedInfra;
+        const scopeLabel = radioValue === 'NodeGroup' ? nodegroupid : radioValue === 'Node' ? nodeid : selectedInfra;
 
         Swal.fire({
           title: `⬆️ Uploading (0/${totalFiles})...`,
@@ -16478,17 +16478,17 @@ async function transferFileToInfra() {
             </div>`;
           });
 
-          // Per-VM results
+          // Per-Node results
           allResults.forEach(r => {
             const isSuccess = !r.error;
-            const safeVmId = window.escapeHtml(r.vmId || '');
-            const safeVmIp = window.escapeHtml(r.vmIp || 'N/A');
+            const safeNodeId = window.escapeHtml(r.nodeId || '');
+            const safeNodeIp = window.escapeHtml(r.nodeIp || 'N/A');
             const safeFileName = window.escapeHtml(r._fileName || '');
             const safeDetail = isSuccess
               ? '✅ ' + window.escapeHtml(r.stdout && r.stdout['0'] || 'OK')
               : '❌ ' + window.escapeHtml(r.error || r.stderr && r.stderr['0'] || 'Failed');
             resultHtml += `<div style="padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; background: ${isSuccess ? '#d4edda' : '#f8d7da'}; font-size: 0.8rem;">
-              <b>${safeVmId}</b> (${safeVmIp}) — ${safeFileName} — ${safeDetail}
+              <b>${safeNodeId}</b> (${safeNodeIp}) — ${safeFileName} — ${safeDetail}
             </div>`;
           });
           resultHtml += `</div>`;
@@ -16511,7 +16511,7 @@ async function transferFileToInfra() {
       } else {
         // === DOWNLOAD ===
         const { selectedVm, sourcePath } = result.value;
-        const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/downloadFile/infra/${selectedInfra}/vm/${selectedVm}`;
+        const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/downloadFile/infra/${selectedInfra}/node/${selectedVm}`;
 
         Swal.fire({
           title: '⬇️ Downloading...',
@@ -16572,7 +16572,7 @@ async function transferFileToInfra() {
                 const parsed = JSON.parse(text);
                 errMsg = parsed.message || JSON.stringify(parsed, null, 2);
               } catch (e) {
-                errMsg = 'Download failed. Check if the file path is correct and the VM is running.';
+                errMsg = 'Download failed. Check if the file path is correct and the Node is running.';
               }
             } else if (error.response?.data) {
               errMsg = JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, '');
@@ -16626,7 +16626,7 @@ function getAccessInfo() {
 window.getAccessInfo = getAccessInfo;
 
 
-// SSH Key save function (single VM)
+// SSH Key save function (single Node)
 const saveBtn = document.querySelector(".save-file");
 saveBtn.addEventListener("click", function () {
   console.log(" [Retrieve Infra Access Information ...]\n");
@@ -16637,8 +16637,8 @@ saveBtn.addEventListener("click", function () {
   var password = config.password;
   var namespace = configNamespace;
   var infraid = infraidElement.value;
-  var groupid = getNodeGroupIdFromVmSelection();
-  var vmid = document.getElementById("vmid").value;
+  var groupid = getNodeGroupIdFromNodeSelection();
+  var nodeid = document.getElementById("nodeid").value;
 
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}?option=accessinfo&accessInfoOption=showSshKey`;
 
@@ -16656,9 +16656,9 @@ saveBtn.addEventListener("click", function () {
 
     for (let nodeGroupAccessInfo of res.data.InfraNodeGroupAccessInfo) {
       if (nodeGroupAccessInfo.NodeGroupId == groupid) {
-        for (let vmAccessInfo of nodeGroupAccessInfo.InfraVmAccessInfo) {
-          if (vmAccessInfo.vmId == vmid) {
-            privateKey = vmAccessInfo.privateKey.replace(/['",]+/g, "");
+        for (let nodeAccessInfo of nodeGroupAccessInfo.NodeAccessInfo) {
+          if (nodeAccessInfo.nodeId == nodeid) {
+            privateKey = nodeAccessInfo.privateKey.replace(/['",]+/g, "");
             break;
           }
         }
@@ -16669,14 +16669,14 @@ saveBtn.addEventListener("click", function () {
     var taBlob = new Blob([privateKey], { type: "text/plain" });
 
     tempLink.setAttribute("href", URL.createObjectURL(taBlob));
-    tempLink.setAttribute("download", `${namespace}-${infraid}-${vmid}.pem`);
+    tempLink.setAttribute("download", `${namespace}-${infraid}-${nodeid}.pem`);
     tempLink.click();
 
     URL.revokeObjectURL(tempLink.href);
   });
 });
 
-// Download ALL VM SSH keys in an Infra as a single zip file
+// Download ALL Node SSH keys in an Infra as a single zip file
 function downloadAllSshKeys() {
   console.log(" [Download All SSH Keys as ZIP ...]\n");
 
@@ -16697,7 +16697,7 @@ function downloadAllSshKeys() {
 
   Swal.fire({
     title: "Downloading SSH Keys...",
-    html: "Retrieving access information for all VMs.",
+    html: "Retrieving access information for all Nodes.",
     allowOutsideClick: false,
     didOpen: () => { Swal.showLoading(); }
   });
@@ -16719,29 +16719,29 @@ function downloadAllSshKeys() {
     for (let nodeGroupAccessInfo of (accessRes.data.InfraNodeGroupAccessInfo || [])) {
       const nodeGroupId = safeName(nodeGroupAccessInfo.NodeGroupId || "unknown");
       const nodeGroupVmSummaries = [];
-      for (let vmAccessInfo of (nodeGroupAccessInfo.InfraVmAccessInfo || [])) {
-        const vmId = safeName(vmAccessInfo.vmId || "unknown");
-        const privateKey = (vmAccessInfo.privateKey || "").replace(/['",]+/g, "");
+      for (let nodeAccessInfo of (nodeGroupAccessInfo.NodeAccessInfo || [])) {
+        const nodeId = safeName(nodeAccessInfo.nodeId || "unknown");
+        const privateKey = (nodeAccessInfo.privateKey || "").replace(/['",]+/g, "");
         if (privateKey) {
-          zip.file(`${nodeGroupId}/${safeName(namespace)}-${safeName(infraid)}-${vmId}.pem`, privateKey);
+          zip.file(`${nodeGroupId}/${safeName(namespace)}-${safeName(infraid)}-${nodeId}.pem`, privateKey);
           keyCount++;
         }
-        // Collect per-VM summary for nodegroup JSON
+        // Collect per-Node summary for nodegroup JSON
         nodeGroupVmSummaries.push({
-          vmId: vmId,
-          publicIP: vmAccessInfo.publicIP || "",
-          privateIP: vmAccessInfo.privateIP || "",
-          sshPort: vmAccessInfo.sshPort || 22,
-          vmUserName: vmAccessInfo.vmUserName || "",
-          keyFile: `${safeName(namespace)}-${safeName(infraid)}-${vmId}.pem`
+          nodeId: nodeId,
+          publicIP: nodeAccessInfo.publicIP || "",
+          privateIP: nodeAccessInfo.privateIP || "",
+          sshPort: nodeAccessInfo.sshPort || 22,
+          nodeUserName: nodeAccessInfo.nodeUserName || "",
+          keyFile: `${safeName(namespace)}-${safeName(infraid)}-${nodeId}.pem`
         });
       }
       // Add per-nodegroup access info JSON
       if (nodeGroupVmSummaries.length > 0) {
         zip.file(`${nodeGroupId}/access-info.json`, JSON.stringify({
           nodeGroupId: nodeGroupId,
-          vmCount: nodeGroupVmSummaries.length,
-          vms: nodeGroupVmSummaries
+          ndCount: nodeGroupVmSummaries.length,
+          nodes: nodeGroupVmSummaries
         }, null, 2));
       }
     }
@@ -16984,8 +16984,8 @@ function updateFirewallRules() {
   var password = config.password;
   var nsId = configNamespace;
   var infraId = infraidElement.value;
-  var nodegroupid = getNodeGroupIdFromVmSelection();
-  var vmid = document.getElementById("vmid").value;
+  var nodegroupid = getNodeGroupIdFromNodeSelection();
+  var nodeid = document.getElementById("nodeid").value;
 
   if (!nsId) {
     errorAlert("Please select a namespace first");
@@ -18072,7 +18072,7 @@ window.addNewRuleToSg = addNewRuleToSg;
 // Function for Scale Out NodeGroup
 function scaleOutNodeGroup() {
   var infraid = document.getElementById("infraid").value;
-  var nodegroupid = getNodeGroupIdFromVmSelection();
+  var nodegroupid = getNodeGroupIdFromNodeSelection();
 
   if (!infraid) {
     errorAlert("Please select an Infra first");
@@ -18090,7 +18090,7 @@ function scaleOutNodeGroup() {
   var password = config.password;
   var namespace = configNamespace;
 
-  // Show dialog to get number of VMs to add
+  // Show dialog to get number of Nodes to add
   Swal.fire({
     title: "Scale Out NodeGroup",
     width: 600,
@@ -18100,7 +18100,7 @@ function scaleOutNodeGroup() {
       "<p><b>Target Infra:</b> " + infraid + "</p>" +
       "<p><b>Target NodeGroup:</b> " + nodegroupid + "</p>" +
       "<hr>" +
-      "<p><b>Enter the number of VMs to add:</b></p>" +
+      "<p><b>Enter the number of Nodes to add:</b></p>" +
       "</div>",
     input: "number",
     inputValue: 1,
@@ -18121,19 +18121,19 @@ function scaleOutNodeGroup() {
         return 'Please enter a valid number (minimum 1)';
       }
       if (value > 20) {
-        return 'Maximum 20 VMs can be added at once';
+        return 'Maximum 20 Nodes can be added at once';
       }
     }
   }).then((result) => {
     if (result.isConfirmed) {
-      var numVMsToAdd = parseInt(result.value);
+      var numNodesToAdd = parseInt(result.value);
       
       // Confirmation dialog
       Swal.fire({
         title: "Confirm Scale Out",
         html: 
           "<div style='text-align: left; margin: 20px;'>" +
-          "<p>You are about to add <b>" + numVMsToAdd + " VM(s)</b> to:</p>" +
+          "<p>You are about to add <b>" + numNodesToAdd + " Node(s)</b> to:</p>" +
           "<ul>" +
           "<li>Infra: <b>" + infraid + "</b></li>" +
           "<li>NodeGroup: <b>" + nodegroupid + "</b></li>" +
@@ -18148,7 +18148,7 @@ function scaleOutNodeGroup() {
         cancelButtonColor: "#dc3545"
       }).then((confirmResult) => {
         if (confirmResult.isConfirmed) {
-          executeScaleOut(namespace, infraid, nodegroupid, numVMsToAdd, hostname, port, username, password);
+          executeScaleOut(namespace, infraid, nodegroupid, numNodesToAdd, hostname, port, username, password);
         }
       });
     }
@@ -18247,37 +18247,37 @@ function copyInfraConfig(infraId) {
     clearCircle('');
 
     // Group VMs from Infra info by nodeGroupId for spec metadata extraction
-    var vmByNodeGroup = {};
-    if (infraInfo && infraInfo.vm) {
-      infraInfo.vm.forEach(function(vm) {
-        var sgId = vm.nodeGroupId || vm.id;
-        if (!vmByNodeGroup[sgId]) {
-          vmByNodeGroup[sgId] = vm;
+    var nodeByGroup = {};
+    if (infraInfo && infraInfo.node) {
+      infraInfo.node.forEach(function(nd) {
+        var sgId = nd.nodeGroupId || nd.id;
+        if (!nodeByGroup[sgId]) {
+          nodeByGroup[sgId] = nd;
         }
       });
     }
 
-    // Populate vmNodeGroupReqeustFromSpecList and recommendedSpecList
+    // Populate nodeGroupRequestFromSpecList and recommendedSpecList
     infraReq.nodeGroups.forEach(function(sg) {
-      var vmConfig = $.extend({}, createInfraReqVmTmplt);
-      vmConfig.name = sg.name || ("g" + (vmNodeGroupReqeustFromSpecList.length + 1));
-      vmConfig.specId = sg.specId || "";
-      vmConfig.imageId = sg.imageId || "ubuntu22.04";
-      vmConfig.rootDiskType = sg.rootDiskType || "default";
-      vmConfig.rootDiskSize = sg.rootDiskSize || 0;
-      vmConfig.nodeGroupSize = sg.nodeGroupSize || 1;
-      vmConfig.description = sg.description || "mapui";
-      vmConfig.connectionName = sg.connectionName || "";
-      vmConfig.zone = sg.zone || "";
+      var nodeConfig = $.extend({}, createInfraReqVmTmplt);
+      nodeConfig.name = sg.name || ("g" + (nodeGroupRequestFromSpecList.length + 1));
+      nodeConfig.specId = sg.specId || "";
+      nodeConfig.imageId = sg.imageId || "ubuntu22.04";
+      nodeConfig.rootDiskType = sg.rootDiskType || "default";
+      nodeConfig.rootDiskSize = sg.rootDiskSize || 0;
+      nodeConfig.nodeGroupSize = sg.nodeGroupSize || 1;
+      nodeConfig.description = sg.description || "mapui";
+      nodeConfig.connectionName = sg.connectionName || "";
+      nodeConfig.zone = sg.zone || "";
       if (sg.label && Object.keys(sg.label).length > 0) {
-        vmConfig.label = sg.label;
+        nodeConfig.label = sg.label;
       }
 
-      vmNodeGroupReqeustFromSpecList.push(vmConfig);
+      nodeGroupRequestFromSpecList.push(nodeConfig);
 
-      // Build recommendedSpec from Infra VM info for display in the review panel
+      // Build recommendedSpec from Infra Node info for display in the review panel
       // Look up by sg.name first (matches nodeGroupId), then try specId-based fallback
-      var repVm = vmByNodeGroup[sg.name] || vmByNodeGroup[vmConfig.name];
+      var repVm = nodeByGroup[sg.name] || nodeByGroup[nodeConfig.name];
       var specInfo = {
         id: sg.specId || "",
         providerName: repVm?.connectionConfig?.providerName || extractProviderFromSpecId(sg.specId),
@@ -18473,7 +18473,7 @@ function showScaleOutConfiguration(infraId, nodeGroupId, namespace, hostname, po
       "<p><b>Selected Infra:</b> " + infraId + "</p>" +
       "<p><b>Selected NodeGroup:</b> " + nodeGroupId + "</p>" +
       "<hr>" +
-      "<p><b>Enter the number of VMs to add:</b></p>" +
+      "<p><b>Enter the number of Nodes to add:</b></p>" +
       "</div>",
     input: "number",
     inputValue: 1,
@@ -18492,19 +18492,19 @@ function showScaleOutConfiguration(infraId, nodeGroupId, namespace, hostname, po
         return 'Please enter a valid number (minimum 1)';
       }
       if (value > 20) {
-        return 'Maximum 20 VMs can be added at once';
+        return 'Maximum 20 Nodes can be added at once';
       }
     }
   }).then((result) => {
     if (result.isConfirmed) {
-      var numVMsToAdd = parseInt(result.value);
+      var numNodesToAdd = parseInt(result.value);
       
       // Final confirmation dialog
       Swal.fire({
         title: "Confirm Scale Out",
         html: 
           "<div style='text-align: left; margin: 20px;'>" +
-          "<p>You are about to add <b>" + numVMsToAdd + " VM(s)</b> to:</p>" +
+          "<p>You are about to add <b>" + numNodesToAdd + " Node(s)</b> to:</p>" +
           "<ul>" +
           "<li>Infra: <b>" + infraId + "</b></li>" +
           "<li>NodeGroup: <b>" + nodeGroupId + "</b></li>" +
@@ -18519,7 +18519,7 @@ function showScaleOutConfiguration(infraId, nodeGroupId, namespace, hostname, po
         cancelButtonColor: "#dc3545"
       }).then((confirmResult) => {
         if (confirmResult.isConfirmed) {
-          executeScaleOut(namespace, infraId, nodeGroupId, numVMsToAdd, hostname, port, username, password);
+          executeScaleOut(namespace, infraId, nodeGroupId, numNodesToAdd, hostname, port, username, password);
         }
       });
     } else if (result.dismiss === Swal.DismissReason.cancel) {
@@ -18530,18 +18530,18 @@ function showScaleOutConfiguration(infraId, nodeGroupId, namespace, hostname, po
 }
 
 // Function to execute the scale out operation
-function executeScaleOut(namespace, infraid, nodegroupid, numVMsToAdd, hostname, port, username, password) {
+function executeScaleOut(namespace, infraid, nodegroupid, numNodesToAdd, hostname, port, username, password) {
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/nodegroup/${nodegroupid}`;
   
   var scaleOutReq = {
-    numVMsToAdd: numVMsToAdd
+    numNodesToAdd: numNodesToAdd
   };
 
   var jsonBody = JSON.stringify(scaleOutReq, undefined, 4);
   
-  console.log(` Scaling out NodeGroup ${nodegroupid} by adding ${numVMsToAdd} VM(s)...`);
-  var spinnerId = addSpinnerTask(`Scale Out: ${infraid}/${nodegroupid} (+${numVMsToAdd} VMs)`);
-  infoAlert(`Starting Scale Out: Adding ${numVMsToAdd} VM(s) to ${nodegroupid}`);
+  console.log(` Scaling out NodeGroup ${nodegroupid} by adding ${numNodesToAdd} Node(s)...`);
+  var spinnerId = addSpinnerTask(`Scale Out: ${infraid}/${nodegroupid} (+${numNodesToAdd} Nodes)`);
+  infoAlert(`Starting Scale Out: Adding ${numNodesToAdd} Node(s) to ${nodegroupid}`);
 
   var requestId = generateRandomRequestId("scaleout-" + infraid + "-" + nodegroupid + "-", 10);
   addRequestIdToSelect(requestId);
@@ -18566,19 +18566,19 @@ function executeScaleOut(namespace, infraid, nodegroupid, numVMsToAdd, hostname,
       displayJsonData(res.data, typeInfo);
       handleAxiosResponse(res);
       
-      console.log(`Successfully scaled out NodeGroup ${nodegroupid} by adding ${numVMsToAdd} VM(s)`);
+      console.log(`Successfully scaled out NodeGroup ${nodegroupid} by adding ${numNodesToAdd} Node(s)`);
       
       Swal.fire({
         icon: "success",
         title: "Scale Out Successful!",
         html: 
           "<div style='text-align: left;'>" +
-          "<p><b>" + numVMsToAdd + " VM(s)</b> have been successfully added to:</p>" +
+          "<p><b>" + numNodesToAdd + " Node(s)</b> have been successfully added to:</p>" +
           "<ul>" +
           "<li>Infra: <b>" + infraid + "</b></li>" +
           "<li>NodeGroup: <b>" + nodegroupid + "</b></li>" +
           "</ul>" +
-          "<p style='margin-top: 15px; color: #28a745;'>✓ The new VMs are being provisioned.</p>" +
+          "<p style='margin-top: 15px; color: #28a745;'>✓ The new Nodes are being provisioned.</p>" +
           "</div>",
         confirmButtonText: "OK"
       });
@@ -18722,7 +18722,7 @@ function executeAction(action) {
           <p><b>${infraid}</b></p>
           <br>
           <p style="color: #dc3545;"><b>⚠️ WARNING:</b> This action is <b>IRREVERSIBLE</b>!</p>
-          <p style="color: #dc3545;">All VMs and associated resources will be permanently deleted.</p>
+          <p style="color: #dc3545;">All Nodes and associated resources will be permanently deleted.</p>
         </div>
       `,
       icon: "warning",
@@ -18745,7 +18745,7 @@ function executeAction(action) {
           <p>You are about to <b style="color: #ffc107;">WITHDRAW</b> Infra:</p>
           <p><b>${infraid}</b></p>
           <br>
-          <p style="color: #ffc107;"><b>⚠️ WARNING:</b> This will shut down all VMs in the Infra.</p>
+          <p style="color: #ffc107;"><b>⚠️ WARNING:</b> This will shut down all Nodes in the Infra.</p>
         </div>
       `,
       icon: "warning",
@@ -18854,8 +18854,8 @@ function showInfraSelectionForScaleOut(title, description, successCallback) {
             html:
               "<div style='text-align: left; margin: 20px;'>" +
               "<p><b>Step 1:</b> " + description + "</p>" +
-              (vmNodeGroupReqeustFromSpecList && vmNodeGroupReqeustFromSpecList.length > 0 ? 
-                "<p><b>Available VM Configurations:</b> " + vmNodeGroupReqeustFromSpecList.length + " location(s)</p>" : "") +
+              (nodeGroupRequestFromSpecList && nodeGroupRequestFromSpecList.length > 0 ? 
+                "<p><b>Available Node Configurations:</b> " + nodeGroupRequestFromSpecList.length + " location(s)</p>" : "") +
               "<hr>" +
               "<div class='form-group'>" +
               "<label for='infra-select'><b>Available Infras:</b></label>" +
@@ -18911,16 +18911,16 @@ function scaleOutInfraWithConfiguration() {
     return;
   }
 
-  // Check if we have any VM configuration from the map
-  if (!vmNodeGroupReqeustFromSpecList || vmNodeGroupReqeustFromSpecList.length === 0) {
-    errorAlert("Please configure VM specifications first by clicking on the map or using the configuration form");
+  // Check if we have any Node configuration from the map
+  if (!nodeGroupRequestFromSpecList || nodeGroupRequestFromSpecList.length === 0) {
+    errorAlert("Please configure Node specifications first by clicking on the map or using the configuration form");
     return;
   }
 
   // Use the common Infra selection dialog for ScaleOut operations
   showInfraSelectionForScaleOut(
-    "Select Infra for VM Addition",
-    "Select the Infra to add new VMs",
+    "Select Infra for Node Addition",
+    "Select the Infra to add new Nodes",
     (selectedInfraId) => {
       showInfraScaleOutConfiguration(selectedInfraId, namespace, hostname, port, username, password);
     }
@@ -18930,20 +18930,20 @@ window.scaleOutInfraWithConfiguration = scaleOutInfraWithConfiguration;
 
 // Step 2: Show Infra scale out configuration dialog
 function showInfraScaleOutConfiguration(selectedInfraId, namespace, hostname, port, username, password) {
-  // Build VM configuration summary from current map settings
+  // Build Node configuration summary from current map settings
   var vmConfigSummary = "";
-  var totalVMs = 0;
+  var totalNodes = 0;
   
-  if (vmNodeGroupReqeustFromSpecList && vmNodeGroupReqeustFromSpecList.length > 0) {
-    vmNodeGroupReqeustFromSpecList.forEach((vmConfig, index) => {
-      var vmCount = 1; // Default VM count per location
-      totalVMs += vmCount;
+  if (nodeGroupRequestFromSpecList && nodeGroupRequestFromSpecList.length > 0) {
+    nodeGroupRequestFromSpecList.forEach((nodeConfig, index) => {
+      var ndCount = 1; // Default Node count per location
+      totalNodes += ndCount;
       vmConfigSummary += 
         "<div style='margin: 5px 0; padding: 8px; background: #f8f9fa; border-radius: 4px;'>" +
         "<b>Location " + (index + 1) + ":</b><br>" +
-        "Spec: " + (vmConfig.specId || "Auto-selected") + "<br>" +
-        "Image: " + (vmConfig.imageId || "Auto-selected") + "<br>" +
-        "Count: " + vmCount + " VM(s)" +
+        "Spec: " + (nodeConfig.specId || "Auto-selected") + "<br>" +
+        "Image: " + (nodeConfig.imageId || "Auto-selected") + "<br>" +
+        "Count: " + ndCount + " Node(s)" +
         "</div>";
     });
   }
@@ -18953,7 +18953,7 @@ function showInfraScaleOutConfiguration(selectedInfraId, namespace, hostname, po
     width: 700,
     html:
       "<div style='text-align: left; margin: 20px;'>" +
-      "<p><b>Step 2:</b> Configure VM addition to Infra</p>" +
+      "<p><b>Step 2:</b> Configure Node addition to Infra</p>" +
       "<p><b>Selected Infra:</b> " + selectedInfraId + "</p>" +
       "<hr>" +
       "<div style='margin-bottom: 15px;'>" +
@@ -18962,52 +18962,52 @@ function showInfraScaleOutConfiguration(selectedInfraId, namespace, hostname, po
       "placeholder='Enter nodegroup name (e.g., web-servers-2)' value='dynamic-group-" + Date.now() + "'>" +
       "</div>" +
       "<div style='margin-bottom: 15px;'>" +
-      "<label for='vm-count'><b>Number of VMs per location:</b></label>" +
-      "<input id='vm-count' type='number' class='form-control' style='margin-top: 5px;' " +
-      "min='1' max='10' value='1' placeholder='Enter number of VMs'>" +
+      "<label for='node-count'><b>Number of Nodes per location:</b></label>" +
+      "<input id='node-count' type='number' class='form-control' style='margin-top: 5px;' " +
+      "min='1' max='10' value='1' placeholder='Enter number of Nodes'>" +
       "</div>" +
       "<hr>" +
-      "<p><b>VM Configuration Summary:</b></p>" +
+      "<p><b>Node Configuration Summary:</b></p>" +
       "<div style='max-height: 200px; overflow-y: auto;'>" +
       vmConfigSummary +
       "</div>" +
       "<hr>" +
-      "<p><b>Total VMs to add:</b> <span id='total-vms'>" + totalVMs + "</span></p>" +
+      "<p><b>Total Nodes to add:</b> <span id='total-nodes'>" + totalNodes + "</span></p>" +
       "</div>",
     showCancelButton: true,
     confirmButtonText: "Review Configuration",
     cancelButtonText: "Back",
     confirmButtonColor: "#17a2b8",
     didOpen: () => {
-      // Update total VM count when VM count per location changes
-      document.getElementById('vm-count').addEventListener('input', function() {
+      // Update total Node count when Node count per location changes
+      document.getElementById('node-count').addEventListener('input', function() {
         var vmPerLocation = parseInt(this.value) || 1;
-        var totalLocations = vmNodeGroupReqeustFromSpecList.length;
+        var totalLocations = nodeGroupRequestFromSpecList.length;
         var newTotal = vmPerLocation * totalLocations;
-        document.getElementById('total-vms').textContent = newTotal;
+        document.getElementById('total-nodes').textContent = newTotal;
       });
     },
     preConfirm: () => {
       const nodeGroupName = document.getElementById('nodegroup-name').value.trim();
-      const vmCount = parseInt(document.getElementById('vm-count').value) || 1;
+      const ndCount = parseInt(document.getElementById('node-count').value) || 1;
       
       if (!nodeGroupName) {
         Swal.showValidationMessage('Please enter a NodeGroup name');
         return false;
       }
       
-      if (vmCount < 1 || vmCount > 10) {
-        Swal.showValidationMessage('VM count must be between 1 and 10');
+      if (ndCount < 1 || ndCount > 10) {
+        Swal.showValidationMessage('Node count must be between 1 and 10');
         return false;
       }
       
-      return { nodeGroupName, vmCount };
+      return { nodeGroupName, ndCount };
     }
   }).then((result) => {
     if (result.isConfirmed) {
       var config = result.value;
       // Go to review step first
-      showInfraScaleOutReview(selectedInfraId, config.nodeGroupName, config.vmCount, namespace, hostname, port, username, password);
+      showInfraScaleOutReview(selectedInfraId, config.nodeGroupName, config.ndCount, namespace, hostname, port, username, password);
     } else if (result.dismiss === Swal.DismissReason.cancel) {
       // Go back to Infra selection
       scaleOutInfraWithConfiguration();
@@ -19016,19 +19016,19 @@ function showInfraScaleOutConfiguration(selectedInfraId, namespace, hostname, po
 }
 
 // Step 2.5: Show Infra scale out review
-function showInfraScaleOutReview(selectedInfraId, nodeGroupName, vmCountPerLocation, namespace, hostname, port, username, password) {
-  // Use the first VM configuration from the map as the template for review
-  if (!vmNodeGroupReqeustFromSpecList || vmNodeGroupReqeustFromSpecList.length === 0) {
-    errorAlert("No VM configuration available for review");
+function showInfraScaleOutReview(selectedInfraId, nodeGroupName, nodeCountPerLocation, namespace, hostname, port, username, password) {
+  // Use the first Node configuration from the map as the template for review
+  if (!nodeGroupRequestFromSpecList || nodeGroupRequestFromSpecList.length === 0) {
+    errorAlert("No Node configuration available for review");
     return;
   }
 
-  var vmTemplate = vmNodeGroupReqeustFromSpecList[0];
+  var vmTemplate = nodeGroupRequestFromSpecList[0];
   
   // Build the review request using the template
   var reviewReq = {
     name: nodeGroupName,
-    nodeGroupSize: vmCountPerLocation,
+    nodeGroupSize: nodeCountPerLocation,
     specId: vmTemplate.specId,
     imageId: vmTemplate.imageId,
     description: "Dynamically added via CB-MapUI Scale Out Infra",
@@ -19080,7 +19080,7 @@ function showInfraScaleOutReview(selectedInfraId, nodeGroupName, vmCountPerLocat
       successAlert("NodeGroup configuration reviewed successfully");
       
       var reviewData = res.data;
-      showInfraScaleOutReviewResults(selectedInfraId, nodeGroupName, vmCountPerLocation, reviewData, namespace, hostname, port, username, password);
+      showInfraScaleOutReviewResults(selectedInfraId, nodeGroupName, nodeCountPerLocation, reviewData, namespace, hostname, port, username, password);
     })
     .catch(function (error) {
       console.log("Failed to review NodeGroup configuration:", error);
@@ -19106,7 +19106,7 @@ function showInfraScaleOutReview(selectedInfraId, nodeGroupName, vmCountPerLocat
 }
 
 // Step 2.6: Show review results and proceed to confirmation
-function showInfraScaleOutReviewResults(selectedInfraId, nodeGroupName, vmCountPerLocation, reviewData, namespace, hostname, port, username, password) {
+function showInfraScaleOutReviewResults(selectedInfraId, nodeGroupName, nodeCountPerLocation, reviewData, namespace, hostname, port, username, password) {
   console.log("Processing review results:", reviewData);
   
   // Safely extract data with fallbacks
@@ -19163,7 +19163,7 @@ function showInfraScaleOutReviewResults(selectedInfraId, nodeGroupName, vmCountP
     infoHtml += '</ul></div>';
   }
   
-  var totalVMs = vmCountPerLocation * vmNodeGroupReqeustFromSpecList.length;
+  var totalNodes = nodeCountPerLocation * nodeGroupRequestFromSpecList.length;
   
   Swal.fire({
     title: "NodeGroup Configuration Review",
@@ -19176,9 +19176,9 @@ function showInfraScaleOutReviewResults(selectedInfraId, nodeGroupName, vmCountP
       "<h5>📋 Configuration Summary</h5>" +
       "<p><b>Target Infra:</b> " + selectedInfraId + "</p>" +
       "<p><b>NodeGroup Name:</b> " + nodeGroupName + "</p>" +
-      "<p><b>VMs per location:</b> " + vmCountPerLocation + "</p>" +
-      "<p><b>Total locations:</b> " + vmNodeGroupReqeustFromSpecList.length + "</p>" +
-      "<p><b>Total VMs to add:</b> " + totalVMs + "</p>" +
+      "<p><b>Nodes per location:</b> " + nodeCountPerLocation + "</p>" +
+      "<p><b>Total locations:</b> " + nodeGroupRequestFromSpecList.length + "</p>" +
+      "<p><b>Total Nodes to add:</b> " + totalNodes + "</p>" +
       "<p><b>Estimated Cost:</b> " + estimatedCost + "</p>" +
       "</div>" +
       "<div style='background: " + statusColor + "20; padding: 15px; border-radius: 8px; border-left: 4px solid " + statusColor + "; margin-bottom: 15px;'>" +
@@ -19201,7 +19201,7 @@ function showInfraScaleOutReviewResults(selectedInfraId, nodeGroupName, vmCountP
     if (result.isConfirmed) {
       if (canCreate) {
         // Proceed to final confirmation
-        showInfraScaleOutConfirmation(selectedInfraId, nodeGroupName, vmCountPerLocation, namespace, hostname, port, username, password);
+        showInfraScaleOutConfirmation(selectedInfraId, nodeGroupName, nodeCountPerLocation, namespace, hostname, port, username, password);
       } else {
         // Go back to configuration
         showInfraScaleOutConfiguration(selectedInfraId, namespace, hostname, port, username, password);
@@ -19214,43 +19214,43 @@ function showInfraScaleOutReviewResults(selectedInfraId, nodeGroupName, vmCountP
 }
 
 // Step 3: Show final confirmation and execute Infra scale out
-function showInfraScaleOutConfirmation(infraId, nodeGroupName, vmCountPerLocation, namespace, hostname, port, username, password) {
-  var totalVMs = vmCountPerLocation * vmNodeGroupReqeustFromSpecList.length;
+function showInfraScaleOutConfirmation(infraId, nodeGroupName, nodeCountPerLocation, namespace, hostname, port, username, password) {
+  var totalNodes = nodeCountPerLocation * nodeGroupRequestFromSpecList.length;
   
   Swal.fire({
     title: "Confirm Infra Scale Out",
     html: 
       "<div style='text-align: left; margin: 20px;'>" +
-      "<p>You are about to add <b>" + totalVMs + " VM(s)</b> to Infra:</p>" +
+      "<p>You are about to add <b>" + totalNodes + " Node(s)</b> to Infra:</p>" +
       "<ul>" +
       "<li>Infra: <b>" + infraId + "</b></li>" +
       "<li>New NodeGroup: <b>" + nodeGroupName + "</b></li>" +
-      "<li>VMs per location: <b>" + vmCountPerLocation + "</b></li>" +
-      "<li>Total locations: <b>" + vmNodeGroupReqeustFromSpecList.length + "</b></li>" +
+      "<li>Nodes per location: <b>" + nodeCountPerLocation + "</b></li>" +
+      "<li>Total locations: <b>" + nodeGroupRequestFromSpecList.length + "</b></li>" +
       "</ul>" +
       "<p style='color: #dc3545; margin-top: 15px;'><b>⚠️ Warning:</b> This will incur additional costs.</p>" +
       "</div>",
     icon: "warning",
     showCancelButton: true,
-    confirmButtonText: "Proceed with VM Addition",
+    confirmButtonText: "Proceed with Node Addition",
     cancelButtonText: "Cancel",
     confirmButtonColor: "#28a745",
     cancelButtonColor: "#dc3545"
   }).then((confirmResult) => {
     if (confirmResult.isConfirmed) {
-      executeInfraScaleOut(namespace, infraId, nodeGroupName, vmCountPerLocation, hostname, port, username, password);
+      executeInfraScaleOut(namespace, infraId, nodeGroupName, nodeCountPerLocation, hostname, port, username, password);
     }
   });
 }
 
 // Execute Infra scale out operation
-function executeInfraScaleOut(namespace, infraId, nodeGroupName, vmCountPerLocation, hostname, port, username, password) {
+function executeInfraScaleOut(namespace, infraId, nodeGroupName, nodeCountPerLocation, hostname, port, username, password) {
   var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraId}/nodeGroupDynamic`;
   
   // Build the request body using current map configuration
   var nodeGroupDynamicReq = {
     name: nodeGroupName,
-    nodeGroupSize: vmCountPerLocation,
+    nodeGroupSize: nodeCountPerLocation,
     description: "Dynamically added via CB-MapUI Scale Out Infra",
     label: {
       "created-by": "cb-mapui",
@@ -19259,10 +19259,10 @@ function executeInfraScaleOut(namespace, infraId, nodeGroupName, vmCountPerLocat
     }
   };
 
-  // Use the first VM configuration from the map as the template
+  // Use the first Node configuration from the map as the template
   // In a real scenario, you might want to let users select which configuration to use
-  if (vmNodeGroupReqeustFromSpecList && vmNodeGroupReqeustFromSpecList.length > 0) {
-    var templateVm = vmNodeGroupReqeustFromSpecList[0];
+  if (nodeGroupRequestFromSpecList && nodeGroupRequestFromSpecList.length > 0) {
+    var templateVm = nodeGroupRequestFromSpecList[0];
     
     if (templateVm.specId) {
       nodeGroupDynamicReq.specId = templateVm.specId;
@@ -19283,9 +19283,9 @@ function executeInfraScaleOut(namespace, infraId, nodeGroupName, vmCountPerLocat
 
   var jsonBody = JSON.stringify(nodeGroupDynamicReq, undefined, 4);
   
-  console.log(`Adding VMs to Infra ${infraId} with nodegroup ${nodeGroupName}...`);
-  var spinnerId = addSpinnerTask(`Scale Out Infra: ${infraId} (+${vmCountPerLocation * vmNodeGroupReqeustFromSpecList.length} VMs)`);
-  infoAlert(`Starting Infra Scale Out: Adding ${vmCountPerLocation * vmNodeGroupReqeustFromSpecList.length} VM(s) to ${infraId}`);
+  console.log(`Adding Nodes to Infra ${infraId} with nodegroup ${nodeGroupName}...`);
+  var spinnerId = addSpinnerTask(`Scale Out Infra: ${infraId} (+${nodeCountPerLocation * nodeGroupRequestFromSpecList.length} Nodes)`);
+  infoAlert(`Starting Infra Scale Out: Adding ${nodeCountPerLocation * nodeGroupRequestFromSpecList.length} Node(s) to ${infraId}`);
 
   var requestId = generateRandomRequestId("infra-scaleout-" + infraId + "-" + nodeGroupName + "-", 10);
   addRequestIdToSelect(requestId);
@@ -19337,19 +19337,19 @@ function executeInfraScaleOut(namespace, infraId, nodeGroupName, vmCountPerLocat
         console.log('Failed to activate control tab:', error);
       }
       
-      console.log(`Successfully added VMs to Infra ${infraId}`);
+      console.log(`Successfully added Nodes to Infra ${infraId}`);
       
       Swal.fire({
         icon: "success",
         title: "Infra Scale Out Successful!",
         html: 
           "<div style='text-align: left;'>" +
-          "<p><b>" + (vmCountPerLocation * vmNodeGroupReqeustFromSpecList.length) + " VM(s)</b> have been successfully added to:</p>" +
+          "<p><b>" + (nodeCountPerLocation * nodeGroupRequestFromSpecList.length) + " Node(s)</b> have been successfully added to:</p>" +
           "<ul>" +
           "<li>Infra: <b>" + infraId + "</b></li>" +
           "<li>NodeGroup: <b>" + nodeGroupName + "</b></li>" +
           "</ul>" +
-          "<p style='margin-top: 15px; color: #28a745;'>✓ The new VMs are being provisioned.</p>" +
+          "<p style='margin-top: 15px; color: #28a745;'>✓ The new Nodes are being provisioned.</p>" +
           "</div>",
         confirmButtonText: "OK"
       });
@@ -19565,7 +19565,7 @@ function drawObjects(event) {
     vectorContext.drawGeometry(geoResourceLocation.vpn[0]);
   }
 
-  // Draw Infra Points and Individual VM Status Badges
+  // Draw Infra Points and Individual Node Status Badges
   for (const [, data] of infraRenderMap) {
     const geometryPoint = data.geometryPoints;
     
@@ -19574,20 +19574,20 @@ function drawObjects(event) {
       continue;
     }
     
-    // Check if geometryPoint has the new structure with VM data
+    // Check if geometryPoint has the new structure with Node data
     if (geometryPoint && typeof geometryPoint === 'object' && geometryPoint.geometry) {
-      const { geometry, vmPoints, vmStatuses, vmProviders, vmCommandStatuses } = geometryPoint;
+      const { geometry, nodePoints, nodeStatuses, nodeProviders, nodeCommandStatuses } = geometryPoint;
       const vmBaseScale = changeSizeStatus(data.name + data.status);
       
-      if (vmPoints && vmStatuses) {
-        vmStatuses.forEach((vmStatus, vmIndex) => {
-          if (vmPoints[vmIndex]) {
-            const vmCoords = vmPoints[vmIndex];
-            const vmProvider = vmProviders ? vmProviders[vmIndex] : null;
-            const commandStatus = vmCommandStatuses ? vmCommandStatuses[vmIndex] : "None";
-            const vmStyles = createVmStyleWithStatusBadge(vmStatus, vmProvider, vmBaseScale, vmCoords, commandStatus);
+      if (nodePoints && nodeStatuses) {
+        nodeStatuses.forEach((nodeStatus, nodeIndex) => {
+          if (nodePoints[nodeIndex]) {
+            const nodeCoords = nodePoints[nodeIndex];
+            const vmProvider = nodeProviders ? nodeProviders[nodeIndex] : null;
+            const commandStatus = nodeCommandStatuses ? nodeCommandStatuses[nodeIndex] : "None";
+            const vmStyles = createNodeStyleWithStatusBadge(nodeStatus, vmProvider, vmBaseScale, nodeCoords, commandStatus);
             
-            const vmPoint = new Point(vmCoords);
+            const vmPoint = new Point(nodeCoords);
             vmStyles.forEach(style => {
               vectorContext.setStyle(style);
               vectorContext.drawGeometry(vmPoint);
@@ -19600,7 +19600,7 @@ function drawObjects(event) {
       if (data.name.includes("NLB")) {
         vectorContext.setStyle(iconStyleNlb);
       } else {
-        vectorContext.setStyle(iconStyleVm);
+        vectorContext.setStyle(iconStyleNode);
       }
       if (geometryPoint) {
         vectorContext.drawGeometry(geometryPoint);
@@ -19713,7 +19713,7 @@ function drawObjects(event) {
 
   // Draw Infra status text
   for (const [, data] of infraRenderMap) {
-    const statusColors = getVmStatusColor(data.status);
+    const statusColors = getNodeStatusColor(data.status);
     
     const nameLines = splitInfraNameToLines(data.name);
     const baseScale = changeSizeByName(data.name + data.status) + 0.1;
@@ -20133,7 +20133,7 @@ async function showSnapshotManagementModal() {
         .snapshot-compact-form .btn { margin: 8px 0; }
       </style>
       <div class="snapshot-compact-form">
-        <h5>Create VM Snapshot</h5>
+        <h5>Create Node Snapshot</h5>
         <div class="form-row">
           <div class="form-col">
             <label>Select Infra:</label>
@@ -20143,11 +20143,11 @@ async function showSnapshotManagementModal() {
             </select>
           </div>
           <div class="form-col">
-            <label>Select VM:</label>
-            <select id="snapshotVmSelect" class="form-control form-control-sm">
+            <label>Select Node:</label>
+            <select id="snapshotNodeSelect" class="form-control form-control-sm">
               <option value="">-- Select Infra First --</option>
             </select>
-            <small class="form-text text-muted" style="margin-top: 2px;">Select "🌐 All VMs" for Infra-wide snapshot</small>
+            <small class="form-text text-muted" style="margin-top: 2px;">Select "🌐 All Nodes" for Infra-wide snapshot</small>
           </div>
         </div>
         <div class="form-row">
@@ -20160,7 +20160,7 @@ async function showSnapshotManagementModal() {
             <input type="text" id="snapshotDescription" class="form-control form-control-sm" placeholder="Snapshot description">
           </div>
         </div>
-        <button onclick="createVmSnapshotFromModal()" class="btn btn-primary btn-block">📸 Create Snapshot</button>
+        <button onclick="createNodeSnapshotFromModal()" class="btn btn-primary btn-block">📸 Create Snapshot</button>
         
         <hr>
         
@@ -20193,11 +20193,11 @@ async function showSnapshotManagementModal() {
       
       // Infra selection change handler
       const loadVmsForInfra = async function(infraId) {
-        const vmSelect = document.getElementById('snapshotVmSelect');
-        vmSelect.innerHTML = '<option value="">-- Loading VMs --</option>';
+        const nodeSelect = document.getElementById('snapshotNodeSelect');
+        nodeSelect.innerHTML = '<option value="">-- Loading Nodes --</option>';
         
         if (!infraId) {
-          vmSelect.innerHTML = '<option value="">-- Select Infra First --</option>';
+          nodeSelect.innerHTML = '<option value="">-- Select Infra First --</option>';
           return;
         }
 
@@ -20210,14 +20210,14 @@ async function showSnapshotManagementModal() {
             }
           );
           
-          const vms = response.data.vm || [];
-          // Add "All VMs" option for Infra-wide snapshot
-          vmSelect.innerHTML = '<option value="">-- Select VM or All --</option>' + 
-            '<option value="__ALL_VMS__">🌐 All VMs (Infra Snapshot - one per nodegroup)</option>' +
-            vms.map(vm => `<option value="${vm.id}">${vm.id} (${vm.status})</option>`).join('');
+          const nodes = response.data.node || [];
+          // Add "All Nodes" option for Infra-wide snapshot
+          nodeSelect.innerHTML = '<option value="">-- Select Node or All --</option>' + 
+            '<option value="__ALL_NODES__">🌐 All Nodes (Infra Snapshot - one per nodegroup)</option>' +
+            nodes.map(nd => `<option value="${nd.id}">${nd.id} (${nd.status})</option>`).join('');
         } catch (error) {
-          console.error('Error loading VM list:', error);
-          vmSelect.innerHTML = '<option value="">-- Error loading VMs --</option>';
+          console.error('Error loading Node list:', error);
+          nodeSelect.innerHTML = '<option value="">-- Error loading Nodes --</option>';
         }
       };
       
@@ -20288,25 +20288,25 @@ async function showSnapshotManagementModal() {
   });
 }
 
-// Create VM Snapshot (supports both single VM and Infra-wide snapshots)
-async function createVmSnapshotFromModal() {
+// Create Node Snapshot (supports both single Node and Infra-wide snapshots)
+async function createNodeSnapshotFromModal() {
   const namespace = configNamespace;
   const infraId = document.getElementById('snapshotInfraSelect').value;
-  const vmId = document.getElementById('snapshotVmSelect').value;
+  const nodeId = document.getElementById('snapshotNodeSelect').value;
   const snapshotName = document.getElementById('snapshotName').value;
   const description = document.getElementById('snapshotDescription').value;
 
-  if (!infraId || !vmId) {
-    Swal.fire('Warning', 'Please select Infra and VM (or All VMs)', 'warning');
+  if (!infraId || !nodeId) {
+    Swal.fire('Warning', 'Please select Infra and Node (or All Nodes)', 'warning');
     return;
   }
 
   const config = getConfig();
-  const isInfraSnapshot = (vmId === '__ALL_VMS__');
+  const isInfraSnapshot = (nodeId === '__ALL_NODES__');
   
   try {
     Swal.fire({
-      title: isInfraSnapshot ? 'Creating Infra Snapshots...' : 'Creating VM Snapshot...',
+      title: isInfraSnapshot ? 'Creating Infra Snapshots...' : 'Creating Node Snapshot...',
       html: isInfraSnapshot ? 
         'Creating snapshots for all nodegroups in parallel...<br>This may take several minutes...' : 
         'This may take a few minutes...',
@@ -20346,7 +20346,7 @@ async function createVmSnapshotFromModal() {
           <tr>
             <td>${statusIcon}</td>
             <td>${result.nodeGroupId}</td>
-            <td>${result.vmId}</td>
+            <td>${result.nodeId}</td>
             <td>${result.imageId || 'N/A'} ${statusBadge}</td>
             <td><span class="badge badge-${statusClass}">${result.status}</span></td>
             <td style="font-size: 11px; color: ${result.error ? 'red' : 'inherit'};">${result.error || '-'}</td>
@@ -20370,7 +20370,7 @@ async function createVmSnapshotFromModal() {
                   <tr>
                     <th>Status</th>
                     <th>NodeGroup</th>
-                    <th>VM ID</th>
+                    <th>Node ID</th>
                     <th>Image ID</th>
                     <th>Result</th>
                     <th>Error</th>
@@ -20393,9 +20393,9 @@ async function createVmSnapshotFromModal() {
       });
       
     } else {
-      // Single VM snapshot
+      // Single Node snapshot
       response = await axios.post(
-        `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/infra/${infraId}/vm/${vmId}/snapshot`,
+        `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/infra/${infraId}/node/${nodeId}/snapshot`,
         requestBody,
         {
           auth: { username: config.username, password: config.password },
@@ -20410,7 +20410,7 @@ async function createVmSnapshotFromModal() {
       
       Swal.fire({
         icon: 'success',
-        title: 'VM Snapshot Created!',
+        title: 'Node Snapshot Created!',
         html: `
           <div style="text-align: left; padding: 10px;">
             <p><strong>Image ID:</strong> ${response.data.id}</p>
@@ -20503,7 +20503,7 @@ async function loadCustomImagesInModal(namespace) {
       return;
     }
 
-    let html = '<div style="overflow-x: auto;"><table class="table table-sm table-striped" style="font-size: 12px;"><thead><tr><th>Provider (Region)</th><th>ID (Status)</th><th>OS (Arch)</th><th>Description</th><th>Source VM UID</th><th>Created</th><th>Action</th></tr></thead><tbody>';
+    let html = '<div style="overflow-x: auto;"><table class="table table-sm table-striped" style="font-size: 12px;"><thead><tr><th>Provider (Region)</th><th>ID (Status)</th><th>OS (Arch)</th><th>Description</th><th>Source Node UID</th><th>Created</th><th>Action</th></tr></thead><tbody>';
     
     images.forEach(img => {
       // Enhanced status badge with icons and colors
@@ -20536,7 +20536,7 @@ async function loadCustomImagesInModal(namespace) {
           <td title="${img.id} - Status: ${img.imageStatus}">${idWithStatus}</td>
           <td>${osInfo}</td>
           <td title="${img.description || 'N/A'}">${descShort}</td>
-          <td title="${img.sourceVmUid || 'N/A'}">${img.sourceVmUid ? img.sourceVmUid.substring(0, 12) + '...' : 'N/A'}</td>
+          <td title="${img.sourceNodeUid || 'N/A'}">${img.sourceNodeUid ? img.sourceNodeUid.substring(0, 12) + '...' : 'N/A'}</td>
           <td>${img.creationDate ? new Date(img.creationDate).toLocaleDateString() : 'N/A'}</td>
           <td style="white-space: nowrap;">
             <button onclick="viewCustomImageDetails('${img.id}')" class="btn btn-sm btn-info" title="View Details">👁️</button>
@@ -20583,7 +20583,7 @@ async function viewCustomImageDetails(imageId) {
     if (img.imageStatus === 'Available') {
       statusIcon = '✅';
       statusClass = 'success';
-      statusMessage = '<p class="text-success"><strong>This snapshot is ready to use for VM creation.</strong></p>';
+      statusMessage = '<p class="text-success"><strong>This snapshot is ready to use for Node creation.</strong></p>';
     } else if (img.imageStatus === 'Creating') {
       statusIcon = '🔄';
       statusClass = 'info';
@@ -20615,7 +20615,7 @@ async function viewCustomImageDetails(imageId) {
           <p><strong>OS Architecture:</strong> ${img.osArchitecture || 'N/A'}</p>
           <p><strong>Description:</strong> ${img.description || 'N/A'}</p>
           <p><strong>Created:</strong> ${img.creationDate || 'N/A'}</p>
-          <p><strong>Source VM UID:</strong> ${img.sourceVmUid || 'N/A'}</p>
+          <p><strong>Source Node UID:</strong> ${img.sourceNodeUid || 'N/A'}</p>
         </div>
       `,
       confirmButtonText: 'Close',
@@ -20681,7 +20681,7 @@ async function deleteCustomImageFromModal(imageId) {
 
 // Make functions globally available
 window.showSnapshotManagementModal = showSnapshotManagementModal;
-window.createVmSnapshotFromModal = createVmSnapshotFromModal;
+window.createNodeSnapshotFromModal = createNodeSnapshotFromModal;
 window.loadCustomImagesInModal = loadCustomImagesInModal;
 window.viewCustomImageDetails = viewCustomImageDetails;
 window.deleteCustomImageFromModal = deleteCustomImageFromModal;
@@ -20743,7 +20743,7 @@ async function loadTaskListInModal(namespace, infraid) {
           <thead>
             <tr style="background-color: #f2f2f2;">
               <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Command</th>
-              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Infra / VM</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Infra / Node</th>
               <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd;">Status</th>
               <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd;">Started At</th>
               <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd;">Duration</th>
@@ -20800,10 +20800,10 @@ async function loadTaskListInModal(namespace, infraid) {
         // Also escape cmdTruncated for HTML content
         const cmdTruncatedEscaped = cmdTruncated.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         
-        // Format target - show VM info
-        let targetText = task.vmId || 'N/A';
-        if (task.infraId && task.vmId) {
-          targetText = `${task.infraId} / ${task.vmId}`;
+        // Format target - show Node info
+        let targetText = task.nodeId || 'N/A';
+        if (task.infraId && task.nodeId) {
+          targetText = `${task.infraId} / ${task.nodeId}`;
         } else if (task.infraId) {
           targetText = task.infraId;
         }
@@ -21940,23 +21940,23 @@ async function loadTemplateToInfraConfig(namespace, templateId) {
   // Clear existing configuration
   clearCircle('');
 
-  // Populate vmNodeGroupReqeustFromSpecList and recommendedSpecList (mirrors copyInfraConfig logic)
+  // Populate nodeGroupRequestFromSpecList and recommendedSpecList (mirrors copyInfraConfig logic)
   // Fetch spec details for each nodeGroup in parallel via specId
   const specFetches = infraReq.nodeGroups.map(function(sg) {
-    var vmConfig = $.extend({}, createInfraReqVmTmplt);
-    vmConfig.name           = sg.name           || ('g' + (vmNodeGroupReqeustFromSpecList.length + 1));
-    vmConfig.specId         = sg.specId          || '';
-    vmConfig.imageId        = sg.imageId         || 'ubuntu22.04';
-    vmConfig.rootDiskType   = sg.rootDiskType    || 'default';
-    vmConfig.rootDiskSize   = sg.rootDiskSize    || 0;
-    vmConfig.nodeGroupSize   = sg.nodeGroupSize    || 1;
-    vmConfig.description    = sg.description     || 'mapui';
-    vmConfig.connectionName = sg.connectionName  || '';
-    vmConfig.zone           = sg.zone            || '';
+    var nodeConfig = $.extend({}, createInfraReqVmTmplt);
+    nodeConfig.name           = sg.name           || ('g' + (nodeGroupRequestFromSpecList.length + 1));
+    nodeConfig.specId         = sg.specId          || '';
+    nodeConfig.imageId        = sg.imageId         || 'ubuntu22.04';
+    nodeConfig.rootDiskType   = sg.rootDiskType    || 'default';
+    nodeConfig.rootDiskSize   = sg.rootDiskSize    || 0;
+    nodeConfig.nodeGroupSize   = sg.nodeGroupSize    || 1;
+    nodeConfig.description    = sg.description     || 'mapui';
+    nodeConfig.connectionName = sg.connectionName  || '';
+    nodeConfig.zone           = sg.zone            || '';
     if (sg.label && Object.keys(sg.label).length > 0) {
-      vmConfig.label = sg.label;
+      nodeConfig.label = sg.label;
     }
-    vmNodeGroupReqeustFromSpecList.push(vmConfig);
+    nodeGroupRequestFromSpecList.push(nodeConfig);
 
     // Fetch spec details if specId is available
     if (sg.specId) {
@@ -22155,7 +22155,7 @@ async function showDnsManagementModal(preselectedInfraId) {
         </div>
 
         <div id="dns-geoproxy-info" style="display: none; margin-top: 8px; padding: 8px; background: #e8f4f8; border-radius: 4px; font-size: 12px; color: #0c5460;">
-          ℹ️ <strong>Geoproximity</strong>: Each VM gets its own record with lat/lng coordinates. Route53 routes users to the nearest server. Infra source required (VM location data needed).
+          ℹ️ <strong>Geoproximity</strong>: Each Node gets its own record with lat/lng coordinates. Route53 routes users to the nearest server. Infra source required (Node location data needed).
         </div>
 
         <div style="margin-top: 12px;">
@@ -22166,7 +22166,7 @@ async function showDnsManagementModal(preselectedInfraId) {
             <div style="background: white; border: 1px solid #dee2e6; border-radius: 6px; padding: 10px;">
               <label style="font-size: 13px; cursor: pointer;">
                 <input type="radio" name="dns-ip-source" value="infra" ${infraSourceChecked} style="margin-right: 6px;">
-                <strong>Infra</strong> — Collect Public IPs from VMs in Infra
+                <strong>Infra</strong> — Collect Public IPs from Nodes in Infra
               </label>
               <div id="dns-source-infra-fields" style="margin-top: 6px; display: ${preselectedInfraId ? 'block' : 'none'};">
                 <div style="display: flex; gap: 8px; align-items: center;">
@@ -22183,10 +22183,10 @@ async function showDnsManagementModal(preselectedInfraId) {
                 </div>
                 <!-- Optional Label Filter -->
                 <div style="margin-top: 10px; border-top: 1px dashed #dee2e6; padding-top: 8px;">
-                  <div style="font-size: 11px; color: #495057; margin-bottom: 6px;">🏷️ <strong>Label Filter</strong> <span style="color: #888;">(optional — narrow down VMs by labels)</span></div>
+                  <div style="font-size: 11px; color: #495057; margin-bottom: 6px;">🏷️ <strong>Label Filter</strong> <span style="color: #888;">(optional — narrow down Nodes by labels)</span></div>
                   <div id="selectedLabelsDisplay" style="min-height: 28px; padding: 4px 8px; border: 1px solid #ced4da; border-radius: 4px;
                        background: white; margin-bottom: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;">
-                    <span id="labelPlaceholder" style="color: #999; font-size: 11px;">No filter — all VMs in Infra will be used</span>
+                    <span id="labelPlaceholder" style="color: #999; font-size: 11px;">No filter — all Nodes in Infra will be used</span>
                   </div>
                   <input type="hidden" id="labelSelector" value="">
                   <div style="margin-bottom: 6px;">
@@ -22201,7 +22201,7 @@ async function showDnsManagementModal(preselectedInfraId) {
                   </div>
                   <div id="labelMatchPreview" style="margin-top: 6px; padding: 6px; background: #e7f3ff; border-radius: 4px; display: none;">
                     <span style="font-size: 11px; color: #0066cc;">
-                      <strong>Matching VMs:</strong> <span id="matchingVmCount">0</span> / <span id="totalVmCount">0</span>
+                      <strong>Matching Nodes:</strong> <span id="matchingNodeCount">0</span> / <span id="totalNodeCount">0</span>
                     </span>
                     <div id="matchingVmList" style="margin-top: 4px; font-size: 10px; color: #666; max-height: 50px; overflow-y: auto;"></div>
                   </div>
@@ -22273,7 +22273,7 @@ async function showDnsManagementModal(preselectedInfraId) {
         });
       });
 
-      // When Infra dropdown changes, fetch VM data and update available labels
+      // When Infra dropdown changes, fetch Node data and update available labels
       document.getElementById('dns-infra-id').addEventListener('change', async function() {
         var infraId = this.value;
         var labelContainer = document.getElementById('availableLabelsContainer');
@@ -22288,14 +22288,14 @@ async function showDnsManagementModal(preselectedInfraId) {
           if (labelContainer) labelContainer.innerHTML = '<span style="color: #999; font-size: 11px;">Select an Infra to see available labels...</span>';
           return;
         }
-        // Always fetch fresh Infra detail (cached data may lack VM labels)
+        // Always fetch fresh Infra detail (cached data may lack Node labels)
         if (labelContainer) labelContainer.innerHTML = '<span style="color: #999; font-size: 11px;"><i class="fas fa-spinner fa-spin"></i> Loading labels...</span>';
         try {
           var nsId = document.getElementById('dns-infra-nsid').value.trim();
           var infraDetailUrl = 'http://' + config.hostname + ':' + config.port + '/tumblebug/ns/' + nsId + '/infra/' + infraId;
           var resp = await axios.get(infraDetailUrl, { auth: { username: config.username, password: config.password }, timeout: 15000 });
           var infraDetail = resp.data;
-          if (infraDetail && infraDetail.vm) {
+          if (infraDetail && infraDetail.node) {
             if (!window.cloudBaristaCentralData) window.cloudBaristaCentralData = {};
             if (!window.cloudBaristaCentralData.infraData) window.cloudBaristaCentralData.infraData = [];
             window.cloudBaristaCentralData.infraData = window.cloudBaristaCentralData.infraData.filter(function(m) { return m.id !== infraId; });
@@ -22559,7 +22559,7 @@ async function showDnsManagementModal(preselectedInfraId) {
         const source = document.querySelector('input[name="dns-ip-source"]:checked')?.value;
 
         if (routingPolicy === 'geoproximity' && source === 'ips') {
-          Swal.showValidationMessage('Geoproximity routing requires Infra or Label source (for VM location data).');
+          Swal.showValidationMessage('Geoproximity routing requires Infra or Label source (for Node location data).');
           return;
         }
 

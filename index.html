@@ -623,8 +623,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                       </div>
                       <div class="btn-group btn-group-toggle w-100" data-toggle="buttons" style="flex: 1;">
                         <label class="btn btn-outline-success active" style="flex: 1;">
-                          <input type="radio" name="workloadType" id="vmMode" value="vm" checked onchange="toggleWorkloadType()"> 
-                          <i class="fas fa-server"></i> VM
+                          <input type="radio" name="workloadType" id="nodeMode" value="node" checked onchange="toggleWorkloadType()"> 
+                          <i class="fas fa-server"></i> Node
                         </label>
                         <label class="btn btn-outline-success" style="flex: 1;">
                           <input type="radio" name="workloadType" id="k8sMode" value="k8s" onchange="toggleWorkloadType()"> 
@@ -791,20 +791,20 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                     </div>
                   </div>
 
-                  <!-- VM ID Field -->
+                  <!-- Node ID Field -->
                   <div class="form-group">
                     <div class="input-group">
                       <div class="input-group-prepend">
-                        <span class="input-group-text">🖥️ VM ID</span>
+                        <span class="input-group-text">🖥️ Node ID</span>
                       </div>
-                      <select id="vmid" name="vmid" class="form-control" aria-label="VM ID"
-                        aria-describedby="vmidLabel">
+                      <select id="nodeid" name="nodeid" class="form-control" aria-label="Node ID"
+                        aria-describedby="nodeidLabel">
                         <!-- Options will be filled dynamically -->
                       </select>
                     </div>
                   </div>
 
-                  <!-- VM Public IP Field -->
+                  <!-- Node Public IP Field -->
                   <div class="form-group">
                     <div class="input-group">
                       <div class="input-group-prepend">
@@ -1095,10 +1095,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
               <span class="legend-item inactive" data-node-type="zone" onclick="toggleLegendItem('zone')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle Zone nodes (auto-enables CSP, Region)"><span style="display:inline-block;width:12px;height:12px;background:#32cd32;border-radius:2px;margin-right:4px;"></span>Zone</span>
               <span style="color:#ccc;">|</span>
               <!-- Infrastructure (toggleable, default ON) -->
-              <span class="legend-item active" data-node-type="infra" onclick="toggleLegendItem('infra')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle Infra nodes (enables NodeGroup, VM)"><span style="display:inline-block;width:12px;height:12px;background:#007bff;border-radius:2px;margin-right:4px;"></span>Infra</span>
+              <span class="legend-item active" data-node-type="infra" onclick="toggleLegendItem('infra')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle Infra nodes (enables NodeGroup, Node)"><span style="display:inline-block;width:12px;height:12px;background:#007bff;border-radius:2px;margin-right:4px;"></span>Infra</span>
               <span class="legend-item active" data-node-type="nodegroup" onclick="toggleLegendItem('nodegroup')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle NodeGroup nodes (requires Infra)"><span style="display:inline-block;width:12px;height:12px;background:#6610f2;border-radius:2px;margin-right:4px;"></span>NodeGroup</span>
-              <span class="legend-item active" data-node-type="vm" onclick="toggleLegendItem('vm')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle VM nodes (requires NodeGroup)"><span style="display:inline-block;width:12px;height:12px;background:#28a745;border-radius:50%;margin-right:4px;"></span>VM</span>
-              <span class="legend-item active" data-node-type="gpu" onclick="toggleLegendItem('gpu')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle GPU nodes (attached to VMs)"><span style="display:inline-block;width:12px;height:12px;background:#ff6b6b;transform:skewX(-10deg);border-radius:2px;margin-right:4px;"></span>GPU</span>
+              <span class="legend-item active" data-node-type="node" onclick="toggleLegendItem('node')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle Node (requires NodeGroup)"><span style="display:inline-block;width:12px;height:12px;background:#28a745;border-radius:50%;margin-right:4px;"></span>Node</span>
+              <span class="legend-item active" data-node-type="gpu" onclick="toggleLegendItem('gpu')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle GPU nodes (attached to Nodes)"><span style="display:inline-block;width:12px;height:12px;background:#ff6b6b;transform:skewX(-10deg);border-radius:2px;margin-right:4px;"></span>GPU</span>
               <span style="color:#ccc;">|</span>
               <!-- Network resources (toggleable, default ON) -->
               <span class="legend-item active" data-node-type="vnet" onclick="toggleLegendItem('vnet')" style="padding:2px 4px; border-radius:3px; transition:all 0.2s;" title="Toggle VNet nodes (enables Subnet)"><span style="display:inline-block;width:12px;height:12px;background:#e6a700;transform:rotate(45deg);margin-right:4px;"></span>VNet</span>
