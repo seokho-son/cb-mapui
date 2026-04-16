@@ -45,7 +45,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 const DEBUG_CONFIG = {
   ENABLE_PERFORMANCE_LOGS: false,  // Map performance related logs
   ENABLE_API_RESPONSE_LOGS: false, // API response logs 
-  ENABLE_VM_DEBUG_LOGS: false,     // Detailed VM structure logs
+  ENABLE_NODE_DEBUG_LOGS: false,     // Detailed Node structure logs
   ENABLE_RESOURCE_LOGS: false,     // Resource loading logs
   ENABLE_MAP_OPERATION_LOGS: false // Map operation logs
 };
@@ -54,7 +54,7 @@ const DEBUG_CONFIG = {
 const debugLog = {
   performance: (...args) => DEBUG_CONFIG.ENABLE_PERFORMANCE_LOGS && console.log('[Performance]', ...args),
   api: (...args) => DEBUG_CONFIG.ENABLE_API_RESPONSE_LOGS && console.log('[API]', ...args),
-  vm: (...args) => DEBUG_CONFIG.ENABLE_VM_DEBUG_LOGS && console.log('[VM Debug]', ...args),
+  node: (...args) => DEBUG_CONFIG.ENABLE_NODE_DEBUG_LOGS && console.log('[Node Debug]', ...args),
   resource: (...args) => DEBUG_CONFIG.ENABLE_RESOURCE_LOGS && console.log('[Resource]', ...args),
   mapOp: (...args) => DEBUG_CONFIG.ENABLE_MAP_OPERATION_LOGS && console.log('[Map]', ...args)
 };
@@ -147,16 +147,16 @@ function getTargetActionColor(targetAction) {
   }
 }
 
-// Map-based MCI render data store: Map<mciId, MciRenderData>
-// Each entry holds all render data for a single MCI, enabling O(1) add/remove.
-// MciRenderData = { id, name, status, targetAction, geometry, geometryPoints, geo, isLocationless }
+// Map-based Infra render data store: Map<infraId, InfraRenderData>
+// Each entry holds all render data for a single Infra, enabling O(1) add/remove.
+// InfraRenderData = { id, name, status, targetAction, geometry, geometryPoints, geo, isLocationless }
 // Note: Use globalThis.Map to avoid collision with OpenLayers' Map import (ol/Map)
-var mciRenderMap = new globalThis.Map();
+var infraRenderMap = new globalThis.Map();
 
-// Constants for positioning locationless MCIs (preparing, prepared, failed, empty states)
-const LOCATIONLESS_MCI_LEFT_OFFSET = 0.12;    // 12% offset from left edge to prevent name clipping
-const LOCATIONLESS_MCI_TOP_OFFSET = 0.03;     // 3% offset from top edge
-const LOCATIONLESS_MCI_VERTICAL_SPACING = 0.05; // 5% of map height between stacked MCIs
+// Constants for positioning locationless Infras (preparing, prepared, failed, empty states)
+const LOCATIONLESS_Infra_LEFT_OFFSET = 0.12;    // 12% offset from left edge to prevent name clipping
+const LOCATIONLESS_Infra_TOP_OFFSET = 0.03;     // 3% offset from top edge
+const LOCATIONLESS_Infra_VERTICAL_SPACING = 0.05; // 5% of map height between stacked Infras
 
 var k8sName = new Array();
 var k8sStatus = new Array();
@@ -202,11 +202,11 @@ axios.interceptors.request.use(function (axiosConfig) {
   return axiosConfig;
 });
 
-var mciidElement = document.getElementById("mciid");
+var infraidElement = document.getElementById("infraid");
 
 // Central Data Store for sharing with Dashboard
 window.cloudBaristaCentralData = {
-  mciData: [],
+  infraData: [],
   vmData: [],
   resourceData: {},
   vNet: [],
@@ -430,7 +430,7 @@ function showMapSettings() {
       window.useGenericCspIcons = useGenericCspIcons;
       // Clear cached generic styles so they can be regenerated if needed
       Object.keys(cspGenericStyles).forEach(k => delete cspGenericStyles[k]);
-      Object.keys(vmGenericCloudStyleCache).forEach(k => delete vmGenericCloudStyleCache[k]);
+      Object.keys(nodeGenericCloudStyleCache).forEach(k => delete nodeGenericCloudStyleCache[k]);
       // Force map re-render to apply icon change
       map.render();
       const view = map.getView();
@@ -568,8 +568,8 @@ var map = new Map({
 function clearMap() {
   debugLog.mapOp("Map cleared - optimized");
   
-  // Clear MCI render data
-  mciRenderMap.clear();
+  // Clear Infra render data
+  infraRenderMap.clear();
   
   // Clear resource location data
   geoResourceLocation.k8s = [];
@@ -615,14 +615,14 @@ function clearCircle(option) {
     debugLog.mapOp("Circle configuration cleared");
   }
   latLonInputPairIdx = 0;
-  vmSubGroupReqeustFromSpecList = [];
+  nodeGroupRequestFromSpecList = [];
   recommendedSpecList = [];
   cspPointsCircle = [];
   geoCspPointsCircle = [];
   
-  // Update SubGroup review panel
-  if (typeof updateSubGroupReview === 'function') {
-    updateSubGroupReview();
+  // Update NodeGroup review panel
+  if (typeof updateNodeGroupReview === 'function') {
+    updateNodeGroupReview();
   }
 }
 window.clearCircle = clearCircle;
@@ -633,19 +633,19 @@ function writeLatLonInputPair(idx, lat, lon) {
   var lonf = lon.toFixed(4);
 
   //document.getElementById("latLonInputPairArea").innerHTML +=
-  `VM ${idx + 1}: (${latf}, ${lonf}) / `;
+  `Node ${idx + 1}: (${latf}, ${lonf}) / `;
   if (idx == 0) {
-    debugLog.mapOp("Started MCI configuration");
+    debugLog.mapOp("Started Infra configuration");
   }
-  debugLog.mapOp(`VM-${idx + 1} Location: ${latf}, ${lonf} | Best Spec: `);
+  debugLog.mapOp(`Node-${idx + 1} Location: ${latf}, ${lonf} | Best Spec: `);
 }
 
 var latLonInputPairIdx = 0;
-var vmSubGroupReqeustFromSpecList = new Array();
+var nodeGroupRequestFromSpecList = new Array();
 var recommendedSpecList = new Array();
 
 // ========== LABEL RECOMMENDATION SYSTEM ==========
-// Predefined common labels for SubGroup configuration
+// Predefined common labels for NodeGroup configuration
 const PREDEFINED_LABELS = [
   { key: 'role', value: 'control', description: 'Control plane node' },
   { key: 'role', value: 'node', description: 'General node' },
@@ -969,17 +969,17 @@ map.on("singleclick", function (event) {
   latLonInputPairIdx++;
 });
 
-// Right-click context menu for MCI control
+// Right-click context menu for Infra control
 map.on("contextmenu", function (event) {
   event.preventDefault(); // Prevent default browser context menu
   
   const coord = event.coordinate;
-  const nearestMci = findNearestMci(coord);
+  const nearestInfra = findNearestInfra(coord);
   
-  if (nearestMci) {
-    showMciContextMenu(event.pixel, nearestMci);
+  if (nearestInfra) {
+    showInfraContextMenu(event.pixel, nearestInfra);
   } else {
-    // Show general utility menu when no MCI is nearby
+    // Show general utility menu when no Infra is nearby
     Swal.fire({
       title: '🛠️ Utilities',
       html: `
@@ -992,26 +992,26 @@ map.on("contextmenu", function (event) {
       cancelButtonText: '❌ Close',
       width: '400px',
       customClass: {
-        popup: 'swal2-mci-context'
+        popup: 'swal2-infra-context'
       }
     });
   }
 });
 
-// Mouse hover effect to show when MCI is selectable
+// Mouse hover effect to show when Infra is selectable
 map.on("pointermove", function (event) {
   const coord = event.coordinate;
-  const nearestMci = findNearestMci(coord);
+  const nearestInfra = findNearestInfra(coord);
   const mapElement = map.getTargetElement();
   const tooltip = document.getElementById('mouseTooltip');
   
-  if (nearestMci) {
-    // Change cursor to pointer when MCI is nearby
+  if (nearestInfra) {
+    // Change cursor to pointer when Infra is nearby
     mapElement.style.cursor = 'pointer';
     
-    // Update tooltip to show MCI name and hint
+    // Update tooltip to show Infra name and hint
     if (tooltip) {
-      tooltip.innerHTML = `➕ ┃ 🕹️ ${nearestMci.name}`;
+      tooltip.innerHTML = `➕ ┃ 🕹️ ${nearestInfra.name}`;
     }
   } else {
     // Reset cursor to default crosshair
@@ -1024,35 +1024,35 @@ map.on("pointermove", function (event) {
   }
 });
 
-// Function to find the nearest MCI to clicked coordinates
-function findNearestMci(clickCoord) {
-  let nearestMci = null;
+// Function to find the nearest Infra to clicked coordinates
+function findNearestInfra(clickCoord) {
+  let nearestInfra = null;
   let minDistance = Infinity;
   
   const clickPixel = map.getPixelFromCoordinate(clickCoord);
   
-  // Search through all MCI entries in the render map
-  for (const [mciId, data] of mciRenderMap) {
+  // Search through all Infra entries in the render map
+  for (const [infraId, data] of infraRenderMap) {
     if (data.geometry && data.name) {
-      let mciCoord;
+      let infraCoord;
       
       if (data.geometry.getType() === 'Point') {
-        mciCoord = data.geometry.getCoordinates();
+        infraCoord = data.geometry.getCoordinates();
       } else if (data.geometry.getType() === 'Polygon') {
         const extent = data.geometry.getExtent();
-        mciCoord = [(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2];
+        infraCoord = [(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2];
       }
       
-      if (mciCoord) {
-        const mciPixel = map.getPixelFromCoordinate(mciCoord);
+      if (infraCoord) {
+        const infraPixel = map.getPixelFromCoordinate(infraCoord);
         
-        const nameLines = splitMciNameToLines(data.name);
+        const nameLines = splitInfraNameToLines(data.name);
         const baseScale = changeSizeByName(data.name + data.status) + 0.1;
         const baseOffsetY = 32 * changeSizeByName(data.name + data.status);
         const lineHeight = 12 * baseScale;
         
-        const textCenterY = mciPixel[1] + baseOffsetY + (nameLines.length * lineHeight / 2);
-        const textPixel = [mciPixel[0], textCenterY];
+        const textCenterY = infraPixel[1] + baseOffsetY + (nameLines.length * lineHeight / 2);
+        const textPixel = [infraPixel[0], textCenterY];
         
         const dx = clickPixel[0] - textPixel[0];
         const dy = clickPixel[1] - textPixel[1];
@@ -1060,10 +1060,10 @@ function findNearestMci(clickCoord) {
         
         if (distance < minDistance) {
           minDistance = distance;
-          nearestMci = {
+          nearestInfra = {
             name: data.name,
             status: data.status,
-            id: mciId,
+            id: infraId,
             distance: distance
           };
         }
@@ -1071,79 +1071,79 @@ function findNearestMci(clickCoord) {
     }
   }
   
-  return (minDistance < 100) ? nearestMci : null;
+  return (minDistance < 100) ? nearestInfra : null;
 }
 
-// Store the MCI selected via right-click context menu
-let contextMenuSelectedMci = null;
+// Store the Infra selected via right-click context menu
+let contextMenuSelectedInfra = null;
 
-// Helper function to get the currently selected MCI ID
+// Helper function to get the currently selected Infra ID
 // Prioritizes context menu selection over dropdown selection
-function getSelectedMciId() {
-  if (contextMenuSelectedMci) {
-    return contextMenuSelectedMci;
+function getSelectedInfraId() {
+  if (contextMenuSelectedInfra) {
+    return contextMenuSelectedInfra;
   }
-  return mciidElement ? mciidElement.value : null;
+  return infraidElement ? infraidElement.value : null;
 }
 
-// Function to show MCI context menu
-function showMciContextMenu(pixel, mciInfo) {
-  // Store the selected MCI for use in control actions
-  contextMenuSelectedMci = mciInfo.name;
+// Function to show Infra context menu
+function showInfraContextMenu(pixel, infraInfo) {
+  // Store the selected Infra for use in control actions
+  contextMenuSelectedInfra = infraInfo.name;
   
   // Namespace is managed globally via configNamespace
 
-  // Set the selected MCI in the control panel
-  const mciSelect = document.getElementById('mciid');
-  if (mciSelect) {
-    // Check if the MCI option exists, if not, add it
+  // Set the selected Infra in the control panel
+  const infraSelect = document.getElementById('infraid');
+  if (infraSelect) {
+    // Check if the Infra option exists, if not, add it
     let optionExists = false;
-    for (let option of mciSelect.options) {
-      if (option.value === mciInfo.name) {
+    for (let option of infraSelect.options) {
+      if (option.value === infraInfo.name) {
         optionExists = true;
         break;
       }
     }
     if (!optionExists) {
-      // Add the MCI option if it doesn't exist (for failed MCIs that weren't loaded to control tab)
+      // Add the Infra option if it doesn't exist (for failed Infras that weren't loaded to control tab)
       const newOption = document.createElement('option');
-      newOption.value = mciInfo.name;
-      newOption.text = mciInfo.name;
-      mciSelect.add(newOption);
+      newOption.value = infraInfo.name;
+      newOption.text = infraInfo.name;
+      infraSelect.add(newOption);
     }
     // Set value without triggering change event
-    mciSelect.value = mciInfo.name;
+    infraSelect.value = infraInfo.name;
   }
   
   // Show context menu using SweetAlert
   Swal.fire({
-    title: `🕹️ Control MCI: ${mciInfo.name}`,
+    title: `🕹️ Control Infra: ${infraInfo.name}`,
     html: `
       <div style="text-align: left; margin-bottom: 20px;">
-        <p><strong>Status:</strong> ${mciInfo.status}</p>
-        <p><strong>Distance:</strong> ${mciInfo.distance.toFixed(3)} units</p>
+        <p><strong>Status:</strong> ${infraInfo.status}</p>
+        <p><strong>Distance:</strong> ${infraInfo.distance.toFixed(3)} units</p>
       </div>
-      <div class="mci-context-grid" style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-top: 15px;">
+      <div class="infra-context-grid" style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-top: 15px;">
 
-        <button class="btn btn-success btn-context btn-mci-action" data-action="control">🕹️ Control</button>
-        <button onclick="statusMCI(); Swal.close();" class="btn btn-success btn-context">📊 Status</button>
+        <button class="btn btn-success btn-context btn-infra-action" data-action="control">🕹️ Control</button>
+        <button onclick="statusInfra(); Swal.close();" class="btn btn-success btn-context">📊 Status</button>
         <button onclick="getAccessInfo(); Swal.close();" class="btn btn-success btn-context">🔑 Access Info</button>
-        <button class="btn btn-success btn-context btn-mci-action" data-action="sshKeys">📦 SSH Keys</button>
+        <button class="btn btn-success btn-context btn-infra-action" data-action="sshKeys">📦 SSH Keys</button>
 
         <button onclick="executeRemoteCmd(); Swal.close();" class="btn btn-warning btn-context">💻 Remote Cmd</button>
         <button onclick="showTaskManagementModal(); Swal.close();" class="btn btn-warning btn-context">📋 Cmd Status</button>
-        <button onclick="transferFileToMci(); Swal.close();" class="btn btn-warning btn-context">📁 File Transfer</button>
-        <button class="btn btn-warning btn-context btn-mci-action" data-action="dns">🌐 Global DNS</button>
+        <button onclick="transferFileToInfra(); Swal.close();" class="btn btn-warning btn-context">📁 File Transfer</button>
+        <button class="btn btn-warning btn-context btn-infra-action" data-action="dns">🌐 Global DNS</button>
         <button onclick="setBastionNode(); Swal.close();" class="btn btn-warning btn-context">🔗 Set Bastion</button>
 
-        <button class="btn btn-info btn-context btn-mci-action" data-action="nlb">⚖️ NLB</button>
+        <button class="btn btn-info btn-context btn-infra-action" data-action="nlb">⚖️ NLB</button>
         <button onclick="updateFirewallRules(); Swal.close();" class="btn btn-info btn-context">🔥 Firewall</button>
         <button onclick="showSnapshotManagementModal(); Swal.close();" class="btn btn-info btn-context">📸 Snapshots</button>
-        <button class="btn btn-info btn-context btn-mci-action" data-action="scaleOut">⬆️ Scale Out</button>
+        <button class="btn btn-info btn-context btn-infra-action" data-action="scaleOut">⬆️ Scale Out</button>
 
-        <button class="btn btn-primary btn-context btn-mci-action" data-action="copyConfig">📋 Copy Config</button>
-        <button class="btn btn-primary btn-context btn-mci-action" data-action="saveTemplate">📄 Save Template</button>
-        <button class="btn btn-danger btn-context btn-mci-action" data-action="delete">🗑️ Delete MCI</button>
+        <button class="btn btn-primary btn-context btn-infra-action" data-action="copyConfig">📋 Copy Config</button>
+        <button class="btn btn-primary btn-context btn-infra-action" data-action="saveTemplate">📄 Save Template</button>
+        <button class="btn btn-danger btn-context btn-infra-action" data-action="delete">🗑️ Delete Infra</button>
 
       </div>
     `,
@@ -1152,11 +1152,11 @@ function showMciContextMenu(pixel, mciInfo) {
     cancelButtonText: '❌ Close',
     width: '850px',
     customClass: {
-      popup: 'swal2-mci-context'
+      popup: 'swal2-infra-context'
     },
     didOpen: (popup) => {
-      const mciName = mciInfo.name;
-      popup.querySelectorAll('.btn-mci-action').forEach(btn => {
+      const infraName = infraInfo.name;
+      popup.querySelectorAll('.btn-infra-action').forEach(btn => {
         btn.addEventListener('click', () => {
           const action = btn.dataset.action;
           // Functions that open their own Swal (no explicit close needed)
@@ -1165,15 +1165,15 @@ function showMciContextMenu(pixel, mciInfo) {
           if (action === 'delete') { executeAction('delete'); return; }
           if (action === 'sshKeys') { downloadAllSshKeys(); return; }
           // Functions that don't open Swal — close context menu after
-          if (action === 'scaleOut') scaleOutMciFromContext(mciName);
-          else if (action === 'copyConfig') copyMciConfig(mciName);
-          else if (action === 'saveTemplate') saveMciAsTemplate(mciName);
-          else if (action === 'dns') showDnsManagementModal(mciName);
+          if (action === 'scaleOut') scaleOutInfraFromContext(infraName);
+          else if (action === 'copyConfig') copyInfraConfig(infraName);
+          else if (action === 'saveTemplate') saveInfraAsTemplate(infraName);
+          else if (action === 'dns') showDnsManagementModal(infraName);
           Swal.close();
         });
       });
-      // Auto-span Delete MCI button to fill remaining columns in last row
-      const grid = popup.querySelector('.mci-context-grid');
+      // Auto-span Delete Infra button to fill remaining columns in last row
+      const grid = popup.querySelector('.infra-context-grid');
       if (grid) {
         const cols = 4;
         const total = grid.children.length;
@@ -1185,7 +1185,7 @@ function showMciContextMenu(pixel, mciInfo) {
       // Clear context menu selection when popup closes
       // This allows normal dropdown selection to work again
       setTimeout(() => {
-        contextMenuSelectedMci = null;
+        contextMenuSelectedInfra = null;
       }, 100);
     }
   });
@@ -1304,7 +1304,7 @@ function displayCSPListOn() {
 window.displayCSPListOn = displayCSPListOn;
 
 function endpointChanged() {
-  //getMci();
+  //getInfra();
   var iframe = document.getElementById('iframe');
   var iframe2 = document.getElementById('iframe2');
 
@@ -1376,7 +1376,7 @@ function createStyle(src) {
 var pnt = new Point([-68, -50]);
 
 addIconToMap("img/icon-vm.png", pnt, "001");
-var iconStyleVm = new Style({
+var iconStyleNode = new Style({
   image: new Icon({
     crossOrigin: "anonymous",
     src: "img/icon-vm.png",
@@ -1443,7 +1443,7 @@ var iconStyleKey = new Style({
 });
 
 addIconToMap("img/circle.png", pnt, "001");
-// Pin emoji style for MCI configuration points
+// Pin emoji style for Infra configuration points
 var iconStyleCircle = new Style({
   text: new Text({
     text: '📍',
@@ -1554,15 +1554,15 @@ function getGenericCloudStyle(csp) {
   return cspGenericStyles[csp];
 }
 
-// Cache for VM overlay generic cloud styles keyed by "csp:scale"
-// Separate from cspGenericStyles because scale varies per VM
-const vmGenericCloudStyleCache = {};
-function getVmGenericCloudStyle(csp, scale) {
+// Cache for Node overlay generic cloud styles keyed by "csp:scale"
+// Separate from cspGenericStyles because scale varies per Node
+const nodeGenericCloudStyleCache = {};
+function getNodeGenericCloudStyle(csp, scale) {
   const key = `${csp}:${scale}`;
-  if (!vmGenericCloudStyleCache[key]) {
+  if (!nodeGenericCloudStyleCache[key]) {
     const platform = resolveCloudPlatform(csp);
     const color = cspGenericColors[platform] || cspGenericColors[csp] || CSP_GENERIC_FALLBACK_COLOR;
-    vmGenericCloudStyleCache[key] = new Style({
+    nodeGenericCloudStyleCache[key] = new Style({
       image: new Icon({
         img: createCloudCanvas(color),
         scale: scale,
@@ -1572,7 +1572,7 @@ function getVmGenericCloudStyle(csp, scale) {
       }),
     });
   }
-  return vmGenericCloudStyleCache[key];
+  return nodeGenericCloudStyleCache[key];
 }
 
 // Get the appropriate CSP style based on current icon mode
@@ -1672,7 +1672,7 @@ function resolveCloudPlatform(providerName) {
   return lower;
 }
 
-// Provider Icon Mapping for VM visualization (using existing cspIconImg)
+// Provider Icon Mapping for Node visualization (using existing cspIconImg)
 function getProviderIcon(providerName) {
   if (useGenericCspIcons) return null; // signal to use generic style instead
   const provider = providerName?.toLowerCase();
@@ -1699,8 +1699,8 @@ function getContrastColor(hexColor) {
   return luminance > 0.5 ? "#000000" : "#ffffff";
 }
 
-// Unified VM/MCI Status Color Mapping with improved visibility and contrasting borders
-function getVmStatusColor(status) {
+// Unified Node/Infra Status Color Mapping with improved visibility and contrasting borders
+function getNodeStatusColor(status) {
   // Handle both exact status and status that includes keywords (for backward compatibility)
   const statusStr = status?.toString().toLowerCase() || '';
   
@@ -1714,7 +1714,7 @@ function getVmStatusColor(status) {
   else if (status === "Creating" || statusStr.includes("creating")) {
     fillColor = "#3b82f6"; // blue-500 - bright blue for creation progress
   }
-  // Registering state - Teal (registering existing CSP VM)
+  // Registering state - Teal (registering existing CSP Node))
   else if (status === "Registering" || statusStr.includes("registering")) {
     fillColor = "#14b8a6"; // teal-500 - teal for registration progress
   }
@@ -1728,9 +1728,9 @@ function getVmStatusColor(status) {
   else if (status === "Prepared" || statusStr.includes("Prepared")) {
     fillColor = "#ea580c"; // orange-600 - darker orange for prepared state
   }
-  // Empty state - Gray (MCI exists but has no VMs)
+  // Empty state - Gray (Infra exists but has no Nodes)
   else if (status === "Empty" || statusStr.includes("Empty")) {
-    fillColor = "#9ca3af"; // gray-400 - gray for empty MCI (no VMs)
+    fillColor = "#9ca3af"; // gray-400 - gray for empty Infra (no Nodes)
   }
   // Suspended/Paused states - Yellow/Orange shades (paused but recoverable)
   else if (status === "Suspended" || statusStr.includes("suspended")) {
@@ -1769,9 +1769,9 @@ function getVmStatusColor(status) {
   };
 }
 
-// Legacy function for MCI status - returns only fill color for backward compatibility
+// Legacy function for Infra status - returns only fill color for backward compatibility
 function changeColorStatus(status) {
-  const colorObj = getVmStatusColor(status);
+  const colorObj = getNodeStatusColor(status);
   return typeof colorObj === 'object' ? colorObj.fill : colorObj;
 }
 
@@ -1869,15 +1869,15 @@ function getK8sStatusColor(status) {
   };
 }
 
-// Helper function to truncate MCI name with ellipsis
-function truncateMciName(name, maxLength = 25) {
+// Helper function to truncate Infra name with ellipsis
+function truncateInfraName(name, maxLength = 25) {
   if (!name) return '';
   if (name.length <= maxLength) return name;
   return name.substring(0, maxLength) + '..';
 }
 
-// Helper function to split MCI name into multiple lines for better display
-function splitMciNameToLines(name, maxLineLength = 12) {
+// Helper function to split Infra name into multiple lines for better display
+function splitInfraNameToLines(name, maxLineLength = 12) {
   if (!name) return [''];
   
   // If the name is short enough, return as single line
@@ -1949,8 +1949,8 @@ function generateRandomString() {
   return Math.random().toString(36).substr(2, 5);
 }
 
-// MCI name word pool — familiar words across animals, fruits, flowers, nature, snacks, fantasy, gems, space
-const _mciNameWordPool = [
+// Infra name word pool — familiar words across animals, fruits, flowers, nature, snacks, fantasy, gems, space
+const _infraNameWordPool = [
   // 🐾 Animals
   'lion','tiger','eagle','wolf','bear','fox','panda','hawk','dolphin','penguin',
   'rabbit','shark','whale','parrot','dragon',
@@ -1973,14 +1973,14 @@ const _mciNameWordPool = [
   'nebula','aurora','eclipse','rocket','orbit',
 ];
 
-// Returns an MCI-friendly name like "mc-panda", preferring words not recently used.
+// Returns an Infra-friendly name like "mc-panda", preferring words not recently used.
 // Usage history is stored in localStorage so it persists across sessions.
-function generateMciName() {
-  const STORAGE_KEY = 'mciNameUsedWords';
+function generateInfraName() {
+  const STORAGE_KEY = 'infraNameUsedWords';
   const used = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
 
-  const unused = _mciNameWordPool.filter(w => !used.includes(w));
-  const pool = unused.length > 0 ? unused : _mciNameWordPool; // reset when all used
+  const unused = _infraNameWordPool.filter(w => !used.includes(w));
+  const pool = unused.length > 0 ? unused : _infraNameWordPool; // reset when all used
   const word = pool[Math.floor(Math.random() * pool.length)];
 
   // Record usage (keep last 100 entries max)
@@ -2064,7 +2064,7 @@ function changeSizeStatus(status) {
   } else if (status.includes("NLB")) {
     return 1.5;
   } else if (status.includes("Failed")) {
-    return 2.2; // Make Failed VMs more visible with medium-large size
+    return 2.2; // Make Failed Nodes more visible with medium-large size
   } else if (status.includes("Partial")) {
     return 2.4;
   } else if (status.includes("Running")) {
@@ -2086,12 +2086,12 @@ function changeSizeStatus(status) {
   }
 }
 
-// Create VM icon style with status badge and provider icon
-function createVmStyleWithStatusBadge(vmStatus, providerName = null, baseScale = 1.0, vmCoords = null, commandStatus = "None") {
-  const statusColors = getVmStatusColor(vmStatus);
+// Create Node icon style with status badge and provider icon
+function createNodeStyleWithStatusBadge(nodeStatus, providerName = null, baseScale = 1.0, nodeCoords = null, commandStatus = "None") {
+  const statusColors = getNodeStatusColor(nodeStatus);
   
   const styles = [
-    // Main VM icon (center)
+    // Main Node icon (center)
     new Style({
       image: new Icon({
         crossOrigin: "anonymous",
@@ -2170,8 +2170,8 @@ function createVmStyleWithStatusBadge(vmStatus, providerName = null, baseScale =
   return styles;
 }
 
-// Create individual VM point with offset for status badge
-function createVmPointWithOffset(coordinates, offsetX = 0.008, offsetY = 0.008) {
+// Create individual Node point with offset for status badge
+function createNodePointWithOffset(coordinates, offsetX = 0.008, offsetY = 0.008) {
   return new Point([coordinates[0] + offsetX, coordinates[1] + offsetY]);
 }
 
@@ -2190,32 +2190,32 @@ function changeSizeByName(status) {
 }
 
 /**
- * Compute inter-MCI offset for VMs at shared locations.
- * When multiple MCIs have VMs at the same region, each MCI gets a directional
- * offset so their VM icons don't fully overlap.
- * @param {number} mciIndex - This MCI's index at the shared location (0-based)
- * @param {number} totalMcis - Total MCIs sharing this location
+ * Compute inter-Infra offset for Nodes at shared locations.
+ * When multiple Infras have Nodes at the same region, each Infra gets a directional
+ * offset so their Node icons don't fully overlap.
+ * @param {number} infraIndex - This Infra's index at the shared location (0-based)
+ * @param {number} totalInfras - Total Infras sharing this location
  * @returns {{ox: number, oy: number}} offset in coordinate units
  */
-function getMciLocationOffset(mciIndex, totalMcis) {
-  if (totalMcis <= 1 || mciIndex === 0) return { ox: 0, oy: 0 };
-  // Place MCIs on a ring around the base location
+function getInfraLocationOffset(infraIndex, totalInfras) {
+  if (totalInfras <= 1 || infraIndex === 0) return { ox: 0, oy: 0 };
+  // Place Infras on a ring around the base location
   const ringRadius = 1.5; // coordinate-space radius (scaled by zoom later)
-  const angleStep = 2 * Math.PI / totalMcis;
+  const angleStep = 2 * Math.PI / totalInfras;
   const startAngle = 3 * Math.PI / 2; // base angle; first offset (index=1) lands near top
-  const angle = startAngle + angleStep * mciIndex;
+  const angle = startAngle + angleStep * infraIndex;
   return {
     ox: ringRadius * Math.cos(angle),
     oy: ringRadius * Math.sin(angle) * 0.78 // compress Y for map projection
   };
 }
 
-function returnAdjustmentPoint(index, totalVMs) {
+function returnAdjustmentPoint(index, totalNodes) {
   // Initialize coordinates
   let ax = 0.0;
   let ay = 0.0;
 
-  // First VM (index 0) is placed at center
+  // First Node (index 0) is placed at center
   if (index === 0) {
     ax = 0;
     ay = 0;
@@ -2223,13 +2223,13 @@ function returnAdjustmentPoint(index, totalVMs) {
     // Circle radius
     const radius = 0.75;
 
-    // Calculate angle step (divide 360° by total VMs)
-    const angleStep = 2 * Math.PI / totalVMs;
+    // Calculate angle step (divide 360° by total Nodes))
+    const angleStep = 2 * Math.PI / totalNodes;
 
     // Start at 12 o'clock position
     const startAngle = 3 * Math.PI / 2;
 
-    // Calculate angle for current VM
+    // Calculate angle for current Node
     const angle = startAngle + (angleStep * index);
 
     // Convert polar coordinates to Cartesian
@@ -2273,30 +2273,30 @@ function makeTria(ip1, ip2, ip3) {
   // makeTria is legacy/unused — kept for reference
 }
 
-// Build VM dot geometry data for an MCI entry in mciRenderMap
-function makePolyDot(mciEntry, vmPoints, vmStatuses = [], vmProviders = [], vmCommandStatuses = []) {
+// Build Node dot geometry data for an Infra entry in infraRenderMap
+function makePolyDot(infraEntry, nodePoints, nodeStatuses = [], nodeProviders = [], nodeCommandStatuses = []) {
   var resourcePoints = [];
-  for (i = 0; i < vmPoints.length; i++) {
-    resourcePoints.push(vmPoints[i]);
+  for (i = 0; i < nodePoints.length; i++) {
+    resourcePoints.push(nodePoints[i]);
   }
-  mciEntry.geometryPoints = {
+  infraEntry.geometryPoints = {
     geometry: new MultiPoint(resourcePoints),
-    vmPoints: vmPoints,
-    vmStatuses: vmStatuses,
-    vmProviders: vmProviders,
-    vmCommandStatuses: vmCommandStatuses
+    nodePoints: nodePoints,
+    nodeStatuses: nodeStatuses,
+    nodeProviders: nodeProviders,
+    nodeCommandStatuses: nodeCommandStatuses
   };
 }
 
-// Build polygon geometry for an MCI entry in mciRenderMap
-function makePolyArray(mciEntry, vmPoints) {
+// Build polygon geometry for an Infra entry in infraRenderMap
+function makePolyArray(infraEntry, nodePoints) {
   var resourcePoints = [];
-  for (i = 0; i < vmPoints.length; i++) {
-    resourcePoints.push(vmPoints[i]);
+  for (i = 0; i < nodePoints.length; i++) {
+    resourcePoints.push(nodePoints[i]);
   }
-  resourcePoints.push(vmPoints[0]);
-  mciEntry.geometry = new Polygon([resourcePoints]);
-  mciEntry.geo = new Polygon([resourcePoints]);
+  resourcePoints.push(nodePoints[0]);
+  infraEntry.geometry = new Polygon([resourcePoints]);
+  infraEntry.geo = new Polygon([resourcePoints]);
 }
 
 function cross(a, b, o) {
@@ -2365,7 +2365,7 @@ function changePoints(ipFrom, ipTo) {
 }
 
 var refreshInterval = 5;
-// setTimeout(() => getMci(), refreshInterval*1000);
+// setTimeout(() => getInfra(), refreshInterval*1000);
 //setTimeout(() => console.log(getConnection()), refreshInterval*1000);
 
 function infoAlert(message) {
@@ -2403,10 +2403,10 @@ function outputAlert(jsonData, type) {
   const jsonString = JSON.stringify(jsonData, null, 2);
   const isLargeData = jsonString.length > 50000; // 50KB threshold
   
-  // Check if it's MCI data with many VMs
-  const hasLargeVmList = jsonData?.subGroups?.some(subGroup => 
-    subGroup?.vms && Array.isArray(subGroup.vms) && subGroup.vms.length > 20
-  ) || (Array.isArray(jsonData?.vm) && jsonData.vm.length > 20);
+  // Check if it's Infra data with many Nodes
+  const hasLargeNodeList = jsonData?.nodeGroups?.some(nodeGroup => 
+    nodeGroup?.nodes && Array.isArray(nodeGroup.nodes) && nodeGroup.nodes.length > 20
+  ) || (Array.isArray(jsonData?.node) && jsonData.node.length > 20);
   
   // Store jsonData for copy/base64 functions
   window._currentJsonOutput = jsonData;
@@ -2422,7 +2422,7 @@ function outputAlert(jsonData, type) {
     useToJSON: true,
     quotesOnKeys: false,
     quotesOnValues: false,
-    open: isLargeData || hasLargeVmList ? 1 : 2  // More conservative opening for large data
+    open: isLargeData || hasLargeNodeList ? 1 : 2  // More conservative opening for large data
   };
   
   // Toolbar HTML with Copy, Base64 toggle, and Save buttons
@@ -2509,7 +2509,7 @@ function outputAlert(jsonData, type) {
         const container = document.getElementById("json-output");
         if (container) {
           // Show loading message for large data
-          if (isLargeData || hasLargeVmList) {
+          if (isLargeData || hasLargeNodeList) {
             container.innerHTML = '<div style="color: #888; padding: 10px;">Loading large dataset... Please wait.</div>';
             
             // Delay rendering for large data to improve UX
@@ -3072,9 +3072,9 @@ function displayJsonData(jsonData, type) {
   outputAlert(jsonData, type);
 }
 
-// Handle MCI without VMs (preparing, prepared, empty states)
-function handleMciWithoutVms(mciItem) {
-  // Get current map extent to position MCIs in upper-left area
+// Handle Infra without Nodes (preparing, prepared, empty states)
+function handleInfraWithoutNodes(infraItem) {
+  // Get current map extent to position Infras in upper-left area
   var mapView = map.getView();
   var mapExtent = mapView.calculateExtent(map.getSize());
   
@@ -3083,13 +3083,13 @@ function handleMciWithoutVms(mciItem) {
   var bottomBound = mapExtent[1];
   var topBound = mapExtent[3];
   
-  var defaultLon = leftBound + (rightBound - leftBound) * LOCATIONLESS_MCI_LEFT_OFFSET;
-  var defaultLat = topBound - (topBound - bottomBound) * LOCATIONLESS_MCI_TOP_OFFSET;
+  var defaultLon = leftBound + (rightBound - leftBound) * LOCATIONLESS_Infra_LEFT_OFFSET;
+  var defaultLat = topBound - (topBound - bottomBound) * LOCATIONLESS_Infra_TOP_OFFSET;
 
-  // If MCI has label with location info, try to extract it (optional override)
-  if (mciItem.label && typeof mciItem.label === 'object') {
-    if (mciItem.label.location) {
-      var locParts = mciItem.label.location.split(',');
+  // If Infra has label with location info, try to extract it (optional override)
+  if (infraItem.label && typeof infraItem.label === 'object') {
+    if (infraItem.label.location) {
+      var locParts = infraItem.label.location.split(',');
       if (locParts.length === 2) {
         var labelLat = parseFloat(locParts[0].trim());
         var labelLon = parseFloat(locParts[1].trim());
@@ -3101,37 +3101,37 @@ function handleMciWithoutVms(mciItem) {
     }
   }
   
-  // Count existing locationless MCIs for vertical stacking
-  var verticalSpacing = (topBound - bottomBound) * LOCATIONLESS_MCI_VERTICAL_SPACING;
-  var preparingMciCount = 0;
-  for (const [, data] of mciRenderMap) {
+  // Count existing locationless Infras for vertical stacking
+  var verticalSpacing = (topBound - bottomBound) * LOCATIONLESS_Infra_VERTICAL_SPACING;
+  var preparingInfraCount = 0;
+  for (const [, data] of infraRenderMap) {
     if (data.isLocationless) {
-      preparingMciCount++;
+      preparingInfraCount++;
     }
   }
-  defaultLat -= verticalSpacing * preparingMciCount;
+  defaultLat -= verticalSpacing * preparingInfraCount;
   
-  var newName = mciItem.name;
+  var newName = infraItem.name;
   if (newName.includes("-nlb")) {
     newName = "NLB";
   }
   
-  // Create MCI render entry and store in map
-  var mciEntry = {
-    id: mciItem.id,
+  // Create Infra render entry and store in map
+  var infraEntry = {
+    id: infraItem.id,
     name: newName,
-    status: mciItem.status,
-    targetAction: (mciItem.targetAction && mciItem.targetAction !== "None" && mciItem.targetAction !== "") 
-      ? mciItem.targetAction : null,
+    status: infraItem.status,
+    targetAction: (infraItem.targetAction && infraItem.targetAction !== "None" && infraItem.targetAction !== "") 
+      ? infraItem.targetAction : null,
     geometry: new Point([defaultLon, defaultLat]),
     geometryPoints: null,
     geo: new Point([defaultLon, defaultLat]),
     isLocationless: true
   };
-  mciRenderMap.set(mciItem.id, mciEntry);
+  infraRenderMap.set(infraItem.id, infraEntry);
 }
 
-function getMci() {
+function getInfra() {
   var hostname = configHostname;
   var port = configPort;
   var username = configUsername;
@@ -3142,7 +3142,7 @@ function getMci() {
   var filteredRefreshInterval = isNormalInteger(refreshInterval.toString())
     ? refreshInterval
     : 5;
-  setTimeout(() => getMci(), filteredRefreshInterval * 1000);
+  setTimeout(() => getInfra(), filteredRefreshInterval * 1000);
 
   // Show refresh indicator
   showMapRefreshIndicator(true);
@@ -3151,8 +3151,8 @@ function getMci() {
   var radius = 4.0;
 
   if (namespace && namespace != "") {
-    // get mci list and put them on the map - full details including connectionConfig
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci`;
+    // get infra list and put them on the map - full details including connectionConfig
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra`;
 
     axios({
       method: "get",
@@ -3167,26 +3167,26 @@ function getMci() {
         var obj = res.data;
 
         // Update central data store for Dashboard
-        if (obj.mci) {
-          window.cloudBaristaCentralData.mciData = obj.mci;
+        if (obj.infra) {
+          window.cloudBaristaCentralData.infraData = obj.infra;
           
-          // Extract VM data from MCI data
-          const allVms = [];
-          obj.mci.forEach(mci => {
-            if (mci.vm && Array.isArray(mci.vm)) {
-              mci.vm.forEach(vm => {
-                allVms.push({
-                  ...vm,
-                  mciId: mci.id,
-                  mciName: mci.name
+          // Extract Node data from Infra data
+          const allNodes = [];
+          obj.infra.forEach(infra => {
+            if (infra.node && Array.isArray(infra.node)) {
+              infra.node.forEach(nd => {
+                allNodes.push({
+                  ...nd,
+                  infraId: infra.id,
+                  infraName: infra.name
                 });
               });
             }
           });
-          window.cloudBaristaCentralData.vmData = allVms;
+          window.cloudBaristaCentralData.nodeData = allNodes;
           
-          // Load VPN data from the MCIs we just fetched (reusing MCI data)
-          loadVpnDataFromMcis();
+          // Load VPN data from the Infras we just fetched (reusing Infra data)
+          loadVpnDataFromInfras();
           
           // Notify Dashboard subscribers
           notifyDataSubscribers();
@@ -3201,40 +3201,40 @@ function getMci() {
         // Also load K8s cluster data for dashboard
         loadK8sClusterData();
 
-        // Rebuild mciRenderMap from fresh API data
-        mciRenderMap.clear();
+        // Rebuild infraRenderMap from fresh API data
+        infraRenderMap.clear();
         
-        // Track how many MCIs share each base location, so overlapping MCIs get offset
-        // Key: "roundedLon,roundedLat" → counter (incremented per MCI at that location)
-        const locationMciCounter = new globalThis.Map();
-        // For each MCI, store its assigned index per location
-        // Key: "mciId:locationKey" → mciIndexAtLocation
-        const mciLocationIndex = new globalThis.Map();
+        // Track how many Infras share each base location, so overlapping Infras get offset
+        // Key: "roundedLon,roundedLat" → counter (incremented per Infra at that location)
+        const locationInfraCounter = new globalThis.Map();
+        // For each Infra, store its assigned index per location
+        // Key: "infraId:locationKey" → infraIndexAtLocation
+        const infraLocationIndex = new globalThis.Map();
 
-        if (obj.mci != null && obj.mci.length > 0) {
-          debugLog.api(`Processing ${obj.mci.length} MCIs for map display`);
+        if (obj.infra != null && obj.infra.length > 0) {
+          debugLog.api(`Processing ${obj.infra.length} Infras for map display`);
 
-          // First pass: assign MCI index per shared location
-          for (let item of obj.mci) {
-            if (item.vm == null || item.vm.length === 0) continue;
+          // First pass: assign Infra index per shared location
+          for (let item of obj.infra) {
+            if (item.node == null || item.node.length === 0) continue;
             const seenLocations = new Set();
-            for (const vm of item.vm) {
-              if (!vm.location || vm.location.longitude === undefined || vm.location.latitude === undefined) continue;
+            for (const nd of item.node) {
+              if (!nd.location || nd.location.longitude === undefined || nd.location.latitude === undefined) continue;
               // Round to ~0.5 degree to group nearby regions
-              const locKey = Math.round(vm.location.longitude * 2) / 2 + ',' + Math.round(vm.location.latitude * 2) / 2;
+              const locKey = Math.round(nd.location.longitude * 2) / 2 + ',' + Math.round(nd.location.latitude * 2) / 2;
               if (!seenLocations.has(locKey)) {
                 seenLocations.add(locKey);
-                const idx = locationMciCounter.get(locKey) || 0;
-                mciLocationIndex.set(item.id + ':' + locKey, idx);
-                locationMciCounter.set(locKey, idx + 1);
+                const idx = locationInfraCounter.get(locKey) || 0;
+                infraLocationIndex.set(item.id + ':' + locKey, idx);
+                locationInfraCounter.set(locKey, idx + 1);
               }
             }
           }
 
-          for (let item of obj.mci) {
+          for (let item of obj.infra) {
 
             var hideFlag = false;
-            for (let hideName of mciHideList) {
+            for (let hideName of infraHideList) {
               if (item.id == hideName) {
                 hideFlag = true;
                 break;
@@ -3244,27 +3244,27 @@ function getMci() {
               continue;
             }
 
-            // Handle MCI without VMs (preparing, prepared, empty, failed states)
-            if (item.vm == null || item.vm.length === 0) {
+            // Handle Infra without Nodes (preparing, prepared, empty, failed states)
+            if (item.node == null || item.node.length === 0) {
               if (item.status === "Preparing" || item.status === "Prepared" || item.status === "Failed" || item.status.includes("Empty")) {
-                handleMciWithoutVms(item);
+                handleInfraWithoutNodes(item);
               }
               continue;
             }
 
             var vmGeo = [];
 
-            // Build intra-MCI location groups: VMs within same ~0.5° grid get spread out
-            // Key: "roundedLon,roundedLat" → array of VM indices in that cell
+            // Build intra-Infra location groups: VMs within same ~0.5° grid get spread out
+            // Key: "roundedLon,roundedLat" → array of Node indices in that cell
             const intraLocGroups = new globalThis.Map();
-            for (let vi = 0; vi < item.vm.length; vi++) {
-              const v = item.vm[vi];
+            for (let vi = 0; vi < item.node.length; vi++) {
+              const v = item.node[vi];
               if (!v.location || v.location.longitude === undefined || v.location.latitude === undefined) continue;
               const gKey = Math.round(v.location.longitude * 2) / 2 + ',' + Math.round(v.location.latitude * 2) / 2;
               if (!intraLocGroups.has(gKey)) intraLocGroups.set(gKey, []);
               intraLocGroups.get(gKey).push(vi);
             }
-            // Build per-VM lookup: vmIndex → { indexInGroup, groupSize }
+            // Build per-Node lookup: nodeIndex → { indexInGroup, groupSize }
             const vmGroupInfo = new globalThis.Map();
             for (const [, indices] of intraLocGroups) {
               for (let gi = 0; gi < indices.length; gi++) {
@@ -3273,22 +3273,22 @@ function getMci() {
             }
 
             var validateNum = 0;
-            for (j = 0; j < item.vm.length; j++) {
-              const vm = item.vm[j];
-              if (!vm.location || vm.location.longitude === undefined || vm.location.latitude === undefined) {
-                console.warn(`VM ${vm.id || j}: missing location data, skipping`);
+            for (j = 0; j < item.node.length; j++) {
+              const nd = item.node[j];
+              if (!nd.location || nd.location.longitude === undefined || nd.location.latitude === undefined) {
+                console.warn(`Node ${nd.id || j}: missing location data, skipping`);
                 continue;
               }
 
-              // Compute inter-MCI offset for this VM's location
-              const vmLocKey = Math.round(vm.location.longitude * 2) / 2 + ',' + Math.round(vm.location.latitude * 2) / 2;
-              const mciIdxAtLoc = mciLocationIndex.get(item.id + ':' + vmLocKey) || 0;
-              const totalMcisAtLoc = locationMciCounter.get(vmLocKey) || 1;
-              const mciOff = getMciLocationOffset(mciIdxAtLoc, totalMcisAtLoc);
-              const mciOffX = (mciOff.ox / zoomLevel) * radius;
-              const mciOffY = (mciOff.oy / zoomLevel) * radius;
+              // Compute inter-Infra offset for this Node's location
+              const nodeLocKey = Math.round(nd.location.longitude * 2) / 2 + ',' + Math.round(nd.location.latitude * 2) / 2;
+              const infraIdxAtLoc = infraLocationIndex.get(item.id + ':' + nodeLocKey) || 0;
+              const totalInfrasAtLoc = locationInfraCounter.get(nodeLocKey) || 1;
+              const infraOff = getInfraLocationOffset(infraIdxAtLoc, totalInfrasAtLoc);
+              const infraOffX = (infraOff.ox / zoomLevel) * radius;
+              const infraOffY = (infraOff.oy / zoomLevel) * radius;
 
-              // Compute intra-MCI offset: spread VMs sharing the same location group
+              // Compute intra-Infra offset: spread VMs sharing the same location group
               const gInfo = vmGroupInfo.get(j);
               let intraOffX = 0, intraOffY = 0;
               if (gInfo && gInfo.groupSize > 1 && gInfo.indexInGroup > 0) {
@@ -3298,17 +3298,17 @@ function getMci() {
               }
 
               vmGeo.push([
-                vm.location.longitude * 1 + mciOffX + intraOffX,
-                vm.location.latitude * 1 + mciOffY + intraOffY,
+                nd.location.longitude * 1 + infraOffX + intraOffX,
+                nd.location.latitude * 1 + infraOffY + intraOffY,
               ]);
               validateNum++;
             }
-            if (item.vm.length == 1 && item.vm[0].location && item.vm[0].location.longitude !== undefined && item.vm[0].location.latitude !== undefined) {
-              const singleVm = item.vm[0];
+            if (item.node.length == 1 && item.node[0].location && item.node[0].location.longitude !== undefined && item.node[0].location.latitude !== undefined) {
+              const singleVm = item.node[0];
               const sLocKey = Math.round(singleVm.location.longitude * 2) / 2 + ',' + Math.round(singleVm.location.latitude * 2) / 2;
-              const sIdx = mciLocationIndex.get(item.id + ':' + sLocKey) || 0;
-              const sTotal = locationMciCounter.get(sLocKey) || 1;
-              const sOff = getMciLocationOffset(sIdx, sTotal);
+              const sIdx = infraLocationIndex.get(item.id + ':' + sLocKey) || 0;
+              const sTotal = locationInfraCounter.get(sLocKey) || 1;
+              const sOff = getInfraLocationOffset(sIdx, sTotal);
               const sOffX = (sOff.ox / zoomLevel) * radius;
               const sOffY = (sOff.oy / zoomLevel) * radius;
               vmGeo.pop();
@@ -3325,25 +3325,25 @@ function getMci() {
                 singleVm.location.latitude * 1 + sOffY + Math.random() * 0.001,
               ]);
             }
-            if (validateNum == item.vm.length) {
-              var vmStatuses = [];
-              var vmProviders = [];
-              var vmCommandStatuses = [];
-              var vmPoints = [];
+            if (validateNum == item.node.length) {
+              var nodeStatuses = [];
+              var nodeProviders = [];
+              var nodeCommandStatuses = [];
+              var nodePoints = [];
               
-              for (let vmIndex = 0; vmIndex < item.vm.length; vmIndex++) {
-                const vm = item.vm[vmIndex];
+              for (let nodeIndex = 0; nodeIndex < item.node.length; nodeIndex++) {
+                const nd = item.node[nodeIndex];
                 
-                if (vmIndex === 0) {
-                  debugLog.vm(`VM ${vm.id || 'unknown'} structure:`, vm);
+                if (nodeIndex === 0) {
+                  debugLog.node(`Node ${nd.id || 'unknown'} structure:`, nd);
                 }
                 
-                vmStatuses.push(vm.status || "Undefined");
+                nodeStatuses.push(nd.status || "Undefined");
                 
                 let commandStatus = "None";
-                if (vm.commandStatus) {
-                  const queuedCmd = vm.commandStatus.find(cmd => cmd.status === "Queued");
-                  const handlingCmd = vm.commandStatus.find(cmd => cmd.status === "Handling");
+                if (nd.commandStatus) {
+                  const queuedCmd = nd.commandStatus.find(cmd => cmd.status === "Queued");
+                  const handlingCmd = nd.commandStatus.find(cmd => cmd.status === "Handling");
                   
                   if (handlingCmd) {
                     commandStatus = "Handling";
@@ -3351,54 +3351,54 @@ function getMci() {
                     commandStatus = "Queued";
                   }
                 }
-                vmCommandStatuses.push(commandStatus);
+                nodeCommandStatuses.push(commandStatus);
                 
-                if (vmIndex === 0 && vm.commandStatus) {
-                  debugLog.vm(`VM ${vm.id || 'unknown'} commandStatus:`, vm.commandStatus);
-                  debugLog.vm(`VM ${vm.id} command status:`, commandStatus);
+                if (nodeIndex === 0 && nd.commandStatus) {
+                  debugLog.node(`Node ${nd.id || 'unknown'} commandStatus:`, nd.commandStatus);
+                  debugLog.node(`Node ${nd.id} command status:`, commandStatus);
                 }
                 
                 let provider = "unknown";
                 
-                if (vmIndex === 0) {
-                  debugLog.vm(`VM ${vm.id}: connectionName =`, vm.connectionName);
-                  debugLog.vm(`VM ${vm.id}: connectionConfig =`, vm.connectionConfig);
+                if (nodeIndex === 0) {
+                  debugLog.node(`Node ${nd.id}: connectionName =`, nd.connectionName);
+                  debugLog.node(`Node ${nd.id}: connectionConfig =`, nd.connectionConfig);
                 }
                 
-                if (vm.connectionConfig && vm.connectionConfig.providerName) {
-                  provider = vm.connectionConfig.providerName;
-                  if (vmIndex === 0) debugLog.vm(`VM ${vm.id}: found provider in connectionConfig = ${provider}`);
-                } else if (vm.connectionName) {
-                  provider = vm.connectionName.split('-')[0];
-                  if (vmIndex === 0) debugLog.vm(`VM ${vm.id}: extracted provider from connectionName = ${provider}`);
+                if (nd.connectionConfig && nd.connectionConfig.providerName) {
+                  provider = nd.connectionConfig.providerName;
+                  if (nodeIndex === 0) debugLog.node(`Node ${nd.id}: found provider in connectionConfig = ${provider}`);
+                } else if (nd.connectionName) {
+                  provider = nd.connectionName.split('-')[0];
+                  if (nodeIndex === 0) debugLog.node(`Node ${nd.id}: extracted provider from connectionName = ${provider}`);
                 } else {
-                  if (vmIndex === 0) {
-                    debugLog.vm(`VM ${vm.id}: no provider info found, using unknown`);
-                    debugLog.vm(`VM ${vm.id}: available properties:`, Object.keys(vm));
+                  if (nodeIndex === 0) {
+                    debugLog.node(`Node ${nd.id}: no provider info found, using unknown`);
+                    debugLog.node(`Node ${nd.id}: available properties:`, Object.keys(nd));
                   }
                 }
                 
-                vmProviders.push(provider);
+                nodeProviders.push(provider);
 
-                // Compute inter-MCI offset for this VM's location
-                const vmLocKey2 = Math.round(vm.location.longitude * 2) / 2 + ',' + Math.round(vm.location.latitude * 2) / 2;
-                const mciIdx2 = mciLocationIndex.get(item.id + ':' + vmLocKey2) || 0;
-                const totalMcis2 = locationMciCounter.get(vmLocKey2) || 1;
-                const mciOff2 = getMciLocationOffset(mciIdx2, totalMcis2);
-                const mciOffX2 = (mciOff2.ox / zoomLevel) * radius;
-                const mciOffY2 = (mciOff2.oy / zoomLevel) * radius;
+                // Compute inter-Infra offset for this Node's location
+                const nodeLocKey2 = Math.round(nd.location.longitude * 2) / 2 + ',' + Math.round(nd.location.latitude * 2) / 2;
+                const infraIdx2 = infraLocationIndex.get(item.id + ':' + nodeLocKey2) || 0;
+                const totalInfras2 = locationInfraCounter.get(nodeLocKey2) || 1;
+                const infraOff2 = getInfraLocationOffset(infraIdx2, totalInfras2);
+                const infraOffX2 = (infraOff2.ox / zoomLevel) * radius;
+                const infraOffY2 = (infraOff2.oy / zoomLevel) * radius;
                 
-                // Compute intra-MCI offset: spread VMs sharing the same location group
-                const gInfo2 = vmGroupInfo.get(vmIndex);
+                // Compute intra-Infra offset: spread VMs sharing the same location group
+                const gInfo2 = vmGroupInfo.get(nodeIndex);
                 let intraOffX2 = 0, intraOffY2 = 0;
                 if (gInfo2 && gInfo2.groupSize > 1 && gInfo2.indexInGroup > 0) {
                   const adj2 = returnAdjustmentPoint(gInfo2.indexInGroup, gInfo2.groupSize);
                   intraOffX2 = (adj2.ax / zoomLevel) * radius;
                   intraOffY2 = (adj2.ay / zoomLevel) * radius;
                 }
-                vmPoints.push([
-                  vm.location.longitude * 1 + mciOffX2 + intraOffX2,
-                  vm.location.latitude * 1 + mciOffY2 + intraOffY2,
+                nodePoints.push([
+                  nd.location.longitude * 1 + infraOffX2 + intraOffX2,
+                  nd.location.latitude * 1 + infraOffY2 + intraOffY2,
                 ]);
               }
 
@@ -3407,8 +3407,8 @@ function getMci() {
                 newName = "NLB";
               }
 
-              // Create MCI render entry
-              var mciEntry = {
+              // Create Infra render entry
+              var infraEntry = {
                 id: item.id,
                 name: newName,
                 status: item.status,
@@ -3420,22 +3420,22 @@ function getMci() {
                 isLocationless: false
               };
 
-              // Build VM dots and polygon geometry into the entry
-              makePolyDot(mciEntry, vmGeo, vmStatuses, vmProviders, vmCommandStatuses);
+              // Build Node dots and polygon geometry into the entry
+              makePolyDot(infraEntry, vmGeo, nodeStatuses, nodeProviders, nodeCommandStatuses);
               vmGeo = convexHull(vmGeo);
-              makePolyArray(mciEntry, vmGeo);
+              makePolyArray(infraEntry, vmGeo);
 
-              mciRenderMap.set(item.id, mciEntry);
+              infraRenderMap.set(item.id, infraEntry);
             }
           }
         } else {
-          // No MCI data — map is already cleared above
-          console.log("No MCI data found, clearing map objects");
+          // No Infra data — map is already cleared above
+          console.log("No Infra data found, clearing map objects");
           map.render();
         }
       })
       .catch(function (error) {
-        console.log("MCI API error:", error);
+        console.log("Infra API error:", error);
         // Don't update geometries on API error to preserve current state
         
         // Update map connection status to disconnected
@@ -3575,8 +3575,8 @@ function getMci() {
         // Don't update icons on API error to preserve current state
       });
 
-    // Load VPN data from all MCIs (reuses MCI data from central store)
-    loadVpnDataFromMcis();
+    // Load VPN data from all Infras (reuses Infra data from central store)
+    loadVpnDataFromInfras();
 
     // Get custom images
     var customImageUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/customImage`;
@@ -3981,9 +3981,9 @@ function checkConnectionWithRetry() {
         // Process the connection data (use existing logic)
         processConnectionData(connData);
 
-        // Load namespace list and MCI data now that server is ready
+        // Load namespace list and Infra data now that server is ready
         updateNsList();
-        getMci();
+        getInfra();
 
         // Close popup after showing success message
         setTimeout(() => {
@@ -4537,36 +4537,36 @@ function isNormalInteger(str) {
   return n !== Infinity && String(n) === str && n > 0;
 }
 
-var createMciReqTmplt = {
+var createInfraReqTmplt = {
   description: "Made via cb-mapui",
   installMonAgent: "no",
-  name: "mci",
-  subGroups: [],
+  name: "infra",
+  nodeGroups: [],
 };
 
-var createMciReqVmTmplt = {
+var createInfraReqVmTmplt = {
   imageId: "ubuntu22.04",
   specId: "",
   description: "mapui",
   rootDiskType: "default",
   rootDiskSize: 0,
-  subGroupSize: 1,
+  nodeGroupSize: 1,
   name: "",
 };
 
-// Final MCI Creation Confirmation with options
-function showFinalMciConfirmation(createMciReq, url, totalCost, totalNodeScale, costDetailsHtml, subGroupReqString, username, password) {
+// Final Infra Creation Confirmation with options
+function showFinalInfraConfirmation(createInfraReq, url, totalCost, totalNodeScale, costDetailsHtml, nodeGroupReqString, username, password) {
   Swal.fire({
-    title: "Are you sure you want to create this MCI?",
+    title: "Are you sure you want to create this Infra?",
     width: 750,
     html:
       "<font size=4>" +
-      "<br><b><span style='color: black; font-size: larger;'>" + createMciReq.name + " </b> (" + totalNodeScale + " node(s))" + "</span><br>" +
+      "<br><b><span style='color: black; font-size: larger;'>" + createInfraReq.name + " </b> (" + totalNodeScale + " node(s))" + "</span><br>" +
       "<hr>" +
       costDetailsHtml +
       "<hr>" +
-      subGroupReqString +
-      "<br><br><input type='checkbox' id='hold-checkbox'> Hold VM provisioning of the MCI" +
+      nodeGroupReqString +
+      "<br><br><input type='checkbox' id='hold-checkbox'> Hold Node provisioning of the Infra" +
       "<br><input type='checkbox' id='monitoring-checkbox'> Deploy a monitoring agent" +
       "<br><input type='checkbox' id='postcommand-checkbox'> Add post-deployment commands",
     showCancelButton: true,
@@ -4581,13 +4581,13 @@ function showFinalMciConfirmation(createMciReq, url, totalCost, totalNodeScale, 
     }
   }).then((result) => {
     if (result.isConfirmed) {
-      createMciReq.installMonAgent = "no";
+      createInfraReq.installMonAgent = "no";
       if (result.value.monitoring) {
-        Swal.fire("Create MCI with a monitoring agent");
-        createMciReq.installMonAgent = "yes";
+        Swal.fire("Create Infra with a monitoring agent");
+        createInfraReq.installMonAgent = "yes";
       }
       if (result.value.hold) {
-        Swal.fire("Create MCI with hold option. It will not be deployed immediately. Use Action:Continue when you are ready.");
+        Swal.fire("Create Infra with hold option. It will not be deployed immediately. Use Action:Continue when you are ready.");
         url += "?option=hold";
       }
 
@@ -4608,25 +4608,25 @@ function showFinalMciConfirmation(createMciReq, url, totalCost, totalNodeScale, 
           preConfirm: () => collectCommands(),
         }).then((cmdResult) => {
           if (cmdResult.isConfirmed && cmdResult.value && cmdResult.value.length > 0) {
-            createMciReq.postCommand = {
+            createInfraReq.postCommand = {
               command: cmdResult.value,
               userName: "cb-user"
             };
-            proceedWithMciCreation(createMciReq, url, username, password);
+            proceedWithInfraCreation(createInfraReq, url, username, password);
           }
           // User cancelled the postCommand dialog or no commands were entered
         });
       } else {
-        // No postCommand needed, proceed with MCI creation
-        proceedWithMciCreation(createMciReq, url, username, password);
+        // No postCommand needed, proceed with Infra creation
+        proceedWithInfraCreation(createInfraReq, url, username, password);
       }
     }
   });
 }
 
-// MCI Creation execution
+// Infra Creation execution
 // Function to build cloud-agnostic custom images
-function proceedWithBuildAgnosticImage(createMciReq, snapshotName, snapshotDescription, cleanupMciAfterSnapshot, username, password) {
+function proceedWithBuildAgnosticImage(createInfraReq, snapshotName, snapshotDescription, cleanupInfraAfterSnapshot, username, password) {
   const hostname = configHostname;
   const port = configPort;
   const namespace = configNamespace;
@@ -4634,17 +4634,17 @@ function proceedWithBuildAgnosticImage(createMciReq, snapshotName, snapshotDescr
   
   // Prepare buildAgnosticImage request body
   const buildImageReq = {
-    sourceMciReq: createMciReq,
+    sourceInfraReq: createInfraReq,
     snapshotReq: {
       name: snapshotName,
       description: snapshotDescription
     },
-    cleanupMciAfterSnapshot: cleanupMciAfterSnapshot
+    cleanupInfraAfterSnapshot: cleanupInfraAfterSnapshot
   };
   
   const jsonBody = JSON.stringify(buildImageReq, undefined, 4);
-  const spinnerId = addSpinnerTask("Building custom images from: " + createMciReq.name);
-  const requestId = generateRandomRequestId("build-image-" + createMciReq.name + "-", 10);
+  const spinnerId = addSpinnerTask("Building custom images from: " + createInfraReq.name);
+  const requestId = generateRandomRequestId("build-image-" + createInfraReq.name + "-", 10);
   addRequestIdToSelect(requestId);
 
   // Show progress notification
@@ -4655,11 +4655,11 @@ function proceedWithBuildAgnosticImage(createMciReq, snapshotName, snapshotDescr
         <p><strong>Starting workflow...</strong></p>
         <p style="color: #666; font-size: 0.9em;">
           ⏳ This process may take 10-20 minutes<br>
-          1️⃣ Creating MCI infrastructure<br>
+          1️⃣ Creating Infra infrastructure<br>
           2️⃣ Executing post-deployment commands<br>
           3️⃣ Creating custom snapshots<br>
           4️⃣ Waiting for images to become Available<br>
-          ${cleanupMciAfterSnapshot ? '5️⃣ Cleaning up infrastructure' : '5️⃣ Preserving infrastructure'}
+          ${cleanupInfraAfterSnapshot ? '5️⃣ Cleaning up infrastructure' : '5️⃣ Preserving infrastructure'}
         </p>
       </div>
     `,
@@ -4712,17 +4712,17 @@ function proceedWithBuildAgnosticImage(createMciReq, snapshotName, snapshotDescr
           <div style="text-align: left; padding: 15px;">
             <p><strong>Build Summary:</strong></p>
             <ul style="list-style: none; padding-left: 0;">
-              <li>📦 <strong>MCI:</strong> ${result.mciId || 'N/A'}</li>
+              <li>📦 <strong>Infra:</strong> ${result.infraId || 'N/A'}</li>
               <li>⏱️ <strong>Duration:</strong> ${result.totalDuration || 'N/A'}</li>
               <li>✅ <strong>Success:</strong> ${result.snapshotResult?.successCount || 0} images</li>
               <li>❌ <strong>Failed:</strong> ${result.snapshotResult?.failCount || 0} images</li>
-              <li>🗑️ <strong>MCI Cleaned:</strong> ${result.mciCleanedUp ? 'Yes' : 'No'}</li>
+              <li>🗑️ <strong>Infra Cleaned:</strong> ${result.infraCleanedUp ? 'Yes' : 'No'}</li>
             </ul>
             ${result.snapshotResult?.results ? `
               <p><strong>Created Images:</strong></p>
               <ul style="max-height: 200px; overflow-y: auto;">
                 ${result.snapshotResult.results.map(img => 
-                  `<li><strong>${img.imageId}</strong> (${img.subGroupId}) - ${img.status}</li>`
+                  `<li><strong>${img.imageId}</strong> (${img.nodeGroupId}) - ${img.status}</li>`
                 ).join('')}
               </ul>
             ` : ''}
@@ -4743,11 +4743,11 @@ function proceedWithBuildAgnosticImage(createMciReq, snapshotName, snapshotDescr
 
       displayJsonData(res.data, typeInfo);
       handleAxiosResponse(res);
-      updateMciList();
+      updateInfraList();
       // Keep configuration for reuse - user can manually clear if needed
     })
     .catch(function (error) {
-      errorAlert("Failed to build agnostic images from: " + createMciReq.name);
+      errorAlert("Failed to build agnostic images from: " + createInfraReq.name);
       
       let errorDetail = "Unknown error occurred";
       if (error.response) {
@@ -4782,12 +4782,12 @@ function proceedWithBuildAgnosticImage(createMciReq, snapshotName, snapshotDescr
     });
 }
 
-function proceedWithMciCreation(createMciReq, url, username, password) {
-  var jsonBody = JSON.stringify(createMciReq, undefined, 4);
-  // MCI creation now tracked by spinner instead of console log
-  var spinnerId = addSpinnerTask("Creating MCI: " + createMciReq.name);
+function proceedWithInfraCreation(createInfraReq, url, username, password) {
+  var jsonBody = JSON.stringify(createInfraReq, undefined, 4);
+  // Infra creation now tracked by spinner instead of console log
+  var spinnerId = addSpinnerTask("Creating Infra: " + createInfraReq.name);
 
-  var requestId = generateRandomRequestId("mci-" + createMciReq.name + "-", 10);
+  var requestId = generateRandomRequestId("infra-" + createInfraReq.name + "-", 10);
   addRequestIdToSelect(requestId);
 
   axios({
@@ -4804,7 +4804,7 @@ function proceedWithMciCreation(createMciReq, url, username, password) {
       // Debug: uncomment if detailed response debugging needed
       // console.log(res); // for debug
 
-      // Activate control-tab after successful MCI creation
+      // Activate control-tab after successful Infra creation
       try {
         // Remove active class from all tabs
         document.querySelectorAll('.nav-link').forEach(tab => {
@@ -4834,13 +4834,13 @@ function proceedWithMciCreation(createMciReq, url, username, password) {
       displayJsonData(res.data, typeInfo);
       handleAxiosResponse(res);
 
-      updateMciList();
+      updateInfraList();
 
       // Keep configuration for reuse - user can manually clear if needed
-      console.log("Created " + createMciReq.name);
+      console.log("Created " + createInfraReq.name);
     })
     .catch(function (error) {
-      errorAlert("Failed to create MCI: " + createMciReq.name);
+      errorAlert("Failed to create Infra: " + createInfraReq.name);
       if (error.response) {
         // status code is not 2xx
         console.log(error.response.data);
@@ -4869,7 +4869,7 @@ function generateCustomImageSettingsHtml() {
                placeholder="custom-image" value="custom-image">
       </label>
       <div style="font-size: 0.8em; color: #666; margin-top: 3px;">
-        The final image name will be: prefix-subgroupname (e.g., custom-image-g1)
+        The final image name will be: prefix-nodegroupname (e.g., custom-image-g1)
       </div>
     </div>
 
@@ -4883,24 +4883,24 @@ function generateCustomImageSettingsHtml() {
 
     <div style="margin-bottom: 15px;">
       <label style="display: flex; align-items: center; cursor: pointer;">
-        <input type="checkbox" id="cleanupMciCheckbox" checked style="margin-right: 8px; transform: scale(1.2);">
-        <span style="color: #333; font-weight: 500;">🗑️ Cleanup MCI after image creation</span>
+        <input type="checkbox" id="cleanupInfraCheckbox" checked style="margin-right: 8px; transform: scale(1.2);">
+        <span style="color: #333; font-weight: 500;">🗑️ Cleanup Infra after image creation</span>
       </label>
       <div style="font-size: 0.8em; color: #666; margin-top: 3px; margin-left: 28px;">
-        Automatically terminate and delete MCI after custom images are created and available
+        Automatically terminate and delete Infra after custom images are created and available
       </div>
     </div>`;
 }
 
 // Show post-deployment command dialog
-function showPostCommandDialog(createMciReq, mciCreationUrl, username, password, buildAgnosticImage = false) {
+function showPostCommandDialog(createInfraReq, infraCreationUrl, username, password, buildAgnosticImage = false) {
   const workflowInfoHtml = buildAgnosticImage ? `
     <div style="background-color: #e3f2fd; padding: 12px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #2196f3;">
       <p style="margin: 0; font-size: 0.9em; color: #1565c0;">
         <strong>🔧 Image Building Workflow:</strong><br>
-        1️⃣ Create MCI infrastructure<br>
+        1️⃣ Create Infra infrastructure<br>
         2️⃣ Execute post-deployment commands (setup software)<br>
-        3️⃣ Create custom snapshots from VMs<br>
+        3️⃣ Create custom snapshots from Nodes<br>
         4️⃣ Wait for images to become Available<br>
         5️⃣ Cleanup infrastructure (optional)
       </p>
@@ -4920,7 +4920,7 @@ function showPostCommandDialog(createMciReq, mciCreationUrl, username, password,
         ${buildAgnosticImage ? generateCustomImageSettingsHtml() : ''}
       </div>`,
     showCancelButton: true,
-    confirmButtonText: buildAgnosticImage ? "🚀 Build Custom Images" : "Add & Create MCI",
+    confirmButtonText: buildAgnosticImage ? "🚀 Build Custom Images" : "Add & Create Infra",
     didOpen: () => setupCommandsPopup(10),
     preConfirm: () => {
       const commands = collectCommands();
@@ -4931,7 +4931,7 @@ function showPostCommandDialog(createMciReq, mciCreationUrl, username, password,
       if (buildAgnosticImage) {
         result.snapshotName = document.getElementById('snapshotName')?.value?.trim() || 'custom-image';
         result.snapshotDescription = document.getElementById('snapshotDescription')?.value?.trim() || 'Custom image created with BuildAgnosticImage workflow';
-        result.cleanupMciAfterSnapshot = document.getElementById('cleanupMciCheckbox')?.checked !== false;
+        result.cleanupInfraAfterSnapshot = document.getElementById('cleanupInfraCheckbox')?.checked !== false;
       }
 
       return result;
@@ -4939,50 +4939,50 @@ function showPostCommandDialog(createMciReq, mciCreationUrl, username, password,
   }).then((commandResult) => {
     if (commandResult.isConfirmed) {
       if (commandResult.value.commands && commandResult.value.commands.length > 0) {
-        createMciReq.postCommand = {
+        createInfraReq.postCommand = {
           command: commandResult.value.commands,
           userName: "cb-user"
         };
         if (commandResult.value.labelSelector) {
-          createMciReq.postCommand.labelSelector = commandResult.value.labelSelector;
+          createInfraReq.postCommand.labelSelector = commandResult.value.labelSelector;
         }
       }
 
       // Handle buildAgnosticImage workflow
       if (buildAgnosticImage) {
         proceedWithBuildAgnosticImage(
-          createMciReq,
+          createInfraReq,
           commandResult.value.snapshotName,
           commandResult.value.snapshotDescription,
-          commandResult.value.cleanupMciAfterSnapshot,
+          commandResult.value.cleanupInfraAfterSnapshot,
           username,
           password
         );
       } else {
-        proceedWithMciCreation(createMciReq, mciCreationUrl, username, password);
+        proceedWithInfraCreation(createInfraReq, infraCreationUrl, username, password);
       }
     }
   });
 }
 
-// MCI Review function - checks configuration before creation
-function reviewMciConfiguration(createMciReq, hostname, port, username, password, namespace, finalUrl, totalCost, totalNodeScale, costDetailsHtml, subGroupReqString) {
-  var reviewUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mciDynamicReview`;
+// Infra Review function - checks configuration before creation
+function reviewInfraConfiguration(createInfraReq, hostname, port, username, password, namespace, finalUrl, totalCost, totalNodeScale, costDetailsHtml, nodeGroupReqString) {
+  var reviewUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infraDynamicReview`;
   
   // Show loading spinner for review
   Swal.fire({
     title: "Reviewing Configuration...",
-    html: "Please wait while we validate your MCI configuration",
+    html: "Please wait while we validate your Infra configuration",
     allowOutsideClick: false,
     didOpen: () => {
       Swal.showLoading();
     }
   });
 
-  var jsonBody = JSON.stringify(createMciReq, undefined, 4);
-  var requestId = generateRandomRequestId("review-" + createMciReq.name + "-", 10);
+  var jsonBody = JSON.stringify(createInfraReq, undefined, 4);
+  var requestId = generateRandomRequestId("review-" + createInfraReq.name + "-", 10);
 
-  // Call MCI Dynamic Review API
+  // Call Infra Dynamic Review API
   axios({
     method: "post",
     url: reviewUrl,
@@ -5006,7 +5006,7 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
     var warnings = [];
     var errors = [];
     var infos = [];
-    var vmDetailsList = [];
+    var nodeDetailsList = [];
     var resourceSummary = {
       totalEstimatedTime: "N/A",
       totalResources: 0,
@@ -5017,15 +5017,15 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
     
     // Parse enhanced review response to extract comprehensive validation information
     if (reviewData) {
-      // Extract MCI-level information (prioritize backend-calculated values)
-      if (reviewData.mciName) infos.push(`MCI Name: ${reviewData.mciName}`);
-      // Use backend-calculated totalVmCount if available, fallback to frontend calculation
-      if (reviewData.totalVmCount) {
-        infos.push(`SubGroups: ${reviewData.totalVmCount}`);
+      // Extract Infra-level information (prioritize backend-calculated values)
+      if (reviewData.infraName) infos.push(`Infra Name: ${reviewData.infraName}`);
+      // Use backend-calculated totalNodeCount if available, fallback to frontend calculation
+      if (reviewData.totalNodeCount) {
+        infos.push(`NodeGroups: ${reviewData.totalNodeCount}`);
         // Update totalNodeScale with backend value if available
-        totalNodeScale = reviewData.totalVmCount;
+        totalNodeScale = reviewData.totalNodeCount;
       } else {
-        infos.push(`SubGroups: ${totalNodeScale} (frontend calculated)`);
+        infos.push(`NodeGroups: ${totalNodeScale} (frontend calculated)`);
       }
       // Use backend-calculated estimatedCost if available
       if (reviewData.estimatedCost) {
@@ -5039,10 +5039,10 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
       if (reviewData.overallStatus) {
         infos.push(`Overall Status: ${reviewData.overallStatus}`);
         if (reviewData.overallStatus.toLowerCase().includes("error")) {
-          errors.push(`MCI Status Error: ${reviewData.overallMessage || reviewData.overallStatus}`);
+          errors.push(`Infra Status Error: ${reviewData.overallMessage || reviewData.overallStatus}`);
           validationStatus = "error";
         } else if (reviewData.overallStatus.toLowerCase().includes("warning")) {
-          warnings.push(`MCI Status Warning: ${reviewData.overallMessage || reviewData.overallStatus}`);
+          warnings.push(`Infra Status Warning: ${reviewData.overallMessage || reviewData.overallStatus}`);
         }
       }
       
@@ -5083,51 +5083,51 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
         }
       }
       
-      // Parse VM review results in detail and group by SubGroup
-      if (reviewData.vmReviews && Array.isArray(reviewData.vmReviews)) {
-        resourceSummary.totalResources = reviewData.vmReviews.length;
+      // Parse Node review results in detail and group by NodeGroup
+      if (reviewData.nodeReviews && Array.isArray(reviewData.nodeReviews)) {
+        resourceSummary.totalResources = reviewData.nodeReviews.length;
         
-        // Group VMs by SubGroup name for better organization
-        var subGroupVMs = {};
+        // Group Nodes by NodeGroup name for better organization
+        var nodeGroupVMs = {};
         
-        reviewData.vmReviews.forEach((vmReview, index) => {
-          var vmDetails = {
+        reviewData.nodeReviews.forEach((nodeReview, index) => {
+          var nodeDetails = {
             index: index + 1,
-            name: vmReview.vmName || `VM-${index + 1}`,
-            subGroupName: vmReview.subGroupName || vmReview.vmName || `VM-${index + 1}`,
-            subGroupSize: vmReview.subGroupSize || 1,
-            status: vmReview.status || "Unknown",
-            message: vmReview.message || "",
-            canCreate: vmReview.canCreate || false,
-            estimatedCost: vmReview.estimatedCost || "Unknown",
+            name: nodeReview.nodeName || `Node-${index + 1}`,
+            nodeGroupName: nodeReview.nodeGroupName || nodeReview.nodeName || `Node-${index + 1}`,
+            nodeGroupSize: nodeReview.nodeGroupSize || 1,
+            status: nodeReview.status || "Unknown",
+            message: nodeReview.message || "",
+            canCreate: nodeReview.canCreate || false,
+            estimatedCost: nodeReview.estimatedCost || "Unknown",
             issues: [],
             info: [],
             validations: {}
           };
           
-          // VM basic information with enhanced SubGroup details
-          if (vmReview.subGroupSize) {
-            var actualVMs = parseInt(vmReview.subGroupSize) || 1;
-            vmDetails.info.push(`SubGroup Size: ${vmReview.subGroupSize} VM${actualVMs > 1 ? 's' : ''}`);
-            if (actualVMs > 1) {
-              vmDetails.info.push(`Total VMs in SubGroup: ${actualVMs} instances`);
+          // Node basic information with enhanced NodeGroup details
+          if (nodeReview.nodeGroupSize) {
+            var actualNodes = parseInt(nodeReview.nodeGroupSize) || 1;
+            nodeDetails.info.push(`NodeGroup Size: ${nodeReview.nodeGroupSize} Node${actualNodes > 1 ? 's' : ''}`);
+            if (actualNodes > 1) {
+              nodeDetails.info.push(`Total Nodes in NodeGroup: ${actualNodes} instances`);
             }
           }
-          if (vmReview.connectionName) vmDetails.info.push(`Connection: ${vmReview.connectionName}`);
-          if (vmReview.providerName) vmDetails.info.push(`Provider: ${vmReview.providerName}`);
-          if (vmReview.regionName) vmDetails.info.push(`Region: ${vmReview.regionName}`);
+          if (nodeReview.connectionName) nodeDetails.info.push(`Connection: ${nodeReview.connectionName}`);
+          if (nodeReview.providerName) nodeDetails.info.push(`Provider: ${nodeReview.providerName}`);
+          if (nodeReview.regionName) nodeDetails.info.push(`Region: ${nodeReview.regionName}`);
           
-          // Group VMs by SubGroup name
-          var groupKey = vmDetails.subGroupName;
-          if (!subGroupVMs[groupKey]) {
-            subGroupVMs[groupKey] = [];
+          // Group Nodes by NodeGroup name
+          var groupKey = nodeDetails.nodeGroupName;
+          if (!nodeGroupVMs[groupKey]) {
+            nodeGroupVMs[groupKey] = [];
           }
-          subGroupVMs[groupKey].push(vmDetails);
+          nodeGroupVMs[groupKey].push(nodeDetails);
           
           // Spec validation details
-          if (vmReview.specValidation) {
-            var sv = vmReview.specValidation;
-            vmDetails.validations.spec = {
+          if (nodeReview.specValidation) {
+            var sv = nodeReview.specValidation;
+            nodeDetails.validations.spec = {
               resourceId: sv.resourceId,
               resourceName: sv.resourceName,
               isAvailable: sv.isAvailable,
@@ -5137,14 +5137,14 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             };
             
             if (!sv.isAvailable) {
-              vmDetails.issues.push(`Spec Issue: ${sv.message || 'Spec not available'}`);
+              nodeDetails.issues.push(`Spec Issue: ${sv.message || 'Spec not available'}`);
             }
           }
           
           // Image validation details
-          if (vmReview.imageValidation) {
-            var iv = vmReview.imageValidation;
-            vmDetails.validations.image = {
+          if (nodeReview.imageValidation) {
+            var iv = nodeReview.imageValidation;
+            nodeDetails.validations.image = {
               resourceId: iv.resourceId,
               resourceName: iv.resourceName,
               isAvailable: iv.isAvailable,
@@ -5154,54 +5154,54 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             };
             
             if (!iv.isAvailable) {
-              vmDetails.issues.push(`Image Issue: ${iv.message || 'Image not available'}`);
+              nodeDetails.issues.push(`Image Issue: ${iv.message || 'Image not available'}`);
             }
           }
           
-          // VM-level errors, warnings, and info
-          if (vmReview.errors && Array.isArray(vmReview.errors)) {
-            vmReview.errors.forEach(error => {
-              vmDetails.issues.push(`Error: ${error}`);
-              errors.push(`VM ${index + 1} (${vmDetails.name}): ${error}`);
+          // Node-level errors, warnings, and info
+          if (nodeReview.errors && Array.isArray(nodeReview.errors)) {
+            nodeReview.errors.forEach(error => {
+              nodeDetails.issues.push(`Error: ${error}`);
+              errors.push(`Node ${index + 1} (${nodeDetails.name}): ${error}`);
               validationStatus = "error";
             });
           }
           
-          if (vmReview.warnings && Array.isArray(vmReview.warnings)) {
-            vmReview.warnings.forEach(warning => {
-              vmDetails.issues.push(`Warning: ${warning}`);
-              warnings.push(`VM ${index + 1} (${vmDetails.name}): ${warning}`);
+          if (nodeReview.warnings && Array.isArray(nodeReview.warnings)) {
+            nodeReview.warnings.forEach(warning => {
+              nodeDetails.issues.push(`Warning: ${warning}`);
+              warnings.push(`Node ${index + 1} (${nodeDetails.name}): ${warning}`);
             });
           }
           
-          if (vmReview.info && Array.isArray(vmReview.info)) {
-            vmReview.info.forEach(info => {
-              vmDetails.info.push(info);
+          if (nodeReview.info && Array.isArray(nodeReview.info)) {
+            nodeReview.info.forEach(info => {
+              nodeDetails.info.push(info);
             });
           }
           
-          // Don't add individual VMs to vmDetailsList anymore, we'll use subGroupVMs
+          // Don't add individual VMs to nodeDetailsList anymore, we'll use nodeGroupVMs
         });
         
-        // Convert subGroupVMs to organized vmDetailsList
-        Object.keys(subGroupVMs).forEach(groupName => {
-          var groupVMs = subGroupVMs[groupName];
-          // Add SubGroup as a single entry with consolidated information
+        // Convert nodeGroupVMs to organized nodeDetailsList
+        Object.keys(nodeGroupVMs).forEach(groupName => {
+          var groupVMs = nodeGroupVMs[groupName];
+          // Add NodeGroup as a single entry with consolidated information
           if (groupVMs.length > 0) {
             var representativeVM = groupVMs[0];
-            var subGroupSize = parseInt(representativeVM.subGroupSize) || 1;
+            var nodeGroupSize = parseInt(representativeVM.nodeGroupSize) || 1;
             
-            // Find corresponding VM configuration from createMciReq for additional spec details
-            var vmConfig = null;
-            if (createMciReq && createMciReq.subGroups) {
-              vmConfig = createMciReq.subGroups.find(vm => vm.name === groupName);
+            // Find corresponding Node configuration from createInfraReq for additional spec details
+            var nodeConfig = null;
+            if (createInfraReq && createInfraReq.nodeGroups) {
+              nodeConfig = createInfraReq.nodeGroups.find(nd => nd.name === groupName);
             }
             
             var groupDetails = {
               index: representativeVM.index,
               name: groupName,
-              isSubGroup: true,
-              subGroupSize: subGroupSize,
+              isNodeGroup: true,
+              nodeGroupSize: nodeGroupSize,
               status: representativeVM.status,
               message: representativeVM.message,
               canCreate: representativeVM.canCreate,
@@ -5210,21 +5210,21 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
               info: representativeVM.info,
               validations: representativeVM.validations,
               vmInstances: groupVMs.length,
-              // Add VM configuration details
-              vmConfig: vmConfig
+              // Add Node configuration details
+              nodeConfig: nodeConfig
             };
             
-            // Calculate total cost for SubGroup if cost per VM is available
+            // Calculate total cost for NodeGroup if cost per Node is available
             if (representativeVM.estimatedCost && representativeVM.estimatedCost !== 'Unknown') {
               var costMatch = String(representativeVM.estimatedCost).match(/\$?([\d.]+)/);
               if (costMatch) {
                 var costPerVM = parseFloat(costMatch[1]);
-                var totalSubGroupCost = (costPerVM * subGroupSize).toFixed(4);
-                groupDetails.estimatedCost = `$${totalSubGroupCost}/hour (${subGroupSize} × $${costPerVM})`;
+                var totalNodeGroupCost = (costPerVM * nodeGroupSize).toFixed(4);
+                groupDetails.estimatedCost = `$${totalNodeGroupCost}/hour (${nodeGroupSize} × $${costPerVM})`;
               }
             }
             
-            vmDetailsList.push(groupDetails);
+            nodeDetailsList.push(groupDetails);
           }
         });
       }
@@ -5253,7 +5253,7 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
       validationSummaryHtml = `
         <div style="margin: 15px 0; padding: 12px; background-color: #f0f8f0; border: 1px solid #28a745; border-radius: 5px;">
           <h4 style="color: #28a745; margin: 0 0 8px 0; font-size: 1em;">✅ Configuration Valid</h4>
-          <p style="color: #666; margin: 0; font-size: 0.9em;">Your MCI configuration has been validated successfully. All resources can be provisioned as configured.</p>
+          <p style="color: #666; margin: 0; font-size: 0.9em;">Your Infra configuration has been validated successfully. All resources can be provisioned as configured.</p>
         </div>
       `;
     } else {
@@ -5281,7 +5281,7 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
     }
 
     // Build comprehensive information sections with structured layout
-    var mciInfoHtml = "";
+    var infraInfoHtml = "";
     if (infos.length > 0) {
       // Parse structured information from the review response
       var structuredInfo = {
@@ -5292,15 +5292,15 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
       };
       
       infos.forEach(info => {
-        if (info.includes('MCI Name:') || info.includes('Total VM Count:') || info.includes('Estimated Cost:')) {
+        if (info.includes('Infra Name:') || info.includes('Total Node Count:') || info.includes('Estimated Cost:')) {
           // Special handling for estimated cost
           if (info.includes('Estimated Cost:')) {
             const costValue = info.split(': ')[1];
             if (costValue && (costValue.includes('unavailable') || costValue.includes('Cost estimation'))) {
               // Parse cost unavailability messages
               if (costValue.includes('unavailable for all')) {
-                const vmCount = costValue.match(/\d+/);
-                structuredInfo.basic.push(`Estimated Cost: Not available (${vmCount ? vmCount[0] : 'all'} VMs)`);
+                const ndCount = costValue.match(/\d+/);
+                structuredInfo.basic.push(`Estimated Cost: Not available (${ndCount ? ndCount[0] : 'all'} Nodes)`);
               } else if (costValue.includes('unavailable')) {
                 structuredInfo.basic.push(`Estimated Cost: Not available`);
               } else {
@@ -5325,7 +5325,7 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
         }
       });
       
-      mciInfoHtml = `
+      infraInfoHtml = `
         <div style="margin: 15px 0; padding: 0; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 5px; overflow: hidden;">
           
           <div style="padding: 16px;">
@@ -5461,7 +5461,7 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
                     
                     // Sort basic info (excluding Message)
                     basicInfoWithoutMessage.sort((a, b) => {
-                      const order = ['MCI Name', 'Total VM Count', 'Estimated Cost'];
+                      const order = ['Infra Name', 'Total Node Count', 'Estimated Cost'];
                       const indexA = order.indexOf(a.label);
                       const indexB = order.indexOf(b.label);
                       
@@ -5550,7 +5550,7 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             <th style="border: 1px solid #ddd; padding: 8px; text-align: left; color: #333;">Count/Details</th>
           </tr>
           <tr>
-            <td style="border: 1px solid #ddd; padding: 8px; color: #666;">Total VMs</td>
+            <td style="border: 1px solid #ddd; padding: 8px; color: #666;">Total Nodes</td>
             <td style="border: 1px solid #ddd; padding: 8px; color: #333;"><strong>${resourceSummary.totalResources}</strong></td>
           </tr>
           ${Object.keys(resourceSummary.providerBreakdown).length > 0 ? `
@@ -5575,39 +5575,39 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
       </div>
     `;
 
-    // Build detailed VM information HTML with enhanced SubGroup validation details
-    var vmDetailsHtml = "";
-    if (vmDetailsList.length > 0) {
-      vmDetailsHtml = vmDetailsList.map(vm => {
-        var statusIcon = vm.canCreate ? '✅' : '❌';
-        var statusColor = vm.canCreate ? '#28a745' : '#dc3545';
+    // Build detailed Node information HTML with enhanced NodeGroup validation details
+    var nodeDetailsHtml = "";
+    if (nodeDetailsList.length > 0) {
+      nodeDetailsHtml = nodeDetailsList.map(nd => {
+        var statusIcon = nd.canCreate ? '✅' : '❌';
+        var statusColor = nd.canCreate ? '#28a745' : '#dc3545';
         var bgColor = '#f8f9fa';
         
-        // SubGroup-specific display
-        var subGroupIndicator = '';
-        var vmTitle = '';
-        if (vm.isSubGroup) {
-          subGroupIndicator = `
+        // NodeGroup-specific display
+        var nodeGroupIndicator = '';
+        var nodeTitle = '';
+        if (nd.isNodeGroup) {
+          nodeGroupIndicator = `
             <div style="display: inline-flex; align-items: center; margin-left: 10px; padding: 2px 8px; background: #f0f8ff; border: 1px solid #007bff; border-radius: 12px; font-size: 0.8em; color: #007bff;">
-             🖥️ X ${vm.subGroupSize}
+             🖥️ X ${nd.nodeGroupSize}
             </div>
           `;
-          vmTitle = `${vm.name}`;
+          nodeTitle = `${nd.name}`;
         } else {
-          vmTitle = `${vm.name} (VM #${vm.index})`;
+          nodeTitle = `${nd.name} (Node #${nd.index})`;
         }
         
         return `
         <div style="margin: 10px 0; padding: 12px; border: 1px solid #ddd; border-radius: 5px; background-color: ${bgColor};">
           <div style="display: flex; align-items: center; margin-bottom: 10px; flex-wrap: wrap;">
             <label style="display: flex; align-items: center; margin-right: 8px; cursor: pointer;">
-              <input type="checkbox" class="subgroup-checkbox" data-subgroup-name="${vm.name}" style="margin-right: 6px; transform: scale(1.1);" checked onchange="updateReviewButtonState()">
+              <input type="checkbox" class="nodegroup-checkbox" data-nodegroup-name="${nd.name}" style="margin-right: 6px; transform: scale(1.1);" checked onchange="updateReviewButtonState()">
             </label>
             <span style="font-size: 1em; margin-right: 8px;">${statusIcon}</span>
-            <h6 style="margin: 0; color: ${statusColor}; font-size: 1em;">${vmTitle}</h6>
-            ${subGroupIndicator}
-            ${vm.estimatedCost !== 'Unknown' && vm.estimatedCost !== 'Cost estimation unavailable' ? 
-              `<span style="margin-left: auto; padding: 3px 8px; background: #28a745; color: white; border-radius: 14px; font-size: 0.8em;">💰 ${vm.estimatedCost}</span>` : 
+            <h6 style="margin: 0; color: ${statusColor}; font-size: 1em;">${nodeTitle}</h6>
+            ${nodeGroupIndicator}
+            ${nd.estimatedCost !== 'Unknown' && nd.estimatedCost !== 'Cost estimation unavailable' ? 
+              `<span style="margin-left: auto; padding: 3px 8px; background: #28a745; color: white; border-radius: 14px; font-size: 0.8em;">💰 ${nd.estimatedCost}</span>` : 
               `<span style="margin-left: auto; padding: 3px 8px; background: #ffc107; color: white; border-radius: 14px; font-size: 0.8em;">⚠️ Cost N/A</span>`
             }
           </div>
@@ -5616,38 +5616,38 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             <div style="margin-bottom: 4px;">
               <strong style="font-size: 0.9em;">Status:</strong> 
               <span style="color: ${statusColor}; font-weight: bold; font-size: 0.9em;">
-                ${vm.status}
+                ${nd.status}
               </span>
             </div>
-            ${vm.message ? `<div style="margin-left: 0; color: #666; font-size: 0.8em; line-height: 1.4; word-wrap: break-word; white-space: normal;">(${vm.message})</div>` : ''}
+            ${nd.message ? `<div style="margin-left: 0; color: #666; font-size: 0.8em; line-height: 1.4; word-wrap: break-word; white-space: normal;">(${nd.message})</div>` : ''}
           </div>
           
-          ${vm.isSubGroup ? `
+          ${nd.isNodeGroup ? `
           <div style="margin: 8px 0; padding: 8px; background: #f0f8ff; border-radius: 4px; border-left: 3px solid #007bff;">
             
             ${(() => {
-              // Extract Provider and Region from VM info
+              // Extract Provider and Region from Node info
               var provider = '';
               var region = '';
-              if (vm.info && Array.isArray(vm.info)) {
-                vm.info.forEach(info => {
+              if (nd.info && Array.isArray(nd.info)) {
+                nd.info.forEach(info => {
                   if (info.includes('Provider:')) provider = info.split(': ')[1] || '';
                   if (info.includes('Region:')) region = info.split(': ')[1] || '';
                 });
               }
               
-              // Extract spec details from vmConfig if available
+              // Extract spec details from nodeConfig if available
               var specDetails = '';
-              if (vm.vmConfig) {
+              if (nd.nodeConfig) {
                 var specs = [];
                 
                 // Try to find detailed spec info from recommendedSpecList if available
                 var detailedSpec = null;
-                if (vm.vmConfig.specId && typeof recommendedSpecList !== 'undefined' && Array.isArray(recommendedSpecList)) {
+                if (nd.nodeConfig.specId && typeof recommendedSpecList !== 'undefined' && Array.isArray(recommendedSpecList)) {
                   detailedSpec = recommendedSpecList.find(spec => 
-                    spec.id === vm.vmConfig.specId || 
-                    spec.name === vm.vmConfig.specId ||
-                    vm.vmConfig.specId.includes(spec.id)
+                    spec.id === nd.nodeConfig.specId || 
+                    spec.name === nd.nodeConfig.specId ||
+                    nd.nodeConfig.specId.includes(spec.id)
                   );
                 }
                 
@@ -5666,35 +5666,35 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
                     }
                     specs.push(`⚡ <strong>Accelerator:</strong> ${acceleratorInfo}`);
                   }
-                } else if (vm.vmConfig.specId) {
+                } else if (nd.nodeConfig.specId) {
                   // Fallback: Try to extract vCPU and memory from spec name if available
-                  var specMatch = vm.vmConfig.specId.match(/([0-9]+)vcpu_([0-9.]+)gb/i);
+                  var specMatch = nd.nodeConfig.specId.match(/([0-9]+)vcpu_([0-9.]+)gb/i);
                   if (specMatch) {
                     specs.push(`💻 <strong>vCPU:</strong> ${specMatch[1]}`);
                     specs.push(`🧠 <strong>Memory:</strong> ${specMatch[2]} GB`);
                   } else {
                     // Show spec ID as fallback
-                    specs.push(`🖥️ <strong>Spec:</strong> ${vm.vmConfig.specId.split('+').pop() || vm.vmConfig.specId}`);
+                    specs.push(`🖥️ <strong>Spec:</strong> ${nd.nodeConfig.specId.split('+').pop() || nd.nodeConfig.specId}`);
                   }
                 }
                 
                 // Add RootDisk information if available
-                if (vm.vmConfig.rootDiskSize && vm.vmConfig.rootDiskSize > 0) {
-                  specs.push(`💽 <strong>Root Disk:</strong> ${vm.vmConfig.rootDiskSize} GB`);
+                if (nd.nodeConfig.rootDiskSize && nd.nodeConfig.rootDiskSize > 0) {
+                  specs.push(`💽 <strong>Root Disk:</strong> ${nd.nodeConfig.rootDiskSize} GB`);
                 } else {
                   // Show default if 0 or not specified
                   specs.push(`💽 <strong>Root Disk:</strong> Default`);
                 }
                 
                 // Add RootDisk type if available
-                if (vm.vmConfig.rootDiskType && vm.vmConfig.rootDiskType !== 'default') {
-                  specs.push(`📀 <strong>Disk Type:</strong> ${vm.vmConfig.rootDiskType}`);
+                if (nd.nodeConfig.rootDiskType && nd.nodeConfig.rootDiskType !== 'default') {
+                  specs.push(`📀 <strong>Disk Type:</strong> ${nd.nodeConfig.rootDiskType}`);
                 }
                 
                 // Check for accelerator/GPU information from spec name if not found in detailed spec
-                if (!detailedSpec && vm.vmConfig.specId && 
-                    (vm.vmConfig.specId.toLowerCase().includes('gpu') || 
-                     vm.vmConfig.specId.toLowerCase().includes('accelerator'))) {
+                if (!detailedSpec && nd.nodeConfig.specId && 
+                    (nd.nodeConfig.specId.toLowerCase().includes('gpu') || 
+                     nd.nodeConfig.specId.toLowerCase().includes('accelerator'))) {
                   specs.push(`⚡ <strong>Accelerator:</strong> GPU-enabled`);
                 }
                 
@@ -5726,47 +5726,47 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             })()}
           </div>` : ''}
           
-          ${vm.validations && (vm.validations.spec || vm.validations.image) ? `
+          ${nd.validations && (nd.validations.spec || nd.validations.image) ? `
           <div style="margin: 10px 0; padding: 8px; background: #f1f3f4; border-radius: 4px; border-left: 3px solid #007bff;">
             <strong style="color: #495057; font-size: 0.95em;">🔍 Resource Validation</strong>
-            ${vm.validations.spec ? `
-            <div style="margin: 6px 0; padding: 6px; background: ${vm.validations.spec.isAvailable ? '#e8f5e8' : '#ffe8e8'}; border-radius: 4px;">
-              <div style="font-size: 0.9em;"><strong>🖥️ Spec:</strong> ${vm.validations.spec.resourceId || 'N/A'}</div>
+            ${nd.validations.spec ? `
+            <div style="margin: 6px 0; padding: 6px; background: ${nd.validations.spec.isAvailable ? '#e8f5e8' : '#ffe8e8'}; border-radius: 4px;">
+              <div style="font-size: 0.9em;"><strong>🖥️ Spec:</strong> ${nd.validations.spec.resourceId || 'N/A'}</div>
               <div style="font-size: 0.8em; color: #666; line-height: 1.4;">
-                Status: ${vm.validations.spec.status || 'Unknown'} | 
-                Available: ${vm.validations.spec.isAvailable ? 'Yes' : 'No'}
-                ${vm.validations.spec.message ? `<div style="margin-top: 4px; word-wrap: break-word; white-space: normal;">📝 ${vm.validations.spec.message}</div>` : ''}
+                Status: ${nd.validations.spec.status || 'Unknown'} | 
+                Available: ${nd.validations.spec.isAvailable ? 'Yes' : 'No'}
+                ${nd.validations.spec.message ? `<div style="margin-top: 4px; word-wrap: break-word; white-space: normal;">📝 ${nd.validations.spec.message}</div>` : ''}
               </div>
             </div>` : ''}
-            ${vm.validations.image ? `
-            <div style="margin: 6px 0; padding: 6px; background: ${vm.validations.image.isAvailable ? '#e8f5e8' : '#ffe8e8'}; border-radius: 4px;">
-              <div style="font-size: 0.9em;"><strong>💿 Image:</strong> ${vm.validations.image.resourceId || 'N/A'}</div>
+            ${nd.validations.image ? `
+            <div style="margin: 6px 0; padding: 6px; background: ${nd.validations.image.isAvailable ? '#e8f5e8' : '#ffe8e8'}; border-radius: 4px;">
+              <div style="font-size: 0.9em;"><strong>💿 Image:</strong> ${nd.validations.image.resourceId || 'N/A'}</div>
               <div style="font-size: 0.8em; color: #666; line-height: 1.4;">
-                Status: ${vm.validations.image.status || 'Unknown'} | 
-                Available: ${vm.validations.image.isAvailable ? 'Yes' : 'No'}
-                ${vm.validations.image.message ? `<div style="margin-top: 4px; word-wrap: break-word; white-space: normal;">📝 ${vm.validations.image.message}</div>` : ''}
+                Status: ${nd.validations.image.status || 'Unknown'} | 
+                Available: ${nd.validations.image.isAvailable ? 'Yes' : 'No'}
+                ${nd.validations.image.message ? `<div style="margin-top: 4px; word-wrap: break-word; white-space: normal;">📝 ${nd.validations.image.message}</div>` : ''}
               </div>
             </div>` : ''}
           </div>` : ''}
           
-          ${vm.issues.length > 0 ? `
+          ${nd.issues.length > 0 ? `
           <div style="margin: 10px 0; padding: 8px; background: #ffe6e6; border-radius: 4px; border-left: 3px solid #dc3545;">
             <strong style="color: #dc3545; font-size: 0.95em;">⚠️ Issues Found</strong>
             <ul style="margin: 5px 0; padding-left: 20px; color: #dc3545; font-size: 0.85em;">
-              ${vm.issues.map(issue => `<li>${issue}</li>`).join('')}
+              ${nd.issues.map(issue => `<li>${issue}</li>`).join('')}
             </ul>
           </div>` : ''}
           
-          ${vm.info.length > 0 ? `
+          ${nd.info.length > 0 ? `
           <details style="margin-top: 10px;">
             <summary style="cursor: pointer; font-size: 0.9em; color: #6c757d; font-weight: bold;">📋 View Additional Details</summary>
             <div style="margin: 8px 0; padding: 8px; background: #f8f9fa; border-radius: 4px;">
               <ul style="margin: 0; padding-left: 20px; font-size: 0.85em; color: #6c757d;">
-                ${vm.info.filter(info => 
+                ${nd.info.filter(info => 
                   !info.includes('Provider:') && 
                   !info.includes('Region:') && 
-                  !info.includes('SubGroup Size:') &&
-                  !info.includes('Total VMs in SubGroup:')
+                  !info.includes('NodeGroup Size:') &&
+                  !info.includes('Total Nodes in NodeGroup:')
                 ).map(info => `<li style="margin: 2px 0;">${info}</li>`).join('')}
               </ul>
             </div>
@@ -5815,11 +5815,11 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
 
     // Show review results
     Swal.fire({
-      title: "MCI Configuration Review Results",
+      title: "Infra Configuration Review Results",
       width: 1000,
       html: `
         ${validationSummaryHtml}
-        ${mciInfoHtml}
+        ${infraInfoHtml}
         <div style="text-align: left;">
           <details>
             <summary style="font-weight: bold; font-size: 1em; margin: 10px 0; cursor: pointer; color: #333;">📋 Configuration Summary</summary>
@@ -5829,26 +5829,26 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
           </details>
           
           <details>
-            <summary style="font-weight: bold; font-size: 1em; margin: 10px 0; cursor: pointer; color: #333;">🖥️ SubGroup Configuration Status</summary>
+            <summary style="font-weight: bold; font-size: 1em; margin: 10px 0; cursor: pointer; color: #333;">🖥️ NodeGroup Configuration Status</summary>
             <div style="margin-left: 20px;">
               <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid #007bff;">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                  <strong style="color: #007bff; font-size: 0.95em;">📋 SubGroup Selection</strong>
-                  <button id="reviewWithSelectedSubgroups" style="padding: 4px 12px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 0.8em; cursor: pointer;">
+                  <strong style="color: #007bff; font-size: 0.95em;">📋 NodeGroup Selection</strong>
+                  <button id="reviewWithSelectedNodeGroups" style="padding: 4px 12px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 0.8em; cursor: pointer;">
                     🔄 re-validate
                   </button>
                 </div>
                 <div style="font-size: 0.85em; color: #666; margin-bottom: 8px;">
-                  Uncheck SubGroups to exclude them from MCI creation. Click "re-validate" to re-validate your configuration.
+                  Uncheck NodeGroups to exclude them from Infra creation. Click "re-validate" to re-validate your configuration.
                 </div>
                 <div style="margin: 8px 0;">
                   <label style="display: flex; align-items: center; cursor: pointer; font-size: 0.85em; margin-bottom: 4px;">
-                    <input type="checkbox" id="selectAllSubgroups" style="margin-right: 6px;" checked onchange="toggleAllSubgroups()">
-                    <span style="color: #333; font-weight: 500;">Select/Deselect All SubGroups</span>
+                    <input type="checkbox" id="selectAllNodeGroups" style="margin-right: 6px;" checked onchange="toggleAllNodeGroups()">
+                    <span style="color: #333; font-weight: 500;">Select/Deselect All NodeGroups</span>
                   </label>
                 </div>
               </div>
-              ${vmDetailsHtml.length > 0 ? vmDetailsHtml : '<p style="color: #666; font-style: italic; font-size: 0.9em;">No SubGroup details available</p>'}
+              ${nodeDetailsHtml.length > 0 ? nodeDetailsHtml : '<p style="color: #666; font-style: italic; font-size: 0.9em;">No NodeGroup details available</p>'}
             </div>
           </details>
           
@@ -5864,10 +5864,10 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             <div style="margin-left: 20px;">
               <div style="margin-bottom: 15px;">
                 <div style="font-size: 0.9em; color: #666; margin-bottom: 8px;">
-                  This shows the current MCI request body that will be sent to create the infrastructure.
+                  This shows the current Infra request body that will be sent to create the infrastructure.
                 </div>
               </div>
-              <pre style="background-color: #f8f9fa; padding: 10px; border-radius: 5px; overflow: auto; max-height: 400px; font-size: 0.8em; border: 1px solid #ddd; color: #666;">${JSON.stringify(createMciReq, null, 2)}</pre>
+              <pre style="background-color: #f8f9fa; padding: 10px; border-radius: 5px; overflow: auto; max-height: 400px; font-size: 0.8em; border: 1px solid #ddd; color: #666;">${JSON.stringify(createInfraReq, null, 2)}</pre>
             </div>
           </details>
           
@@ -5881,17 +5881,17 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
                   <span style="color: #999; font-weight: 500;">📊 Deploy a monitoring agent (temporarily disabled)</span>
                 </label>
                 <div style="margin-left: 24px; margin-top: 4px; color: #999; font-size: 0.8em;">
-                  Install CB-Dragonfly monitoring agent on all VMs for performance monitoring.
+                  Install CB-Dragonfly monitoring agent on all Nodes for performance monitoring.
                 </div>
               </div>
 
               <div style="margin: 8px 0;">
                 <label style="display: flex; align-items: center; cursor: pointer; font-size: 0.9em;">
                   <input type="checkbox" id="hold-checkbox" style="margin-right: 8px; transform: scale(1.2);">
-                  <span style="color: #333; font-weight: 500;">⏸️ Hold VM provisioning of the MCI</span>
+                  <span style="color: #333; font-weight: 500;">⏸️ Hold Node provisioning of the Infra</span>
                 </label>
                 <div style="margin-left: 24px; margin-top: 4px; color: #666; font-size: 0.8em;">
-                  Create MCI structure without deploying VMs immediately. Use "Continue" action when ready.
+                  Create Infra structure without deploying Nodes immediately. Use "Continue" action when ready.
                 </div>
               </div>
 
@@ -5902,7 +5902,7 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
                   <span style="color: #333; font-weight: 500;">🚀 Add post-deployment commands</span>
                 </label>
                 <div style="margin-left: 24px; margin-top: 4px; color: #666; font-size: 0.8em;">
-                  Execute custom commands on all VMs after successful deployment.
+                  Execute custom commands on all Nodes after successful deployment.
                 </div>
               </div>
               
@@ -5912,7 +5912,7 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
                   <span style="color: #333; font-weight: 500;">📦 Build Cloud-Agnostic Custom Image</span>
                 </label>
                 <div style="margin-left: 24px; margin-top: 4px; color: #666; font-size: 0.8em;">
-                  Create custom images from deployed VMs and optionally cleanup infrastructure.
+                  Create custom images from deployed Nodes and optionally cleanup infrastructure.
                 </div>
               </div>
             </div>
@@ -5955,17 +5955,17 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
         </script>
       `,
       showCancelButton: true,
-      confirmButtonText: "Create MCI",
+      confirmButtonText: "Create Infra",
       cancelButtonText: "Cancel",
       confirmButtonColor: validationStatus === "error" ? "#ffc107" : "#28a745",
       scrollbarPadding: false,
       didOpen: () => {
-        // Initialize SubGroup management functions
-        window.toggleAllSubgroups = function() {
-          const selectAllCheckbox = document.getElementById('selectAllSubgroups');
-          const subgroupCheckboxes = document.querySelectorAll('.subgroup-checkbox');
+        // Initialize NodeGroup management functions
+        window.toggleAllNodeGroups = function() {
+          const selectAllCheckbox = document.getElementById('selectAllNodeGroups');
+          const nodegroupCheckboxes = document.querySelectorAll('.nodegroup-checkbox');
           
-          subgroupCheckboxes.forEach(checkbox => {
+          nodegroupCheckboxes.forEach(checkbox => {
             checkbox.checked = selectAllCheckbox.checked;
           });
           
@@ -5973,27 +5973,27 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
         };
         
           window.updateReviewButtonState = function() {
-          const selectedSubgroups = document.querySelectorAll('.subgroup-checkbox:checked');
-          const reviewButton = document.getElementById('reviewWithSelectedSubgroups');
-          const selectAllCheckbox = document.getElementById('selectAllSubgroups');
+          const selectedNodeGroups = document.querySelectorAll('.nodegroup-checkbox:checked');
+          const reviewButton = document.getElementById('reviewWithSelectedNodeGroups');
+          const selectAllCheckbox = document.getElementById('selectAllNodeGroups');
           
           if (reviewButton) {
-            if (selectedSubgroups.length === 0) {
+            if (selectedNodeGroups.length === 0) {
               reviewButton.style.background = '#dc3545';
-              reviewButton.textContent = '⚠️ No SubGroups Selected';
+              reviewButton.textContent = '⚠️ No NodeGroups Selected';
               reviewButton.disabled = true;
             } else {
               reviewButton.style.background = '#28a745';
-              reviewButton.textContent = '🔄 Review Selected (' + selectedSubgroups.length + ')';
+              reviewButton.textContent = '🔄 Review Selected (' + selectedNodeGroups.length + ')';
               reviewButton.disabled = false;
             }
           }
           
           // Update "Select All" checkbox state
-          const allSubgroups = document.querySelectorAll('.subgroup-checkbox');
-          if (selectAllCheckbox && allSubgroups.length > 0) {
-            selectAllCheckbox.checked = selectedSubgroups.length === allSubgroups.length;
-            selectAllCheckbox.indeterminate = selectedSubgroups.length > 0 && selectedSubgroups.length < allSubgroups.length;
+          const allNodeGroups = document.querySelectorAll('.nodegroup-checkbox');
+          if (selectAllCheckbox && allNodeGroups.length > 0) {
+            selectAllCheckbox.checked = selectedNodeGroups.length === allNodeGroups.length;
+            selectAllCheckbox.indeterminate = selectedNodeGroups.length > 0 && selectedNodeGroups.length < allNodeGroups.length;
           }
         };
         
@@ -6010,30 +6010,30 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             }
           }
         };
-        window.getSelectedSubgroups = function() {
-          const selectedCheckboxes = document.querySelectorAll('.subgroup-checkbox:checked');
-          return Array.from(selectedCheckboxes).map(cb => cb.getAttribute('data-subgroup-name'));
+        window.getSelectedNodeGroups = function() {
+          const selectedCheckboxes = document.querySelectorAll('.nodegroup-checkbox:checked');
+          return Array.from(selectedCheckboxes).map(cb => cb.getAttribute('data-nodegroup-name'));
         };
         
         // Set up event listeners
-        const reviewButton = document.getElementById('reviewWithSelectedSubgroups');
+        const reviewButton = document.getElementById('reviewWithSelectedNodeGroups');
         if (reviewButton) {
           reviewButton.addEventListener('click', function() {
-            const selectedSubgroups = getSelectedSubgroups();
-            if (selectedSubgroups.length === 0) {
-              alert('Please select at least one SubGroup to review.');
+            const selectedNodeGroups = getSelectedNodeGroups();
+            if (selectedNodeGroups.length === 0) {
+              alert('Please select at least one NodeGroup to review.');
               return;
             }
             
-            // Store selected subgroups and current config for re-review
-            window.selectedSubgroupsForReview = selectedSubgroups;
+            // Store selected nodegroups and current config for re-review
+            window.selectedNodeGroupsForReview = selectedNodeGroups;
             
             // Close current modal and trigger re-review
             Swal.close();
             
             // Use setTimeout to ensure modal is closed before starting new review
             setTimeout(() => {
-              reviewWithSelectedSubgroups(selectedSubgroups);
+              reviewWithSelectedNodeGroups(selectedNodeGroups);
             }, 100);
           });
         }
@@ -6041,9 +6041,9 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
         // Initialize button state
         updateReviewButtonState();
         
-        // Add change listeners to all subgroup checkboxes
-        const subgroupCheckboxes = document.querySelectorAll('.subgroup-checkbox');
-        subgroupCheckboxes.forEach(checkbox => {
+        // Add change listeners to all nodegroup checkboxes
+        const nodegroupCheckboxes = document.querySelectorAll('.nodegroup-checkbox');
+        nodegroupCheckboxes.forEach(checkbox => {
           checkbox.addEventListener('change', updateReviewButtonState);
         });
         
@@ -6072,7 +6072,7 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             icon: "warning",
             title: "⚠️ Configuration Has Errors",
             html: `
-              <p><strong>Your MCI configuration has validation errors.</strong></p>
+              <p><strong>Your Infra configuration has validation errors.</strong></p>
               <p>Proceeding may result in deployment failures or unexpected behavior.</p>
               <p>Do you want to proceed anyway?</p>
             `,
@@ -6083,47 +6083,47 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
             cancelButtonColor: "#6c757d"
           }).then((forceResult) => {
             if (forceResult.isConfirmed) {
-              // Force proceed with MCI creation using selected options
+              // Force proceed with Infra creation using selected options
               const options = result.value || { monitoring: false, hold: false, addPostCommand: false };
               
-              createMciReq.installMonAgent = "no";
-              var mciCreationUrl = finalUrl;
+              createInfraReq.installMonAgent = "no";
+              var infraCreationUrl = finalUrl;
               
               if (options.monitoring) {
-                createMciReq.installMonAgent = "yes";
+                createInfraReq.installMonAgent = "yes";
               }
               if (options.hold) {
-                mciCreationUrl += "?option=hold";
+                infraCreationUrl += "?option=hold";
               }
               
               // Handle post-deployment commands for force creation
               if (options.addPostCommand || options.buildAgnosticImage) {
                 // Show the same post-command dialog as normal flow (with buildAgnosticImage flag)
-                showPostCommandDialog(createMciReq, mciCreationUrl, username, password, options.buildAgnosticImage);
+                showPostCommandDialog(createInfraReq, infraCreationUrl, username, password, options.buildAgnosticImage);
               } else {
-                proceedWithMciCreation(createMciReq, mciCreationUrl, username, password);
+                proceedWithInfraCreation(createInfraReq, infraCreationUrl, username, password);
               }
             }
           });
         } else {
-          // Proceed directly to MCI creation with selected options
+          // Proceed directly to Infra creation with selected options
           const options = result.value || { monitoring: false, hold: false, addPostCommand: false };
           
-          createMciReq.installMonAgent = "no";
-          var mciCreationUrl = finalUrl;
+          createInfraReq.installMonAgent = "no";
+          var infraCreationUrl = finalUrl;
           
           if (options.monitoring) {
-            createMciReq.installMonAgent = "yes";
+            createInfraReq.installMonAgent = "yes";
           }
           if (options.hold) {
-            mciCreationUrl += "?option=hold";
+            infraCreationUrl += "?option=hold";
           }
 
           if (options.addPostCommand || options.buildAgnosticImage) {
             // Show post-command dialog (with buildAgnosticImage flag)
-            showPostCommandDialog(createMciReq, mciCreationUrl, username, password, options.buildAgnosticImage);
+            showPostCommandDialog(createInfraReq, infraCreationUrl, username, password, options.buildAgnosticImage);
           } else {
-            proceedWithMciCreation(createMciReq, mciCreationUrl, username, password);
+            proceedWithInfraCreation(createInfraReq, infraCreationUrl, username, password);
           }
         }
       }
@@ -6143,7 +6143,7 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
       icon: "error",
       title: "Review Failed",
       html: `
-        <p>Unable to review MCI configuration:</p>
+        <p>Unable to review Infra configuration:</p>
         <div style="background-color: #f8f9fa; padding: 10px; border-radius: 5px; margin: 10px 0;">
           <code>${errorMessage}</code>
         </div>
@@ -6158,74 +6158,74 @@ function reviewMciConfiguration(createMciReq, hostname, port, username, password
         // Proceed to final confirmation even without review - call the same logic as successful review
         const options = { monitoring: false, hold: false, addPostCommand: false };
         
-        createMciReq.installMonAgent = "no";
+        createInfraReq.installMonAgent = "no";
         
-        proceedWithMciCreation(createMciReq, finalUrl, username, password);
+        proceedWithInfraCreation(createInfraReq, finalUrl, username, password);
       }
     });
   });
 }
 
-// Function to review MCI with selected SubGroups only
-function reviewWithSelectedSubgroups(selectedSubgroups) {
-  // Get current MCI request data
+// Function to review Infra with selected NodeGroups only
+function reviewWithSelectedNodeGroups(selectedNodeGroups) {
+  // Get current Infra request data
   var hostname = configHostname;
   var port = configPort;
   var username = configUsername;
   var password = configPassword;
   var namespace = configNamespace;
   
-  // Get current createMciReq from global vmSubGroupReqeustFromSpecList
-  if (vmSubGroupReqeustFromSpecList.length === 0) {
+  // Get current createInfraReq from global nodeGroupRequestFromSpecList
+  if (nodeGroupRequestFromSpecList.length === 0) {
     Swal.fire({
       icon: "error",
       title: "No Configuration Found",
-      text: "No MCI configuration found. Please create a new configuration first."
+      text: "No Infra configuration found. Please create a new configuration first."
     });
     return;
   }
   
-  // Filter VM requests to include only selected SubGroups
-  var filteredVmRequests = vmSubGroupReqeustFromSpecList.filter(vmReq => {
-    return selectedSubgroups.includes(vmReq.name);
+  // Filter Node requests to include only selected NodeGroups
+  var filteredNodeRequests = nodeGroupRequestFromSpecList.filter(nodeReq => {
+    return selectedNodeGroups.includes(nodeReq.name);
   });
   
-  if (filteredVmRequests.length === 0) {
+  if (filteredNodeRequests.length === 0) {
     Swal.fire({
       icon: "warning",
-      title: "No SubGroups Selected",
-      text: "Please select at least one SubGroup to proceed with the review."
+      title: "No NodeGroups Selected",
+      text: "Please select at least one NodeGroup to proceed with the review."
     });
     return;
   }
   
-  // Create modified MCI request with filtered VMs
-  var modifiedCreateMciReq = JSON.parse(JSON.stringify(createMciReqTmplt));
-  modifiedCreateMciReq.name = "mc-" + generateMciName();
-  modifiedCreateMciReq.subGroups = filteredVmRequests;
+  // Create modified Infra request with filtered VMs
+  var modifiedCreateInfraReq = JSON.parse(JSON.stringify(createInfraReqTmplt));
+  modifiedCreateInfraReq.name = "mc-" + generateInfraName();
+  modifiedCreateInfraReq.nodeGroups = filteredNodeRequests;
   
-  // Calculate costs and details for selected SubGroups
+  // Calculate costs and details for selected NodeGroups
   let totalCost = 0;
   let totalNodeScale = 0;
   let costDetailsHtml = "";
-  let subGroupReqString = "";
+  let nodeGroupReqString = "";
   
-  filteredVmRequests.forEach(vmReq => {
-    totalNodeScale += parseInt(vmReq.subGroupSize || 1);
-    subGroupReqString += `<b>${vmReq.name}</b> (${vmReq.subGroupSize || 1} VMs)<br>`;
+  filteredNodeRequests.forEach(nodeReq => {
+    totalNodeScale += parseInt(nodeReq.nodeGroupSize || 1);
+    nodeGroupReqString += `<b>${nodeReq.name}</b> (${nodeReq.nodeGroupSize || 1} Nodes)<br>`;
   });
   
   costDetailsHtml = `
     <div style="text-align: left; margin: 10px 0;">
-      <strong>Selected SubGroups: ${filteredVmRequests.length}</strong><br>
-      <strong>Total VMs: ${totalNodeScale}</strong><br>
+      <strong>Selected NodeGroups: ${filteredNodeRequests.length}</strong><br>
+      <strong>Total Nodes: ${totalNodeScale}</strong><br>
       <div style="font-size: 0.9em; color: #666; margin-top: 5px;">
-        ${subGroupReqString}
+        ${nodeGroupReqString}
       </div>
     </div>
   `;
   
-  var finalUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mciDynamic`;
+  var finalUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infraDynamic`;
   
   // Show loading message
   Swal.fire({
@@ -6235,7 +6235,7 @@ function reviewWithSelectedSubgroups(selectedSubgroups) {
         <div style="margin: 20px 0;">
           <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite;"></div>
         </div>
-        <p>Validating configuration with ${filteredVmRequests.length} selected SubGroups...</p>
+        <p>Validating configuration with ${filteredNodeRequests.length} selected NodeGroups...</p>
       </div>
       <style>
         @keyframes spin {
@@ -6250,44 +6250,44 @@ function reviewWithSelectedSubgroups(selectedSubgroups) {
   
   // Trigger review with modified configuration
   setTimeout(() => {
-    reviewMciConfiguration(modifiedCreateMciReq, hostname, port, username, password, namespace, finalUrl, totalCost, totalNodeScale, costDetailsHtml, subGroupReqString);
+    reviewInfraConfiguration(modifiedCreateInfraReq, hostname, port, username, password, namespace, finalUrl, totalCost, totalNodeScale, costDetailsHtml, nodeGroupReqString);
   }, 1000);
 }
 
-function createMci() {
+function createInfra() {
   // Scroll Provision panel to top
   var scrollableCol = document.querySelector('.scrollable-column');
   if (scrollableCol) scrollableCol.scrollTop = 0;
 
-  if (vmSubGroupReqeustFromSpecList.length != 0) {
+  if (nodeGroupRequestFromSpecList.length != 0) {
     var hostname = configHostname;
     var port = configPort;
     var username = configUsername;
     var password = configPassword;
     var namespace = configNamespace;
 
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mciDynamic`;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infraDynamic`;
 
-    var createMciReq = createMciReqTmplt;
-    createMciReq.name = "mc-" + generateMciName();
-    createMciReq.subGroups = vmSubGroupReqeustFromSpecList;
+    var createInfraReq = createInfraReqTmplt;
+    createInfraReq.name = "mc-" + generateInfraName();
+    createInfraReq.nodeGroups = nodeGroupRequestFromSpecList;
     let totalCost = 0;
     let totalNodeScale = 0;
 
-    var subGroupReqString = "";
-    for (i = 0; i < createMciReq.subGroups.length; i++) {
+    var nodeGroupReqString = "";
+    for (i = 0; i < createInfraReq.nodeGroups.length; i++) {
 
-      totalNodeScale += parseInt(createMciReq.subGroups[i].subGroupSize);
+      totalNodeScale += parseInt(createInfraReq.nodeGroups[i].nodeGroupSize);
       let costPerHour = recommendedSpecList[i].costPerHour;
       let subTotalCost = "unknown";
       if (costPerHour < 0 || !costPerHour) {
         costPerHour = "unknown";
-        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($" + costPerHour + " * " + createMciReq.subGroups[i].subGroupSize + ")" + "</span></b></td></tr>";
+        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($" + costPerHour + " * " + createInfraReq.nodeGroups[i].nodeGroupSize + ")" + "</span></b></td></tr>";
       } else {
-        totalCost += parseFloat(costPerHour) * createMciReq.subGroups[i].subGroupSize;
+        totalCost += parseFloat(costPerHour) * createInfraReq.nodeGroups[i].nodeGroupSize;
 
-        subTotalCost = (parseFloat(costPerHour) * createMciReq.subGroups[i].subGroupSize).toFixed(4);
-        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($" + costPerHour + " * " + createMciReq.subGroups[i].subGroupSize + ")" + "</span></b></td></tr>";
+        subTotalCost = (parseFloat(costPerHour) * createInfraReq.nodeGroups[i].nodeGroupSize).toFixed(4);
+        costPerHour = "<tr><th style='width: 50%;'>Estimated Price(USD/1H)</th><td><b><span style='color: red; '>$" + subTotalCost + "  ($" + costPerHour + " * " + createInfraReq.nodeGroups[i].nodeGroupSize + ")" + "</span></b></td></tr>";
       }
       let acceleratorType = recommendedSpecList[i].acceleratorType;
       let acceleratorModel = recommendedSpecList[i].acceleratorModel;
@@ -6300,18 +6300,18 @@ function createMci() {
       var html =
         "<font size=3>" +
         "<table style='width:80%; text-align:left; margin-top:20px; margin-left:10px; table-layout: auto;'>" +
-        "<tr><th style='width: 50%;'>[#" + (i + 1).toString() + "] SubGroup Name</th><td><b><span style='color: black; '>" + createMciReq.subGroups[i].name + " (" + createMciReq.subGroups[i].subGroupSize + " node(s))</span></b></td></tr>" +
+        "<tr><th style='width: 50%;'>[#" + (i + 1).toString() + "] NodeGroup Name</th><td><b><span style='color: black; '>" + createInfraReq.nodeGroups[i].name + " (" + createInfraReq.nodeGroups[i].nodeGroupSize + " node(s))</span></b></td></tr>" +
         costPerHour +
-        "<tr><th style='width: 50%;'>Spec</th><td><b><span style='color: blue; '>" + createMciReq.subGroups[i].specId + "</span></b></td></tr>" +
+        "<tr><th style='width: 50%;'>Spec</th><td><b><span style='color: blue; '>" + createInfraReq.nodeGroups[i].specId + "</span></b></td></tr>" +
         "<tr><th style='width: 50%;'>vCPU</th><td><b>" + recommendedSpecList[i].vCPU + "</b></td></tr>" +
         "<tr><th style='width: 50%;'>Mem(GiB)</th><td><b>" + recommendedSpecList[i].memoryGiB + "</b></td></tr>" +
         acceleratorType +
-        "<tr><th style='width: 50%;'>RootDisk(GB)</th><td><b>" + (createMciReq.subGroups[i].rootDiskSize > 0 ? createMciReq.subGroups[i].rootDiskSize : 'Default') + " (type: " + createMciReq.subGroups[i].rootDiskType + ")</b></td></tr>" +
-        "<tr><th style='width: 50%;'>Selected Image</th><td><b><span style='color: green; '>" + createMciReq.subGroups[i].imageId + "</span></b></td></tr>" +
+        "<tr><th style='width: 50%;'>RootDisk(GB)</th><td><b>" + (createInfraReq.nodeGroups[i].rootDiskSize > 0 ? createInfraReq.nodeGroups[i].rootDiskSize : 'Default') + " (type: " + createInfraReq.nodeGroups[i].rootDiskType + ")</b></td></tr>" +
+        "<tr><th style='width: 50%;'>Selected Image</th><td><b><span style='color: green; '>" + createInfraReq.nodeGroups[i].imageId + "</span></b></td></tr>" +
 
-        ((createMciReq.subGroups[i].label && Object.keys(createMciReq.subGroups[i].label).length > 0) ?
+        ((createInfraReq.nodeGroups[i].label && Object.keys(createInfraReq.nodeGroups[i].label).length > 0) ?
           "<tr><th style='width: 50%;'>Labels</th><td><b><span style='color: purple; '>" +
-          Object.entries(createMciReq.subGroups[i].label).map(([key, value]) =>
+          Object.entries(createInfraReq.nodeGroups[i].label).map(([key, value]) =>
             `${key}=${value}`
           ).join(", ") +
           "</span></b></td></tr>" : "") +
@@ -6320,7 +6320,7 @@ function createMci() {
         "<hr>"
         ;
 
-      subGroupReqString = subGroupReqString + html;
+      nodeGroupReqString = nodeGroupReqString + html;
     }
 
     var costDetailsHtml =
@@ -6331,32 +6331,32 @@ function createMci() {
       "<tr><th>Monthly</th><td><span style='color: red; '><b>$" + (totalCost * 24 * 31).toFixed(4) + "</span></td></tr>" +
       "</table> <br>(Do not rely on this estimated cost. It is just an estimation using spec price.)<br>";
 
-    // Step 1: MCI Name Input
+    // Step 1: Infra Name Input
     Swal.fire({
-      title: "Enter the name of the MCI you wish to create",
+      title: "Enter the name of the Infra you wish to create",
       input: "text",
       inputAttributes: {
         autocapitalize: "off",
       },
-      inputValue: createMciReq.name,
+      inputValue: createInfraReq.name,
       showCancelButton: true,
       confirmButtonText: "Next: Review Configuration",
     }).then((result) => {
       if (result.value) {
-        createMciReq.name = result.value;
+        createInfraReq.name = result.value;
         
-        // Step 2: Start MCI Review process
-        reviewMciConfiguration(createMciReq, hostname, port, username, password, namespace, url, totalCost, totalNodeScale, costDetailsHtml, subGroupReqString);
+        // Step 2: Start Infra Review process
+        reviewInfraConfiguration(createInfraReq, hostname, port, username, password, namespace, url, totalCost, totalNodeScale, costDetailsHtml, nodeGroupReqString);
       }
     });
   } else {
     console.log(
-      "To create a MCI, VMs should be configured! Click the Map to add a config for VM request."
+      "To create a Infra, Nodes should be configured! Click the Map to add a config for Node request."
     );
-    errorAlert("Please configure MCI first\n(Click the Map to add VMs)");
+    errorAlert("Please configure Infra first\n(Click the Map to add Nodes)");
   }
 }
-window.createMci = createMci;
+window.createInfra = createInfra;
 window.proceedWithBuildAgnosticImage = proceedWithBuildAgnosticImage;
 
 // Function to check if K8s node image designation is needed
@@ -6385,13 +6385,13 @@ async function checkK8sNodeImageDesignation(providerName, hostname, port, userna
 
 // K8s Cluster creation function (supports single and multi-cluster creation)
 function createK8sCluster() {
-  if (vmSubGroupReqeustFromSpecList.length < 1) {
-    errorAlert("Please configure at least one SubGroup to create K8s Cluster(s)");
+  if (nodeGroupRequestFromSpecList.length < 1) {
+    errorAlert("Please configure at least one NodeGroup to create K8s Cluster(s)");
     return;
   }
 
-  const isMultiCluster = vmSubGroupReqeustFromSpecList.length > 1;
-  const subGroup = vmSubGroupReqeustFromSpecList[0];
+  const isMultiCluster = nodeGroupRequestFromSpecList.length > 1;
+  const nodeGroup = nodeGroupRequestFromSpecList[0];
   const spec = recommendedSpecList[0];
   
   // Generate random names for K8s resources
@@ -6407,7 +6407,7 @@ function createK8sCluster() {
   // For multi-cluster, use namePrefix approach (simplified dialog)
   if (isMultiCluster) {
     // Build cluster configuration summary
-    const clusterSummary = vmSubGroupReqeustFromSpecList.map((sg, idx) => {
+    const clusterSummary = nodeGroupRequestFromSpecList.map((sg, idx) => {
       const sp = recommendedSpecList[idx];
       return `<tr>
         <td>${idx + 1}</td>
@@ -6418,7 +6418,7 @@ function createK8sCluster() {
     }).join('');
 
     Swal.fire({
-      title: `Create ${vmSubGroupReqeustFromSpecList.length} K8s Clusters`,
+      title: `Create ${nodeGroupRequestFromSpecList.length} K8s Clusters`,
       html: `
         <div style="text-align: left; padding: 15px;">
           <div style="margin-bottom: 15px;">
@@ -6430,7 +6430,7 @@ function createK8sCluster() {
             </div>
           </div>
           <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px; max-height: 200px; overflow-y: auto;">
-            <strong>Clusters to create (${vmSubGroupReqeustFromSpecList.length}):</strong>
+            <strong>Clusters to create (${nodeGroupRequestFromSpecList.length}):</strong>
             <table style="width: 100%; font-size: 0.85em; margin-top: 8px;">
               <tr style="background: #e9ecef;"><th>#</th><th>Provider</th><th>Region</th><th>Spec</th></tr>
               ${clusterSummary}
@@ -6442,7 +6442,7 @@ function createK8sCluster() {
         </div>
       `,
       showCancelButton: true,
-      confirmButtonText: `Create ${vmSubGroupReqeustFromSpecList.length} Clusters`,
+      confirmButtonText: `Create ${nodeGroupRequestFromSpecList.length} Clusters`,
       cancelButtonText: "Cancel",
       preConfirm: () => {
         const namePrefix = document.getElementById('k8sNamePrefix').value.trim();
@@ -6457,7 +6457,7 @@ function createK8sCluster() {
         const { namePrefix } = result.value;
         
         // Build multi-cluster request
-        const clusters = vmSubGroupReqeustFromSpecList.map((sg, idx) => {
+        const clusters = nodeGroupRequestFromSpecList.map((sg, idx) => {
           const clusterReq = {
             imageId: sg.imageId || "default",
             specId: sg.specId
@@ -6590,10 +6590,10 @@ function createK8sCluster() {
             <small>Provider: ${spec.providerName}</small><br>
             <small>Region: ${spec.regionName}</small><br>
             <small>Spec: ${spec.cspSpecName}</small><br>
-            <small>Image: ${subGroup.imageId}</small>
+            <small>Image: ${nodeGroup.imageId}</small>
           </div>
           <div style="font-size: 0.9em; color: #666;">
-            Note: This will create a new Kubernetes cluster using the configured SubGroup settings.
+            Note: This will create a new Kubernetes cluster using the configured NodeGroup settings.
           </div>
         </div>
       `,
@@ -6659,8 +6659,8 @@ function createK8sCluster() {
             
             // Create K8s cluster request body
             const k8sClusterReq = {
-              imageId: imageDesignationNeeded ? (subGroup.imageId || "default") : "default",
-              specId: subGroup.specId,
+              imageId: imageDesignationNeeded ? (nodeGroup.imageId || "default") : "default",
+              specId: nodeGroup.specId,
               name: clusterName,
               nodeGroupName: nodeGroupName
             };
@@ -6671,11 +6671,11 @@ function createK8sCluster() {
             }
             
             // Add rootDiskType and rootDiskSize if available
-            if (subGroup.rootDiskType) {
-              k8sClusterReq.rootDiskType = subGroup.rootDiskType;
+            if (nodeGroup.rootDiskType) {
+              k8sClusterReq.rootDiskType = nodeGroup.rootDiskType;
             }
-            if (subGroup.rootDiskSize) {
-              k8sClusterReq.rootDiskSize = subGroup.rootDiskSize;
+            if (nodeGroup.rootDiskSize) {
+              k8sClusterReq.rootDiskSize = nodeGroup.rootDiskSize;
             }
 
             // Check if using custom version (not from available versions list)
@@ -6770,8 +6770,8 @@ window.createK8sCluster = createK8sCluster;
 
 // Add NodeGroup to existing K8s Cluster function (supports single and multi-NodeGroup)
 function addNodeGroupToK8sCluster() {
-  if (vmSubGroupReqeustFromSpecList.length < 1) {
-    errorAlert("Please configure at least one SubGroup to add NodeGroup(s) to K8s Cluster");
+  if (nodeGroupRequestFromSpecList.length < 1) {
+    errorAlert("Please configure at least one NodeGroup to add NodeGroup(s) to K8s Cluster");
     return;
   }
 
@@ -6795,10 +6795,10 @@ function addNodeGroupToK8sCluster() {
       return;
     }
 
-    const isMultiNodeGroup = vmSubGroupReqeustFromSpecList.length > 1;
+    const isMultiNodeGroup = nodeGroupRequestFromSpecList.length > 1;
 
     if (isMultiNodeGroup) {
-      // Multi-NodeGroup: Each SubGroup maps to a compatible cluster
+      // Multi-NodeGroup: Each NodeGroup maps to a compatible cluster
       showMultiNodeGroupDialog(clusters, hostname, port, username, password, namespace);
     } else {
       // Single NodeGroup (original flow)
@@ -6813,11 +6813,11 @@ function addNodeGroupToK8sCluster() {
 
 // Single NodeGroup dialog (original behavior)
 function showSingleNodeGroupDialog(clusters, hostname, port, username, password, namespace) {
-  const subGroup = vmSubGroupReqeustFromSpecList[0];
+  const nodeGroup = nodeGroupRequestFromSpecList[0];
   const spec = recommendedSpecList[0];
   const k8sNodeGroupRandomName = "ng-" + generateRandomString();
-  const subGroupProvider = spec.providerName;
-  const subGroupRegion = spec.regionName;
+  const nodeGroupProvider = spec.providerName;
+  const nodeGroupRegion = spec.regionName;
     
     const clusterOptions = clusters.map(cluster => {
       // Use cluster-level status for determining availability
@@ -6828,7 +6828,7 @@ function showSingleNodeGroupDialog(clusters, hostname, port, username, password,
       const clusterProvider = cluster?.connectionConfig?.providerName || '';
       const clusterRegion = cluster?.connectionConfig?.regionDetail?.regionId || '';
       
-      const providerRegionMatch = (clusterProvider === subGroupProvider && clusterRegion === subGroupRegion);
+      const providerRegionMatch = (clusterProvider === nodeGroupProvider && clusterRegion === nodeGroupRegion);
       
       // Enable only if cluster is Active AND provider/region matches
       const isSelectable = isActive && providerRegionMatch;
@@ -6861,12 +6861,12 @@ function showSingleNodeGroupDialog(clusters, hostname, port, username, password,
       const isActive = clusterStatus === 'Active';
       const clusterProvider = cluster?.connectionConfig?.providerName || '';
       const clusterRegion = cluster?.connectionConfig?.regionDetail?.regionId || '';
-      const providerRegionMatch = (clusterProvider === subGroupProvider && clusterRegion === subGroupRegion);
+      const providerRegionMatch = (clusterProvider === nodeGroupProvider && clusterRegion === nodeGroupRegion);
       return isActive && providerRegionMatch;
     });
     
     if (selectableClusters.length === 0) {
-      errorAlert(`No compatible K8s clusters found.\n\nRequired:\n- Status: Active\n- Provider: ${subGroupProvider}\n- Region: ${subGroupRegion}\n\nPlease create a compatible K8s cluster first or check existing cluster configurations.`);
+      errorAlert(`No compatible K8s clusters found.\n\nRequired:\n- Status: Active\n- Provider: ${nodeGroupProvider}\n- Region: ${nodeGroupRegion}\n\nPlease create a compatible K8s cluster first or check existing cluster configurations.`);
       return;
     }
     
@@ -6881,7 +6881,7 @@ function showSingleNodeGroupDialog(clusters, hostname, port, username, password,
               ${clusterOptions}
             </select>
             <div style="font-size: 0.8em; color: #666; margin-top: 5px;">
-              Note: Only Active clusters with matching Provider (${subGroupProvider}) and Region (${subGroupRegion}) can be selected
+              Note: Only Active clusters with matching Provider (${nodeGroupProvider}) and Region (${nodeGroupRegion}) can be selected
             </div>
           </div>
           <div style="margin-bottom: 15px;">
@@ -6894,7 +6894,7 @@ function showSingleNodeGroupDialog(clusters, hostname, port, username, password,
             <small>Provider: ${spec.providerName}</small><br>
             <small>Region: ${spec.regionName}</small><br>
             <small>Spec: ${spec.cspSpecName}</small><br>
-            <small>Image: ${subGroup.imageId}</small>
+            <small>Image: ${nodeGroup.imageId}</small>
           </div>
           <div style="font-size: 0.9em; color: #666;">
             Note: This will add a new NodeGroup to the selected active K8s cluster.
@@ -6949,17 +6949,17 @@ function showSingleNodeGroupDialog(clusters, hostname, port, username, password,
             
             // Create NodeGroup request body
             const nodeGroupReq = {
-              imageId: imageDesignationNeeded ? (subGroup.imageId || "default") : "default",
-              specId: subGroup.specId,
+              imageId: imageDesignationNeeded ? (nodeGroup.imageId || "default") : "default",
+              specId: nodeGroup.specId,
               name: nodeGroupName
             };
             
             // Add rootDiskType and rootDiskSize if available
-            if (subGroup.rootDiskType) {
-              nodeGroupReq.rootDiskType = subGroup.rootDiskType;
+            if (nodeGroup.rootDiskType) {
+              nodeGroupReq.rootDiskType = nodeGroup.rootDiskType;
             }
-            if (subGroup.rootDiskSize) {
-              nodeGroupReq.rootDiskSize = subGroup.rootDiskSize;
+            if (nodeGroup.rootDiskSize) {
+              nodeGroupReq.rootDiskSize = nodeGroup.rootDiskSize;
             }
 
             const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster/${clusterId}/k8sNodeGroupDynamic`;
@@ -7024,12 +7024,12 @@ function showSingleNodeGroupDialog(clusters, hostname, port, username, password,
     });
 }
 
-// Multi-NodeGroup dialog: maps each SubGroup to compatible clusters
+// Multi-NodeGroup dialog: maps each NodeGroup to compatible clusters
 function showMultiNodeGroupDialog(clusters, hostname, port, username, password, namespace) {
   const nodeGroupPrefix = "ng-" + generateRandomString();
   
-  // Build mapping of SubGroups to compatible clusters
-  const subGroupMappings = vmSubGroupReqeustFromSpecList.map((sg, idx) => {
+  // Build mapping of NodeGroups to compatible clusters
+  const nodeGroupMappings = nodeGroupRequestFromSpecList.map((sg, idx) => {
     const spec = recommendedSpecList[idx];
     const provider = spec?.providerName || '';
     const region = spec?.regionName || '';
@@ -7044,15 +7044,15 @@ function showMultiNodeGroupDialog(clusters, hostname, port, username, password, 
     return { idx, sg, spec, provider, region, compatibleClusters };
   });
 
-  // Check if any SubGroup has compatible clusters
-  const hasAnyCompatible = subGroupMappings.some(m => m.compatibleClusters.length > 0);
+  // Check if any NodeGroup has compatible clusters
+  const hasAnyCompatible = nodeGroupMappings.some(m => m.compatibleClusters.length > 0);
   if (!hasAnyCompatible) {
-    errorAlert("No compatible K8s clusters found for any SubGroup configuration.\n\nEnsure you have Active clusters matching the Provider/Region of your SubGroups.");
+    errorAlert("No compatible K8s clusters found for any NodeGroup configuration.\n\nEnsure you have Active clusters matching the Provider/Region of your NodeGroups.");
     return;
   }
 
-  // Build HTML for cluster selection per SubGroup
-  const mappingRows = subGroupMappings.map(m => {
+  // Build HTML for cluster selection per NodeGroup
+  const mappingRows = nodeGroupMappings.map(m => {
     const clusterOpts = m.compatibleClusters.length > 0
       ? m.compatibleClusters.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
       : '<option value="" disabled>No compatible cluster</option>';
@@ -7068,7 +7068,7 @@ function showMultiNodeGroupDialog(clusters, hostname, port, username, password, 
   }).join('');
 
   Swal.fire({
-    title: `Add ${vmSubGroupReqeustFromSpecList.length} NodeGroups`,
+    title: `Add ${nodeGroupRequestFromSpecList.length} NodeGroups`,
     html: `
       <div style="text-align: left; padding: 10px;">
         <div style="margin-bottom: 15px;">
@@ -7077,7 +7077,7 @@ function showMultiNodeGroupDialog(clusters, hostname, port, username, password, 
                  value="${nodeGroupPrefix}" placeholder="Enter prefix">
         </div>
         <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; max-height: 250px; overflow-y: auto;">
-          <strong>SubGroup → Cluster Mapping:</strong>
+          <strong>NodeGroup → Cluster Mapping:</strong>
           <table style="width: 100%; font-size: 0.85em; margin-top: 8px;">
             <tr style="background: #e9ecef;"><th>#</th><th>Provider</th><th>Region</th><th>Target Cluster</th></tr>
             ${mappingRows}
@@ -7089,7 +7089,7 @@ function showMultiNodeGroupDialog(clusters, hostname, port, username, password, 
       </div>
     `,
     showCancelButton: true,
-    confirmButtonText: `Add ${vmSubGroupReqeustFromSpecList.length} NodeGroups`,
+    confirmButtonText: `Add ${nodeGroupRequestFromSpecList.length} NodeGroups`,
     cancelButtonText: "Cancel",
     preConfirm: () => {
       const prefix = document.getElementById('ngNamePrefix').value.trim();
@@ -7100,7 +7100,7 @@ function showMultiNodeGroupDialog(clusters, hostname, port, username, password, 
       
       // Collect cluster selections
       const selections = [];
-      for (let i = 0; i < vmSubGroupReqeustFromSpecList.length; i++) {
+      for (let i = 0; i < nodeGroupRequestFromSpecList.length; i++) {
         const sel = document.getElementById(`clusterSelect_${i}`);
         if (sel && sel.value) {
           selections.push({ idx: i, clusterId: sel.value });
@@ -7129,7 +7129,7 @@ async function executeMultiNodeGroupAddition(selections, prefix, hostname, port,
 
   try {
     for (const sel of selections) {
-      const sg = vmSubGroupReqeustFromSpecList[sel.idx];
+      const sg = nodeGroupRequestFromSpecList[sel.idx];
       const ngName = `${prefix}-${sel.idx + 1}`;
       
       const nodeGroupReq = {
@@ -7298,29 +7298,29 @@ let workloadConfigurations = {
 let k8sClusterInfo = null;
 
 // Global variable to track current workload type
-let currentWorkloadType = 'vm'; // default to VM
+let currentWorkloadType = 'node'; // default to VM/Node mode (not k8s)
 
 // Helper function to check current workload type
 function getCurrentWorkloadType() {
   // First try to get from radio buttons
-  const vmModeInput = document.getElementById("vmMode");
+  const nodeModeInput = document.getElementById("nodeMode");
   const k8sModeInput = document.getElementById("k8sMode");
   
   // Debug: uncomment if workload type debugging needed
   // console.log('getCurrentWorkloadType() called');
-  // console.log('vmModeInput:', vmModeInput);
+  // console.log('nodeModeInput:', nodeModeInput);
   // console.log('k8sModeInput:', k8sModeInput);
-  // console.log('vmModeInput.checked:', vmModeInput?.checked);
+  // console.log('nodeModeInput.checked:', nodeModeInput?.checked);
   // console.log('k8sModeInput.checked:', k8sModeInput?.checked);
   
   if (k8sModeInput && k8sModeInput.checked) {
     console.log('Returning k8s from radio button');
     currentWorkloadType = 'k8s';
     return 'k8s';
-  } else if (vmModeInput && vmModeInput.checked) {
-    console.log('Returning vm from radio button');
-    currentWorkloadType = 'vm';
-    return 'vm';
+  } else if (nodeModeInput && nodeModeInput.checked) {
+    console.log('Returning node mode from radio button');
+    currentWorkloadType = 'node';
+    return 'node';
   }
   
   // Fallback to global variable
@@ -7393,24 +7393,24 @@ function updateProvidersForK8s(k8sInfo) {
   updateProviderDropdownText();
 }
 
-// Function to toggle between MC-Infra (VM) and K8s-Infra
+// Function to toggle between MC-Infra (Node) and K8s-Infra
 async function toggleWorkloadType() {
-  const vmModeInput = document.getElementById("vmMode");
+  const nodeModeInput = document.getElementById("nodeMode");
   const k8sModeInput = document.getElementById("k8sMode");
   const isK8sMode = k8sModeInput && k8sModeInput.checked;
   
   // Update global workload type
-  currentWorkloadType = isK8sMode ? 'k8s' : 'vm';
+  currentWorkloadType = isK8sMode ? 'k8s' : 'node';
   console.log('toggleWorkloadType: currentWorkloadType set to', currentWorkloadType);
   
   // Save current configuration before switching
   if (isK8sMode) {
-    // Switching from VM to K8s - save VM config
+    // Switching from Node to K8s - save Node config
     workloadConfigurations.vmInfra.minVCPU = document.getElementById("minVCPU").value || "1";
     workloadConfigurations.vmInfra.minRAM = document.getElementById("minRAM").value || "0.5";
     workloadConfigurations.vmInfra.diskSize = document.getElementById("diskSize").value || "";
     
-    // Store current VM provider selection
+    // Store current Node provider selection
     workloadConfigurations.vmInfra.selectedProviders = getSelectedProviders();
     workloadConfigurations.vmInfra.allSelected = document.getElementById("provider-all")?.checked || false;
     
@@ -7433,17 +7433,17 @@ async function toggleWorkloadType() {
     workloadConfigurations.k8sInfra.isActive = true;
     
   } else {
-    // Switching from K8s to VM - save K8s config
+    // Switching from K8s to Node - save Node config
     workloadConfigurations.k8sInfra.minVCPU = document.getElementById("minVCPU").value || "4";
     workloadConfigurations.k8sInfra.minRAM = document.getElementById("minRAM").value || "16";
     workloadConfigurations.k8sInfra.diskSize = document.getElementById("diskSize").value || "100";
     
-    // Apply VM configuration (restore previous or defaults)
+    // Apply Node configuration (restore previous or defaults)
     document.getElementById("minVCPU").value = workloadConfigurations.vmInfra.minVCPU;
     document.getElementById("minRAM").value = workloadConfigurations.vmInfra.minRAM;
     document.getElementById("diskSize").value = workloadConfigurations.vmInfra.diskSize;
     
-    // Restore VM provider selection
+    // Restore Node provider selection
     if (workloadConfigurations.vmInfra.allSelected) {
       const allCheckbox = document.getElementById("provider-all");
       if (allCheckbox) {
@@ -7480,10 +7480,10 @@ async function toggleWorkloadType() {
     workloadConfigurations.vmInfra.isActive = true;
     workloadConfigurations.k8sInfra.isActive = false;
     
-    // No alert needed for VM mode as requested
+    // No alert needed for Node mode as requested
   }
   
-  console.log('Workload Type Changed:', isK8sMode ? 'K8s-Infra' : 'MC-Infra (VM)');
+  console.log('Workload Type Changed:', isK8sMode ? 'K8s-Infra' : 'MC-Infra (Node)');
   console.log('Current Configuration:', workloadConfigurations);
 }
 window.toggleWorkloadType = toggleWorkloadType;
@@ -7710,7 +7710,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
   };
 
   var jsonBody = JSON.stringify(struct);
-  console.log("Request body for mciDynamicCheckRequest:", jsonBody);
+  console.log("Request body for infraDynamicCheckRequest:", jsonBody);
 
   // // Show loading popup while API is processing
   // Swal.fire({
@@ -8532,23 +8532,23 @@ function getRecommendedSpec(idx, latitude, longitude) {
               // Now proceed to the final spec confirmation step
               addRegionMarker(selectedSpec.id);
 
-              var createMciReqVm = $.extend({}, createMciReqVmTmplt);
+              var createInfraReqVm = $.extend({}, createInfraReqVmTmplt);
               var recommendedSpec = selectedSpec;
 
-              createMciReqVm.name = "g" + (vmSubGroupReqeustFromSpecList.length + 1).toString();
+              createInfraReqVm.name = "g" + (nodeGroupRequestFromSpecList.length + 1).toString();
 
               var osImage = document.getElementById("osImage");
               var diskSize = document.getElementById("diskSize");
 
-              createMciReqVm.specId = selectedSpec.id;
-              createMciReqVm.imageId = selectedImageId; // Use selected image ID (from list or custom input)
-              createMciReqVm.rootDiskType = selectedSpec.rootDiskType;
+              createInfraReqVm.specId = selectedSpec.id;
+              createInfraReqVm.imageId = selectedImageId; // Use selected image ID (from list or custom input)
+              createInfraReqVm.rootDiskType = selectedSpec.rootDiskType;
 
               var diskSizeInput = parseInt(diskSize.value, 10);
               if (isNaN(diskSizeInput) || diskSizeInput <= 0) {
                 diskSizeInput = 0; // 0 means use CSP default
               }
-              createMciReqVm.rootDiskSize = diskSizeInput;
+              createInfraReqVm.rootDiskSize = diskSizeInput;
               // Note: 0 means use CSP default, positive values specify exact size
               // selectedSpec.rootDiskSize is now an integer from the API
 
@@ -8573,9 +8573,9 @@ function getRecommendedSpec(idx, latitude, longitude) {
           // Use setTimeout to open as independent popup (not nested)
           setTimeout(() => {
           Swal.fire({
-            title: "📋 SubGroup Configuration",
+            title: "📋 NodeGroup Configuration",
             width: 650,
-            html: buildSpecConfigPopupHtml(selectedSpec, createMciReqVm, {
+            html: buildSpecConfigPopupHtml(selectedSpec, createInfraReqVm, {
               isEdit: false,
               showValidation: true,
               imageSelectHTML: imageSelectHTML,
@@ -8664,13 +8664,13 @@ function getRecommendedSpec(idx, latitude, longitude) {
               // Fetch and populate Zone dropdown using the new availableZonesForSpec API (GET method)
               populateZoneSelect('zoneSelect', 'zoneLoadingSpinner', selectedSpec.id, '', 'zoneStatusMessage');
 
-              // Focus on the VM count input for better user experience
-              const vmCountInput = document.getElementById('vmCount');
+              // Focus on the Node count input for better user experience
+              const vmCountInput = document.getElementById('ndCount');
               if (vmCountInput) {
                 vmCountInput.focus();
               }
 
-              // Add input validation feedback for VM count
+              // Add input validation feedback for Node count
               if (vmCountInput) {
                 vmCountInput.addEventListener('input', function() {
                   const value = parseInt(this.value, 10);
@@ -8738,7 +8738,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
               autocapitalize: "off",
             },
             showCancelButton: true,
-            confirmButtonText: "➕ Add SubGroup",
+            confirmButtonText: "➕ Add NodeGroup",
             confirmButtonColor: '#28a745',
             cancelButtonText: "Cancel",
             //showLoaderOnConfirm: true,
@@ -8746,10 +8746,10 @@ function getRecommendedSpec(idx, latitude, longitude) {
             //back(disabled section)ground color
             backdrop: `rgba(0, 0, 0, 0.08)`,
             preConfirm: () => {
-              // vmCount input validation
-              const vmCountInput = document.getElementById('vmCount');
-              let vmCount = parseInt(vmCountInput.value, 10);
-              if (isNaN(vmCount) || vmCount < 1 || vmCount > 100) {
+              // ndCount input validation
+              const vmCountInput = document.getElementById('ndCount');
+              let ndCount = parseInt(vmCountInput.value, 10);
+              if (isNaN(ndCount) || ndCount < 1 || ndCount > 100) {
                 Swal.showValidationMessage('Enter a valid number between 1 and 100');
                 return false;
               }
@@ -8775,14 +8775,14 @@ function getRecommendedSpec(idx, latitude, longitude) {
               const osImageSelect = document.getElementById('osImageSelect');
               if (osImageSelect && osImageSelect.value) {
                 console.log(osImageSelect.value);
-                createMciReqVm.imageId = osImageSelect.value;
+                createInfraReqVm.imageId = osImageSelect.value;
               }
-              if (!createMciReqVm.imageId) {
+              if (!createInfraReqVm.imageId) {
                 Swal.showValidationMessage('Select an OS image');
                 return false;
               }
 
-              return vmCount;
+              return ndCount;
             },
 
 
@@ -8790,22 +8790,22 @@ function getRecommendedSpec(idx, latitude, longitude) {
             // result.value is false if result.isDenied or another key such as result.isDismissed
             if (result.value) {
 
-              createMciReqVm.subGroupSize = parseInt(result.value, 10) || 1;
-              if (createMciReqVm.subGroupSize <= 0) {
-                createMciReqVm.subGroupSize = 1;
+              createInfraReqVm.nodeGroupSize = parseInt(result.value, 10) || 1;
+              if (createInfraReqVm.nodeGroupSize <= 0) {
+                createInfraReqVm.nodeGroupSize = 1;
               }
 
               const rootDiskTypeSelect = document.getElementById('rootDiskTypeSelect');
               const rootDiskTypeValue = rootDiskTypeSelect ? rootDiskTypeSelect.value : "default";
               console.log("RootDiskType:", rootDiskTypeValue);
-              createMciReqVm.rootDiskType = rootDiskTypeValue || "default";
+              createInfraReqVm.rootDiskType = rootDiskTypeValue || "default";
 
               const rootDiskSizeInput = document.getElementById('rootDiskSizeCustom').value.trim();
               if (rootDiskSizeInput) {
                 console.log("RootDiskSize:", rootDiskSizeInput);
-                createMciReqVm.rootDiskSize = parseInt(rootDiskSizeInput, 10) || 0;
+                createInfraReqVm.rootDiskSize = parseInt(rootDiskSizeInput, 10) || 0;
               } else {
-                createMciReqVm.rootDiskSize = 0;
+                createInfraReqVm.rootDiskSize = 0;
               }
 
               // Get selected zone (optional)
@@ -8813,14 +8813,14 @@ function getRecommendedSpec(idx, latitude, longitude) {
               const selectedZone = zoneSelect ? zoneSelect.value : "";
               if (selectedZone) {
                 console.log("Zone:", selectedZone);
-                createMciReqVm.zone = selectedZone;
+                createInfraReqVm.zone = selectedZone;
               }
 
               // Parse labels using common helper function
               const vmLabelsInput = document.getElementById('vmLabels').value.trim();
               const labels = parseLabelsString(vmLabelsInput);
               if (Object.keys(labels).length > 0) {
-                createMciReqVm.label = labels;
+                createInfraReqVm.label = labels;
                 
                 // Add used labels to recently used list
                 Object.entries(labels).forEach(([key, value]) => {
@@ -8830,25 +8830,25 @@ function getRecommendedSpec(idx, latitude, longitude) {
 
 
               console.log(
-                `${createMciReqVm.specId}` +
-                `\t(${createMciReqVm.subGroupSize})`
+                `${createInfraReqVm.specId}` +
+                `\t(${createInfraReqVm.nodeGroupSize})`
               );
               
-              // Check if we're editing an existing SubGroup or adding a new one
-              if (window.editingSubGroupIndex >= 0) {
-                // Update existing SubGroup
-                vmSubGroupReqeustFromSpecList[window.editingSubGroupIndex] = createMciReqVm;
-                recommendedSpecList[window.editingSubGroupIndex] = recommendedSpec;
-                console.log(`Updated SubGroup at index ${window.editingSubGroupIndex}`);
-                window.editingSubGroupIndex = -1; // Reset editing mode
+              // Check if we're editing an existing NodeGroup or adding a new one
+              if (window.editingNodeGroupIndex >= 0) {
+                // Update existing NodeGroup
+                nodeGroupRequestFromSpecList[window.editingNodeGroupIndex] = createInfraReqVm;
+                recommendedSpecList[window.editingNodeGroupIndex] = recommendedSpec;
+                console.log(`Updated NodeGroup at index ${window.editingNodeGroupIndex}`);
+                window.editingNodeGroupIndex = -1; // Reset editing mode
               } else {
-                // Add new SubGroup
-                vmSubGroupReqeustFromSpecList.push(createMciReqVm);
+                // Add new NodeGroup
+                nodeGroupRequestFromSpecList.push(createInfraReqVm);
                 recommendedSpecList.push(recommendedSpec);
               }
               
-              // Update SubGroup review panel
-              updateSubGroupReview();
+              // Update NodeGroup review panel
+              updateNodeGroupReview();
               
               // Activate provision-tab after successful configuration
               try {
@@ -8877,7 +8877,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 console.log('Failed to activate provision tab:', error);
               }
             } else {
-              console.log("VM configuration failed for this location");
+              console.log("Node configuration failed for this location");
               latLonInputPairIdx--;
               cspPointsCircle.pop();
               if (cspPointsCircle.length > 0) {
@@ -8892,7 +8892,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
             } else {
               // User canceled image selection
               console.log("Image selection canceled");
-              window.editingSubGroupIndex = -1; // Reset editing mode
+              window.editingNodeGroupIndex = -1; // Reset editing mode
               latLonInputPairIdx--;
               cspPointsCircle.pop();
               if (cspPointsCircle.length > 0) {
@@ -8908,7 +8908,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
       } else {
         // User canceled spec selection
         console.log("Spec selection canceled");
-        window.editingSubGroupIndex = -1; // Reset editing mode
+        window.editingNodeGroupIndex = -1; // Reset editing mode
         latLonInputPairIdx--;
         cspPointsCircle.pop();
         if (cspPointsCircle.length > 0) {
@@ -8958,8 +8958,8 @@ function getRecommendedSpec(idx, latitude, longitude) {
 }
 window.getRecommendedSpec = getRecommendedSpec;
 
-// Global variable for SubGroup editing mode (-1 means new, >= 0 means editing existing index)
-window.editingSubGroupIndex = -1;
+// Global variable for NodeGroup editing mode (-1 means new, >= 0 means editing existing index)
+window.editingNodeGroupIndex = -1;
 
 // ========== Common Helper Functions for Spec Configuration Popup ==========
 
@@ -9165,10 +9165,10 @@ const POPUP_STYLES = `
 `;
 
 /**
- * Build HTML for SubGroup Configuration popup with spec, image, and VM settings.
+ * Build HTML for NodeGroup Configuration popup with spec, image, and Node settings.
  * Creates a modern, compact layout with grouped sections.
- * @param {Object} spec - VM specification object with provider, region, CPU, memory, etc.
- * @param {Object} vm - VM configuration object with imageId, zone, labels, etc.
+ * @param {Object} spec - Node specification object with provider, region, CPU, memory, etc.
+ * @param {Object} nodeConf - Node configuration object with imageId, zone, labels, etc.
  * @param {Object} options - Optional configuration parameters
  * @param {boolean} options.isEdit - Whether this is edit mode (vs new spec selection)
  * @param {string} options.imageSelectHTML - Custom HTML for image selection input
@@ -9176,9 +9176,9 @@ const POPUP_STYLES = `
  * @param {Object} options.validationResult - Validation result object
  * @returns {string} Complete HTML string for the popup content
  */
-function buildSpecConfigPopupHtml(spec, vm, options = {}) {
+function buildSpecConfigPopupHtml(spec, nodeConf, options = {}) {
   const isEdit = options.isEdit || false;
-  const imageSelectHTML = options.imageSelectHTML || `<span class="popup-value-sm">${vm.imageId || 'N/A'}</span>`;
+  const imageSelectHTML = options.imageSelectHTML || `<span class="popup-value-sm">${nodeConf.imageId || 'N/A'}</span>`;
   const costPerHour = spec.costPerHour || 'N/A';
   const hasGpu = spec.acceleratorType === "gpu" || spec.acceleratorModel;
   
@@ -9198,15 +9198,15 @@ function buildSpecConfigPopupHtml(spec, vm, options = {}) {
     `;
   }
   
-  // SubGroup Name (only for edit mode)
+  // NodeGroup Name (only for edit mode)
   if (isEdit) {
     html += `
       <div class="popup-section">
         <div class="popup-row">
           <div class="popup-col">
             <div class="popup-field">
-              <label class="popup-label">📝 SubGroup Name</label>
-              <input type="text" id="editSubGroupName" class="popup-input" value="${vm.name || ''}" placeholder="Enter name">
+              <label class="popup-label">📝 NodeGroup Name</label>
+              <input type="text" id="editNodeGroupName" class="popup-input" value="${nodeConf.name || ''}" placeholder="Enter name">
             </div>
           </div>
         </div>
@@ -9315,14 +9315,14 @@ function buildSpecConfigPopupHtml(spec, vm, options = {}) {
       <div class="popup-row">
         <div class="popup-col">
           <div class="popup-field">
-            ${isEdit ? `<span class="popup-value-sm">${vm.imageId || 'N/A'}</span>` : imageSelectHTML}
+            ${isEdit ? `<span class="popup-value-sm">${nodeConf.imageId || 'N/A'}</span>` : imageSelectHTML}
           </div>
         </div>
       </div>
     </div>
   `;
   
-  // 🏷️ Configuration Section (Disk Type, Disk Size, Labels, VM Count)
+  // 🏷️ Configuration Section (Disk Type, Disk Size, Labels, Node Count)
   const labelsInputId = isEdit ? 'editVmLabels' : 'vmLabels';
   const currentLabelsValue = options.currentLabels || '';
   
@@ -9339,7 +9339,7 @@ function buildSpecConfigPopupHtml(spec, vm, options = {}) {
         <div class="popup-col">
           <div class="popup-field">
             <label class="popup-label">Disk Size (GB)</label>
-            <input type="text" id="${isEdit ? 'editRootDiskSize' : 'rootDiskSizeCustom'}" class="popup-input" value="${vm.rootDiskSize > 0 ? vm.rootDiskSize : ''}" placeholder="Default">
+            <input type="text" id="${isEdit ? 'editRootDiskSize' : 'rootDiskSizeCustom'}" class="popup-input" value="${nodeConf.rootDiskSize > 0 ? nodeConf.rootDiskSize : ''}" placeholder="Default">
           </div>
         </div>
         <div class="popup-col popup-col-2">
@@ -9354,9 +9354,9 @@ function buildSpecConfigPopupHtml(spec, vm, options = {}) {
       <div class="popup-row">
         <div class="popup-col">
           <div class="popup-field">
-            <label class="popup-label">VM Count (1-1000)</label>
-            <input type="number" id="${isEdit ? 'editVmCount' : 'vmCount'}" class="popup-input" 
-                   min="1" max="1000" value="${vm.subGroupSize || '1'}">
+            <label class="popup-label">Node Count (1-1000)</label>
+            <input type="number" id="${isEdit ? 'editVmCount' : 'ndCount'}" class="popup-input" 
+                   min="1" max="1000" value="${nodeConf.nodeGroupSize || '1'}">
           </div>
         </div>
       </div>
@@ -9367,61 +9367,61 @@ function buildSpecConfigPopupHtml(spec, vm, options = {}) {
   return html;
 }
 
-// SubGroup Management Functions
-function updateSubGroupReview() {
-  const reviewCard = document.getElementById('mci-review-card');
-  const subgroupList = document.getElementById('subgroup-list');
-  const noSubgroups = document.getElementById('no-subgroups');
+// NodeGroup Management Functions
+function updateNodeGroupReview() {
+  const reviewCard = document.getElementById('infra-review-card');
+  const nodegroupList = document.getElementById('nodegroup-list');
+  const noNodeGroups = document.getElementById('no-nodegroups');
   
   // Clear existing items
-  subgroupList.innerHTML = '';
+  nodegroupList.innerHTML = '';
   
-  if (vmSubGroupReqeustFromSpecList.length === 0) {
+  if (nodeGroupRequestFromSpecList.length === 0) {
     reviewCard.style.display = 'none';
     return;
   }
   
   // Show review card
   reviewCard.style.display = 'block';
-  noSubgroups.style.display = 'none';
+  noNodeGroups.style.display = 'none';
   
-  // Add each SubGroup item
-  vmSubGroupReqeustFromSpecList.forEach((vm, index) => {
+  // Add each NodeGroup item
+  nodeGroupRequestFromSpecList.forEach((nodeConf, index) => {
     const spec = recommendedSpecList[index];
-    const subgroupItem = createSubGroupItem(vm, spec, index);
-    subgroupList.appendChild(subgroupItem);
+    const nodegroupItem = createNodeGroupItem(nodeConf, spec, index);
+    nodegroupList.appendChild(nodegroupItem);
   });
   
-  // Add action buttons at the bottom of the SubGroup list
+  // Add action buttons at the bottom of the NodeGroup list
   const actionButtonsContainer = document.createElement('div');
   actionButtonsContainer.className = 'mt-3 pt-3 border-top';
   
-  // Check if SubGroups exist for K8s operations (now supports multi-cluster)
-  const hasSubGroups = vmSubGroupReqeustFromSpecList.length >= 1;
-  const hasOneSubGroup = vmSubGroupReqeustFromSpecList.length === 1;
+  // Check if NodeGroups exist for K8s operations (now supports multi-cluster)
+  const hasNodeGroups = nodeGroupRequestFromSpecList.length >= 1;
+  const hasOneNodeGroup = nodeGroupRequestFromSpecList.length === 1;
   
   // Get current workload type
   const workloadType = getCurrentWorkloadType();
   console.log('Current workload type:', workloadType);
-  console.log('VM radio:', document.getElementById('vmMode'));
+  console.log('Node radio:', document.getElementById('nodeMode'));
   console.log('K8s radio:', document.getElementById('k8sMode'));
-  console.log('VM checked:', document.getElementById('vmMode')?.checked);
+  console.log('Node checked:', document.getElementById('nodeMode')?.checked);
   console.log('K8s checked:', document.getElementById('k8sMode')?.checked);
   
   // Generate buttons based on workload type
   let buttonsHtml = '<div class="d-flex flex-column" style="gap: 8px;">';
   
-  if (workloadType === 'vm') {
-    console.log('Generating VM buttons...');
-    // VM workload buttons
+  if (workloadType === 'node') {
+    console.log('Generating Node buttons...');
+    // Node workload buttons
     buttonsHtml += `
-      <button type="button" onClick="createMci();" class="btn btn-success btn-sm" style="font-size: 0.85rem; padding: 8px 12px;">
-        🚀 Create MCI
+      <button type="button" onClick="createInfra();" class="btn btn-success btn-sm" style="font-size: 0.85rem; padding: 8px 12px;">
+        🚀 Create Infra
       </button>
       <div class="d-flex" style="gap: 4px;">
-        <button type="button" onClick="scaleOutMciWithConfiguration();" class="btn btn-info btn-sm ${!hasOneSubGroup ? 'disabled' : ''}" 
-                style="font-size: 0.75rem; padding: 6px 8px; flex: 1;" ${!hasOneSubGroup ? 'disabled' : ''}>
-          ➕ ScaleOut existing MCI
+        <button type="button" onClick="scaleOutInfraWithConfiguration();" class="btn btn-info btn-sm ${!hasOneNodeGroup ? 'disabled' : ''}" 
+                style="font-size: 0.75rem; padding: 6px 8px; flex: 1;" ${!hasOneNodeGroup ? 'disabled' : ''}>
+          ➕ ScaleOut existing Infra
         </button>
         <button type="button" onClick="clearCircle('clearText');" class="btn btn-outline-secondary btn-sm" 
                 style="font-size: 0.7rem; padding: 6px 8px; min-width: 60px;">
@@ -9435,14 +9435,14 @@ function updateSubGroupReview() {
     buttonsHtml += `
       <div class="border-top pt-2">
         <small class="text-muted d-block mb-2">Kubernetes Cluster</small>
-        <button type="button" onClick="createK8sCluster();" class="btn btn-primary btn-sm ${!hasSubGroups ? 'disabled' : ''}" 
-                style="font-size: 0.85rem; padding: 8px 12px; width: 100%; margin-bottom: 4px;" ${!hasSubGroups ? 'disabled' : ''}>
-          ☸️ Create K8s Cluster${vmSubGroupReqeustFromSpecList.length > 1 ? 's (' + vmSubGroupReqeustFromSpecList.length + ')' : ''}
+        <button type="button" onClick="createK8sCluster();" class="btn btn-primary btn-sm ${!hasNodeGroups ? 'disabled' : ''}" 
+                style="font-size: 0.85rem; padding: 8px 12px; width: 100%; margin-bottom: 4px;" ${!hasNodeGroups ? 'disabled' : ''}>
+          ☸️ Create K8s Cluster${nodeGroupRequestFromSpecList.length > 1 ? 's (' + nodeGroupRequestFromSpecList.length + ')' : ''}
         </button>
         <div class="d-flex" style="gap: 4px;">
-          <button type="button" onClick="addNodeGroupToK8sCluster();" class="btn btn-outline-primary btn-sm ${!hasSubGroups ? 'disabled' : ''}" 
-                  style="font-size: 0.75rem; padding: 6px 8px; flex: 1;" ${!hasSubGroups ? 'disabled' : ''}>
-            ➕ Add NodeGroup${vmSubGroupReqeustFromSpecList.length > 1 ? 's' : ''} to K8s Cluster
+          <button type="button" onClick="addNodeGroupToK8sCluster();" class="btn btn-outline-primary btn-sm ${!hasNodeGroups ? 'disabled' : ''}" 
+                  style="font-size: 0.75rem; padding: 6px 8px; flex: 1;" ${!hasNodeGroups ? 'disabled' : ''}>
+            ➕ Add NodeGroup${nodeGroupRequestFromSpecList.length > 1 ? 's' : ''} to K8s Cluster
           </button>
           <button type="button" onClick="clearCircle('clearText');" class="btn btn-outline-secondary btn-sm" 
                   style="font-size: 0.7rem; padding: 6px 8px; min-width: 60px;">
@@ -9452,16 +9452,16 @@ function updateSubGroupReview() {
       </div>
     `;
   } else {
-    console.log('Generating default VM buttons (fallback)...');
-    // Default fallback to VM buttons
+    console.log('Generating default Node buttons (fallback)...');
+    // Default fallback to Node buttons
     buttonsHtml += `
-      <button type="button" onClick="createMci();" class="btn btn-success btn-sm" style="font-size: 0.85rem; padding: 8px 12px;">
-        🚀 Create MCI
+      <button type="button" onClick="createInfra();" class="btn btn-success btn-sm" style="font-size: 0.85rem; padding: 8px 12px;">
+        🚀 Create Infra
       </button>
       <div class="d-flex" style="gap: 4px;">
-        <button type="button" onClick="scaleOutMciWithConfiguration();" class="btn btn-info btn-sm ${!hasOneSubGroup ? 'disabled' : ''}" 
-                style="font-size: 0.75rem; padding: 6px 8px; flex: 1;" ${!hasOneSubGroup ? 'disabled' : ''}>
-          ➕ ScaleOut existing MCI
+        <button type="button" onClick="scaleOutInfraWithConfiguration();" class="btn btn-info btn-sm ${!hasOneNodeGroup ? 'disabled' : ''}" 
+                style="font-size: 0.75rem; padding: 6px 8px; flex: 1;" ${!hasOneNodeGroup ? 'disabled' : ''}>
+          ➕ ScaleOut existing Infra
         </button>
         <button type="button" onClick="clearCircle('clearText');" class="btn btn-outline-secondary btn-sm" 
                 style="font-size: 0.7rem; padding: 6px 8px; min-width: 60px;">
@@ -9473,7 +9473,7 @@ function updateSubGroupReview() {
   
   buttonsHtml += '</div>';
   actionButtonsContainer.innerHTML = buttonsHtml;
-  subgroupList.appendChild(actionButtonsContainer);
+  nodegroupList.appendChild(actionButtonsContainer);
   
   // Auto-scroll to bottom when new items are added (with safety checks)
   setTimeout(() => {
@@ -9491,7 +9491,7 @@ function updateSubGroupReview() {
   }, 100);
 }
 
-function createSubGroupItem(vm, spec, index) {
+function createNodeGroupItem(nodeConf, spec, index) {
   const item = document.createElement('div');
   item.className = 'list-group-item p-2 mb-2 border rounded';
   item.style.backgroundColor = '#f8f9fa';
@@ -9508,15 +9508,15 @@ function createSubGroupItem(vm, spec, index) {
   const zoneTextColor = getContrastTextColor(zoneColor);
   
   // Build zone badge HTML if zone is specified
-  const zoneBadge = vm.zone 
-    ? `<span class="badge mr-1" style="background-color: ${zoneColor}; color: ${zoneTextColor}; font-size: 0.7rem;">${vm.zone}</span>`
+  const zoneBadge = nodeConf.zone 
+    ? `<span class="badge mr-1" style="background-color: ${zoneColor}; color: ${zoneTextColor}; font-size: 0.7rem;">${nodeConf.zone}</span>`
     : '';
   
   item.innerHTML = `
     <div class="d-flex align-items-start justify-content-between">
       <div class="flex-grow-1" style="min-width: 0;">
         <div class="d-flex align-items-center mb-1 flex-wrap">
-          <span class="badge mr-1" style="background-color: #343a40; color: white; font-size: 0.75rem;">💻 ${vm.name || `SubGroup-${index + 1}`} ⨉ ${vm.subGroupSize}</span>
+          <span class="badge mr-1" style="background-color: #343a40; color: white; font-size: 0.75rem;">💻 ${nodeConf.name || `NodeGroup-${index + 1}`} ⨉ ${nodeConf.nodeGroupSize}</span>
           <span class="badge mr-1" style="background-color: ${providerColor}; color: ${providerTextColor}; font-size: 0.7rem;">
             ${useGenericCspIcons ? 'Cloud' : (spec?.providerName || 'Unknown').toUpperCase()}
           </span>
@@ -9526,17 +9526,17 @@ function createSubGroupItem(vm, spec, index) {
           ${zoneBadge}
         </div>
         <div class="small text-muted" style="font-size: 0.7rem; line-height: 1.2;">
-          <div style="margin-bottom: 2px;"><strong>Spec:</strong> ${spec?.cspSpecName || vm.specId}</div>
-          <div style="margin-bottom: 2px;"><strong>Image:</strong> ${vm.imageId}</div>
+          <div style="margin-bottom: 2px;"><strong>Spec:</strong> ${spec?.cspSpecName || nodeConf.specId}</div>
+          <div style="margin-bottom: 2px;"><strong>Image:</strong> ${nodeConf.imageId}</div>
           <div><strong>vCPU:</strong> ${spec?.vCPU || 'N/A'} | <strong>Memory:</strong> ${spec?.memoryGiB || 'N/A'}GB | <strong>Cost:</strong> $${spec?.costPerHour || 'N/A'}/h</div>
           ${(spec?.acceleratorModel && spec.acceleratorModel !== '' && spec.acceleratorModel !== 'N/A') ? `<div style="margin-top: 2px;"><span style="color: #e74c3c; font-weight: bold;">⚡GPU: ${spec.acceleratorModel} (${spec.acceleratorCount || 'N/A'}, ${spec.acceleratorMemoryGB || 'N/A'}GB)</span></div>` : ''}
         </div>
       </div>
       <div class="d-flex flex-column ml-2" style="gap: 2px;">
-        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editSubGroup(${index})" title="Edit" style="width: 28px; height: 28px; padding: 2px; font-size: 0.7rem;">
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editNodeGroup(${index})" title="Edit" style="width: 28px; height: 28px; padding: 2px; font-size: 0.7rem;">
           ✏️
         </button>
-        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeSubGroup(${index})" title="Remove" style="width: 28px; height: 28px; padding: 2px; font-size: 0.7rem;">
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeNodeGroup(${index})" title="Remove" style="width: 28px; height: 28px; padding: 2px; font-size: 0.7rem;">
           🗑️
         </button>
       </div>
@@ -9684,34 +9684,34 @@ function getContrastTextColor(color) {
   return luminance > LUMINANCE_THRESHOLD ? '#333' : 'white';
 }
 
-function editSubGroup(index) {
-  const vm = vmSubGroupReqeustFromSpecList[index];
+function editNodeGroup(index) {
+  const nodeConf = nodeGroupRequestFromSpecList[index];
   const spec = recommendedSpecList[index];
   
-  if (!spec || !vm) {
-    console.error('Spec or VM not found for index:', index);
+  if (!spec || !nodeConf) {
+    console.error('Spec or Node config not found for index:', index);
     return;
   }
   
   // Set editing mode
-  window.editingSubGroupIndex = index;
+  window.editingNodeGroupIndex = index;
   
   // Build zone options (will be populated after dialog opens)
-  const currentZone = vm.zone || '';
+  const currentZone = nodeConf.zone || '';
   
   // Parse current labels using common helper
-  const currentLabels = labelsToString(vm.label);
+  const currentLabels = labelsToString(nodeConf.label);
   
   Swal.fire({
-    title: "✏️ Edit SubGroup Configuration",
+    title: "✏️ Edit NodeGroup Configuration",
     width: 650,
-    html: buildSpecConfigPopupHtml(spec, vm, {
+    html: buildSpecConfigPopupHtml(spec, nodeConf, {
       isEdit: true,
       currentLabels: currentLabels
     }),
     didOpen: () => {
       // Use common helpers for dropdown population
-      populateRootDiskTypeSelect('editRootDiskTypeSelect', spec.providerName, vm.rootDiskType || 'default');
+      populateRootDiskTypeSelect('editRootDiskTypeSelect', spec.providerName, nodeConf.rootDiskType || 'default');
       populateZoneSelect('editZoneSelect', 'editZoneLoadingSpinner', spec.id, currentZone, null);
       
       // Setup label input listener for chip sync
@@ -9725,7 +9725,7 @@ function editSubGroup(index) {
     cancelButtonText: 'Cancel',
     confirmButtonColor: '#28a745',
     preConfirm: () => {
-      const name = document.getElementById('editSubGroupName').value.trim();
+      const name = document.getElementById('editNodeGroupName').value.trim();
       const count = parseInt(document.getElementById('editVmCount').value);
       const diskType = document.getElementById('editRootDiskTypeSelect').value;
       const diskSize = document.getElementById('editRootDiskSize').value.trim();
@@ -9733,7 +9733,7 @@ function editSubGroup(index) {
       const labelsText = document.getElementById('editVmLabels').value.trim();
       
       if (isNaN(count) || count < 1) {
-        Swal.showValidationMessage('Please provide valid VM count');
+        Swal.showValidationMessage('Please provide valid Node count');
         return false;
       }
       
@@ -9743,44 +9743,44 @@ function editSubGroup(index) {
       return { name, count, diskType, diskSize: parseInt(diskSize, 10) || 0, zone, labels };
     }
   }).then((result) => {
-    window.editingSubGroupIndex = -1; // Reset editing mode
+    window.editingNodeGroupIndex = -1; // Reset editing mode
     
     if (result.isConfirmed) {
-      // Update the VM configuration
-      vmSubGroupReqeustFromSpecList[index].name = result.value.name;
-      vmSubGroupReqeustFromSpecList[index].subGroupSize = result.value.count;
-      vmSubGroupReqeustFromSpecList[index].rootDiskType = result.value.diskType;
-      vmSubGroupReqeustFromSpecList[index].rootDiskSize = result.value.diskSize;
+      // Update the Node configuration
+      nodeGroupRequestFromSpecList[index].name = result.value.name;
+      nodeGroupRequestFromSpecList[index].nodeGroupSize = result.value.count;
+      nodeGroupRequestFromSpecList[index].rootDiskType = result.value.diskType;
+      nodeGroupRequestFromSpecList[index].rootDiskSize = result.value.diskSize;
       
       if (result.value.zone) {
-        vmSubGroupReqeustFromSpecList[index].zone = result.value.zone;
+        nodeGroupRequestFromSpecList[index].zone = result.value.zone;
       } else {
-        delete vmSubGroupReqeustFromSpecList[index].zone;
+        delete nodeGroupRequestFromSpecList[index].zone;
       }
       
       if (Object.keys(result.value.labels).length > 0) {
-        vmSubGroupReqeustFromSpecList[index].label = result.value.labels;
+        nodeGroupRequestFromSpecList[index].label = result.value.labels;
         
         // Add used labels to recently used list
         Object.entries(result.value.labels).forEach(([key, value]) => {
           window.addToRecentLabels(`${key}=${value}`);
         });
       } else {
-        delete vmSubGroupReqeustFromSpecList[index].label;
+        delete nodeGroupRequestFromSpecList[index].label;
       }
       
-      updateSubGroupReview();
-      successAlert('SubGroup updated successfully!');
+      updateNodeGroupReview();
+      successAlert('NodeGroup updated successfully!');
     }
   });
 }
 
-function removeSubGroup(index) {
-  const vm = vmSubGroupReqeustFromSpecList[index];
+function removeNodeGroup(index) {
+  const nodeConf = nodeGroupRequestFromSpecList[index];
   
   Swal.fire({
-    title: 'Remove SubGroup?',
-    text: `Are you sure you want to remove "${vm.name || `SubGroup-${index + 1}`}"?`,
+    title: 'Remove NodeGroup?',
+    text: `Are you sure you want to remove "${nodeConf.name || `NodeGroup-${index + 1}`}"?`,
     icon: 'warning',
     showCancelButton: true,
     confirmButtonText: 'Yes, Remove',
@@ -9789,7 +9789,7 @@ function removeSubGroup(index) {
   }).then((result) => {
     if (result.isConfirmed) {
       // Remove from arrays
-      vmSubGroupReqeustFromSpecList.splice(index, 1);
+      nodeGroupRequestFromSpecList.splice(index, 1);
       recommendedSpecList.splice(index, 1);
       
       // Remove corresponding coordinate point
@@ -9807,16 +9807,16 @@ function removeSubGroup(index) {
         latLonInputPairIdx--;
       }
       
-      updateSubGroupReview();
-      // successAlert('SubGroup removed successfully!');
+      updateNodeGroupReview();
+      // successAlert('NodeGroup removed successfully!');
     }
   });
 }
 
 // Make functions available globally
-window.updateSubGroupReview = updateSubGroupReview;
-window.editSubGroup = editSubGroup;
-window.removeSubGroup = removeSubGroup;
+window.updateNodeGroupReview = updateNodeGroupReview;
+window.editNodeGroup = editNodeGroup;
+window.removeNodeGroup = removeNodeGroup;
 
 function range_change(obj) {
   document.getElementById("myvalue").value = obj.value;
@@ -9916,7 +9916,7 @@ function addRegionMarker(spec) {
 }
 window.addRegionMarker = addRegionMarker;
 
-function controlMCI(action) {
+function controlInfra(action) {
   switch (action) {
     case "refine":
     case "suspend":
@@ -9932,7 +9932,7 @@ function controlMCI(action) {
       );
       return;
   }
-  //console.log("[MCI " +action +"]");
+  //console.log("[Infra " +action +"]");
 
   var config = getConfig();
   var hostname = config.hostname;
@@ -9940,23 +9940,23 @@ function controlMCI(action) {
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var mciid = getSelectedMciId();
+  var infraid = getSelectedInfraId();
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
     return;
   }
-  if (!mciid) {
-    errorAlert("Please select an MCI first");
+  if (!infraid) {
+    errorAlert("Please select an Infra first");
     return;
   }
 
-  var spinnerId = addSpinnerTask(action + ": " + mciid);
-  infoAlert(action + ": " + mciid);
+  var spinnerId = addSpinnerTask(action + ": " + infraid);
+  infoAlert(action + ": " + infraid);
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/control/mci/${mciid}?action=${action}`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/control/infra/${infraid}?action=${action}`;
 
-  console.log("MCI control:[" + action + "]");
+  console.log("Infra control:[" + action + "]");
 
   axios({
     method: "get",
@@ -10007,9 +10007,9 @@ function controlMCI(action) {
       removeSpinnerTask(spinnerId);
     });
 }
-window.controlMCI = controlMCI;
+window.controlInfra = controlInfra;
 
-function hideMCI() {
+function hideInfra() {
   var config = getConfig();
   var hostname = config.hostname;
   var port = config.port;
@@ -10017,11 +10017,11 @@ function hideMCI() {
   var password = config.password;
   var namespace = configNamespace;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra?option=id`;
 
   var hideListString = "";
-  for (i = 0; i < mciHideList.length; i++) {
-    var html = "<br>[" + i + "]" + ": <b>" + mciHideList[i] + "</b> (hidden)";
+  for (i = 0; i < infraHideList.length; i++) {
+    var html = "<br>[" + i + "]" + ": <b>" + infraHideList[i] + "</b> (hidden)";
 
     hideListString = hideListString + html;
   }
@@ -10035,10 +10035,10 @@ function hideMCI() {
     },
   }).then((res) => {
     if (res.data.output != null) {
-      mciList = res.data.output;
+      infraList = res.data.output;
 
       Swal.fire({
-        title: "Hide/Show a MCI from the Map",
+        title: "Hide/Show a Infra from the Map",
         html: "<font size=3>" + hideListString,
         showCancelButton: true,
         confirmButtonText: "Show",
@@ -10048,12 +10048,12 @@ function hideMCI() {
         hideListString = "";
 
         if (result.isConfirmed) {
-          if (mciHideList.length != 0) {
+          if (infraHideList.length != 0) {
             Swal.fire({
-              title: "Show a MCI from the Map",
+              title: "Show a Infra from the Map",
               html: "<font size=3>" + hideListString,
               input: "select",
-              inputOptions: mciHideList,
+              inputOptions: infraHideList,
               inputPlaceholder: "Select from dropdown",
               inputAttributes: {
                 autocapitalize: "off",
@@ -10062,39 +10062,39 @@ function hideMCI() {
               confirmButtonText: "Show",
             }).then((result) => {
               if (result.isConfirmed) {
-                mciHideList = mciHideList.filter(
-                  (a) => a !== mciHideList[result.value]
+                infraHideList = infraHideList.filter(
+                  (a) => a !== infraHideList[result.value]
                 );
 
-                for (i = 0; i < mciHideList.length; i++) {
+                for (i = 0; i < infraHideList.length; i++) {
                   var html =
                     "<br>[" +
                     i +
                     "]" +
                     ": <b>" +
-                    mciHideList[i] +
+                    infraHideList[i] +
                     "</b> (hidden)";
                   hideListString = hideListString + html;
                 }
                 infoAlert(
                   "Show: " +
-                  mciHideList[result.value] +
+                  infraHideList[result.value] +
                   "<br>" +
                   hideListString
                 );
               }
             });
           } else {
-            infoAlert("There is no hidden MCI yet");
+            infoAlert("There is no hidden Infra yet");
           }
         } else if (result.isDenied) {
-          if (mciList.length != 0) {
+          if (infraList.length != 0) {
             Swal.fire({
-              title: "Hide a MCI from the Map",
+              title: "Hide a Infra from the Map",
               html: "<font size=3>" + hideListString,
               input: "select",
-              inputOptions: mciList.filter(
-                (val) => !mciHideList.includes(val)
+              inputOptions: infraList.filter(
+                (val) => !infraHideList.includes(val)
               ),
               inputPlaceholder: "Select from dropdown",
               inputAttributes: {
@@ -10104,37 +10104,37 @@ function hideMCI() {
               confirmButtonText: "Hide",
             }).then((result) => {
               if (result.isConfirmed) {
-                mciHideList.push(mciList[result.value]);
+                infraHideList.push(infraList[result.value]);
                 // remove duplicated items
-                mciHideList = [...new Set(mciHideList)];
+                infraHideList = [...new Set(infraHideList)];
 
-                for (i = 0; i < mciHideList.length; i++) {
+                for (i = 0; i < infraHideList.length; i++) {
                   var html =
                     "<br>[" +
                     i +
                     "]" +
                     ": <b>" +
-                    mciHideList[i] +
+                    infraHideList[i] +
                     "</b> (hidden)";
                   hideListString = hideListString + html;
                 }
                 infoAlert(
-                  "Hide: " + mciList[result.value] + "<br>" + hideListString
+                  "Hide: " + infraList[result.value] + "<br>" + hideListString
                 );
               }
             });
           } else {
-            infoAlert("There is no MCI yet");
+            infoAlert("There is no Infra yet");
           }
         }
       });
     }
   });
 }
-window.hideMCI = hideMCI;
+window.hideInfra = hideInfra;
 
-function statusMCI() {
-  console.log("[Get MCI status]");
+function statusInfra() {
+  console.log("[Get Infra status]");
 
   var config = getConfig();
   var hostname = config.hostname;
@@ -10142,19 +10142,19 @@ function statusMCI() {
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var mciid = getSelectedMciId();
+  var infraid = getSelectedInfraId();
 
   // Validate required parameters
   if (!namespace || namespace === "") {
     errorAlert("Namespace is not selected. Please select a namespace first or switch to Control tab and back.");
     return;
   }
-  if (!mciid || mciid === "") {
-    errorAlert("MCI ID is not selected. Please select an MCI first.");
+  if (!infraid || infraid === "") {
+    errorAlert("Infra ID is not selected. Please select an Infra first.");
     return;
   }
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}`;
 
   axios({
     method: "get",
@@ -10166,7 +10166,7 @@ function statusMCI() {
     timeout: 600000,
   })
     .then((res) => {
-      console.log("[Status MCI]");
+      console.log("[Status Infra]");
       displayJsonData(res.data, typeInfo);
     })
     .catch(function (error) {
@@ -10180,7 +10180,7 @@ function statusMCI() {
         const status = error.response.status;
         let errorMsg = "";
         if (status === 404) {
-          errorMsg = `MCI '${mciid}' not found in namespace '${namespace}'.\n\nThis may happen if:\n- The MCI was deleted\n- The namespace is incorrect\n- The MCI creation failed completely`;
+          errorMsg = `Infra '${infraid}' not found in namespace '${namespace}'.\n\nThis may happen if:\n- The Infra was deleted\n- The namespace is incorrect\n- The Infra creation failed completely`;
         } else {
           errorMsg = JSON.stringify(errorData, null, 2).replace(/['",]+/g, "");
         }
@@ -10192,10 +10192,10 @@ function statusMCI() {
       console.log(error.config);
     });
 }
-window.statusMCI = statusMCI;
+window.statusInfra = statusInfra;
 
-function deleteMCI() {
-  console.log("Deleting MCI");
+function deleteInfra() {
+  console.log("Deleting Infra");
 
   var config = getConfig();
   var hostname = config.hostname;
@@ -10203,12 +10203,12 @@ function deleteMCI() {
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var mciid = getSelectedMciId();
+  var infraid = getSelectedInfraId();
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=terminate`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}?option=terminate`;
 
-  var spinnerId = addSpinnerTask("Deleting MCI: " + mciid);
-  infoAlert("Delete: " + mciid + " (option=terminate)");
+  var spinnerId = addSpinnerTask("Deleting Infra: " + infraid);
+  infoAlert("Delete: " + infraid + " (option=terminate)");
 
   axios({
     method: "delete",
@@ -10221,14 +10221,14 @@ function deleteMCI() {
     .then((res) => {
       console.log(res);
       displayJsonData(res.data, typeInfo);
-      // Targeted removal: only remove the deleted MCI from the render map
-      mciRenderMap.delete(mciid);
+      // Targeted removal: only remove the deleted Infra from the render map
+      infraRenderMap.delete(infraid);
       map.render();
-      updateMciList();
+      updateInfraList();
     })
     .catch(function (error) {
       console.log(error);
-      errorAlert("Failed to delete MCI: " + mciid);
+      errorAlert("Failed to delete Infra: " + infraid);
       if (error.response && error.response.data) {
         displayJsonData(error.response.data, typeError);
       }
@@ -10237,7 +10237,7 @@ function deleteMCI() {
       removeSpinnerTask(spinnerId);
     });
 }
-window.deleteMCI = deleteMCI;
+window.deleteInfra = deleteInfra;
 
 function releaseResources() {
   var spinnerId = addSpinnerTask("Removing associated default resources");
@@ -10330,10 +10330,10 @@ function registerCspResource() {
   var password = config.password;
   var namespace = configNamespace;
 
-  var url = `http://${hostname}:${port}/tumblebug/registerCspResourcesAll?mciFlag=n`;
+  var url = `http://${hostname}:${port}/tumblebug/registerCspResourcesAll?infraFlag=n`;
 
   var commandReqTmp = {
-    mciName: "csp",
+    infraName: "csp",
     nsId: `${namespace}`,
   };
   var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
@@ -10374,9 +10374,9 @@ async function showScheduleJobManagement() {
   const username = config.username;
   const password = config.password;
 
-  // Generate random MCI name prefix (reg-xxxx)
+  // Generate random Infra name prefix (reg-xxxx)
   const randomSuffix = Math.random().toString(36).substring(2, 6).toLowerCase();
-  const defaultMciPrefix = `reg-${randomSuffix}`;
+  const defaultInfraPrefix = `reg-${randomSuffix}`;
 
   // Load namespace and connection lists
   let namespaces = [];
@@ -10539,8 +10539,8 @@ async function showScheduleJobManagement() {
             <small>Min: 10s, Recommended: 1800s+</small>
           </div>
           <div class="form-col">
-            <label>MCI Name Prefix</label>
-            <input type="text" id="sched-mciPrefix" class="form-control form-control-sm" value="${defaultMciPrefix}" placeholder="e.g., reg-a3f9">
+            <label>Infra Name Prefix</label>
+            <input type="text" id="sched-infraPrefix" class="form-control form-control-sm" value="${defaultInfraPrefix}" placeholder="e.g., reg-a3f9">
             <small>Auto-generated: reg-xxxx</small>
           </div>
         </div>
@@ -10578,8 +10578,8 @@ async function showScheduleJobManagement() {
                 </div>
                 <div class="schedule-option-item">
                   <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="sched-option-vm" value="vm">
-                    <label class="form-check-label" for="sched-option-vm">vm</label>
+                    <input class="form-check-input" type="checkbox" id="sched-option-node" value="node">
+                    <label class="form-check-label" for="sched-option-node">node</label>
                   </div>
                 </div>
                 <div class="schedule-option-item">
@@ -10593,10 +10593,10 @@ async function showScheduleJobManagement() {
             <small>Default : All Resources</small>
           </div>
           <div class="form-col">
-            <label>MCI Flag</label>
-            <select id="sched-mciFlag" class="form-control form-control-sm">
-              <option value="y">Single MCI</option>
-              <option value="n">Separate per VM</option>
+            <label>Infra Flag</label>
+            <select id="sched-infraFlag" class="form-control form-control-sm">
+              <option value="y">Single Infra</option>
+              <option value="n">Separate per Node</option>
             </select>
           </div>
         </div>
@@ -10733,7 +10733,7 @@ async function showScheduleJobManagement() {
           { id: 'sched-option-vnet', label: 'vNet' },
           { id: 'sched-option-sg', label: 'securityGroup' },
           { id: 'sched-option-sshkey', label: 'sshKey' },
-          { id: 'sched-option-vm', label: 'vm' },
+          { id: 'sched-option-node', label: 'node' },
           { id: 'sched-option-customimage', label: 'customImage' }
         ];
         
@@ -10759,7 +10759,7 @@ async function showScheduleJobManagement() {
         'sched-option-vnet',
         'sched-option-sg',
         'sched-option-sshkey',
-        'sched-option-vm',
+        'sched-option-node',
         'sched-option-customimage'
       ];
       
@@ -10900,7 +10900,7 @@ async function loadScheduleJobsInModal() {
                 `<strong>Conn:</strong> ${job.connectionName || 'All'} | `
               }
               <strong>Interval:</strong> ${job.intervalSeconds}s (${Math.round(job.intervalSeconds/60)}m) |
-              <strong>MCI Prefix:</strong> ${job.mciNamePrefix || '-'} |
+              <strong>Infra Prefix:</strong> ${job.infraNamePrefix || '-'} |
               <strong>Stats:</strong> Exec: ${job.executionCount}, Success: <span class="text-success">${job.successCount}</span>, Fail: <span class="text-danger">${job.failureCount}</span> (Consecutive: ${job.consecutiveFailures}) |
               <strong>Next:</strong> ${new Date(job.nextExecutionAt).toLocaleString()}${job.lastExecutionAt ? ` | <strong>Last:</strong> ${new Date(job.lastExecutionAt).toLocaleString()}` : ''}
             </div>
@@ -10929,7 +10929,7 @@ async function createScheduleJobFromModal() {
   const config = getConfig();
   const nsId = document.getElementById('sched-nsId').value;
   const intervalSeconds = parseInt(document.getElementById('sched-interval').value);
-  const mciNamePrefix = document.getElementById('sched-mciPrefix').value;
+  const infraNamePrefix = document.getElementById('sched-infraPrefix').value;
 
   // Determine active filter mode
   const activeFilterMode = document.querySelector('.filter-mode-tab.active')?.getAttribute('data-mode') || 'hierarchy';
@@ -10960,7 +10960,7 @@ async function createScheduleJobFromModal() {
       { id: 'sched-option-vnet', value: 'vNet' },
       { id: 'sched-option-sg', value: 'securityGroup' },
       { id: 'sched-option-sshkey', value: 'sshKey' },
-      { id: 'sched-option-vm', value: 'vm' },
+      { id: 'sched-option-node', value: 'node' },
       { id: 'sched-option-customimage', value: 'customImage' }
     ];
     optionCheckboxes.forEach(opt => {
@@ -10972,7 +10972,7 @@ async function createScheduleJobFromModal() {
     option = selectedOptions.join(',');
   }
 
-  const mciFlag = document.getElementById('sched-mciFlag').value;
+  const infraFlag = document.getElementById('sched-infraFlag').value;
 
   if (!nsId || !intervalSeconds || intervalSeconds < 10) {
     Swal.fire('❌ Error', 'Please fill required fields correctly (interval min: 10s)', 'error');
@@ -10986,9 +10986,9 @@ async function createScheduleJobFromModal() {
       jobType: "registerCspResources",
       nsId,
       intervalSeconds,
-      mciNamePrefix,
+      infraNamePrefix,
       option,
-      mciFlag
+      infraFlag
     };
 
     // Add filter fields based on mode
@@ -11063,9 +11063,9 @@ async function viewJobDetails(jobId) {
             </td></tr>` :
             `<tr><th style="background-color: #f8f9fa;">Connection</th><td>${job.connectionName || '<span class="badge badge-secondary">All Connections</span>'}</td></tr>`
           }
-          <tr><th style="background-color: #f8f9fa;">MCI Prefix</th><td>${job.mciNamePrefix || '-'}</td></tr>
+          <tr><th style="background-color: #f8f9fa;">Infra Prefix</th><td>${job.infraNamePrefix || '-'}</td></tr>
           <tr><th style="background-color: #f8f9fa;">Option</th><td>${job.option || 'All Resources'}</td></tr>
-          <tr><th style="background-color: #f8f9fa;">MCI Flag</th><td>${job.mciFlag === 'y' ? 'Single MCI' : 'Separate per VM'}</td></tr>
+          <tr><th style="background-color: #f8f9fa;">Infra Flag</th><td>${job.infraFlag === 'y' ? 'Single Infra' : 'Separate per Node'}</td></tr>
           <tr><th style="background-color: #f8f9fa;">Interval</th><td><strong>${job.intervalSeconds}</strong> seconds (${Math.round(job.intervalSeconds/60)} minutes)</td></tr>
           <tr><th style="background-color: #f8f9fa;">Status</th><td>
             ${job.enabled ? '<span class="badge badge-success">🟢 Enabled</span>' : '<span class="badge badge-secondary">⚫ Disabled</span>'}
@@ -11278,7 +11278,7 @@ function applyNamespace(newNs) {
   window.configNamespace = newNs;
   console.log('[Namespace] Changed: ' + oldNs + ' → ' + newNs);
   updateNsDisplays();
-  updateMciList();
+  updateInfraList();
 }
 
 // Change credential holder and reload connections + map
@@ -11402,9 +11402,9 @@ function reloadConnectionsForHolder() {
 
         updateMapConnectionStatus('connected');
 
-        // Also refresh MCI data and namespace list for new holder context
+        // Also refresh Infra data and namespace list for new holder context
         updateNsList();
-        getMci();
+        getInfra();
       } else {
         console.log('[CredentialHolder] No connections for holder:', configCredentialHolder);
         // Clear map points
@@ -11469,18 +11469,18 @@ function updateNsList() {
       }
     })
     .finally(function () {
-      updateMciList();
+      updateInfraList();
     });
 }
 
 // (syncNamespaceSelection removed — namespace is now a global configNamespace)
 
-var mciList = [];
-var mciHideList = [];
+var infraList = [];
+var infraHideList = [];
 
-function updateMciList() {
+function updateInfraList() {
   // Clear options in 'select'
-  var selectElement = document.getElementById("mciid");
+  var selectElement = document.getElementById("infraid");
   var previousSelection = selectElement.value;
   var i,
     L = selectElement.options.length - 1;
@@ -11495,7 +11495,7 @@ function updateMciList() {
   var namespace = configNamespace;
 
   if (namespace && namespace != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra?option=id`;
 
     axios({
       method: "get",
@@ -11507,7 +11507,7 @@ function updateMciList() {
     })
       .then((res) => {
         if (res.data.output != null) {
-          // mciList = res.data.output;
+          // infraList = res.data.output;
           for (let item of res.data.output) {
             if (item && item.trim() !== "") {
               var option = document.createElement("option");
@@ -11525,7 +11525,7 @@ function updateMciList() {
         }
       })
       .finally(function () {
-        updateVmAndIpListsFromMci();
+        updateNodeAndIpListsFromInfra();
         updateResourceList(typeStringVNet);
         updateResourceList(typeStringSG);
         updateResourceList(typeStringSshKey);
@@ -11534,30 +11534,30 @@ function updateMciList() {
       });
   }
 }
-window.updateMciList = updateMciList;
+window.updateInfraList = updateInfraList;
 
-document.getElementById("mciid").onmouseover = function () {
-  updateMciList();
+document.getElementById("infraid").onmouseover = function () {
+  updateInfraList();
 };
-document.getElementById("mciid").onchange = function () {
-  updateVmAndIpListsFromMci();
+document.getElementById("infraid").onchange = function () {
+  updateNodeAndIpListsFromInfra();
 };
 
 function updateVmList() {
-  // This function is now deprecated as VM list is updated via updateVmAndIpListsFromMci()
+  // This function is now deprecated as Node list is updated via updateNodeAndIpListsFromInfra()
   // Keeping for backward compatibility, but functionality moved to unified function
 }
 window.updateVmList = updateVmList;
 
-document.getElementById("vmid").addEventListener('change', function () {
-  // When VM is selected, auto-select corresponding IP
-  var selectedVmId = this.value;
+document.getElementById("nodeid").addEventListener('change', function () {
+  // When Node is selected, auto-select corresponding IP
+  var selectedNodeId = this.value;
   var pubipSelect = document.getElementById("pubip");
   
-  // Find and select the IP option that contains this VM ID
+  // Find and select the IP option that contains this Node ID
   for (let i = 0; i < pubipSelect.options.length; i++) {
     var optionText = pubipSelect.options[i].text;
-    if (optionText.includes(`(${selectedVmId},`)) {
+    if (optionText.includes(`(${selectedNodeId},`)) {
       pubipSelect.options[i].selected = true;
       break;
     }
@@ -11565,29 +11565,29 @@ document.getElementById("vmid").addEventListener('change', function () {
 });
 
 function updateIpList() {
-  // This function is now deprecated as IP list is updated via updateVmAndIpListsFromMci()
+  // This function is now deprecated as IP list is updated via updateNodeAndIpListsFromInfra()
   // Keeping for backward compatibility, but functionality moved to unified function
 }
 window.updateIpList = updateIpList;
 
-function updateSubGroupList() {
-  // This function is now deprecated as SubGroup selection is removed from UI
-  // SubGroup information is now shown in VM ID dropdown as "vm-id (subgroup-id)"
+function updateNodeGroupList() {
+  // This function is now deprecated as NodeGroup selection is removed from UI
+  // NodeGroup information is now shown in Node ID dropdown as "node-id (nodegroup-id)"
 }
-window.updateSubGroupList = updateSubGroupList;
+window.updateNodeGroupList = updateNodeGroupList;
 
-// SubGroup selection element no longer exists in UI
+// NodeGroup selection element no longer exists in UI
 
-// New unified function to update VM and IP lists from MCI data
-function updateVmAndIpListsFromMci() {
-  var vmSelectElement = document.getElementById("vmid");
+// New unified function to update Node and IP lists from Infra data
+function updateNodeAndIpListsFromInfra() {
+  var nodeSelectElement = document.getElementById("nodeid");
   var ipSelectElement = document.getElementById("pubip");
-  var previousVmSelection = vmSelectElement.value;
+  var previousNodeSelection = nodeSelectElement.value;
   var previousIpSelection = ipSelectElement.value;
   
   // Clear existing options
-  while (vmSelectElement.options.length > 0) {
-    vmSelectElement.remove(0);
+  while (nodeSelectElement.options.length > 0) {
+    nodeSelectElement.remove(0);
   }
   while (ipSelectElement.options.length > 0) {
     ipSelectElement.remove(0);
@@ -11598,10 +11598,10 @@ function updateVmAndIpListsFromMci() {
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var mciid = mciidElement.value;
+  var infraid = infraidElement.value;
 
-  if (namespace && namespace != "" && mciid && mciid != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}`;
+  if (namespace && namespace != "" && infraid && infraid != "") {
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}`;
 
     axios({
       method: "get",
@@ -11612,27 +11612,27 @@ function updateVmAndIpListsFromMci() {
       },
     })
       .then((res) => {
-        if (res.data && res.data.vm) {
-          res.data.vm.forEach(vm => {
-            // Add VM option with SubGroup info
-            var vmOption = document.createElement("option");
-            vmOption.value = vm.id;
-            vmOption.text = `${vm.id} (${vm.subGroupId || 'default'})`;
-            vmSelectElement.appendChild(vmOption);
+        if (res.data && res.data.node) {
+          res.data.node.forEach(nd => {
+            // Add Node option with NodeGroup info
+            var nodeOption = document.createElement("option");
+            nodeOption.value = nd.id;
+            nodeOption.text = `${nd.id} (${nd.nodeGroupId || 'default'})`;
+            nodeSelectElement.appendChild(nodeOption);
 
-            // Add IP option with VM and SubGroup info
-            if (vm.publicIP && vm.publicIP.trim() !== "") {
+            // Add IP option with Node and NodeGroup info
+            if (nd.publicIP && nd.publicIP.trim() !== "") {
               var ipOption = document.createElement("option");
-              ipOption.value = vm.publicIP;
-              ipOption.text = `${vm.publicIP} (${vm.id}, ${vm.subGroupId || 'default'})`;
+              ipOption.value = nd.publicIP;
+              ipOption.text = `${nd.publicIP} (${nd.id}, ${nd.nodeGroupId || 'default'})`;
               ipSelectElement.appendChild(ipOption);
             }
           });
 
           // Restore previous selections if they still exist
-          for (let i = 0; i < vmSelectElement.options.length; i++) {
-            if (vmSelectElement.options[i].value === previousVmSelection) {
-              vmSelectElement.options[i].selected = true;
+          for (let i = 0; i < nodeSelectElement.options.length; i++) {
+            if (nodeSelectElement.options[i].value === previousNodeSelection) {
+              nodeSelectElement.options[i].selected = true;
               break;
             }
           }
@@ -11645,18 +11645,18 @@ function updateVmAndIpListsFromMci() {
         }
       })
       .catch(function (error) {
-        console.error("Error updating VM and IP lists:", error);
+        console.error("Error updating Node and IP lists:", error);
       });
   }
 }
-window.updateVmAndIpListsFromMci = updateVmAndIpListsFromMci;
+window.updateNodeAndIpListsFromInfra = updateNodeAndIpListsFromInfra;
 
-// Helper function to extract SubGroup ID from VM selection text
-function getSubGroupIdFromVmSelection() {
-  var vmSelect = document.getElementById("vmid");
-  var selectedOption = vmSelect.options[vmSelect.selectedIndex];
+// Helper function to extract NodeGroup ID from Node selection text
+function getNodeGroupIdFromNodeSelection() {
+  var nodeSelect = document.getElementById("nodeid");
+  var selectedOption = nodeSelect.options[nodeSelect.selectedIndex];
   if (selectedOption && selectedOption.text) {
-    // Extract SubGroup ID from text like "vm-id (subgroup-id)"
+    // Extract NodeGroup ID from text like "node-id (nodegroup-id)"
     var match = selectedOption.text.match(/\(([^)]+)\)$/);
     if (match) {
       return match[1];
@@ -11807,10 +11807,10 @@ document.getElementById(typeStringConnection).onmouseover = function () {
 };
 
 function AddMcNLB() {
-  var mciid = mciidElement.value;
+  var infraid = infraidElement.value;
 
-  if (!mciid) {
-    errorAlert("You need to specify the ID of MCI");
+  if (!infraid) {
+    errorAlert("You need to specify the ID of Infra");
     return;
   }
 
@@ -11825,7 +11825,7 @@ function AddMcNLB() {
     return;
   }
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/mcSwNlb`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/mcSwNlb`;
 
   Swal.fire({
     title: "Configuration for Global NLB",
@@ -11833,7 +11833,7 @@ function AddMcNLB() {
     html:
       "<div style='text-align: left; margin: 20px;'>" +
       "<p><b>Global NLB Configuration:</b></p>" +
-      "<p><b>Target MCI:</b> " + mciid + "</p>" +
+      "<p><b>Target Infra:</b> " + infraid + "</p>" +
       "<p><b>Protocol:</b> TCP</p>" +
       "<hr>" +
       "<p><b>Port (listen/target):</b></p>" +
@@ -11894,7 +11894,7 @@ function AddMcNLB() {
       })
         .then((res) => {
           successAlert("Global NLB created successfully");
-          getMci();
+          getInfra();
         })
         .catch(function (error) {
           errorAlert("Error creating Global NLB: " + (error.response?.data?.message || error.message));
@@ -11913,10 +11913,10 @@ function AddNLB() {
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var mciid = mciidElement.value;
+  var infraid = infraidElement.value;
 
-  if (!mciid) {
-    errorAlert("You need to specify the ID of MCI");
+  if (!infraid) {
+    errorAlert("You need to specify the ID of Infra");
     return;
   }
 
@@ -11925,13 +11925,13 @@ function AddNLB() {
     return;
   }
 
-  // Load SubGroup list for selection
-  var subGroupUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/subgroup`;
-  var spinnerId = addSpinnerTask("Loading SubGroup list");
+  // Load NodeGroup list for selection
+  var nodeGroupUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/nodegroup`;
+  var spinnerId = addSpinnerTask("Loading NodeGroup list");
 
   axios({
     method: "get",
-    url: subGroupUrl,
+    url: nodeGroupUrl,
     auth: {
       username: `${username}`,
       password: `${password}`,
@@ -11939,29 +11939,29 @@ function AddNLB() {
     timeout: 600000,
   })
     .then((res) => {
-      var subGroupOptions = '';
+      var nodeGroupOptions = '';
       
       if (res.data.output && res.data.output.length > 0) {
-        res.data.output.forEach((subGroupName) => {
-          if (subGroupName && subGroupName.trim() !== "") {
-            subGroupOptions += `<option value="${subGroupName}">${subGroupName}</option>`;
+        res.data.output.forEach((nodeGroupName) => {
+          if (nodeGroupName && nodeGroupName.trim() !== "") {
+            nodeGroupOptions += `<option value="${nodeGroupName}">${nodeGroupName}</option>`;
           }
         });
 
-        // Show SubGroup selection dialog with port configuration
+        // Show NodeGroup selection dialog with port configuration
         Swal.fire({
           title: "Create Regional NLB",
           width: 600,
           html:
             "<div style='text-align: left; margin: 20px;'>" +
             "<p><b>Regional NLB Configuration:</b></p>" +
-            "<p><b>Target MCI:</b> " + mciid + "</p>" +
+            "<p><b>Target Infra:</b> " + infraid + "</p>" +
             "<hr>" +
             "<div class='form-group' style='margin-bottom: 20px;'>" +
-            "<label for='subgroup-select'><b>Available SubGroups:</b></label>" +
-            "<select id='subgroup-select' class='form-control' style='margin-top: 10px;'>" +
-            "<option value=''>-- Select SubGroup --</option>" +
-            subGroupOptions +
+            "<label for='nodegroup-select'><b>Available NodeGroups:</b></label>" +
+            "<select id='nodegroup-select' class='form-control' style='margin-top: 10px;'>" +
+            "<option value=''>-- Select NodeGroup --</option>" +
+            nodeGroupOptions +
             "</select>" +
             "</div>" +
             "<div class='form-group'>" +
@@ -11985,11 +11985,11 @@ function AddNLB() {
             }
           },
           preConfirm: () => {
-            const selectedSubGroup = document.getElementById('subgroup-select').value;
+            const selectedNodeGroup = document.getElementById('nodegroup-select').value;
             const nlbPort = document.getElementById('nlb-port').value;
             
-            if (!selectedSubGroup) {
-              Swal.showValidationMessage('Please select a SubGroup');
+            if (!selectedNodeGroup) {
+              Swal.showValidationMessage('Please select a NodeGroup');
               return false;
             }
             
@@ -11998,28 +11998,28 @@ function AddNLB() {
               return false;
             }
             
-            return { subGroup: selectedSubGroup, port: parseInt(nlbPort) };
+            return { nodeGroup: selectedNodeGroup, port: parseInt(nlbPort) };
           }
         }).then((result) => {
           if (result.isConfirmed) {
-            createRegionalNLB(mciid, result.value.subGroup, result.value.port, namespace, hostname, port, username, password);
+            createRegionalNLB(infraid, result.value.nodeGroup, result.value.port, namespace, hostname, port, username, password);
           }
         });
       } else {
-        errorAlert("No SubGroups found in the selected MCI");
+        errorAlert("No NodeGroups found in the selected Infra");
       }
     })
     .catch(function (error) {
-      errorAlert("Error loading SubGroups: " + (error.response?.data?.message || error.message));
+      errorAlert("Error loading NodeGroups: " + (error.response?.data?.message || error.message));
     })
     .finally(function () {
       removeSpinnerTask(spinnerId);
     });
 }
 
-// Create Regional NLB with selected SubGroup and port
-function createRegionalNLB(mciid, subgroupid, nlbport, namespace, hostname, port, username, password) {
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/nlb`;
+// Create Regional NLB with selected NodeGroup and port
+function createRegionalNLB(infraid, nodegroupid, nlbport, namespace, hostname, port, username, password) {
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/nlb`;
 
   var nlbReqTmp = {
     type: "PUBLIC",
@@ -12031,7 +12031,7 @@ function createRegionalNLB(mciid, subgroupid, nlbport, namespace, hostname, port
     targetGroup: {
       Protocol: "TCP",
       Port: `${nlbport}`,
-      subGroupId: `${subgroupid}`,
+      nodeGroupId: `${nodegroupid}`,
     },
     HealthChecker: {
       Interval: "default",
@@ -12054,7 +12054,7 @@ function createRegionalNLB(mciid, subgroupid, nlbport, namespace, hostname, port
   })
     .then((res) => {
       successAlert("Regional NLB created successfully");
-      getMci();
+      getInfra();
     })
     .catch(function (error) {
       errorAlert("Error creating Regional NLB: " + (error.response?.data?.message || error.message));
@@ -12072,10 +12072,10 @@ function DelNLB() {
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var mciid = mciidElement.value;
+  var infraid = infraidElement.value;
 
-  if (!mciid) {
-    errorAlert("You need to specify the ID of MCI");
+  if (!infraid) {
+    errorAlert("You need to specify the ID of Infra");
     return;
   }
 
@@ -12084,13 +12084,13 @@ function DelNLB() {
     return;
   }
 
-  // Load SubGroup list for selection
-  var subGroupUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/subgroup`;
-  var spinnerId = addSpinnerTask("Loading SubGroup list");
+  // Load NodeGroup list for selection
+  var nodeGroupUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/nodegroup`;
+  var spinnerId = addSpinnerTask("Loading NodeGroup list");
 
   axios({
     method: "get",
-    url: subGroupUrl,
+    url: nodeGroupUrl,
     auth: {
       username: `${username}`,
       password: `${password}`,
@@ -12098,33 +12098,33 @@ function DelNLB() {
     timeout: 600000,
   })
     .then((res) => {
-      var subGroupOptions = '';
+      var nodeGroupOptions = '';
       
       if (res.data.output && res.data.output.length > 0) {
-        res.data.output.forEach((subGroupName) => {
-          if (subGroupName && subGroupName.trim() !== "") {
-            subGroupOptions += `<option value="${subGroupName}">${subGroupName}</option>`;
+        res.data.output.forEach((nodeGroupName) => {
+          if (nodeGroupName && nodeGroupName.trim() !== "") {
+            nodeGroupOptions += `<option value="${nodeGroupName}">${nodeGroupName}</option>`;
           }
         });
 
-        // Show SubGroup selection dialog with deletion confirmation
+        // Show NodeGroup selection dialog with deletion confirmation
         Swal.fire({
           title: "Delete Regional NLB",
           width: 600,
           html:
             "<div style='text-align: left; margin: 20px;'>" +
             "<p><b>⚠️ Warning:</b> This action cannot be undone.</p>" +
-            "<p><b>Target MCI:</b> " + mciid + "</p>" +
+            "<p><b>Target Infra:</b> " + infraid + "</p>" +
             "<hr>" +
             "<div class='form-group' style='margin-bottom: 20px;'>" +
-            "<label for='subgroup-select'><b>Select SubGroup to Delete NLB:</b></label>" +
-            "<select id='subgroup-select' class='form-control' style='margin-top: 10px;'>" +
-            "<option value=''>-- Select SubGroup --</option>" +
-            subGroupOptions +
+            "<label for='nodegroup-select'><b>Select NodeGroup to Delete NLB:</b></label>" +
+            "<select id='nodegroup-select' class='form-control' style='margin-top: 10px;'>" +
+            "<option value=''>-- Select NodeGroup --</option>" +
+            nodeGroupOptions +
             "</select>" +
             "</div>" +
             "<div class='alert alert-danger' style='margin-top: 15px; padding: 10px; border-radius: 5px;'>" +
-            "<strong>Confirmation:</strong> The Regional NLB for the selected SubGroup will be permanently deleted." +
+            "<strong>Confirmation:</strong> The Regional NLB for the selected NodeGroup will be permanently deleted." +
             "</div>" +
             "</div>",
           icon: 'warning',
@@ -12135,34 +12135,34 @@ function DelNLB() {
           position: "top-end",
           backdrop: `rgba(0, 0, 0, 0.08)`,
           preConfirm: () => {
-            const selectedSubGroup = document.getElementById('subgroup-select').value;
-            if (!selectedSubGroup) {
-              Swal.showValidationMessage('Please select a SubGroup');
+            const selectedNodeGroup = document.getElementById('nodegroup-select').value;
+            if (!selectedNodeGroup) {
+              Swal.showValidationMessage('Please select a NodeGroup');
               return false;
             }
-            return selectedSubGroup;
+            return selectedNodeGroup;
           }
         }).then((result) => {
           if (result.isConfirmed) {
-            deleteRegionalNLB(mciid, result.value, namespace, hostname, port, username, password);
+            deleteRegionalNLB(infraid, result.value, namespace, hostname, port, username, password);
           }
         });
       } else {
-        errorAlert("No SubGroups found in the selected MCI");
+        errorAlert("No NodeGroups found in the selected Infra");
       }
     })
     .catch(function (error) {
-      errorAlert("Error loading SubGroups: " + (error.response?.data?.message || error.message));
+      errorAlert("Error loading NodeGroups: " + (error.response?.data?.message || error.message));
     })
     .finally(function () {
       removeSpinnerTask(spinnerId);
     });
 }
 
-// Show deletion confirmation dialog after SubGroup selection
+// Show deletion confirmation dialog after NodeGroup selection
 // Separate function to handle the actual deletion
-function deleteRegionalNLB(mciid, subgroupid, namespace, hostname, port, username, password) {
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/nlb/${subgroupid}`;
+function deleteRegionalNLB(infraid, nodegroupid, namespace, hostname, port, username, password) {
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/nlb/${nodegroupid}`;
   var spinnerId = addSpinnerTask("Deleting Regional NLB");
   
   axios({
@@ -12175,7 +12175,7 @@ function deleteRegionalNLB(mciid, subgroupid, namespace, hostname, port, usernam
   })
     .then((res) => {
       successAlert("Regional NLB deleted successfully");
-      getMci();
+      getInfra();
     })
     .catch(function (error) {
       errorAlert("Error deleting Regional NLB: " + (error.response?.data?.message || error.message));
@@ -12211,7 +12211,7 @@ function manageNLB() {
     cancelButtonText: '❌ Close',
     width: '500px',
     customClass: {
-      popup: 'swal2-mci-context'
+      popup: 'swal2-infra-context'
     }
   });
 }
@@ -12261,7 +12261,7 @@ function setDefaultRemoteCommandsByApp(appName) {
   switch (appName) {
     case "Xonotic":
       defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/xonotic/startServer.sh; chmod +x ~/startServer.sh";
-      defaultRemoteCommand[1] = "sudo ~/startServer.sh " + "Cloud-Barista-$$Func(GetMciId())" + " 26000" + " 8" + " 8";
+      defaultRemoteCommand[1] = "sudo ~/startServer.sh " + "Cloud-Barista-$$Func(GetInfraId())" + " 26000" + " 8" + " 8";
       defaultRemoteCommand[2] = "echo '$$Func(GetPublicIP(target=this,postfix=:26000))'";
       break;
     case "ELK":
@@ -12294,7 +12294,7 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "echo '[INFO] After reboot, verify with: nvidia-smi'";
       break;
     case "RebootVM":
-      // Reboot VM - useful after GPU driver installation
+      // Reboot Node - useful after GPU driver installation
       defaultRemoteCommand[0] = "sudo reboot";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
@@ -12328,7 +12328,7 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "";
       break;
     case "PortForward-Add":
-      // Forward an external port on this VM to a target IP:port (e.g., OpenStack floating IP)
+      // Forward an external port on this Node to a target IP:port (e.g., OpenStack floating IP)
       // Fill in FLOATING_IP, EXT_PORT, TARGET_PORT in the parameter fields below the command
       defaultRemoteCommand[0] = "IFACE=$(ip route show 0.0.0.0/0 | grep -oE \"dev [^ ]+\" | cut -c5-) && sudo sysctl -w net.ipv4.ip_forward=1 && sudo iptables -t nat -A PREROUTING -i $IFACE -p tcp --dport <EXT_PORT> -j DNAT --to-destination <FLOATING_IP>:<TARGET_PORT> && sudo iptables -A FORWARD -p tcp -d <FLOATING_IP> --dport <TARGET_PORT> -j ACCEPT && sudo iptables -t nat -A POSTROUTING -j MASQUERADE && echo \"✅ Port forwarding :<EXT_PORT> → <FLOATING_IP>:<TARGET_PORT> activated\" && echo \"🌐 Access: http://$$Func(GetPublicIP(target=this)):<EXT_PORT>\"";
       defaultRemoteCommand[1] = "";
@@ -12374,45 +12374,45 @@ function setDefaultRemoteCommandsByApp(appName) {
       break;
     case "TelemetrySensor":
       // Setup GPU telemetry sensor (Node Exporter + GPU Exporter + Telegraf)
-      // Run on each GPU VM to expose aggregated metrics on port 9101
+      // Run on each GPU Node to expose aggregated metrics on port 9101
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/setup_gpu_sensor.sh | bash";
       defaultRemoteCommand[1] = "echo 'Telegraf gateway: $$Func(GetPublicIP(target=this)):9101'";
       defaultRemoteCommand[2] = "";
       break;
     case "TelemetryMonitor":
-      // Setup central monitoring (Prometheus + Grafana) on a monitoring VM
-      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU VM IPs
+      // Setup central monitoring (Prometheus + Grafana) on a monitoring Node
+      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU Node IPs
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/setup_monitoring.sh | bash -s -- $$Func(GetPublicIPs(separator=' ', label='accelerator=gpu'))";
       defaultRemoteCommand[1] = "echo 'Prometheus: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:9090/targets))'";
       defaultRemoteCommand[2] = "echo 'Grafana: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
       break;
     case "TelemetryExport":
     case "BenchmarkTelemetryExport":
-      // Export Prometheus metrics to CSV (run on the VM that hosts Prometheus, e.g., monitoring VM or benchmark manager)
-      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU VM IPs
+      // Export Prometheus metrics to CSV (run on the Node that hosts Prometheus, e.g., monitoring Node or benchmark manager)
+      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU Node IPs
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/export_metrics.sh | bash -s -- --minutes <EXPORT_MINUTES> --ips \"$$Func(GetPublicIPs(separator=',', label='accelerator=gpu'))\"";
       defaultRemoteCommand[1] = "ls -la ./metrics_export/";
       defaultRemoteCommand[2] = "";
       break;
     case "BenchmarkTarget":
       // All-in-one setup for benchmark target GPU VMs: vLLM + Model Serving + Telemetry Sensor
-      // Uses per-VM model assignment via $$Func(AssignTask(...)) from a predefined model list
+      // Uses per-Node model assignment via $$Func(AssignTask(...)) from a predefined model list
       // Assumes GPU driver is already installed (use 'Install GPU Driver' step first)
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/setupBenchmarkTarget.sh | bash -s -- $$Func(AssignTask(task='Qwen/Qwen2.5-1.5B-Instruct, meta-llama/Llama-3.2-3B-Instruct, mistralai/Mistral-7B-Instruct-v0.3, deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'))";
       defaultRemoteCommand[1] = "echo 'API: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:8000/v1))'";
       defaultRemoteCommand[2] = "echo 'Metrics: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:9101/metrics))'";
       break;
     case "BenchmarkManager":
-      // All-in-one setup for benchmark manager VM: Prometheus + Grafana + GuideLLM + Export Tools
-      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU VM IPs
+      // All-in-one setup for benchmark manager Node: Prometheus + Grafana + GuideLLM + Export Tools
+      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU Node IPs
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/setupBenchmarkManager.sh | bash -s -- $$Func(GetPublicIPs(separator=' ', label='accelerator=gpu'))";
       defaultRemoteCommand[1] = "echo 'Prometheus: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:9090/targets))'";
       defaultRemoteCommand[2] = "echo 'Grafana: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
       break;
     case "RunBenchmark":
-      // Run GuideLLM benchmark against target GPU VMs (runs on benchmark manager VM)
+      // Run GuideLLM benchmark against target GPU Nodes (runs on benchmark manager Node)
       // run_guidellm.sh supports multiple IPs natively: --ip <IP1> <IP2> ...
-      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU VM IPs
+      // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU Node IPs
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/run_guidellm.sh | bash -s -- --ip $$Func(GetPublicIPs(separator=' ', label='accelerator=gpu')) --seconds 60";
       defaultRemoteCommand[1] = "ls -la ~/guidellm_bench/bench_*";
       defaultRemoteCommand[2] = "";
@@ -12476,7 +12476,7 @@ function setDefaultRemoteCommandsByApp(appName) {
       // Deploy llm-d on K8s cluster via helmfile (run on control plane)
       // Prerequisites: K8s with --llm-d mode, GPU workers joined
       // --hf-token required for gated models (Llama, Mistral, etc.)
-      // --nodeport 30080 exposes gateway externally via NodePort on VM public IP
+      // --nodeport 30080 exposes gateway externally via NodePort on Node public IP
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deploy-llm-d.sh | bash -s -- --hf-token <HF_TOKEN> --nodeport 30080";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
@@ -12484,7 +12484,7 @@ function setDefaultRemoteCommandsByApp(appName) {
     case "LlmdDeployWithModel":
       // Deploy llm-d with specific model via helmfile (run on control plane)
       // --replicas 1 --tp 1 for minimal single-GPU; adjust for multi-GPU
-      // --nodeport 30080 exposes gateway externally via NodePort on VM public IP
+      // --nodeport 30080 exposes gateway externally via NodePort on Node public IP
       // Replace <HF_TOKEN> with your Hugging Face token (required for gated models like Llama, Mistral)
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deploy-llm-d.sh | bash -s -- --hf-token <HF_TOKEN> --replicas 1 --tp 1 --nodeport 30080 --model $$Func(AssignTask(task='Qwen/Qwen3-32B, meta-llama/Llama-3.3-8B-Instruct, Qwen/Qwen3-8B, mistralai/Mistral-Small-3.2-24B-Instruct-2503'))";
       defaultRemoteCommand[1] = "";
@@ -12563,21 +12563,21 @@ function setDefaultRemoteCommandsByApp(appName) {
       break;
     case "DevStack-Install":
       // Install DevStack on bare-metal VMs (e.g., AWS m5.metal)
-      // CSP name is derived from MCI ID + VM ID for unique provider registration
-      // Location info is automatically populated from the VM's deployment location
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/1.installDevStack.sh -o /tmp/installDevStack.sh && bash /tmp/installDevStack.sh --csp-name openstack-$$Func(GetMciId())-$$Func(GetVmId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
+      // CSP name is derived from Infra ID + Node ID for unique provider registration
+      // Location info is automatically populated from the Node's deployment location
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/1.installDevStack.sh -o /tmp/installDevStack.sh && bash /tmp/installDevStack.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetNodeId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
       defaultRemoteCommand[1] = "echo 'DevStack installed. Horizon: $$Func(GetPublicIP(target=this, prefix=http://, postfix=/dashboard))'";
       defaultRemoteCommand[2] = "";
       break;
     case "DevStack-Info":
       // Get registration info from installed DevStack
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/2.getRegistrationInfo.sh -o /tmp/getRegistrationInfo.sh && bash /tmp/getRegistrationInfo.sh --csp-name openstack-$$Func(GetMciId())-$$Func(GetVmId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/2.getRegistrationInfo.sh -o /tmp/getRegistrationInfo.sh && bash /tmp/getRegistrationInfo.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetNodeId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
     case "DevStack-UpdateEndpoints":
       // Update OpenStack service catalog endpoints after public IP change (e.g., suspend/resume)
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/3.updateEndpoints.sh -o /tmp/updateEndpoints.sh && bash /tmp/updateEndpoints.sh --csp-name openstack-$$Func(GetMciId())-$$Func(GetVmId())";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/3.updateEndpoints.sh -o /tmp/updateEndpoints.sh && bash /tmp/updateEndpoints.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetNodeId())";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
@@ -12589,19 +12589,19 @@ function setDefaultRemoteCommandsByApp(appName) {
       break;
     case "Kolla-Install":
       // Install OpenStack via Kolla-Ansible (Docker-based, production-grade, survives reboot)
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/kolla/1.installKolla.sh -o /tmp/installKolla.sh && bash /tmp/installKolla.sh --csp-name openstack-$$Func(GetMciId())-$$Func(GetVmId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/kolla/1.installKolla.sh -o /tmp/installKolla.sh && bash /tmp/installKolla.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetNodeId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
       defaultRemoteCommand[1] = "echo 'Kolla-Ansible installed. Horizon: $$Func(GetPublicIP(target=this, prefix=http://, postfix=/))'";
       defaultRemoteCommand[2] = "";
       break;
     case "Kolla-Info":
       // Get registration info from Kolla-Ansible deployment
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/kolla/2.getRegistrationInfo.sh -o /tmp/getKollaInfo.sh && bash /tmp/getKollaInfo.sh --csp-name openstack-$$Func(GetMciId())-$$Func(GetVmId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/kolla/2.getRegistrationInfo.sh -o /tmp/getKollaInfo.sh && bash /tmp/getKollaInfo.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetNodeId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
     case "Kolla-UpdateEndpoints":
       // Update OpenStack service catalog endpoints after public IP change
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/kolla/3.updateEndpoints.sh -o /tmp/updateKollaEndpoints.sh && bash /tmp/updateKollaEndpoints.sh --csp-name openstack-$$Func(GetMciId())-$$Func(GetVmId())";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/kolla/3.updateEndpoints.sh -o /tmp/updateKollaEndpoints.sh && bash /tmp/updateKollaEndpoints.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetNodeId())";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
@@ -12622,20 +12622,20 @@ function setDefaultRemoteCommandsByApp(appName) {
 
 // function for startApp by startApp button item
 function startApp() {
-  var mciid = mciidElement.value;
-  if (mciid) {
+  var infraid = infraidElement.value;
+  if (infraid) {
     setDefaultRemoteCommandsByApp(selectApp.value);
     executeRemoteCmd();
   } else {
-    console.log(" MCI ID is not assigned");
+    console.log(" Infra ID is not assigned");
   }
 }
 window.startApp = startApp;
 
 // function for stopApp by stopApp button item
 function stopApp() {
-  var mciid = mciidElement.value;
-  if (mciid) {
+  var infraid = infraidElement.value;
+  if (infraid) {
     console.log(" Stopping " + selectApp.value);
 
     var config = getConfig(); var hostname = config.hostname;
@@ -12644,7 +12644,7 @@ function stopApp() {
     var password = config.password;
     var namespace = configNamespace;
 
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}`;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/infra/${infraid}`;
     var cmd = [];
     if (selectApp.value == "Xonotic") {
       cmd.push(
@@ -12701,7 +12701,7 @@ function stopApp() {
       displayJsonData(res.data, typeInfo);
     });
   } else {
-    console.log(" MCI ID is not assigned");
+    console.log(" Infra ID is not assigned");
   }
 }
 window.stopApp = stopApp;
@@ -12713,12 +12713,12 @@ function statusApp() {
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var mciid = mciidElement.value;
+  var infraid = infraidElement.value;
 
-  if (mciid) {
+  if (infraid) {
     console.log(" Getting status " + selectApp.value);
 
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}`;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/infra/${infraid}`;
     var cmd = [];
     if (selectApp.value == "Xonotic") {
       cmd.push(
@@ -12779,7 +12779,7 @@ function statusApp() {
       displayJsonData(res.data, typeInfo);
     });
   } else {
-    console.log(" MCI ID is not assigned");
+    console.log(" Infra ID is not assigned");
   }
 }
 window.statusApp = statusApp;
@@ -12864,12 +12864,12 @@ window.PLACEHOLDER_METADATA = {
     secret: false,
   },
   'TELEMETRY_GPU_VM_IPS': {
-    description: 'GPU VM public IPs (space-separated)',
+    description: 'GPU Node public IPs (space-separated)',
     hint: '104.42.74.157 3.96.201.235',
     secret: false,
   },
   'TELEMETRY_GPU_VM_IPS_CSV': {
-    description: 'GPU VM public IPs (comma-separated)',
+    description: 'GPU Node public IPs (comma-separated)',
     hint: '104.42.74.157,3.96.201.235',
     secret: false,
   },
@@ -12889,12 +12889,12 @@ window.PLACEHOLDER_METADATA = {
     secret: false,
   },
   'EXT_PORT': {
-    description: 'External port to expose on this VM',
+    description: 'External port to expose on this Node',
     hint: '80',
     secret: false,
   },
   'TARGET_PORT': {
-    description: 'Target port on the destination VM',
+    description: 'Target port on the destination Node',
     hint: '80',
     secret: false,
   },
@@ -13062,7 +13062,7 @@ window.predefinedScriptCategories = {
     description: 'Ollama-based LLM service deployment',
     scripts: [
       { value: 'Nvidia', label: '1. Install GPU Driver', step: 1 },
-      { value: 'RebootVM', label: '2. Reboot VM', step: 2 },
+      { value: 'RebootVM', label: '2. Reboot Node', step: 2 },
       { value: 'Nvidia-Status', label: '3. Check GPU Driver', step: 3 },
       { value: 'Ollama', label: '4. Install Ollama', step: 4 },
       { value: 'OllamaPull', label: '5. Pull LLM Model', step: 5 },
@@ -13075,7 +13075,7 @@ window.predefinedScriptCategories = {
     description: 'vLLM-based high-performance LLM service',
     scripts: [
       { value: 'Nvidia', label: '1. Install GPU Driver', step: 1, targetLabel: 'accelerator=gpu' },
-      { value: 'RebootVM', label: '2. Reboot VM', step: 2, targetLabel: 'accelerator=gpu' },
+      { value: 'RebootVM', label: '2. Reboot Node', step: 2, targetLabel: 'accelerator=gpu' },
       { value: 'Nvidia-Status', label: '3. Check GPU Driver', step: 3, targetLabel: 'accelerator=gpu' },
       { value: 'vLLM', label: '4. Install vLLM', step: 4, targetLabel: 'accelerator=gpu' },
       { value: 'vLLMServe', label: '5. Serve LLM Model', step: 5, targetLabel: 'accelerator=gpu' },
@@ -13091,7 +13091,7 @@ window.predefinedScriptCategories = {
     description: 'LLM benchmark environment (vLLM + GuideLLM + Monitoring)',
     scripts: [
       { value: 'Nvidia', label: '1. Install GPU Driver', step: 1, targetLabel: 'accelerator=gpu' },
-      { value: 'RebootVM', label: '2. Reboot VM', step: 2, targetLabel: 'accelerator=gpu' },
+      { value: 'RebootVM', label: '2. Reboot Node', step: 2, targetLabel: 'accelerator=gpu' },
       { value: 'Nvidia-Status', label: '3. Check GPU Driver', step: 3, targetLabel: 'accelerator=gpu' },
       { value: 'BenchmarkTarget', label: '4. Setup Benchmark Target (vLLM+Model+Telemetry)', step: 4, targetLabel: 'accelerator=gpu' },
       { value: 'BenchmarkManager', label: '5. Setup Benchmark Manager (Monitoring+Tools)', step: 5, targetLabel: 'role=benchmark', targetLabels: ['role=benchmark', 'role=observability'] },
@@ -13109,7 +13109,7 @@ window.predefinedScriptCategories = {
       { value: 'K8sGetJoinCommand',      label: '2. Get Join Command',                        step: 2,  targetLabel: 'role=control', syncMode: true },
       { value: 'K8sGetKubeconfig',       label: '3. Get Kubeconfig (Base64)',                 step: 3,  targetLabel: 'role=control', syncMode: true },
       { value: 'Nvidia',                 label: '4. Install GPU Driver (GPU worker only)',    step: 4,  targetLabel: 'accelerator=gpu', optional: true },
-      { value: 'RebootVM',               label: '5. Reboot VM (GPU worker only)',             step: 5,  targetLabel: 'role=node', optional: true },
+      { value: 'RebootVM',               label: '5. Reboot Node (GPU worker only)',             step: 5,  targetLabel: 'role=node', optional: true },
       { value: 'Nvidia-Status',          label: '6. Check GPU Driver (GPU worker only)',      step: 6,  targetLabel: 'accelerator=gpu', optional: true, syncMode: true },
       { value: 'K8sWorker-Deploy',       label: '7. Deploy Worker & Join Cluster',           step: 7,  targetLabel: 'role=node' },
       { value: 'K8sClusterStatus',       label: '8. Check Cluster Status',                   step: 8,  targetLabel: 'role=control', syncMode: true },
@@ -13189,7 +13189,7 @@ window.predefinedScriptCategories = {
     label: '🔧 Utility',
     description: 'Utility scripts and tools',
     scripts: [
-      { value: 'RebootVM', label: 'Reboot VM', step: 1 },
+      { value: 'RebootVM', label: 'Reboot Node', step: 1 },
       { value: 'Nginx', label: 'Install Web Server', step: 2 },
       { value: 'MvToWebRoot', label: 'Move files to web root (/var/www/html/)', step: 3 },
       { value: 'ExtractToWebRoot', label: 'Extract archive to web root (auto-detect format)', step: 4 },
@@ -13384,7 +13384,7 @@ window.switchScriptCategory = function(categoryKey) {
 // usePopupStyle: true for new POPUP_STYLES, false for legacy style
 window.generateLabelSelectorHtml = function (isOptional = false, usePopupStyle = false) {
   if (usePopupStyle) {
-    const hintText = isOptional ? '<span class="popup-hint">(Optional - filter VMs by labels)</span>' : '';
+    const hintText = isOptional ? '<span class="popup-hint">(Optional - filter Nodes by labels)</span>' : '';
     return `
       <div class="popup-section">
         <div class="popup-section-title">🏷️ Label Selector ${hintText}</div>
@@ -13401,11 +13401,11 @@ window.generateLabelSelectorHtml = function (isOptional = false, usePopupStyle =
         </div>
         <div style="font-size: 0.7rem; color: #666; margin-bottom: 4px;"><strong>Available Labels</strong> (click to add/remove)</div>
         <div id="availableLabelsContainer" style="padding: 8px; background: #f8f9fa; border-radius: 4px; min-height: 36px;">
-          <span style="color: #999; font-size: 0.75rem;">Select an MCI to see available labels...</span>
+          <span style="color: #999; font-size: 0.75rem;">Select an Infra to see available labels...</span>
         </div>
         <div id="labelMatchPreview" style="margin-top: 6px; padding: 6px; background: #e7f3ff; border-radius: 4px; display: none;">
           <span style="font-size: 0.75rem; color: #0066cc;">
-            <strong>Matching VMs:</strong> <span id="matchingVmCount">0</span> / <span id="totalVmCount">0</span>
+            <strong>Matching Nodes:</strong> <span id="matchingNodeCount">0</span> / <span id="totalNodeCount">0</span>
           </span>
           <div id="matchingVmList" style="margin-top: 4px; font-size: 0.7rem; color: #666; max-height: 50px; overflow-y: auto;"></div>
         </div>
@@ -13428,11 +13428,11 @@ window.generateLabelSelectorHtml = function (isOptional = false, usePopupStyle =
       </button>
       <p style="margin: 8px 0 5px 0; font-size: 12px; color: #666;"><strong>Available Labels</strong> (click to add/remove)</p>
       <div id="availableLabelsContainer" style="padding: 10px; background: #f8f9fa; border-radius: 5px; min-height: 40px;">
-        <span style="color: #999; font-size: 12px;">Select an MCI to see available labels...</span>
+        <span style="color: #999; font-size: 12px;">Select an Infra to see available labels...</span>
       </div>
       <div id="labelMatchPreview" style="margin-top: 8px; padding: 8px; background: #e7f3ff; border-radius: 5px; display: none;">
         <span style="font-size: 12px; color: #0066cc;">
-          <strong>Matching VMs:</strong> <span id="matchingVmCount">0</span> / <span id="totalVmCount">0</span>
+          <strong>Matching Nodes:</strong> <span id="matchingNodeCount">0</span> / <span id="totalNodeCount">0</span>
         </span>
         <div id="matchingVmList" style="margin-top: 5px; font-size: 11px; color: #666; max-height: 60px; overflow-y: auto;"></div>
       </div>
@@ -13459,27 +13459,27 @@ window.setupClearLabelButtonListener = function() {
   }
 };
 
-// Extract unique labels from MCI VMs
-window.extractLabelsFromMci = function(mciId) {
-  const mciData = window.cloudBaristaCentralData?.mciData || [];
-  const mci = mciData.find(m => m.id === mciId || m.name === mciId);
+// Extract unique labels from Infra VMs
+window.extractLabelsFromInfra = function(infraId) {
+  const infraData = window.cloudBaristaCentralData?.infraData || [];
+  const infra = infraData.find(m => m.id === infraId || m.name === infraId);
   
-  if (!mci || !mci.vm || mci.vm.length === 0) {
-    return { labels: {}, vmCount: 0, vms: [] };
+  if (!infra || !infra.node || infra.node.length === 0) {
+    return { labels: {}, ndCount: 0, nodes: [] };
   }
   
   const labelMap = {}; // key -> Set of values
-  const vms = [];
+  const nodes = [];
   
-  mci.vm.forEach(vm => {
-    vms.push({
-      id: vm.id,
-      name: vm.name || vm.id,
-      label: vm.label || {}
+  infra.node.forEach(nd => {
+    nodes.push({
+      id: nd.id,
+      name: nd.name || nd.id,
+      label: nodeConf.label || {}
     });
     
-    if (vm.label && typeof vm.label === 'object') {
-      Object.entries(vm.label).forEach(([key, value]) => {
+    if (nodeConf.label && typeof nodeConf.label === 'object') {
+      Object.entries(nodeConf.label).forEach(([key, value]) => {
         if (!labelMap[key]) {
           labelMap[key] = new Set();
         }
@@ -13494,22 +13494,22 @@ window.extractLabelsFromMci = function(mciId) {
     labels[key] = Array.from(valueSet);
   });
   
-  return { labels, vmCount: mci.vm.length, vms };
+  return { labels, ndCount: infra.node.length, nodes };
 };
 
-// Update available labels display when MCI is selected
-window.updateAvailableLabels = function(mciId) {
+// Update available labels display when Infra is selected
+window.updateAvailableLabels = function(infraId) {
   const container = document.getElementById('availableLabelsContainer');
   if (!container) return;
   
-  const { labels, vmCount, vms } = extractLabelsFromMci(mciId);
+  const { labels, ndCount, nodes } = extractLabelsFromInfra(infraId);
   
-  // Store vms data for preview
-  window._currentMciVms = vms;
-  window._currentMciLabels = labels;
+  // Store nodes data for preview
+  window._currentInfraNodes = nodes;
+  window._currentInfraLabels = labels;
   
   if (Object.keys(labels).length === 0) {
-    container.innerHTML = '<span style="color: #999; font-size: 12px;">No labels found in this MCI\'s VMs</span>';
+    container.innerHTML = '<span style="color: #999; font-size: 12px;">No labels found in this Infra\'s Nodes</span>';
     return;
   }
   
@@ -13557,7 +13557,7 @@ window.updateAvailableLabels = function(mciId) {
     </div>`;
   }
   
-  html += `<p style="margin: 10px 0 0 0; font-size: 11px; color: #666;">Total: ${Object.keys(labels).length} label keys, ${vmCount} VMs</p>`;
+  html += `<p style="margin: 10px 0 0 0; font-size: 11px; color: #666;">Total: ${Object.keys(labels).length} label keys, ${ndCount} Nodes</p>`;
   
   container.innerHTML = html;
   
@@ -13738,17 +13738,17 @@ window.addLabelToSelector = function(labelPair) {
 // Update preview of matching VMs
 window.updateLabelMatchPreview = function() {
   const previewDiv = document.getElementById('labelMatchPreview');
-  const matchingCountSpan = document.getElementById('matchingVmCount');
-  const totalCountSpan = document.getElementById('totalVmCount');
+  const matchingCountSpan = document.getElementById('matchingNodeCount');
+  const totalCountSpan = document.getElementById('totalNodeCount');
   const matchingListDiv = document.getElementById('matchingVmList');
   const labelInput = document.getElementById('labelSelector');
   
-  if (!previewDiv || !labelInput || !window._currentMciVms) return;
+  if (!previewDiv || !labelInput || !window._currentInfraNodes) return;
   
-  const vms = window._currentMciVms;
+  const nodes = window._currentInfraNodes;
   const labelSelector = labelInput.value.trim();
   
-  totalCountSpan.textContent = vms.length;
+  totalCountSpan.textContent = nodes.length;
   
   if (!labelSelector) {
     previewDiv.style.display = 'none';
@@ -13766,24 +13766,24 @@ window.updateLabelMatchPreview = function() {
   });
   
   // Find matching VMs - ALL label pairs must match (AND condition)
-  const matchingVms = vms.filter(vm => {
-    if (!vm.label || requiredLabelPairs.length === 0) return false;
+  const matchingNodes = nodes.filter(nd => {
+    if (!nodeConf.label || requiredLabelPairs.length === 0) return false;
     
-    // Every required label pair must exist in VM's labels
+    // Every required label pair must exist in Node's labels
     return requiredLabelPairs.every(({ key, value }) => {
-      return vm.label[key] === value;
+      return nodeConf.label[key] === value;
     });
   });
   
-  matchingCountSpan.textContent = matchingVms.length;
+  matchingCountSpan.textContent = matchingNodes.length;
   
-  if (matchingVms.length > 0) {
-    matchingListDiv.innerHTML = matchingVms.map(vm => 
-      `<span style="display: inline-block; padding: 2px 6px; margin: 2px; background: #d4edda; border-radius: 3px;">${escapeHtml(vm.name)}</span>`
+  if (matchingNodes.length > 0) {
+    matchingListDiv.innerHTML = matchingNodes.map(nd => 
+      `<span style="display: inline-block; padding: 2px 6px; margin: 2px; background: #d4edda; border-radius: 3px;">${escapeHtml(nd.name)}</span>`
     ).join('');
     previewDiv.style.background = '#d4edda';
   } else {
-    matchingListDiv.innerHTML = '<span style="color: #dc3545;">No VMs match the current selector</span>';
+    matchingListDiv.innerHTML = '<span style="color: #dc3545;">No Nodes match the current selector</span>';
     previewDiv.style.background = '#f8d7da';
   }
   
@@ -13797,14 +13797,14 @@ window.escapeHtml = function(text) {
   return div.innerHTML;
 };
 
-// Setup MCI selector change handler for label updates
-window.setupMciSelectorForLabels = function() {
-  const mciSelector = document.getElementById('mciSelector');
-  if (!mciSelector) return;
+// Setup Infra selector change handler for label updates
+window.setupInfraSelectorForLabels = function() {
+  const infraSelector = document.getElementById('infraSelector');
+  if (!infraSelector) return;
   
-  // Update labels when MCI selection changes
-  mciSelector.addEventListener('change', function() {
-    // Clear previous selection when changing MCI
+  // Update labels when Infra selection changes
+  infraSelector.addEventListener('change', function() {
+    // Clear previous selection when changing Infra
     const labelInput = document.getElementById('labelSelector');
     if (labelInput) {
       labelInput.value = '';
@@ -13817,8 +13817,8 @@ window.setupMciSelectorForLabels = function() {
   // Interaction happens through chip clicks which call addLabelToSelector()
   
   // Initialize with current selection
-  if (mciSelector.value) {
-    updateAvailableLabels(mciSelector.value);
+  if (infraSelector.value) {
+    updateAvailableLabels(infraSelector.value);
   }
 };
 
@@ -14038,7 +14038,7 @@ window.loadPredefinedScript = function () {
 // Apply targetLabel from predefined script to Label Selector
 // Only sets the label if:
 // 1. The script has a targetLabel defined
-// 2. The target label is available in the current MCI's VMs
+// 2. The target label is available in the current Infra's VMs
 window.applyScriptTargetLabel = function(scriptValue) {
   if (!scriptValue) return;
   
@@ -14067,8 +14067,8 @@ window.applyScriptTargetLabel = function(scriptValue) {
   const labelsToTry = targetLabels ? [...targetLabels] : (targetLabel ? [targetLabel] : []);
   if (labelsToTry.length === 0) return; // No targetLabel for this script
   
-  // Check if any target label is available in current MCI's VMs
-  const availableLabels = window._currentMciLabels;
+  // Check if any target label is available in current Infra's VMs
+  const availableLabels = window._currentInfraLabels;
   if (!availableLabels || Object.keys(availableLabels).length === 0) return;
   
   let matchedLabel = null;
@@ -14082,7 +14082,7 @@ window.applyScriptTargetLabel = function(scriptValue) {
     }
   }
   
-  if (!matchedLabel) return; // None of the target labels are available in the MCI
+  if (!matchedLabel) return; // None of the target labels are available in the Infra
   
   // Set the label in the selector
   const labelInput = document.getElementById('labelSelector');
@@ -14137,7 +14137,7 @@ window.applyScriptSyncMode = function(scriptValue) {
 // Remote Command Result Viewer
 // ============================================================
 // Shows a formatted, human-readable view of remote command execution results.
-// Groups output by VM and command index for easy readability.
+// Groups output by Node and command index for easy readability.
 // Provides a "View Raw JSON" button to see the original JSON output.
 
 /**
@@ -14181,7 +14181,7 @@ function _escAndLinkify(text) {
 
 /**
  * Shows formatted remote command execution results in a SweetAlert window. 
- * Groups output by VM → Command for readability.
+ * Groups output by Node → Command for readability.
  * @param {Object} data - The API response with data.results[]
  */
 function showRemoteCmdResult(data, appliedDnsUrl) {
@@ -14191,22 +14191,22 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
   }
 
   const results = data.results;
-  const vmCount = results.length;
+  const ndCount = results.length;
   const TAIL_LINES = 10;
   const MAX_CMD_DISPLAY = 120; // Max chars for command preview in header
 
-  // --- Build per-VM tab content ---
-  const vmTabs = results.map((vm, vmIdx) => {
-    const vmLabel = vm.vmId || `vm-${vmIdx}`;
-    const vmIp = vm.vmIp || '';
-    const hasError = vm.error && vm.error.trim();
-    const cmdKeys = Object.keys(vm.command || {}).sort((a, b) => Number(a) - Number(b));
+  // --- Build per-Node tab content ---
+  const ndTabs = results.map((nd, ndIdx) => {
+    const ndLabel = nd.nodeId || `node-${ndIdx}`;
+    const ndIp = nd.nodeIp || '';
+    const hasError = nd.error && nd.error.trim();
+    const cmdKeys = Object.keys(nd.command || {}).sort((a, b) => Number(a) - Number(b));
 
     // Build command groups
     const cmdGroupsHtml = cmdKeys.map((key) => {
-      const cmdText = (vm.command[key] || '').trim();
-      const stdoutInfo = _tailLines(vm.stdout?.[key] || '', TAIL_LINES);
-      const stderrInfo = _tailLines(vm.stderr?.[key] || '', TAIL_LINES);
+      const cmdText = (nd.command[key] || '').trim();
+      const stdoutInfo = _tailLines(nd.stdout?.[key] || '', TAIL_LINES);
+      const stderrInfo = _tailLines(nd.stderr?.[key] || '', TAIL_LINES);
       const cmdIdx = Number(key) + 1;
 
       // Truncated command display (long curl commands, etc.)
@@ -14221,7 +14221,7 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
 
       // stdout block
       if (stdoutInfo) {
-        const blockId = `stdout-${vmIdx}-${key}`;
+        const blockId = `stdout-${ndIdx}-${key}`;
         html += `
           <div style="padding: 0;">
             <div style="background: #e8f5e9; padding: 3px 10px; font-size: 11px; color: #2e7d32; font-weight: 600; display: flex; justify-content: space-between; align-items: center;">
@@ -14249,7 +14249,7 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
 
       // stderr block (only if non-empty)
       if (stderrInfo) {
-        const blockId = `stderr-${vmIdx}-${key}`;
+        const blockId = `stderr-${ndIdx}-${key}`;
         html += `
           <div style="padding: 0;">
             <div style="background: #fff3e0; padding: 3px 10px; font-size: 11px; color: #e65100; font-weight: 600; display: flex; justify-content: space-between; align-items: center;">
@@ -14279,40 +14279,40 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
       return html;
     }).join('');
 
-    // VM-level error
-    const vmErrorHtml = hasError ? `
+    // Node-level error
+    const ndErrorHtml = hasError ? `
       <div style="margin-bottom: 8px; padding: 6px 10px; background: #ffebee; border-left: 4px solid #d32f2f; border-radius: 4px; font-size: 12px; color: #c62828;">
-        <b>Error:</b> ${window.escapeHtml(vm.error)}
+        <b>Error:</b> ${window.escapeHtml(nd.error)}
       </div>` : '';
 
-    return { vmLabel, vmIp, vmIdx, cmdGroupsHtml, vmErrorHtml, cmdCount: cmdKeys.length };
+    return { ndLabel, ndIp, ndIdx, cmdGroupsHtml, ndErrorHtml, cmdCount: cmdKeys.length };
   });
 
-  // --- Determine if we need VM tabs or single VM view ---
-  const buildVmContent = (vm) => `
+  // --- Determine if we need Node tabs or single Node view ---
+  const buildNodeContent = (nd) => `
     <div style="margin-bottom: 4px; font-size: 12px; color: #666;">
-      <span style="font-weight: 600; color: #333;">${window.escapeHtml(vm.vmLabel)}</span>
-      ${vm.vmIp ? `<span style="margin-left: 6px; color: #888;">(${window.escapeHtml(vm.vmIp)})</span>` : ''}
-      <span style="margin-left: 6px; color: #999;">${vm.cmdCount} command${vm.cmdCount > 1 ? 's' : ''}</span>
+      <span style="font-weight: 600; color: #333;">${window.escapeHtml(nd.ndLabel)}</span>
+      ${nd.ndIp ? `<span style="margin-left: 6px; color: #888;">(${window.escapeHtml(nd.ndIp)})</span>` : ''}
+      <span style="margin-left: 6px; color: #999;">${nd.cmdCount} command${nd.cmdCount > 1 ? 's' : ''}</span>
     </div>
-    ${vm.vmErrorHtml}
-    ${vm.cmdGroupsHtml}`;
+    ${nd.ndErrorHtml}
+    ${nd.cmdGroupsHtml}`;
 
   let bodyHtml;
-  if (vmCount === 1) {
-    bodyHtml = buildVmContent(vmTabs[0]);
+  if (ndCount === 1) {
+    bodyHtml = buildNodeContent(ndTabs[0]);
   } else {
-    // VM tab buttons
-    const tabBtns = vmTabs.map((vm, i) => `
+    // Node tab buttons
+    const tabBtns = ndTabs.map((nd, i) => `
       <button type="button" class="rcr-tab-btn${i === 0 ? ' rcr-tab-active' : ''}" data-idx="${i}"
         style="padding: 4px 10px; font-size: 11px; border: 1px solid #dee2e6; border-bottom: none; border-radius: 5px 5px 0 0; 
                cursor: pointer; background: ${i === 0 ? '#fff' : '#f1f3f5'}; color: ${i === 0 ? '#333' : '#888'}; font-weight: ${i === 0 ? '600' : '400'};">
-        ${window.escapeHtml(vm.vmLabel)} <span style="font-size: 10px; color: #999;">${window.escapeHtml(vm.vmIp)}</span>
+        ${window.escapeHtml(nd.ndLabel)} <span style="font-size: 10px; color: #999;">${window.escapeHtml(nd.ndIp)}</span>
       </button>`).join('');
 
-    const tabPanels = vmTabs.map((vm, i) => `
+    const tabPanels = ndTabs.map((nd, i) => `
       <div class="rcr-tab-panel" data-idx="${i}" style="display: ${i === 0 ? 'block' : 'none'}; padding: 10px 0 0 0;">
-        ${buildVmContent(vm)}
+        ${buildNodeContent(nd)}
       </div>`).join('');
 
     bodyHtml = `
@@ -14323,11 +14323,11 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
   }
 
   // --- Summary bar ---
-  const totalCmds = results.reduce((s, vm) => s + Object.keys(vm.command || {}).length, 0);
-  const hasAnyError = results.some(vm => (vm.error && vm.error.trim()));
-  const hasAnyStderr = results.some(vm => {
-    const keys = Object.keys(vm.stderr || {});
-    return keys.some(k => vm.stderr[k] && vm.stderr[k].trim());
+  const totalCmds = results.reduce((s, nd) => s + Object.keys(nd.command || {}).length, 0);
+  const hasAnyError = results.some(nd => (nd.error && nd.error.trim()));
+  const hasAnyStderr = results.some(nd => {
+    const keys = Object.keys(nd.stderr || {});
+    return keys.some(k => nd.stderr[k] && nd.stderr[k].trim());
   });
   const statusIcon = hasAnyError ? '⚠️' : (hasAnyStderr ? '⚡' : '✅');
   const statusColor = hasAnyError ? '#d32f2f' : (hasAnyStderr ? '#e65100' : '#2e7d32');
@@ -14347,7 +14347,7 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
       <div style="display: flex; align-items: center; gap: 10px;">
         <span style="font-size: 18px;">${statusIcon}</span>
         <span style="font-weight: 600; font-size: 13px; color: ${statusColor};">${statusText}</span>
-        <span style="font-size: 11px; color: #888;">${vmCount} VM${vmCount > 1 ? 's' : ''} · ${totalCmds} command${totalCmds > 1 ? 's' : ''}</span>
+        <span style="font-size: 11px; color: #888;">${ndCount} Node${ndCount > 1 ? 's' : ''} · ${totalCmds} command${totalCmds > 1 ? 's' : ''}</span>
       </div>
       <button type="button" id="rcr-raw-json-btn"
         style="padding: 4px 10px; font-size: 11px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
@@ -14423,15 +14423,15 @@ window._cmdStreamSessions = {};
  * Create a new streaming session, start SSE consumption in background,
  * and open the streaming modal.
  */
-function startStreamingSession(streamUrl, username, password, xRequestId, mciId, spinnerId, appliedDnsUrl) {
+function startStreamingSession(streamUrl, username, password, xRequestId, infraId, spinnerId, appliedDnsUrl) {
   const session = {
     xRequestId,
-    mciId,
+    infraId,
     spinnerId,
     streamUrl,
     appliedDnsUrl: appliedDnsUrl || null,
     startTime: Date.now(),
-    vmState: {},        // { vmId: { status, stdoutLines: [], stderrLines: [], statusInfo: null } }
+    nodeState: {},        // { nodeId: { status, stdoutLines: [], stderrLines: [], statusInfo: null } }
     doneSummary: null,
     abortController: new AbortController(),
     rebuildCallback: null,   // set when modal is open, null when closed
@@ -14443,31 +14443,31 @@ function startStreamingSession(streamUrl, username, password, xRequestId, mciId,
   window._cmdStreamSessions[xRequestId] = session;
   updateStreamingBadge();
 
-  const getOrCreateVm = (vmId) => {
-    if (!session.vmState[vmId]) {
-      session.vmState[vmId] = { status: 'Queued', stdoutLines: [], stderrLines: [], statusInfo: null };
+  const getOrCreateNode = (nodeId) => {
+    if (!session.nodeState[nodeId]) {
+      session.nodeState[nodeId] = { status: 'Queued', stdoutLines: [], stderrLines: [], statusInfo: null };
     }
-    return session.vmState[vmId];
+    return session.nodeState[nodeId];
   };
 
   // Start background SSE consumption
   consumeSSEStream(streamUrl, username, password, session.abortController, (event) => {
-    console.log('[SSE] Event received:', event.type, event.vmId || '', event);
-    if (event.type === 'CommandStatus' && event.vmId) {
-      const vm = getOrCreateVm(event.vmId);
-      vm.status = event.status?.status || vm.status;
-      vm.statusInfo = event.status || vm.statusInfo;
-    } else if (event.type === 'CommandLog' && event.vmId && event.log) {
-      const vm = getOrCreateVm(event.vmId);
+    console.log('[SSE] Event received:', event.type, event.nodeId || '', event);
+    if (event.type === 'CommandStatus' && event.nodeId) {
+      const nd = getOrCreateNode(event.nodeId);
+      nd.status = event.status?.status || nd.status;
+      nd.statusInfo = event.status || nd.statusInfo;
+    } else if (event.type === 'CommandLog' && event.nodeId && event.log) {
+      const nd = getOrCreateNode(event.nodeId);
       const line = event.log.line || '';
       if (event.log.stream === 'stdout') {
-        vm.stdoutLines.push(line);
+        nd.stdoutLines.push(line);
       } else if (event.log.stream === 'stderr') {
-        vm.stderrLines.push(line);
+        nd.stderrLines.push(line);
       }
     } else if (event.type === 'CommandDone') {
-      const totalVms = Object.keys(session.vmState).length;
-      session.doneSummary = event.summary || { totalVms, completedVms: 0, failedVms: 0, elapsedSeconds: 0 };
+      const totalNodes = Object.keys(session.nodeState).length;
+      session.doneSummary = event.summary || { totalNodes, completedNodes: 0, failedNodes: 0, elapsedSeconds: 0 };
       // Propagate server-side error from CommandDone summary
       if (event.summary && event.summary.error) {
         session.commandError = event.summary.error;
@@ -14500,7 +14500,7 @@ function startStreamingSession(streamUrl, username, password, xRequestId, mciId,
     }
     const elapsed = (Date.now() - session.startTime) / 1000;
     // After 60 seconds with no events and no VMs, treat as connection issue
-    if (elapsed > 60 && Object.keys(session.vmState).length === 0) {
+    if (elapsed > 60 && Object.keys(session.nodeState).length === 0) {
       session.error = 'No events received within 60 seconds. The command may have failed silently.';
       removeSpinnerTask(session.spinnerId);
       clearInterval(session._waitingTimer);
@@ -14532,23 +14532,23 @@ function openStreamingSessionModal(xRequestId) {
     return `<span style="display:inline-block;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:600;color:#fff;background:${bg};">${window.escapeHtml(status)}</span>`;
   };
 
-  const renderVmPanel = (vmId) => {
-    const vm = session.vmState[vmId];
-    if (!vm) return '';
-    const stdoutText = vm.stdoutLines.join('\n');
-    const stderrText = vm.stderrLines.join('\n');
+  const renderNodePanel = (nodeId) => {
+    const nd = session.nodeState[nodeId];
+    if (!nd) return '';
+    const stdoutText = nd.stdoutLines.join('\n');
+    const stderrText = nd.stderrLines.join('\n');
 
     let html = `
       <div style="margin-bottom:4px;display:flex;align-items:center;gap:8px;">
-        <span style="font-weight:600;font-size:12px;color:#333;">${window.escapeHtml(vmId)}</span>
-        ${statusBadge(vm.status)}
-        ${vm.statusInfo && vm.statusInfo.elapsedTime ? `<span style="font-size:10px;color:#888;">${vm.statusInfo.elapsedTime}s</span>` : ''}
+        <span style="font-weight:600;font-size:12px;color:#333;">${window.escapeHtml(nodeId)}</span>
+        ${statusBadge(nd.status)}
+        ${nd.statusInfo && nd.statusInfo.elapsedTime ? `<span style="font-size:10px;color:#888;">${nd.statusInfo.elapsedTime}s</span>` : ''}
       </div>`;
 
     // Show error details when status is Failed/Timeout (e.g. SSH connection failure, command timeout)
-    if (['Failed', 'Timeout'].includes(vm.status) && vm.statusInfo) {
-      const errMsg = vm.statusInfo.errorMessage;
-      const summary = vm.statusInfo.resultSummary;
+    if (['Failed', 'Timeout'].includes(nd.status) && nd.statusInfo) {
+      const errMsg = nd.statusInfo.errorMessage;
+      const summary = nd.statusInfo.resultSummary;
       if (errMsg || summary) {
         html += `
       <div style="margin-bottom:4px;padding:8px;background:#ffebee;border-left:4px solid #d32f2f;border-radius:4px;">`;
@@ -14565,7 +14565,7 @@ function openStreamingSessionModal(xRequestId) {
     if (stdoutText) {
       html += `
       <div style="margin-bottom:4px;">
-        <div style="background:#e8f5e9;padding:2px 8px;font-size:10px;color:#2e7d32;font-weight:600;">stdout (${vm.stdoutLines.length} lines)</div>
+        <div style="background:#e8f5e9;padding:2px 8px;font-size:10px;color:#2e7d32;font-weight:600;">stdout (${nd.stdoutLines.length} lines)</div>
         <pre style="margin:0;padding:6px 8px;background:#1e1e1e;color:#d4d4d4;font-size:11px;line-height:1.4;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;">${_escAndLinkify(stdoutText)}</pre>
       </div>`;
     }
@@ -14573,7 +14573,7 @@ function openStreamingSessionModal(xRequestId) {
     if (stderrText) {
       html += `
       <div style="margin-bottom:4px;">
-        <div style="background:#fff3e0;padding:2px 8px;font-size:10px;color:#e65100;font-weight:600;">stderr (${vm.stderrLines.length} lines)</div>
+        <div style="background:#fff3e0;padding:2px 8px;font-size:10px;color:#e65100;font-weight:600;">stderr (${nd.stderrLines.length} lines)</div>
         <pre style="margin:0;padding:6px 8px;background:#2e1e1e;color:#ffab91;font-size:11px;line-height:1.4;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;">${_escAndLinkify(stderrText)}</pre>
       </div>`;
     }
@@ -14598,10 +14598,10 @@ function openStreamingSessionModal(xRequestId) {
     const container = popup.querySelector('#stream-body');
     if (!container) return;
 
-    const vmIds = Object.keys(session.vmState).sort();
-    const totalVms = vmIds.length;
-    const completedCount = vmIds.filter(id => ['Completed','Failed','Timeout','Cancelled','Interrupted'].includes(session.vmState[id].status)).length;
-    const handlingCount = vmIds.filter(id => session.vmState[id].status === 'Handling').length;
+    const nodeIds = Object.keys(session.nodeState).sort();
+    const totalNodes = nodeIds.length;
+    const completedCount = nodeIds.filter(id => ['Completed','Failed','Timeout','Cancelled','Interrupted'].includes(session.nodeState[id].status)).length;
+    const handlingCount = nodeIds.filter(id => session.nodeState[id].status === 'Handling').length;
     const isFinished = session.doneSummary !== null;
 
     const streamDnsLinkHtml = session.appliedDnsUrl ? `
@@ -14615,12 +14615,12 @@ function openStreamingSessionModal(xRequestId) {
       ${streamDnsLinkHtml}
       <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:#f8f9fa;border:1px solid #e0e0e0;border-radius:5px;margin-bottom:8px;">
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:16px;">${isFinished ? (session.commandError || session.doneSummary.failedVms > 0 ? '⚠️' : '✅') : '⏳'}</span>
+          <span style="font-size:16px;">${isFinished ? (session.commandError || session.doneSummary.failedNodes > 0 ? '⚠️' : '✅') : '⏳'}</span>
           <span style="font-size:12px;font-weight:600;color:#333;">${isFinished ? (session.commandError ? 'Failed' : 'Completed') : 'Streaming...'}</span>
-          <span style="font-size:10px;color:#888;">${completedCount}/${totalVms} VMs done${handlingCount > 0 ? ` · ${handlingCount} running` : ''}</span>
+          <span style="font-size:10px;color:#888;">${completedCount}/${totalNodes} Nodes done${handlingCount > 0 ? ` · ${handlingCount} running` : ''}</span>
           ${session.doneSummary ? `<span style="font-size:10px;color:#888;">· ${session.doneSummary.elapsedSeconds}s total</span>` : ''}
         </div>
-        <span style="font-size:10px;color:#aaa;">MCI: ${window.escapeHtml(session.mciId)} | x-request-id: ${window.escapeHtml(xRequestId)}</span>
+        <span style="font-size:10px;color:#aaa;">Infra: ${window.escapeHtml(session.infraId)} | x-request-id: ${window.escapeHtml(xRequestId)}</span>
       </div>`;
 
     if (session.error) {
@@ -14630,19 +14630,19 @@ function openStreamingSessionModal(xRequestId) {
     }
 
     // Waiting state
-    if (vmIds.length === 0 && !isFinished) {
+    if (nodeIds.length === 0 && !isFinished) {
       if (session.commandError) {
         // Error before any VMs started (e.g., preprocessing failure)
         container.innerHTML = summaryHtml + `<div style="padding:16px;text-align:center;">
           <div style="margin-bottom:8px;padding:10px;background:#ffebee;border-left:4px solid #d32f2f;border-radius:4px;font-size:12px;color:#c62828;text-align:left;">
             <b>Command Failed:</b> ${window.escapeHtml(session.commandError)}
           </div>
-          <div style="font-size:11px;color:#888;">The command failed before reaching any VMs.</div>
+          <div style="font-size:11px;color:#888;">The command failed before reaching any Nodes.</div>
         </div>`;
       } else if (session.error) {
         // SSE transport error while waiting
         container.innerHTML = summaryHtml + `<div style="padding:16px;text-align:center;">
-          <div style="font-size:11px;color:#888;">No VM execution results available.</div>
+          <div style="font-size:11px;color:#888;">No Node execution results available.</div>
         </div>`;
       } else {
         // Still waiting for events
@@ -14655,7 +14655,7 @@ function openStreamingSessionModal(xRequestId) {
     }
 
     // Finished with error but no VMs processed
-    if (vmIds.length === 0 && isFinished) {
+    if (nodeIds.length === 0 && isFinished) {
       let errorHtml = '';
       if (session.commandError) {
         errorHtml = `<div style="margin-bottom:8px;padding:10px;background:#ffebee;border-left:4px solid #d32f2f;border-radius:4px;font-size:12px;color:#c62828;text-align:left;">
@@ -14664,32 +14664,32 @@ function openStreamingSessionModal(xRequestId) {
       }
       container.innerHTML = summaryHtml + `<div style="padding:16px;text-align:center;">
         ${errorHtml}
-        <div style="font-size:11px;color:#888;">No VM execution results available.</div>
+        <div style="font-size:11px;color:#888;">No Node execution results available.</div>
       </div>`;
       return;
     }
 
-    // VM panels with tabs
+    // Node panels with tabs
     let bodyHtml;
-    if (vmIds.length <= 1) {
-      bodyHtml = vmIds.map(id => renderVmPanel(id)).join('');
+    if (nodeIds.length <= 1) {
+      bodyHtml = nodeIds.map(id => renderNodePanel(id)).join('');
     } else {
-      const activeTab = popup.querySelector('.stream-tab-btn.stream-tab-active')?.dataset?.vmid || vmIds[0];
-      const tabBtns = vmIds.map(id => {
+      const activeTab = popup.querySelector('.stream-tab-btn.stream-tab-active')?.dataset?.nodeid || nodeIds[0];
+      const tabBtns = nodeIds.map(id => {
         const isActive = id === activeTab;
-        const vm = session.vmState[id];
-        const statusDot = vm.status === 'Handling' ? '🔵' : (vm.status === 'Completed' ? '🟢' : (vm.status === 'Failed' ? '🔴' : '⚪'));
-        return `<button type="button" class="stream-tab-btn${isActive ? ' stream-tab-active' : ''}" data-vmid="${window.escapeHtml(id)}"
+        const nd = session.nodeState[id];
+        const statusDot = nd.status === 'Handling' ? '🔵' : (nd.status === 'Completed' ? '🟢' : (nd.status === 'Failed' ? '🔴' : '⚪'));
+        return `<button type="button" class="stream-tab-btn${isActive ? ' stream-tab-active' : ''}" data-nodeid="${window.escapeHtml(id)}"
           style="padding:3px 8px;font-size:10px;border:1px solid #dee2e6;border-bottom:none;border-radius:4px 4px 0 0;cursor:pointer;
                  background:${isActive ? '#fff' : '#f1f3f5'};color:${isActive ? '#333' : '#888'};font-weight:${isActive ? '600' : '400'};">
           ${statusDot} ${window.escapeHtml(id)}
         </button>`;
       }).join('');
 
-      const tabPanels = vmIds.map(id => {
+      const tabPanels = nodeIds.map(id => {
         const isActive = id === activeTab;
-        return `<div class="stream-tab-panel" data-vmid="${window.escapeHtml(id)}" style="display:${isActive ? 'block' : 'none'};padding:8px 0 0 0;">
-          ${renderVmPanel(id)}
+        return `<div class="stream-tab-panel" data-nodeid="${window.escapeHtml(id)}" style="display:${isActive ? 'block' : 'none'};padding:8px 0 0 0;">
+          ${renderNodePanel(id)}
         </div>`;
       }).join('');
 
@@ -14705,7 +14705,7 @@ function openStreamingSessionModal(xRequestId) {
     // Tab click listeners
     container.querySelectorAll('.stream-tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        const vmid = btn.dataset.vmid;
+        const nodeid = btn.dataset.nodeid;
         container.querySelectorAll('.stream-tab-btn').forEach(b => {
           b.classList.remove('stream-tab-active');
           b.style.background = '#f1f3f5'; b.style.color = '#888'; b.style.fontWeight = '400';
@@ -14713,7 +14713,7 @@ function openStreamingSessionModal(xRequestId) {
         btn.classList.add('stream-tab-active');
         btn.style.background = '#fff'; btn.style.color = '#333'; btn.style.fontWeight = '600';
         container.querySelectorAll('.stream-tab-panel').forEach(p => {
-          p.style.display = p.dataset.vmid === vmid ? 'block' : 'none';
+          p.style.display = p.dataset.nodeid === nodeid ? 'block' : 'none';
         });
       });
     });
@@ -14775,18 +14775,18 @@ function showStreamingSessionList() {
 
   const rows = keys.map(reqId => {
     const s = sessions[reqId];
-    const vmIds = Object.keys(s.vmState);
-    const totalVms = vmIds.length;
-    const completedVms = vmIds.filter(id => ['Completed','Failed','Timeout','Cancelled','Interrupted'].includes(s.vmState[id].status)).length;
+    const nodeIds = Object.keys(s.nodeState);
+    const totalNodes = nodeIds.length;
+    const completedNodes = nodeIds.filter(id => ['Completed','Failed','Timeout','Cancelled','Interrupted'].includes(s.nodeState[id].status)).length;
     const isFinished = s.doneSummary !== null;
     const elapsed = ((Date.now() - s.startTime) / 1000).toFixed(0);
-    const statusIcon = isFinished ? (s.commandError || s.doneSummary.failedVms > 0 ? '⚠️' : '✅') : (s.error ? '❌' : '⏳');
+    const statusIcon = isFinished ? (s.commandError || s.doneSummary.failedNodes > 0 ? '⚠️' : '✅') : (s.error ? '❌' : '⏳');
     const statusText = isFinished ? (s.commandError ? 'Failed' : 'Done') : (s.error ? 'Error' : 'Running');
 
     return `<tr style="cursor:pointer;" onclick="openStreamingSessionModal('${window.escapeHtml(reqId)}')">
       <td style="padding:6px 8px;font-size:11px;">${statusIcon} ${statusText}</td>
-      <td style="padding:6px 8px;font-size:11px;font-weight:600;">${window.escapeHtml(s.mciId)}</td>
-      <td style="padding:6px 8px;font-size:11px;">${completedVms}/${totalVms} VMs</td>
+      <td style="padding:6px 8px;font-size:11px;font-weight:600;">${window.escapeHtml(s.infraId)}</td>
+      <td style="padding:6px 8px;font-size:11px;">${completedNodes}/${totalNodes} Nodes</td>
       <td style="padding:6px 8px;font-size:11px;color:#888;">${elapsed}s ago</td>
       <td style="padding:6px 8px;font-size:10px;color:#aaa;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${window.escapeHtml(reqId)}</td>
       <td style="padding:6px 8px;">
@@ -14806,7 +14806,7 @@ function showStreamingSessionList() {
         <thead>
           <tr style="background:#f8f9fa;border-bottom:2px solid #dee2e6;">
             <th style="padding:6px 8px;font-size:11px;text-align:left;">Status</th>
-            <th style="padding:6px 8px;font-size:11px;text-align:left;">MCI</th>
+            <th style="padding:6px 8px;font-size:11px;text-align:left;">Infra</th>
             <th style="padding:6px 8px;font-size:11px;text-align:left;">Progress</th>
             <th style="padding:6px 8px;font-size:11px;text-align:left;">Elapsed</th>
             <th style="padding:6px 8px;font-size:11px;text-align:left;">Request ID</th>
@@ -15131,29 +15131,29 @@ async function setBastionNode() {
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var mciid = getSelectedMciId();
+  var infraid = getSelectedInfraId();
 
-  if (!namespace || !mciid) {
-    errorAlert("Please select a namespace and MCI first");
+  if (!namespace || !infraid) {
+    errorAlert("Please select a namespace and Infra first");
     return;
   }
 
-  // Load VMs in the current (target) MCI
-  let targetVmOptions = '<option value="">-- select VM --</option>';
+  // Load VMs in the current (target) Infra
+  let targetNodeOptions = '<option value="">-- select Node --</option>';
   try {
-    const mciRes = await axios.get(
-      `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}`,
+    const infraRes = await axios.get(
+      `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}`,
       { auth: { username, password } }
     );
-    const vms = mciRes.data.vm || [];
-    vms.forEach(vm => {
-      const rawLabel = vm.publicIP ? `${vm.id} (${vm.publicIP})` : vm.id;
-      const escapedValue = window.escapeHtml(String(vm.id));
+    const nodes = infraRes.data.node || [];
+    nodes.forEach(nd => {
+      const rawLabel = nd.publicIP ? `${nd.id} (${nd.publicIP})` : nd.id;
+      const escapedValue = window.escapeHtml(String(nd.id));
       const escapedLabel = window.escapeHtml(String(rawLabel));
-      targetVmOptions += `<option value="${escapedValue}">${escapedLabel}</option>`;
+      targetNodeOptions += `<option value="${escapedValue}">${escapedLabel}</option>`;
     });
   } catch (err) {
-    console.error("Failed to fetch target MCI VMs:", err);
+    console.error("Failed to fetch target Infra Nodes:", err);
   }
 
   Swal.fire({
@@ -15163,9 +15163,9 @@ async function setBastionNode() {
     ${POPUP_STYLES}
     <div class="popup-container">
 
-      <!-- Target VM Section -->
+      <!-- Target Node Section -->
       <div class="popup-section">
-        <div class="popup-section-title">🎯 Target VM (needs bastion access)</div>
+        <div class="popup-section-title">🎯 Target Node (needs bastion access)</div>
         <div class="popup-row">
           <div class="popup-col">
             <div class="popup-field">
@@ -15175,14 +15175,14 @@ async function setBastionNode() {
           </div>
           <div class="popup-col">
             <div class="popup-field">
-              <label class="popup-label">MCI</label>
-              <span class="popup-value">${window.escapeHtml(mciid)}</span>
+              <label class="popup-label">Infra</label>
+              <span class="popup-value">${window.escapeHtml(infraid)}</span>
             </div>
           </div>
           <div class="popup-col" style="flex: 2;">
             <div class="popup-field">
-              <label class="popup-label">Target VM</label>
-              <select id="bastionTargetVmId" class="popup-select">${targetVmOptions}</select>
+              <label class="popup-label">Target Node</label>
+              <select id="bastionTargetNodeId" class="popup-select">${targetNodeOptions}</select>
             </div>
           </div>
         </div>
@@ -15190,44 +15190,44 @@ async function setBastionNode() {
 
       <!-- Bastion Node Section -->
       <div class="popup-section">
-        <div class="popup-section-title">🛡️ Bastion Node (jump host — can be from another namespace/MCI)</div>
+        <div class="popup-section-title">🛡️ Bastion Node (jump host — can be from another namespace/Infra)</div>
         <div class="popup-row">
           <div class="popup-col">
             <div class="popup-field">
               <label class="popup-label">Namespace</label>
               <input type="text" id="bastionNsId" class="popup-input" value="${namespace}"
-                placeholder="${namespace}" title="Bastion VM's namespace (leave as-is for same namespace)">
+                placeholder="${namespace}" title="Bastion Node's namespace (leave as-is for same namespace)">
             </div>
           </div>
           <div class="popup-col" style="flex: 0 0 auto;">
             <div class="popup-field">
               <label class="popup-label">&nbsp;</label>
-              <button type="button" id="loadBastionMciBtn"
+              <button type="button" id="loadBastionInfraBtn"
                 style="padding: 6px 12px; background: #0d6efd; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.82rem; white-space: nowrap;">
-                🔄 Load MCIs
+                🔄 Load Infras
               </button>
             </div>
           </div>
           <div class="popup-col" style="flex: 2;">
             <div class="popup-field">
-              <label class="popup-label">MCI</label>
-              <select id="bastionMciId" class="popup-select">
-                <option value="">-- click Load MCIs --</option>
+              <label class="popup-label">Infra</label>
+              <select id="bastionInfraId" class="popup-select">
+                <option value="">-- click Load Infras --</option>
               </select>
             </div>
           </div>
           <div class="popup-col" style="flex: 2;">
             <div class="popup-field">
-              <label class="popup-label">Bastion VM</label>
-              <select id="bastionVmId" class="popup-select">
-                <option value="">-- select MCI first --</option>
+              <label class="popup-label">Bastion Node</label>
+              <select id="bastionNodeId" class="popup-select">
+                <option value="">-- select Infra first --</option>
               </select>
             </div>
           </div>
         </div>
         <div class="popup-row">
           <div class="popup-col">
-            <span class="popup-hint">💡 For cross-namespace bastions (e.g. AWS VM in a shared-services namespace), change the namespace above and click Load MCIs.</span>
+            <span class="popup-hint">💡 For cross-namespace bastions (e.g. AWS Node in a shared-services namespace), change the namespace above and click Load Infras.</span>
           </div>
         </div>
       </div>
@@ -15237,114 +15237,114 @@ async function setBastionNode() {
     confirmButtonText: "Set Bastion",
     cancelButtonText: "Cancel",
     didOpen: () => {
-      // Load MCIs button handler
-      document.getElementById('loadBastionMciBtn').addEventListener('click', async () => {
+      // Load Infras button handler
+      document.getElementById('loadBastionInfraBtn').addEventListener('click', async () => {
         const bastionNs = document.getElementById('bastionNsId').value.trim();
         if (!bastionNs) { return; }
-        const mciSel = document.getElementById('bastionMciId');
-        mciSel.innerHTML = '<option value="">Loading...</option>';
-        document.getElementById('bastionVmId').innerHTML = '<option value="">-- select MCI first --</option>';
+        const infraSel = document.getElementById('bastionInfraId');
+        infraSel.innerHTML = '<option value="">Loading...</option>';
+        document.getElementById('bastionNodeId').innerHTML = '<option value="">-- select Infra first --</option>';
         try {
           const res = await axios.get(
-            `http://${hostname}:${port}/tumblebug/ns/${bastionNs}/mci?option=id`,
+            `http://${hostname}:${port}/tumblebug/ns/${bastionNs}/infra?option=id`,
             { auth: { username, password } }
           );
-          const mcis = Array.isArray(res.data.output) ? res.data.output : [];
-          mciSel.innerHTML = '<option value="">-- select MCI --</option>';
-          mcis.forEach(m => {
+          const infras = Array.isArray(res.data.output) ? res.data.output : [];
+          infraSel.innerHTML = '<option value="">-- select Infra --</option>';
+          infras.forEach(m => {
             const opt = document.createElement('option');
             opt.value = String(m);
             opt.textContent = String(m);
-            mciSel.appendChild(opt);
+            infraSel.appendChild(opt);
           });
         } catch (err) {
-          mciSel.innerHTML = '<option value="">Failed to load</option>';
-          console.error("Failed to load bastion MCIs:", err);
+          infraSel.innerHTML = '<option value="">Failed to load</option>';
+          console.error("Failed to load bastion Infras:", err);
         }
       });
 
-      // MCI change → load VMs
-      document.getElementById('bastionMciId').addEventListener('change', async () => {
+      // Infra change → load VMs
+      document.getElementById('bastionInfraId').addEventListener('change', async () => {
         const bastionNs = document.getElementById('bastionNsId').value.trim();
-        const bastionMci = document.getElementById('bastionMciId').value;
-        const vmSel = document.getElementById('bastionVmId');
-        if (!bastionMci) {
-          vmSel.innerHTML = '<option value="">-- select MCI first --</option>';
+        const bastionInfra = document.getElementById('bastionInfraId').value;
+        const nodeSel = document.getElementById('bastionNodeId');
+        if (!bastionInfra) {
+          nodeSel.innerHTML = '<option value="">-- select Infra first --</option>';
           return;
         }
-        vmSel.innerHTML = '<option value="">Loading...</option>';
+        nodeSel.innerHTML = '<option value="">Loading...</option>';
         try {
           const res = await axios.get(
-            `http://${hostname}:${port}/tumblebug/ns/${bastionNs}/mci/${bastionMci}`,
+            `http://${hostname}:${port}/tumblebug/ns/${bastionNs}/infra/${bastionInfra}`,
             { auth: { username, password } }
           );
-          const vms = res.data.vm || [];
+          const nodes = res.data.node || [];
           // Only show VMs — no auto-select placeholder (auto-select is not supported)
-          vmSel.innerHTML = '<option value="">-- select VM --</option>';
-          vms.forEach(vm => {
-            const hasPublic = !!vm.publicIP;
+          nodeSel.innerHTML = '<option value="">-- select Node --</option>';
+          nodes.forEach(nd => {
+            const hasPublic = !!nd.publicIP;
             const opt = document.createElement('option');
-            opt.value = String(vm.id);
-            opt.textContent = hasPublic ? `${vm.id}  ✅ ${vm.publicIP}` : `${vm.id}  (no public IP)`;
+            opt.value = String(nd.id);
+            opt.textContent = hasPublic ? `${nd.id}  ✅ ${nd.publicIP}` : `${nd.id}  (no public IP)`;
             if (!hasPublic) opt.style.color = '#aaa';
-            vmSel.appendChild(opt);
+            nodeSel.appendChild(opt);
           });
         } catch (err) {
-          vmSel.innerHTML = '<option value="">Failed to load</option>';
-          console.error("Failed to load bastion VMs:", err);
+          nodeSel.innerHTML = '<option value="">Failed to load</option>';
+          console.error("Failed to load bastion Nodes:", err);
         }
       });
     },
     preConfirm: () => {
-      const targetVmId = document.getElementById('bastionTargetVmId').value;
+      const targetNodeId = document.getElementById('bastionTargetNodeId').value;
       const bastionNsId = document.getElementById('bastionNsId').value.trim();
-      const bastionMciId = document.getElementById('bastionMciId').value;
-      const bastionVmId = document.getElementById('bastionVmId').value; // may be empty → auto-select
-      if (!targetVmId) {
-        Swal.showValidationMessage("Please select a target VM");
+      const bastionInfraId = document.getElementById('bastionInfraId').value;
+      const bastionNodeId = document.getElementById('bastionNodeId').value; // may be empty → auto-select
+      if (!targetNodeId) {
+        Swal.showValidationMessage("Please select a target Node");
         return false;
       }
-      if (!bastionMciId) {
-        Swal.showValidationMessage("Please load MCIs and select a bastion MCI");
+      if (!bastionInfraId) {
+        Swal.showValidationMessage("Please load Infras and select a bastion Infra");
         return false;
       }
-      return { targetVmId, bastionNsId, bastionMciId, bastionVmId };
+      return { targetNodeId, bastionNsId, bastionInfraId, bastionNodeId };
     },
   }).then(async (result) => {
     if (!result.isConfirmed || !result.value) return;
 
-    const { targetVmId, bastionNsId, bastionMciId, bastionVmId } = result.value;
+    const { targetNodeId, bastionNsId, bastionInfraId, bastionNodeId } = result.value;
 
     // Build URL based on how many components differ
     let url;
     const sameBastionNs = bastionNsId === namespace;
-    const sameBastionMci = bastionMciId === mciid;
+    const sameBastionInfra = bastionInfraId === infraid;
 
-    if (sameBastionNs && sameBastionMci && bastionVmId) {
-      // Same NS, same MCI
-      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/vm/${targetVmId}/bastion/${bastionVmId}`;
-    } else if (sameBastionNs && bastionVmId) {
-      // Same NS, different MCI
-      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/vm/${targetVmId}/bastion/${bastionMciId}/${bastionVmId}`;
-    } else if (sameBastionNs && !bastionVmId) {
-      // Same NS, different MCI, auto-select VM
-      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/vm/${targetVmId}/bastion/${bastionMciId}/`;
-    } else if (bastionVmId) {
-      // Cross-NS with explicit VM
-      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/vm/${targetVmId}/bastion/${bastionNsId}/${bastionMciId}/${bastionVmId}`;
+    if (sameBastionNs && sameBastionInfra && bastionNodeId) {
+      // Same NS, same Infra
+      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionNodeId}`;
+    } else if (sameBastionNs && bastionNodeId) {
+      // Same NS, different Infra
+      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionInfraId}/${bastionNodeId}`;
+    } else if (sameBastionNs && !bastionNodeId) {
+      // Same NS, different Infra, auto-select Node
+      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionInfraId}/`;
+    } else if (bastionNodeId) {
+      // Cross-NS with explicit Node
+      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionNsId}/${bastionInfraId}/${bastionNodeId}`;
     } else {
-      // Cross-NS, auto-select VM — not supported via URL params; fall back to explicit auto-select call
-      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/vm/${targetVmId}/bastion/${bastionNsId}/${bastionMciId}/`;
+      // Cross-NS, auto-select Node — not supported via URL params; fall back to explicit auto-select call
+      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionNsId}/${bastionInfraId}/`;
     }
 
-    // Remove trailing slash if bastionVmId is empty (auto-select not available via 3-segment route)
-    // For auto-select, use the existing same-MCI route which auto-picks a public-IP VM in bastionMciId
-    if (!bastionVmId) {
-      // Use bastionMciId route without VM ID — not directly supported; show guidance
+    // Remove trailing slash if bastionNodeId is empty (auto-select not available via 3-segment route)
+    // For auto-select, use the existing same-Infra route which auto-picks a public-IP Node in bastionInfraId
+    if (!bastionNodeId) {
+      // Use bastionInfraId route without Node ID — not directly supported; show guidance
       Swal.fire({
         icon: 'info',
-        title: 'Auto-select requires a VM ID',
-        text: `Please select a specific bastion VM. Auto-selection across MCI/namespaces is not supported via the UI — select a VM with a ✅ public IP from the list.`,
+        title: 'Auto-select requires a Node ID',
+        text: `Please select a specific bastion Node. Auto-selection across Infra/namespaces is not supported via the UI — select a Node with a ✅ public IP from the list.`,
         confirmButtonText: 'OK'
       });
       return;
@@ -15379,9 +15379,9 @@ async function executeRemoteCmd() {
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var mciid = getSelectedMciId();
-  var subgroupid = getSubGroupIdFromVmSelection();
-  var vmid = document.getElementById("vmid").value;
+  var infraid = getSelectedInfraId();
+  var nodegroupid = getNodeGroupIdFromNodeSelection();
+  var nodeid = document.getElementById("nodeid").value;
   let _appliedDnsUrl = null; // set when Apply DNS succeeds
 
   if (!namespace) {
@@ -15389,33 +15389,33 @@ async function executeRemoteCmd() {
     return;
   }
 
-  // Fetch MCI list for selector
-  let mciListOptions = [];
+  // Fetch Infra list for selector
+  let infraListOptions = [];
   try {
-    const mciListUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
-    const mciRes = await axios.get(mciListUrl, {
+    const infraListUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra?option=id`;
+    const infraRes = await axios.get(infraListUrl, {
       auth: { username: username, password: password }
     });
-    if (mciRes.data.output && mciRes.data.output.length > 0) {
-      mciListOptions = mciRes.data.output;
+    if (infraRes.data.output && infraRes.data.output.length > 0) {
+      infraListOptions = infraRes.data.output;
     }
   } catch (err) {
-    console.error("Failed to fetch MCI list:", err);
+    console.error("Failed to fetch Infra list:", err);
   }
 
-  if (mciListOptions.length === 0) {
-    errorAlert("No MCI available. Please create an MCI first.");
+  if (infraListOptions.length === 0) {
+    errorAlert("No Infra available. Please create an Infra first.");
     return;
   }
 
-  // Build MCI selector options HTML
-  const mciOptionsHtml = mciListOptions.map(m => 
-    `<option value="${m}" ${m === mciid ? 'selected' : ''}>${m}</option>`
+  // Build Infra selector options HTML
+  const infraOptionsHtml = infraListOptions.map(m => 
+    `<option value="${m}" ${m === infraid ? 'selected' : ''}>${m}</option>`
   ).join('');
 
   var spinnerId = "";
 
-  console.log("Opening remote command dialog (context MCI: " + mciid + ")");
+  console.log("Opening remote command dialog (context Infra: " + infraid + ")");
 
   var cmd = [];
 
@@ -15424,16 +15424,16 @@ async function executeRemoteCmd() {
     <p><font size=4><b>[Select target]</b></font></p>
     <div style="display: flex; align-items: center; margin-bottom: 15px;">
       <div style="margin-right: 10px;">
-        <input type="radio" id="mciOption" name="selectOption" value="MCI" checked>
-        <label for="mciOption">MCI (all VMs)</label>
+        <input type="radio" id="infraOption" name="selectOption" value="Infra" checked>
+        <label for="infraOption">Infra (all Nodes)</label>
       </div>
       <div style="margin-right: 10px;">
-        <input type="radio" id="subGroupOption" name="selectOption" value="SubGroup" ${subgroupid ? '' : 'disabled'}>
-        <label for="subGroupOption">SUBGROUP: <span style="color:green;">${subgroupid || 'N/A'}</span></label>
+        <input type="radio" id="nodeGroupOption" name="selectOption" value="NodeGroup" ${nodegroupid ? '' : 'disabled'}>
+        <label for="nodeGroupOption">NodeGroup: <span style="color:green;">${nodegroupid || 'N/A'}</span></label>
       </div>
       <div>
-        <input type="radio" id="vmOption" name="selectOption" value="VM" ${vmid ? '' : 'disabled'}>
-        <label for="vmOption">VM: <span style="color:red;">${vmid || 'N/A'}</span></label>
+        <input type="radio" id="nodeOption" name="selectOption" value="Node" ${nodeid ? '' : 'disabled'}>
+        <label for="nodeOption">Node: <span style="color:red;">${nodeid || 'N/A'}</span></label>
       </div>
     </div>`;
 
@@ -15443,15 +15443,15 @@ async function executeRemoteCmd() {
     html: `
     ${POPUP_STYLES}
     <div class="popup-container">
-      <!-- MCI & Target Selection Section (Combined) -->
+      <!-- Infra & Target Selection Section (Combined) -->
       <div class="popup-section">
         <div class="popup-section-title">🎯 Target Selection</div>
         <div class="popup-row">
           <div class="popup-col" style="flex: 1;">
             <div class="popup-field">
-              <label class="popup-label">MCI</label>
-              <select id="mciSelector" class="popup-select">
-                ${mciOptionsHtml}
+              <label class="popup-label">Infra</label>
+              <select id="infraSelector" class="popup-select">
+                ${infraOptionsHtml}
               </select>
             </div>
           </div>
@@ -15460,18 +15460,18 @@ async function executeRemoteCmd() {
               <label class="popup-label">Scope</label>
               <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; min-height: 32px;">
                 <label class="popup-inline" style="cursor: pointer;">
-                  <input type="radio" id="mciOption" name="selectOption" value="MCI" checked>
-                  <span class="popup-badge" style="background: #0d6efd; color: white;">All VMs</span>
+                  <input type="radio" id="infraOption" name="selectOption" value="Infra" checked>
+                  <span class="popup-badge" style="background: #0d6efd; color: white;">All Nodes</span>
                 </label>
-                <label class="popup-inline" style="cursor: pointer; ${subgroupid ? '' : 'opacity: 0.5;'}">
-                  <input type="radio" id="subGroupOption" name="selectOption" value="SubGroup" ${subgroupid ? '' : 'disabled'}>
-                  <span class="popup-badge" style="background: #28a745; color: white;">SubGroup</span>
-                  <span style="font-size: 0.75rem; color: #666;">${subgroupid || 'N/A'}</span>
+                <label class="popup-inline" style="cursor: pointer; ${nodegroupid ? '' : 'opacity: 0.5;'}">
+                  <input type="radio" id="nodeGroupOption" name="selectOption" value="NodeGroup" ${nodegroupid ? '' : 'disabled'}>
+                  <span class="popup-badge" style="background: #28a745; color: white;">NodeGroup</span>
+                  <span style="font-size: 0.75rem; color: #666;">${nodegroupid || 'N/A'}</span>
                 </label>
-                <label class="popup-inline" style="cursor: pointer; ${vmid ? '' : 'opacity: 0.5;'}">
-                  <input type="radio" id="vmOption" name="selectOption" value="VM" ${vmid ? '' : 'disabled'}>
-                  <span class="popup-badge" style="background: #dc3545; color: white;">VM</span>
-                  <span style="font-size: 0.75rem; color: #666;">${vmid || 'N/A'}</span>
+                <label class="popup-inline" style="cursor: pointer; ${nodeid ? '' : 'opacity: 0.5;'}">
+                  <input type="radio" id="nodeOption" name="selectOption" value="Node" ${nodeid ? '' : 'disabled'}>
+                  <span class="popup-badge" style="background: #dc3545; color: white;">Node</span>
+                  <span style="font-size: 0.75rem; color: #666;">${nodeid || 'N/A'}</span>
                 </label>
               </div>
             </div>
@@ -15674,7 +15674,7 @@ async function executeRemoteCmd() {
     confirmButtonText: "Execute",
     didOpen: () => {
       setupCommandsPopup(0); // 0 means no limit
-      setupMciSelectorForLabels(); // Setup MCI selector for label updates
+      setupInfraSelectorForLabels(); // Setup Infra selector for label updates
       setupClearLabelButtonListener(); // Setup Clear All button listener
       // Auto-resize textareas on open
       document.querySelectorAll('#cmdContainer textarea').forEach(ta => autoResizeTextarea(ta));
@@ -15693,17 +15693,17 @@ async function executeRemoteCmd() {
           statusEl.innerHTML = `<span style="color:#dc3545;">⚠️ "${window.escapeHtml(oversized.name)}" exceeds 50MB limit.</span>`;
           return;
         }
-        const mciId = document.getElementById('mciSelector').value;
-        if (!mciId) {
-          statusEl.innerHTML = '<span style="color:#dc3545;">⚠️ Select an MCI first.</span>';
+        const infraId = document.getElementById('infraSelector').value;
+        if (!infraId) {
+          statusEl.innerHTML = '<span style="color:#dc3545;">⚠️ Select an Infra first.</span>';
           return;
         }
 
         const radioEl = Swal.getPopup().querySelector('input[name="selectOption"]:checked');
-        const radioValue = radioEl ? radioEl.value : 'MCI';
-        let uploadUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/transferFile/mci/${mciId}`;
-        if (radioValue === 'SubGroup') uploadUrl += `?subGroupId=${encodeURIComponent(subgroupid)}`;
-        else if (radioValue === 'VM') uploadUrl += `?vmId=${encodeURIComponent(vmid)}`;
+        const radioValue = radioEl ? radioEl.value : 'Infra';
+        let uploadUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/transferFile/infra/${infraId}`;
+        if (radioValue === 'NodeGroup') uploadUrl += `?nodeGroupId=${encodeURIComponent(nodegroupid)}`;
+        else if (radioValue === 'Node') uploadUrl += `?nodeId=${encodeURIComponent(nodeid)}`;
 
         const btn = document.getElementById('rcUploadBtn');
         btn.disabled = true;
@@ -15715,7 +15715,7 @@ async function executeRemoteCmd() {
         let failed = 0;
 
         // Upload in batches of CONCURRENCY
-        const vmFailDetails = []; // { fileName, vmId, error }
+        const nodeFailDetails = []; // { fileName, nodeId, error }
         for (let i = 0; i < files.length; i += CONCURRENCY) {
           const batch = files.slice(i, i + CONCURRENCY);
           await Promise.all(batch.map(async (file) => {
@@ -15729,13 +15729,13 @@ async function executeRemoteCmd() {
                   'Content-Type': 'multipart/form-data',
                 },
               });
-              // Check per-VM results inside the response body
+              // Check per-Node results inside the response body
               const results = res.data?.results || [];
-              const vmFails = results.filter(r => r.error && r.error.trim());
-              if (vmFails.length > 0) {
-                vmFails.forEach(r => vmFailDetails.push({ fileName: file.name, vmId: r.vmId || '?', error: r.error }));
+              const nodeFails = results.filter(r => r.error && r.error.trim());
+              if (nodeFails.length > 0) {
+                nodeFails.forEach(r => nodeFailDetails.push({ fileName: file.name, nodeId: r.nodeId || '?', error: r.error }));
                 failed++;
-                console.warn(`RC upload VM-level failure for ${file.name}:`, vmFails);
+                console.warn(`RC upload Node-level failure for ${file.name}:`, nodeFails);
               } else {
                 succeeded++;
               }
@@ -15751,9 +15751,9 @@ async function executeRemoteCmd() {
         btn.disabled = false;
         const color = failed === 0 ? '#198754' : '#fd7e14';
         let statusMsg = `<span style="color:${color};">✅ ${succeeded} uploaded${failed > 0 ? `, ❌ ${failed} failed` : ''} (${files.length} total)</span>`;
-        if (vmFailDetails.length > 0) {
-          const detailLines = vmFailDetails.map(d =>
-            `<div style="margin-top:2px;">• ${window.escapeHtml(d.fileName)} → VM <b>${window.escapeHtml(d.vmId)}</b>: ${window.escapeHtml(d.error)}</div>`
+        if (nodeFailDetails.length > 0) {
+          const detailLines = nodeFailDetails.map(d =>
+            `<div style="margin-top:2px;">• ${window.escapeHtml(d.fileName)} → Node <b>${window.escapeHtml(d.nodeId)}</b>: ${window.escapeHtml(d.error)}</div>`
           ).join('');
           statusMsg += `<div style="margin-top:4px; color:#dc3545; font-size:0.75rem;">${detailLines}</div>`;
         }
@@ -15774,10 +15774,10 @@ async function executeRemoteCmd() {
           zoneSelect.innerHTML = zones.map(z =>
             `<option value="${window.escapeHtml(z.name)}">${window.escapeHtml(z.name)} (${z.recordCount} records)</option>`
           ).join('');
-          // Pre-fill record name with the currently selected MCI ID
-          const currentMciId = document.getElementById('mciSelector')?.value || '';
-          if (currentMciId) {
-            document.getElementById('dnsRecordName').value = currentMciId;
+          // Pre-fill record name with the currently selected Infra ID
+          const currentInfraId = document.getElementById('infraSelector')?.value || '';
+          if (currentInfraId) {
+            document.getElementById('dnsRecordName').value = currentInfraId;
           }
           document.getElementById('dnsUpdateSection').style.display = '';
         } catch (_) {
@@ -15791,11 +15791,11 @@ async function executeRemoteCmd() {
         const recordName = document.getElementById('dnsRecordName').value.trim();
         const recordType = document.getElementById('dnsRecordType').value;
         const ttl = parseInt(document.getElementById('dnsTtl').value) || 300;
-        const mciId = document.getElementById('mciSelector').value;
+        const infraId = document.getElementById('infraSelector').value;
         const resultEl = document.getElementById('dnsApplyResult');
 
-        if (!mciId) {
-          resultEl.innerHTML = '<span style="color:#dc3545;">⚠️ Select an MCI first.</span>';
+        if (!infraId) {
+          resultEl.innerHTML = '<span style="color:#dc3545;">⚠️ Select an Infra first.</span>';
           return;
         }
 
@@ -15811,7 +15811,7 @@ async function executeRemoteCmd() {
             recordType,
             ttl,
             routingPolicy: 'simple',
-            setBy: { mci: { nsId: namespace, mciId } },
+            setBy: { infra: { nsId: namespace, infraId } },
           };
           await axios.put(
             `http://${hostname}:${port}/tumblebug/resources/globalDns/record`,
@@ -15820,7 +15820,7 @@ async function executeRemoteCmd() {
           );
           const fullRecord = (recordName ? `${recordName}.${domainName}` : domainName).replace(/\.$/, '');
           _appliedDnsUrl = `http://${fullRecord}`;
-          resultEl.innerHTML = `<span style="color:#198754;">✅ DNS record updated: <a href="${_appliedDnsUrl}" target="_blank" style="color:#198754; font-weight:bold;">${window.escapeHtml(fullRecord)}</a> → MCI public IPs (TTL ${ttl}s)</span>`;
+          resultEl.innerHTML = `<span style="color:#198754;">✅ DNS record updated: <a href="${_appliedDnsUrl}" target="_blank" style="color:#198754; font-weight:bold;">${window.escapeHtml(fullRecord)}</a> → Infra public IPs (TTL ${ttl}s)</span>`;
         } catch (err) {
           const msg = err.response?.data?.message || err.message || 'Request failed';
           resultEl.innerHTML = `<span style="color:#dc3545;">❌ ${window.escapeHtml(msg)}</span>`;
@@ -15832,19 +15832,19 @@ async function executeRemoteCmd() {
     },
     preConfirm: () => {
       const commands = collectCommands();
-      const selectedMci = document.getElementById("mciSelector").value;
+      const selectedInfra = document.getElementById("infraSelector").value;
       const timeout = parseInt(document.getElementById("timeoutMinutes").value) || 30;
       const syncMode = document.getElementById("syncModeToggle")?.checked || false;
       const labelSelector = document.getElementById('labelSelector')?.value || '';
       const sshUserName = document.getElementById('sshUserName')?.value?.trim() || '';
-      return { commands, selectedMci, timeout, syncMode, labelSelector, sshUserName, appliedDnsUrl: _appliedDnsUrl };
+      return { commands, selectedInfra, timeout, syncMode, labelSelector, sshUserName, appliedDnsUrl: _appliedDnsUrl };
     },
   }).then((result) => {
       // result.value is false if result.isDenied or another key such as result.isDismissed
       if (result.value && result.value.commands && result.value.commands.length > 0) {
         // Save to recent commands history (with label & sync context)
         saveRecentCmd(result.value.commands, { labelSelector: result.value.labelSelector, syncMode: result.value.syncMode });
-        const selectedMciId = result.value.selectedMci;
+        const selectedInfraId = result.value.selectedInfra;
         // Validate timeout is within allowed range (1-120 minutes)
         const timeoutMinutes = Math.max(1, Math.min(120, parseInt(result.value.timeout, 10) || 30));
         const useSyncMode = result.value.syncMode;
@@ -15854,15 +15854,15 @@ async function executeRemoteCmd() {
         const radioValue = Swal.getPopup().querySelector(
           'input[name="selectOption"]:checked'
         ).value;
-        if (radioValue === "MCI") {
-          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${selectedMciId}`;
-          console.log("Performing remote command for MCI:", selectedMciId);
-        } else if (radioValue === "SubGroup") {
-          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${selectedMciId}?subGroupId=${encodeURIComponent(subgroupid)}`;
-          console.log("Performing remote command for SubGroup:", subgroupid, "in MCI:", selectedMciId);
-        } else if (radioValue === "VM") {
-          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${selectedMciId}?vmId=${encodeURIComponent(vmid)}`;
-          console.log("Performing remote command for VM:", vmid, "in MCI:", selectedMciId);
+        if (radioValue === "Infra") {
+          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/infra/${selectedInfraId}`;
+          console.log("Performing remote command for Infra:", selectedInfraId);
+        } else if (radioValue === "NodeGroup") {
+          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/infra/${selectedInfraId}?nodeGroupId=${encodeURIComponent(nodegroupid)}`;
+          console.log("Performing remote command for NodeGroup:", nodegroupid, "in Infra:", selectedInfraId);
+        } else if (radioValue === "Node") {
+          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/infra/${selectedInfraId}?nodeId=${encodeURIComponent(nodeid)}`;
+          console.log("Performing remote command for Node:", nodeid, "in Infra:", selectedInfraId);
         }
 
         // Get label selector value and add to URL if provided
@@ -15886,9 +15886,9 @@ async function executeRemoteCmd() {
 
         var jsonBody = JSON.stringify(commandReqTmp, undefined, 4);
 
-        spinnerId = addSpinnerTask("Remote command to " + selectedMciId);
+        spinnerId = addSpinnerTask("Remote command to " + selectedInfraId);
 
-        var requestId = generateRandomRequestId("cmd-" + selectedMciId + "-", 10);
+        var requestId = generateRandomRequestId("cmd-" + selectedInfraId + "-", 10);
         addRequestIdToSelect(requestId);
 
         if (useSyncMode) {
@@ -15941,9 +15941,9 @@ async function executeRemoteCmd() {
             if (res.status === 202 && res.data && res.data.xRequestId) {
               // Async mode accepted - start background SSE session and open streaming modal
               var xReqId = res.data.xRequestId;
-              var streamUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/stream/cmd/mci/${selectedMciId}?xRequestId=${encodeURIComponent(xReqId)}`;
+              var streamUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/stream/cmd/infra/${selectedInfraId}?xRequestId=${encodeURIComponent(xReqId)}`;
               console.log('[RemoteCmd] Starting streaming session:', xReqId);
-              startStreamingSession(streamUrl, username, password, xReqId, selectedMciId, spinnerId, appliedDnsUrl);
+              startStreamingSession(streamUrl, username, password, xReqId, selectedInfraId, spinnerId, appliedDnsUrl);
             } else {
               // Fallback: sync response (async=true not in URL or server returned non-202)
               console.warn('[RemoteCmd] Sync fallback - status:', res.status, 'data:', res.data);
@@ -15979,77 +15979,77 @@ async function executeRemoteCmd() {
 window.setBastionNode = setBastionNode;
 window.executeRemoteCmd = executeRemoteCmd;
 
-// Function for transferFileToMci by remoteCmd button item
-async function transferFileToMci() {
+// Function for transferFileToInfra by remoteCmd button item
+async function transferFileToInfra() {
   var config = getConfig(); var hostname = config.hostname;
   var port = config.port;
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var mciid = mciidElement.value;
-  var subgroupid = getSubGroupIdFromVmSelection();
-  var vmid = document.getElementById("vmid").value;
+  var infraid = infraidElement.value;
+  var nodegroupid = getNodeGroupIdFromNodeSelection();
+  var nodeid = document.getElementById("nodeid").value;
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
     return;
   }
 
-  // Fetch MCI list for selector
-  let mciListOptions = [];
+  // Fetch Infra list for selector
+  let infraListOptions = [];
   try {
-    const mciListUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
-    const mciRes = await axios.get(mciListUrl, {
+    const infraListUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra?option=id`;
+    const infraRes = await axios.get(infraListUrl, {
       auth: { username: username, password: password }
     });
-    if (mciRes.data.output && mciRes.data.output.length > 0) {
-      mciListOptions = mciRes.data.output;
+    if (infraRes.data.output && infraRes.data.output.length > 0) {
+      infraListOptions = infraRes.data.output;
     }
   } catch (err) {
-    console.error("Failed to fetch MCI list:", err);
+    console.error("Failed to fetch Infra list:", err);
   }
 
-  if (mciListOptions.length === 0) {
-    errorAlert("No MCI available. Please create an MCI first.");
+  if (infraListOptions.length === 0) {
+    errorAlert("No Infra available. Please create an Infra first.");
     return;
   }
 
-  // Build MCI selector options HTML
-  const mciOptionsHtml = mciListOptions.map(m =>
-    `<option value="${window.escapeHtml(m)}" ${m === mciid ? 'selected' : ''}>${window.escapeHtml(m)}</option>`
+  // Build Infra selector options HTML
+  const infraOptionsHtml = infraListOptions.map(m =>
+    `<option value="${window.escapeHtml(m)}" ${m === infraid ? 'selected' : ''}>${window.escapeHtml(m)}</option>`
   ).join('');
 
-  // Fetch VM list for the selected MCI (for download target)
+  // Fetch Node list for the selected Infra (for download target)
   let vmListOptions = [];
-  const fetchVmList = async (targetMciId) => {
+  const fetchVmList = async (targetInfraId) => {
     try {
-      const vmListUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${targetMciId}`;
+      const vmListUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${targetInfraId}`;
       const vmRes = await axios.get(vmListUrl, {
         auth: { username: username, password: password }
       });
-      if (vmRes.data && vmRes.data.vm) {
-        return vmRes.data.vm.map(vm => ({
-          id: vm.id,
-          subGroupId: vm.subGroupId || 'default',
-          publicIP: vm.publicIP || ''
+      if (vmRes.data && vmRes.data.node) {
+        return vmRes.data.node.map(nd => ({
+          id: nd.id,
+          nodeGroupId: nd.nodeGroupId || 'default',
+          publicIP: nd.publicIP || ''
         }));
       }
     } catch (err) {
-      console.error("Failed to fetch VM list:", err);
+      console.error("Failed to fetch Node list:", err);
     }
     return [];
   };
 
-  vmListOptions = await fetchVmList(mciid || mciListOptions[0]);
+  vmListOptions = await fetchVmList(infraid || infraListOptions[0]);
 
-  const buildVmOptionsHtml = (vms) => {
-    if (vms.length === 0) return '<option value="">No VMs available</option>';
-    return vms.map(vm =>
-      `<option value="${window.escapeHtml(vm.id)}" ${vm.id === vmid ? 'selected' : ''}>${window.escapeHtml(vm.id)} (${window.escapeHtml(vm.subGroupId)}) ${vm.publicIP ? '- ' + window.escapeHtml(vm.publicIP) : ''}</option>`
+  const buildNodeOptionsHtml = (nodes) => {
+    if (nodes.length === 0) return '<option value="">No Nodes available</option>';
+    return nodes.map(nd =>
+      `<option value="${window.escapeHtml(nd.id)}" ${nd.id === nodeid ? 'selected' : ''}>${window.escapeHtml(nd.id)} (${window.escapeHtml(nd.nodeGroupId)}) ${nd.publicIP ? '- ' + window.escapeHtml(nd.publicIP) : ''}</option>`
     ).join('');
   };
 
-  console.log("Opening file transfer dialog (context MCI: " + mciid + ")");
+  console.log("Opening file transfer dialog (context Infra: " + infraid + ")");
 
   Swal.fire({
     title: "📁 File Transfer",
@@ -16065,11 +16065,11 @@ async function transferFileToMci() {
             <div style="display: flex; gap: 8px;">
               <button type="button" id="uploadModeBtn" class="popup-badge" onclick="switchFileTransferMode('upload')"
                 style="padding: 8px 20px; font-size: 0.9rem; cursor: pointer; border: 2px solid #28a745; background: #28a745; color: white; border-radius: 6px; flex: 1; text-align: center;">
-                ⬆️ Upload to VM
+                ⬆️ Upload to Node
               </button>
               <button type="button" id="downloadModeBtn" class="popup-badge" onclick="switchFileTransferMode('download')"
                 style="padding: 8px 20px; font-size: 0.9rem; cursor: pointer; border: 2px solid #0d6efd; background: #f8f9fa; color: #333; border-radius: 6px; flex: 1; text-align: center;">
-                ⬇️ Download from VM
+                ⬇️ Download from Node
               </button>
             </div>
           </div>
@@ -16082,9 +16082,9 @@ async function transferFileToMci() {
         <div class="popup-row">
           <div class="popup-col" style="flex: 1;">
             <div class="popup-field">
-              <label class="popup-label">MCI</label>
-              <select id="mciSelector" class="popup-select">
-                ${mciOptionsHtml}
+              <label class="popup-label">Infra</label>
+              <select id="infraSelector" class="popup-select">
+                ${infraOptionsHtml}
               </select>
             </div>
           </div>
@@ -16094,28 +16094,28 @@ async function transferFileToMci() {
               <label class="popup-label">Scope</label>
               <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; min-height: 32px;">
                 <label class="popup-inline" style="cursor: pointer;">
-                  <input type="radio" id="mciOption" name="selectOption" value="MCI" checked>
-                  <span class="popup-badge" style="background: #0d6efd; color: white;">All VMs</span>
+                  <input type="radio" id="infraOption" name="selectOption" value="Infra" checked>
+                  <span class="popup-badge" style="background: #0d6efd; color: white;">All Nodes</span>
                 </label>
-                <label class="popup-inline" style="cursor: pointer; ${subgroupid ? '' : 'opacity: 0.5;'}">
-                  <input type="radio" id="subGroupOption" name="selectOption" value="SubGroup" ${subgroupid ? '' : 'disabled'}>
-                  <span class="popup-badge" style="background: #28a745; color: white;">SubGroup</span>
-                  <span style="font-size: 0.75rem; color: #666;">${subgroupid || 'N/A'}</span>
+                <label class="popup-inline" style="cursor: pointer; ${nodegroupid ? '' : 'opacity: 0.5;'}">
+                  <input type="radio" id="nodeGroupOption" name="selectOption" value="NodeGroup" ${nodegroupid ? '' : 'disabled'}>
+                  <span class="popup-badge" style="background: #28a745; color: white;">NodeGroup</span>
+                  <span style="font-size: 0.75rem; color: #666;">${nodegroupid || 'N/A'}</span>
                 </label>
-                <label class="popup-inline" style="cursor: pointer; ${vmid ? '' : 'opacity: 0.5;'}">
-                  <input type="radio" id="vmOption" name="selectOption" value="VM" ${vmid ? '' : 'disabled'}>
-                  <span class="popup-badge" style="background: #dc3545; color: white;">VM</span>
-                  <span style="font-size: 0.75rem; color: #666;">${vmid || 'N/A'}</span>
+                <label class="popup-inline" style="cursor: pointer; ${nodeid ? '' : 'opacity: 0.5;'}">
+                  <input type="radio" id="nodeOption" name="selectOption" value="Node" ${nodeid ? '' : 'disabled'}>
+                  <span class="popup-badge" style="background: #dc3545; color: white;">Node</span>
+                  <span style="font-size: 0.75rem; color: #666;">${nodeid || 'N/A'}</span>
                 </label>
               </div>
             </div>
           </div>
-          <!-- Download: VM selector -->
+          <!-- Download: Node selector -->
           <div id="downloadTargetVm" class="popup-col" style="flex: 2; display: none;">
             <div class="popup-field">
-              <label class="popup-label">VM</label>
-              <select id="downloadVmSelector" class="popup-select">
-                ${buildVmOptionsHtml(vmListOptions)}
+              <label class="popup-label">Node</label>
+              <select id="downloadNodeSelector" class="popup-select">
+                ${buildNodeOptionsHtml(vmListOptions)}
               </select>
             </div>
           </div>
@@ -16137,7 +16137,7 @@ async function transferFileToMci() {
           <div class="popup-row">
             <div class="popup-col" style="flex: 1;">
               <div class="popup-field">
-                <label class="popup-label">Target Path on VM</label>
+                <label class="popup-label">Target Path on Node</label>
                 <input type="text" id="targetPathInput" class="popup-input" value="/home/cb-user/" placeholder="/home/cb-user/">
               </div>
             </div>
@@ -16159,8 +16159,8 @@ async function transferFileToMci() {
             </div>
           </div>
           <div style="font-size: 0.7rem; color: #666; padding: 4px 8px; background: #fff3cd; border-radius: 4px;">
-            📝 File(s) will be uploaded to the specified path on all targeted VMs via SCP through bastion hosts. Multiple files can be selected.<br>
-            🔧 If a post-transfer command is provided, it will be executed on each VM after successful file transfer (e.g., move file to a privileged location).
+            📝 File(s) will be uploaded to the specified path on all targeted Nodes via SCP through bastion hosts. Multiple files can be selected.<br>
+            🔧 If a post-transfer command is provided, it will be executed on each Node after successful file transfer (e.g., move file to a privileged location).
           </div>
         </div>
       </div>
@@ -16172,13 +16172,13 @@ async function transferFileToMci() {
           <div class="popup-row">
             <div class="popup-col" style="flex: 1;">
               <div class="popup-field">
-                <label class="popup-label">Source Path on VM (full file path)</label>
+                <label class="popup-label">Source Path on Node (full file path)</label>
                 <input type="text" id="sourcePathInput" class="popup-input" value="" placeholder="/home/cb-user/result.json">
               </div>
             </div>
           </div>
           <div style="font-size: 0.7rem; color: #666; padding: 4px 8px; background: #d1ecf1; border-radius: 4px;">
-            📝 The file will be downloaded from the selected VM via SCP through bastion host. Max file size: 200MB.
+            📝 The file will be downloaded from the selected Node via SCP through bastion host. Max file size: 200MB.
           </div>
         </div>
       </div>
@@ -16236,12 +16236,12 @@ async function transferFileToMci() {
       hiddenInput.value = 'upload';
       Swal.getPopup().appendChild(hiddenInput);
 
-      // Update VM list when MCI selector changes
-      document.getElementById('mciSelector').addEventListener('change', async (e) => {
-        const selectedMci = e.target.value;
-        const newVmList = await fetchVmList(selectedMci);
-        const vmSelector = document.getElementById('downloadVmSelector');
-        vmSelector.innerHTML = buildVmOptionsHtml(newVmList);
+      // Update Node list when Infra selector changes
+      document.getElementById('infraSelector').addEventListener('change', async (e) => {
+        const selectedInfra = e.target.value;
+        const newNodeList = await fetchVmList(selectedInfra);
+        const nodeSelector = document.getElementById('downloadNodeSelector');
+        nodeSelector.innerHTML = buildNodeOptionsHtml(newNodeList);
       });
 
       // Favorites for post-transfer command (persisted via localStorage)
@@ -16351,7 +16351,7 @@ async function transferFileToMci() {
     },
     preConfirm: () => {
       const mode = document.getElementById('fileTransferMode').value;
-      const selectedMci = document.getElementById('mciSelector').value;
+      const selectedInfra = document.getElementById('infraSelector').value;
 
       if (mode === 'upload') {
         const fileInput = document.getElementById('fileInput');
@@ -16372,39 +16372,39 @@ async function transferFileToMci() {
           return false;
         }
         const postTransferCmd = document.getElementById('postTransferCmd').value.trim();
-        return { mode, selectedMci, files, targetPath, postTransferCmd };
+        return { mode, selectedInfra, files, targetPath, postTransferCmd };
       } else {
-        const selectedVm = document.getElementById('downloadVmSelector').value;
+        const selectedVm = document.getElementById('downloadNodeSelector').value;
         const sourcePath = document.getElementById('sourcePathInput').value;
         if (!selectedVm) {
-          Swal.showValidationMessage('Please select a VM.');
+          Swal.showValidationMessage('Please select a Node.');
           return false;
         }
         if (!sourcePath) {
-          Swal.showValidationMessage('Please specify the source file path on the VM.');
+          Swal.showValidationMessage('Please specify the source file path on the Node.');
           return false;
         }
-        return { mode, selectedMci, selectedVm, sourcePath };
+        return { mode, selectedInfra, selectedVm, sourcePath };
       }
     },
   }).then((result) => {
     if (result.value) {
-      const { mode, selectedMci } = result.value;
+      const { mode, selectedInfra } = result.value;
 
       if (mode === 'upload') {
         // === UPLOAD (supports multiple files) ===
         const { files, targetPath, postTransferCmd } = result.value;
         const radioValue = Swal.getPopup().querySelector('input[name="selectOption"]:checked').value;
         const endpoint = postTransferCmd ? 'transferFileAndCmd' : 'transferFile';
-        let url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/${endpoint}/mci/${selectedMci}`;
-        if (radioValue === 'SubGroup') {
-          url += `?subGroupId=${encodeURIComponent(subgroupid)}`;
-        } else if (radioValue === 'VM') {
-          url += `?vmId=${encodeURIComponent(vmid)}`;
+        let url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/${endpoint}/infra/${selectedInfra}`;
+        if (radioValue === 'NodeGroup') {
+          url += `?nodeGroupId=${encodeURIComponent(nodegroupid)}`;
+        } else if (radioValue === 'Node') {
+          url += `?nodeId=${encodeURIComponent(nodeid)}`;
         }
 
         const totalFiles = files.length;
-        const scopeLabel = radioValue === 'SubGroup' ? subgroupid : radioValue === 'VM' ? vmid : selectedMci;
+        const scopeLabel = radioValue === 'NodeGroup' ? nodegroupid : radioValue === 'Node' ? nodeid : selectedInfra;
 
         Swal.fire({
           title: `⬆️ Uploading (0/${totalFiles})...`,
@@ -16478,17 +16478,17 @@ async function transferFileToMci() {
             </div>`;
           });
 
-          // Per-VM results
+          // Per-Node results
           allResults.forEach(r => {
             const isSuccess = !r.error;
-            const safeVmId = window.escapeHtml(r.vmId || '');
-            const safeVmIp = window.escapeHtml(r.vmIp || 'N/A');
+            const safeNodeId = window.escapeHtml(r.nodeId || '');
+            const safeNodeIp = window.escapeHtml(r.nodeIp || 'N/A');
             const safeFileName = window.escapeHtml(r._fileName || '');
             const safeDetail = isSuccess
               ? '✅ ' + window.escapeHtml(r.stdout && r.stdout['0'] || 'OK')
               : '❌ ' + window.escapeHtml(r.error || r.stderr && r.stderr['0'] || 'Failed');
             resultHtml += `<div style="padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; background: ${isSuccess ? '#d4edda' : '#f8d7da'}; font-size: 0.8rem;">
-              <b>${safeVmId}</b> (${safeVmIp}) — ${safeFileName} — ${safeDetail}
+              <b>${safeNodeId}</b> (${safeNodeIp}) — ${safeFileName} — ${safeDetail}
             </div>`;
           });
           resultHtml += `</div>`;
@@ -16511,13 +16511,13 @@ async function transferFileToMci() {
       } else {
         // === DOWNLOAD ===
         const { selectedVm, sourcePath } = result.value;
-        const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/downloadFile/mci/${selectedMci}/vm/${selectedVm}`;
+        const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/downloadFile/infra/${selectedInfra}/node/${selectedVm}`;
 
         Swal.fire({
           title: '⬇️ Downloading...',
           html: `<div style="text-align: left; padding: 10px;">
             <p><b>File:</b> ${window.escapeHtml(sourcePath)}</p>
-            <p><b>From:</b> ${window.escapeHtml(selectedVm)} in ${window.escapeHtml(selectedMci)}</p>
+            <p><b>From:</b> ${window.escapeHtml(selectedVm)} in ${window.escapeHtml(selectedInfra)}</p>
           </div>`,
           allowOutsideClick: false,
           didOpen: () => { Swal.showLoading(); },
@@ -16558,7 +16558,7 @@ async function transferFileToMci() {
               title: 'Download Complete',
               html: `<div style="text-align: left; padding: 10px;">
                 <p>✅ File <b>${window.escapeHtml(downloadFileName)}</b> (${(blob.size / 1024).toFixed(1)} KB) downloaded successfully.</p>
-                <p style="font-size: 0.8rem; color: #666;">Source: ${window.escapeHtml(selectedVm)} in ${window.escapeHtml(selectedMci)}</p>
+                <p style="font-size: 0.8rem; color: #666;">Source: ${window.escapeHtml(selectedVm)} in ${window.escapeHtml(selectedInfra)}</p>
               </div>`,
             });
           })
@@ -16572,7 +16572,7 @@ async function transferFileToMci() {
                 const parsed = JSON.parse(text);
                 errMsg = parsed.message || JSON.stringify(parsed, null, 2);
               } catch (e) {
-                errMsg = 'Download failed. Check if the file path is correct and the VM is running.';
+                errMsg = 'Download failed. Check if the file path is correct and the Node is running.';
               }
             } else if (error.response?.data) {
               errMsg = JSON.stringify(error.response.data, null, 2).replace(/['",]+/g, '');
@@ -16585,31 +16585,31 @@ async function transferFileToMci() {
     }
   });
 }
-window.transferFileToMci = transferFileToMci;
+window.transferFileToInfra = transferFileToInfra;
 
-// function for getAccessInfo of MCI
+// function for getAccessInfo of Infra
 function getAccessInfo() {
   var config = getConfig(); var hostname = config.hostname;
   var port = config.port;
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var mciid = getSelectedMciId();
+  var infraid = getSelectedInfraId();
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
     return;
   }
-  if (!mciid) {
-    errorAlert("Please select an MCI first");
+  if (!infraid) {
+    errorAlert("Please select an Infra first");
     return;
   }
 
   console.log(
-    "Retrieve access information for MCI:" + mciid
+    "Retrieve access information for Infra:" + infraid
   );
 
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=accessinfo`;
+    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}?option=accessinfo`;
 
     axios({
       method: "get",
@@ -16626,21 +16626,21 @@ function getAccessInfo() {
 window.getAccessInfo = getAccessInfo;
 
 
-// SSH Key save function (single VM)
+// SSH Key save function (single Node)
 const saveBtn = document.querySelector(".save-file");
 saveBtn.addEventListener("click", function () {
-  console.log(" [Retrieve MCI Access Information ...]\n");
+  console.log(" [Retrieve Infra Access Information ...]\n");
 
   var config = getConfig(); var hostname = config.hostname;
   var port = config.port;
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var mciid = mciidElement.value;
-  var groupid = getSubGroupIdFromVmSelection();
-  var vmid = document.getElementById("vmid").value;
+  var infraid = infraidElement.value;
+  var groupid = getNodeGroupIdFromNodeSelection();
+  var nodeid = document.getElementById("nodeid").value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=accessinfo&accessInfoOption=showSshKey`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}?option=accessinfo&accessInfoOption=showSshKey`;
 
   axios({
     method: "get",
@@ -16654,11 +16654,11 @@ saveBtn.addEventListener("click", function () {
     displayJsonData(res.data, typeInfo);
     var privateKey = "";
 
-    for (let subGroupAccessInfo of res.data.MciSubGroupAccessInfo) {
-      if (subGroupAccessInfo.SubGroupId == groupid) {
-        for (let vmAccessInfo of subGroupAccessInfo.MciVmAccessInfo) {
-          if (vmAccessInfo.vmId == vmid) {
-            privateKey = vmAccessInfo.privateKey.replace(/['",]+/g, "");
+    for (let nodeGroupAccessInfo of res.data.InfraNodeGroupAccessInfo) {
+      if (nodeGroupAccessInfo.NodeGroupId == groupid) {
+        for (let nodeAccessInfo of nodeGroupAccessInfo.NodeAccessInfo) {
+          if (nodeAccessInfo.nodeId == nodeid) {
+            privateKey = nodeAccessInfo.privateKey.replace(/['",]+/g, "");
             break;
           }
         }
@@ -16669,14 +16669,14 @@ saveBtn.addEventListener("click", function () {
     var taBlob = new Blob([privateKey], { type: "text/plain" });
 
     tempLink.setAttribute("href", URL.createObjectURL(taBlob));
-    tempLink.setAttribute("download", `${namespace}-${mciid}-${vmid}.pem`);
+    tempLink.setAttribute("download", `${namespace}-${infraid}-${nodeid}.pem`);
     tempLink.click();
 
     URL.revokeObjectURL(tempLink.href);
   });
 });
 
-// Download ALL VM SSH keys in an MCI as a single zip file
+// Download ALL Node SSH keys in an Infra as a single zip file
 function downloadAllSshKeys() {
   console.log(" [Download All SSH Keys as ZIP ...]\n");
 
@@ -16686,29 +16686,29 @@ function downloadAllSshKeys() {
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var mciid = mciidElement.value;
+  var infraid = infraidElement.value;
 
-  if (!namespace || !mciid) {
-    Swal.fire("Error", "Please select a namespace and MCI first.", "warning");
+  if (!namespace || !infraid) {
+    Swal.fire("Error", "Please select a namespace and Infra first.", "warning");
     return;
   }
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}?option=accessinfo&accessInfoOption=showSshKey`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}?option=accessinfo&accessInfoOption=showSshKey`;
 
   Swal.fire({
     title: "Downloading SSH Keys...",
-    html: "Retrieving access information for all VMs.",
+    html: "Retrieving access information for all Nodes.",
     allowOutsideClick: false,
     didOpen: () => { Swal.showLoading(); }
   });
 
-  // Fetch both MCI info and access info in parallel
-  var mciInfoUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}`;
+  // Fetch both Infra info and access info in parallel
+  var infraInfoUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}`;
   var authConfig = { username: username, password: password };
 
   Promise.all([
     axios({ method: "get", url: url, auth: authConfig }),
-    axios({ method: "get", url: mciInfoUrl, auth: authConfig })
+    axios({ method: "get", url: infraInfoUrl, auth: authConfig })
   ]).then(([accessRes, infoRes]) => {
     const zip = new JSZip();
     let keyCount = 0;
@@ -16716,43 +16716,43 @@ function downloadAllSshKeys() {
     // Sanitize path component to prevent zip-slip (strip path separators and traversal segments)
     const safeName = (name) => String(name).replace(/[\\/]/g, "_").replace(/\.\./g, "_").replace(/[^a-zA-Z0-9._-]/g, "_") || "unknown";
 
-    for (let subGroupAccessInfo of (accessRes.data.MciSubGroupAccessInfo || [])) {
-      const subGroupId = safeName(subGroupAccessInfo.SubGroupId || "unknown");
-      const subGroupVmSummaries = [];
-      for (let vmAccessInfo of (subGroupAccessInfo.MciVmAccessInfo || [])) {
-        const vmId = safeName(vmAccessInfo.vmId || "unknown");
-        const privateKey = (vmAccessInfo.privateKey || "").replace(/['",]+/g, "");
+    for (let nodeGroupAccessInfo of (accessRes.data.InfraNodeGroupAccessInfo || [])) {
+      const nodeGroupId = safeName(nodeGroupAccessInfo.NodeGroupId || "unknown");
+      const nodeGroupVmSummaries = [];
+      for (let nodeAccessInfo of (nodeGroupAccessInfo.NodeAccessInfo || [])) {
+        const nodeId = safeName(nodeAccessInfo.nodeId || "unknown");
+        const privateKey = (nodeAccessInfo.privateKey || "").replace(/['",]+/g, "");
         if (privateKey) {
-          zip.file(`${subGroupId}/${safeName(namespace)}-${safeName(mciid)}-${vmId}.pem`, privateKey);
+          zip.file(`${nodeGroupId}/${safeName(namespace)}-${safeName(infraid)}-${nodeId}.pem`, privateKey);
           keyCount++;
         }
-        // Collect per-VM summary for subgroup JSON
-        subGroupVmSummaries.push({
-          vmId: vmId,
-          publicIP: vmAccessInfo.publicIP || "",
-          privateIP: vmAccessInfo.privateIP || "",
-          sshPort: vmAccessInfo.sshPort || 22,
-          vmUserName: vmAccessInfo.vmUserName || "",
-          keyFile: `${safeName(namespace)}-${safeName(mciid)}-${vmId}.pem`
+        // Collect per-Node summary for nodegroup JSON
+        nodeGroupVmSummaries.push({
+          nodeId: nodeId,
+          publicIP: nodeAccessInfo.publicIP || "",
+          privateIP: nodeAccessInfo.privateIP || "",
+          sshPort: nodeAccessInfo.sshPort || 22,
+          nodeUserName: nodeAccessInfo.nodeUserName || "",
+          keyFile: `${safeName(namespace)}-${safeName(infraid)}-${nodeId}.pem`
         });
       }
-      // Add per-subgroup access info JSON
-      if (subGroupVmSummaries.length > 0) {
-        zip.file(`${subGroupId}/access-info.json`, JSON.stringify({
-          subGroupId: subGroupId,
-          vmCount: subGroupVmSummaries.length,
-          vms: subGroupVmSummaries
+      // Add per-nodegroup access info JSON
+      if (nodeGroupVmSummaries.length > 0) {
+        zip.file(`${nodeGroupId}/access-info.json`, JSON.stringify({
+          nodeGroupId: nodeGroupId,
+          ndCount: nodeGroupVmSummaries.length,
+          nodes: nodeGroupVmSummaries
         }, null, 2));
       }
     }
 
     if (keyCount === 0) {
-      Swal.fire("No Keys Found", "No SSH private keys were found for this MCI.", "info");
+      Swal.fire("No Keys Found", "No SSH private keys were found for this Infra.", "info");
       return;
     }
 
-    // Add MCI info JSON
-    zip.file(`${safeName(mciid)}-info.json`, JSON.stringify(infoRes.data, null, 2));
+    // Add Infra info JSON
+    zip.file(`${safeName(infraid)}-info.json`, JSON.stringify(infoRes.data, null, 2));
 
     // Add access info JSON (redact privateKey to avoid duplication with .pem files)
     const redactedAccessInfoJson = JSON.stringify(
@@ -16760,19 +16760,19 @@ function downloadAllSshKeys() {
       (key, value) => (key === "privateKey" ? undefined : value),
       2
     );
-    zip.file(`${safeName(mciid)}-access-info.json`, redactedAccessInfoJson);
+    zip.file(`${safeName(infraid)}-access-info.json`, redactedAccessInfoJson);
 
     return zip.generateAsync({ type: "blob" }).then((content) => {
       var tempLink = document.createElement("a");
       tempLink.setAttribute("href", URL.createObjectURL(content));
-      tempLink.setAttribute("download", `${namespace}-${mciid}-ssh-keys.zip`);
+      tempLink.setAttribute("download", `${namespace}-${infraid}-ssh-keys.zip`);
       tempLink.click();
       URL.revokeObjectURL(tempLink.href);
 
       Swal.fire({
         icon: "success",
         title: "Download Complete",
-        html: `Downloaded <strong>${keyCount}</strong> SSH key(s) as a ZIP file.<br><code>${window.escapeHtml(namespace)}-${window.escapeHtml(mciid)}-ssh-keys.zip</code>`,
+        html: `Downloaded <strong>${keyCount}</strong> SSH key(s) as a ZIP file.<br><code>${window.escapeHtml(namespace)}-${window.escapeHtml(infraid)}-ssh-keys.zip</code>`,
         timer: 3000,
         showConfirmButton: false
       });
@@ -16869,7 +16869,7 @@ window.onload = function () {
   updateCredentialHolderList();
   updateNsList();
 
-  getMci();
+  getInfra();
 
   // Add event listener for Provision tab to show map when clicked
   const provisionTab = document.getElementById('provision-tab');
@@ -16983,20 +16983,20 @@ function updateFirewallRules() {
   var username = config.username;
   var password = config.password;
   var nsId = configNamespace;
-  var mciId = mciidElement.value;
-  var subgroupid = getSubGroupIdFromVmSelection();
-  var vmid = document.getElementById("vmid").value;
+  var infraId = infraidElement.value;
+  var nodegroupid = getNodeGroupIdFromNodeSelection();
+  var nodeid = document.getElementById("nodeid").value;
 
   if (!nsId) {
     errorAlert("Please select a namespace first");
     return;
   }
-  if (!mciId) {
-    errorAlert("Please select an MCI first");
+  if (!infraId) {
+    errorAlert("Please select an Infra first");
     return;
   }
 
-  const assocUrl = `http://${hostname}:${port}/tumblebug/ns/${nsId}/mci/${mciId}/associatedResources`;
+  const assocUrl = `http://${hostname}:${port}/tumblebug/ns/${nsId}/infra/${infraId}/associatedResources`;
   axios({
     method: "get",
     url: assocUrl,
@@ -17004,7 +17004,7 @@ function updateFirewallRules() {
   }).then((assocRes) => {
     const sgIds = (assocRes.data?.securityGroupIds || []);
     if (sgIds.length === 0) {
-      errorAlert("No associated Security Groups found for this MCI.");
+      errorAlert("No associated Security Groups found for this Infra.");
       return;
     }
 
@@ -17126,7 +17126,7 @@ function updateFirewallRules() {
           </div>
           <div style="padding: 15px; background-color: #f8f9fa;">
             <div style="margin-bottom: 10px; font-size: 12px; color: #6c757d;">
-              <strong>Note:</strong> These rules will be applied to all Security Groups associated with this MCI, replacing existing rules.
+              <strong>Note:</strong> These rules will be applied to all Security Groups associated with this Infra, replacing existing rules.
             </div>
             <div style="background: white; border-radius: 4px; overflow: hidden; border: 1px solid #dee2e6;">
               <table class="table table-sm table-hover" style="margin-bottom: 0; font-size: 12px;">
@@ -17413,7 +17413,7 @@ function updateFirewallRules() {
           // Since we now use UpdateMultipleFirewallRules, make a single API call instead of multiple calls
           const updatePromise = axios({
             method: "put",
-            url: `http://${hostname}:${port}/tumblebug/ns/${nsId}/mci/${mciId}/associatedSecurityGroups`,
+            url: `http://${hostname}:${port}/tumblebug/ns/${nsId}/infra/${infraId}/associatedSecurityGroups`,
             headers: { "Content-Type": "application/json" },
             data: JSON.stringify({
               firewallRules: result.value[0].firewallRules // All SGs get the same rules
@@ -18069,18 +18069,18 @@ function addNewRuleToSg(sgId, sgName) {
 }
 window.addNewRuleToSg = addNewRuleToSg;
 
-// Function for Scale Out SubGroup
-function scaleOutSubGroup() {
-  var mciid = document.getElementById("mciid").value;
-  var subgroupid = getSubGroupIdFromVmSelection();
+// Function for Scale Out NodeGroup
+function scaleOutNodeGroup() {
+  var infraid = document.getElementById("infraid").value;
+  var nodegroupid = getNodeGroupIdFromNodeSelection();
 
-  if (!mciid) {
-    errorAlert("Please select an MCI first");
+  if (!infraid) {
+    errorAlert("Please select an Infra first");
     return;
   }
 
-  if (!subgroupid) {
-    errorAlert("Please select a SubGroup first");
+  if (!nodegroupid) {
+    errorAlert("Please select a NodeGroup first");
     return;
   }
 
@@ -18090,17 +18090,17 @@ function scaleOutSubGroup() {
   var password = config.password;
   var namespace = configNamespace;
 
-  // Show dialog to get number of VMs to add
+  // Show dialog to get number of Nodes to add
   Swal.fire({
-    title: "Scale Out SubGroup",
+    title: "Scale Out NodeGroup",
     width: 600,
     html:
       "<font size=3>" +
       "<div style='text-align: left; margin: 20px;'>" +
-      "<p><b>Target MCI:</b> " + mciid + "</p>" +
-      "<p><b>Target SubGroup:</b> " + subgroupid + "</p>" +
+      "<p><b>Target Infra:</b> " + infraid + "</p>" +
+      "<p><b>Target NodeGroup:</b> " + nodegroupid + "</p>" +
       "<hr>" +
-      "<p><b>Enter the number of VMs to add:</b></p>" +
+      "<p><b>Enter the number of Nodes to add:</b></p>" +
       "</div>",
     input: "number",
     inputValue: 1,
@@ -18121,22 +18121,22 @@ function scaleOutSubGroup() {
         return 'Please enter a valid number (minimum 1)';
       }
       if (value > 20) {
-        return 'Maximum 20 VMs can be added at once';
+        return 'Maximum 20 Nodes can be added at once';
       }
     }
   }).then((result) => {
     if (result.isConfirmed) {
-      var numVMsToAdd = parseInt(result.value);
+      var numNodesToAdd = parseInt(result.value);
       
       // Confirmation dialog
       Swal.fire({
         title: "Confirm Scale Out",
         html: 
           "<div style='text-align: left; margin: 20px;'>" +
-          "<p>You are about to add <b>" + numVMsToAdd + " VM(s)</b> to:</p>" +
+          "<p>You are about to add <b>" + numNodesToAdd + " Node(s)</b> to:</p>" +
           "<ul>" +
-          "<li>MCI: <b>" + mciid + "</b></li>" +
-          "<li>SubGroup: <b>" + subgroupid + "</b></li>" +
+          "<li>Infra: <b>" + infraid + "</b></li>" +
+          "<li>NodeGroup: <b>" + nodegroupid + "</b></li>" +
           "</ul>" +
           "<p style='color: #dc3545; margin-top: 15px;'><b>⚠️ Warning:</b> This will incur additional costs.</p>" +
           "</div>",
@@ -18148,16 +18148,16 @@ function scaleOutSubGroup() {
         cancelButtonColor: "#dc3545"
       }).then((confirmResult) => {
         if (confirmResult.isConfirmed) {
-          executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, port, username, password);
+          executeScaleOut(namespace, infraid, nodegroupid, numNodesToAdd, hostname, port, username, password);
         }
       });
     }
   });
 }
-window.scaleOutSubGroup = scaleOutSubGroup;
+window.scaleOutNodeGroup = scaleOutNodeGroup;
 
-// Improved Scale Out SubGroup function with MCI and SubGroup selection
-function scaleOutSubGroupWithSelection() {
+// Improved Scale Out NodeGroup function with Infra and NodeGroup selection
+function scaleOutNodeGroupWithSelection() {
   var config = getConfig(); var hostname = config.hostname;
   var port = config.port;
   var username = config.username;
@@ -18169,19 +18169,19 @@ function scaleOutSubGroupWithSelection() {
     return;
   }
 
-  // Use the common MCI selection dialog for ScaleOut operations
-  showMciSelectionForScaleOut(
-    "Select MCI for Scale Out",
-    "Select the MCI to scale out",
-    (selectedMciId) => {
-      showSubGroupSelectionForScaleOut(selectedMciId, namespace, hostname, port, username, password);
+  // Use the common Infra selection dialog for ScaleOut operations
+  showInfraSelectionForScaleOut(
+    "Select Infra for Scale Out",
+    "Select the Infra to scale out",
+    (selectedInfraId) => {
+      showNodeGroupSelectionForScaleOut(selectedInfraId, namespace, hostname, port, username, password);
     }
   );
 }
-window.scaleOutSubGroupWithSelection = scaleOutSubGroupWithSelection;
+window.scaleOutNodeGroupWithSelection = scaleOutNodeGroupWithSelection;
 
-// Scale Out function for context menu - bypasses MCI selection
-function scaleOutMciFromContext(mciId) {
+// Scale Out function for context menu - bypasses Infra selection
+function scaleOutInfraFromContext(infraId) {
   var config = getConfig(); var hostname = config.hostname;
   var port = config.port;
   var username = config.username;
@@ -18193,18 +18193,18 @@ function scaleOutMciFromContext(mciId) {
     return;
   }
 
-  if (!mciId) {
-    errorAlert("MCI ID is required");
+  if (!infraId) {
+    errorAlert("Infra ID is required");
     return;
   }
 
-  // Directly show SubGroup selection for the specified MCI
-  showSubGroupSelectionForScaleOut(mciId, namespace, hostname, port, username, password);
+  // Directly show NodeGroup selection for the specified Infra
+  showNodeGroupSelectionForScaleOut(infraId, namespace, hostname, port, username, password);
 }
-window.scaleOutMciFromContext = scaleOutMciFromContext;
+window.scaleOutInfraFromContext = scaleOutInfraFromContext;
 
-// Copy MCI Configuration - extract MCI config and populate left panel for re-creation
-function copyMciConfig(mciId) {
+// Copy Infra Configuration - extract Infra config and populate left panel for re-creation
+function copyInfraConfig(infraId) {
   var config = getConfig();
   var hostname = config.hostname;
   var port = config.port;
@@ -18217,67 +18217,67 @@ function copyMciConfig(mciId) {
     return;
   }
 
-  if (!mciId) {
-    errorAlert("MCI ID is required");
+  if (!infraId) {
+    errorAlert("Infra ID is required");
     return;
   }
 
-  var spinnerId = addSpinnerTask("Copying MCI configuration");
+  var spinnerId = addSpinnerTask("Copying Infra configuration");
 
-  // Fetch both configCopy and MCI info in parallel
-  var configCopyUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciId}/configCopy`;
-  var mciInfoUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciId}`;
+  // Fetch both configCopy and Infra info in parallel
+  var configCopyUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraId}/configCopy`;
+  var infraInfoUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraId}`;
   var authConfig = { username: username, password: password };
 
   Promise.all([
     axios({ method: "get", url: configCopyUrl, auth: authConfig }),
-    axios({ method: "get", url: mciInfoUrl, auth: authConfig })
+    axios({ method: "get", url: infraInfoUrl, auth: authConfig })
   ]).then(function([configRes, infoRes]) {
     removeSpinnerTask(spinnerId);
 
-    var mciReq = configRes.data;
-    var mciInfo = infoRes.data;
+    var infraReq = configRes.data;
+    var infraInfo = infoRes.data;
 
-    if (!mciReq || !mciReq.subGroups || mciReq.subGroups.length === 0) {
-      errorAlert("No SubGroup configuration found in MCI: " + mciId);
+    if (!infraReq || !infraReq.nodeGroups || infraReq.nodeGroups.length === 0) {
+      errorAlert("No NodeGroup configuration found in Infra: " + infraId);
       return;
     }
 
     // Clear existing configuration
     clearCircle('');
 
-    // Group VMs from MCI info by subGroupId for spec metadata extraction
-    var vmBySubGroup = {};
-    if (mciInfo && mciInfo.vm) {
-      mciInfo.vm.forEach(function(vm) {
-        var sgId = vm.subGroupId || vm.id;
-        if (!vmBySubGroup[sgId]) {
-          vmBySubGroup[sgId] = vm;
+    // Group VMs from Infra info by nodeGroupId for spec metadata extraction
+    var nodeByGroup = {};
+    if (infraInfo && infraInfo.node) {
+      infraInfo.node.forEach(function(nd) {
+        var sgId = nd.nodeGroupId || nd.id;
+        if (!nodeByGroup[sgId]) {
+          nodeByGroup[sgId] = nd;
         }
       });
     }
 
-    // Populate vmSubGroupReqeustFromSpecList and recommendedSpecList
-    mciReq.subGroups.forEach(function(sg) {
-      var vmConfig = $.extend({}, createMciReqVmTmplt);
-      vmConfig.name = sg.name || ("g" + (vmSubGroupReqeustFromSpecList.length + 1));
-      vmConfig.specId = sg.specId || "";
-      vmConfig.imageId = sg.imageId || "ubuntu22.04";
-      vmConfig.rootDiskType = sg.rootDiskType || "default";
-      vmConfig.rootDiskSize = sg.rootDiskSize || 0;
-      vmConfig.subGroupSize = sg.subGroupSize || 1;
-      vmConfig.description = sg.description || "mapui";
-      vmConfig.connectionName = sg.connectionName || "";
-      vmConfig.zone = sg.zone || "";
+    // Populate nodeGroupRequestFromSpecList and recommendedSpecList
+    infraReq.nodeGroups.forEach(function(sg) {
+      var nodeConfig = $.extend({}, createInfraReqVmTmplt);
+      nodeConfig.name = sg.name || ("g" + (nodeGroupRequestFromSpecList.length + 1));
+      nodeConfig.specId = sg.specId || "";
+      nodeConfig.imageId = sg.imageId || "ubuntu22.04";
+      nodeConfig.rootDiskType = sg.rootDiskType || "default";
+      nodeConfig.rootDiskSize = sg.rootDiskSize || 0;
+      nodeConfig.nodeGroupSize = sg.nodeGroupSize || 1;
+      nodeConfig.description = sg.description || "mapui";
+      nodeConfig.connectionName = sg.connectionName || "";
+      nodeConfig.zone = sg.zone || "";
       if (sg.label && Object.keys(sg.label).length > 0) {
-        vmConfig.label = sg.label;
+        nodeConfig.label = sg.label;
       }
 
-      vmSubGroupReqeustFromSpecList.push(vmConfig);
+      nodeGroupRequestFromSpecList.push(nodeConfig);
 
-      // Build recommendedSpec from MCI VM info for display in the review panel
-      // Look up by sg.name first (matches subGroupId), then try specId-based fallback
-      var repVm = vmBySubGroup[sg.name] || vmBySubGroup[vmConfig.name];
+      // Build recommendedSpec from Infra Node info for display in the review panel
+      // Look up by sg.name first (matches nodeGroupId), then try specId-based fallback
+      var repVm = nodeByGroup[sg.name] || nodeByGroup[nodeConfig.name];
       var specInfo = {
         id: sg.specId || "",
         providerName: repVm?.connectionConfig?.providerName || extractProviderFromSpecId(sg.specId),
@@ -18296,8 +18296,8 @@ function copyMciConfig(mciId) {
       recommendedSpecList.push(specInfo);
     });
 
-    // Update the left panel SubGroup review
-    updateSubGroupReview();
+    // Update the left panel NodeGroup review
+    updateNodeGroupReview();
 
     // Switch to Provision tab to show the configuration
     var provisionTab = document.getElementById('provision-tab');
@@ -18306,7 +18306,7 @@ function copyMciConfig(mciId) {
     }
 
     // Show the configCopy response in the standard JSON viewer
-    outputAlert(mciReq, "success");
+    outputAlert(infraReq, "success");
 
     // Offer to save as template with a toast notification
     Swal.fire({
@@ -18323,7 +18323,7 @@ function copyMciConfig(mciId) {
         if (btn) {
           btn.addEventListener('click', function() {
             Swal.close();
-            saveConfigAsTemplate(namespace, mciId, mciReq);
+            saveConfigAsTemplate(namespace, infraId, infraReq);
           });
         }
       }
@@ -18331,11 +18331,11 @@ function copyMciConfig(mciId) {
 
   }).catch(function(err) {
     removeSpinnerTask(spinnerId);
-    console.error("Failed to copy MCI config:", err);
-    errorAlert("Failed to copy MCI configuration: " + (err.response?.data?.message || err.message));
+    console.error("Failed to copy Infra config:", err);
+    errorAlert("Failed to copy Infra configuration: " + (err.response?.data?.message || err.message));
   });
 }
-window.copyMciConfig = copyMciConfig;
+window.copyInfraConfig = copyInfraConfig;
 
 // Helper: extract provider name from specId (e.g., "aws+ap-southeast-1+t3.medium" -> "aws")
 function extractProviderFromSpecId(specId) {
@@ -18351,8 +18351,8 @@ function extractRegionFromSpecId(specId) {
   return parts.length > 1 ? parts[1] : "Unknown";
 }
 
-// Save MCI config as template directly (context menu shortcut)
-function saveMciAsTemplate(mciId) {
+// Save Infra config as template directly (context menu shortcut)
+function saveInfraAsTemplate(infraId) {
   var config = getConfig();
   var hostname = config.hostname;
   var port = config.port;
@@ -18365,8 +18365,8 @@ function saveMciAsTemplate(mciId) {
     return;
   }
 
-  var spinnerId = addSpinnerTask("Extracting MCI configuration");
-  var configCopyUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciId}/configCopy`;
+  var spinnerId = addSpinnerTask("Extracting Infra configuration");
+  var configCopyUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraId}/configCopy`;
 
   axios({
     method: "get",
@@ -18374,24 +18374,24 @@ function saveMciAsTemplate(mciId) {
     auth: { username: username, password: password }
   }).then(function(res) {
     removeSpinnerTask(spinnerId);
-    var mciReq = res.data;
-    if (!mciReq || !mciReq.subGroups || mciReq.subGroups.length === 0) {
-      errorAlert("No SubGroup configuration found in MCI: " + mciId);
+    var infraReq = res.data;
+    if (!infraReq || !infraReq.nodeGroups || infraReq.nodeGroups.length === 0) {
+      errorAlert("No NodeGroup configuration found in Infra: " + infraId);
       return;
     }
-    saveConfigAsTemplate(namespace, mciId, mciReq);
+    saveConfigAsTemplate(namespace, infraId, infraReq);
   }).catch(function(err) {
     removeSpinnerTask(spinnerId);
-    errorAlert("Failed to extract MCI configuration: " + (err.response?.data?.message || err.message));
+    errorAlert("Failed to extract Infra configuration: " + (err.response?.data?.message || err.message));
   });
 }
-window.saveMciAsTemplate = saveMciAsTemplate;
+window.saveInfraAsTemplate = saveInfraAsTemplate;
 
-// Step 2: Show SubGroup selection dialog
-function showSubGroupSelectionForScaleOut(selectedMciId, namespace, hostname, port, username, password) {
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${selectedMciId}/subgroup`;
+// Step 2: Show NodeGroup selection dialog
+function showNodeGroupSelectionForScaleOut(selectedInfraId, namespace, hostname, port, username, password) {
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${selectedInfraId}/nodegroup`;
   
-  var spinnerId = addSpinnerTask("Loading SubGroup list");
+  var spinnerId = addSpinnerTask("Loading NodeGroup list");
 
   axios({
     method: "get",
@@ -18403,29 +18403,29 @@ function showSubGroupSelectionForScaleOut(selectedMciId, namespace, hostname, po
     timeout: 600000,
   })
     .then((res) => {
-      var subGroupOptions = '';
+      var nodeGroupOptions = '';
       
       if (res.data.output && res.data.output.length > 0) {
-        res.data.output.forEach((subGroupName) => {
-          if (subGroupName && subGroupName.trim() !== "") {
-            subGroupOptions += `<option value="${subGroupName}">${subGroupName}</option>`;
+        res.data.output.forEach((nodeGroupName) => {
+          if (nodeGroupName && nodeGroupName.trim() !== "") {
+            nodeGroupOptions += `<option value="${nodeGroupName}">${nodeGroupName}</option>`;
           }
         });
 
-        // Show SubGroup selection dialog
+        // Show NodeGroup selection dialog
         Swal.fire({
-          title: "Select SubGroup for Scale Out",
+          title: "Select NodeGroup for Scale Out",
           width: 600,
           html:
             "<div style='text-align: left; margin: 20px;'>" +
-            "<p><b>Step 2:</b> Select the SubGroup to scale out</p>" +
-            "<p><b>Selected MCI:</b> " + selectedMciId + "</p>" +
+            "<p><b>Step 2:</b> Select the NodeGroup to scale out</p>" +
+            "<p><b>Selected Infra:</b> " + selectedInfraId + "</p>" +
             "<hr>" +
             "<div class='form-group'>" +
-            "<label for='subgroup-select'><b>Available SubGroups:</b></label>" +
-            "<select id='subgroup-select' class='form-control' style='margin-top: 10px;'>" +
-            "<option value=''>-- Select SubGroup --</option>" +
-            subGroupOptions +
+            "<label for='nodegroup-select'><b>Available NodeGroups:</b></label>" +
+            "<select id='nodegroup-select' class='form-control' style='margin-top: 10px;'>" +
+            "<option value=''>-- Select NodeGroup --</option>" +
+            nodeGroupOptions +
             "</select>" +
             "</div>" +
             "</div>",
@@ -18434,28 +18434,28 @@ function showSubGroupSelectionForScaleOut(selectedMciId, namespace, hostname, po
           cancelButtonText: "Back",
           confirmButtonColor: "#007bff",
           preConfirm: () => {
-            const selectedSubGroup = document.getElementById('subgroup-select').value;
-            if (!selectedSubGroup) {
-              Swal.showValidationMessage('Please select a SubGroup');
+            const selectedNodeGroup = document.getElementById('nodegroup-select').value;
+            if (!selectedNodeGroup) {
+              Swal.showValidationMessage('Please select a NodeGroup');
               return false;
             }
-            return selectedSubGroup;
+            return selectedNodeGroup;
           }
         }).then((result) => {
           if (result.isConfirmed) {
-            showScaleOutConfiguration(selectedMciId, result.value, namespace, hostname, port, username, password);
+            showScaleOutConfiguration(selectedInfraId, result.value, namespace, hostname, port, username, password);
           } else if (result.dismiss === Swal.DismissReason.cancel) {
-            // Go back to MCI selection
-            scaleOutSubGroupWithSelection();
+            // Go back to Infra selection
+            scaleOutNodeGroupWithSelection();
           }
         });
       } else {
-        errorAlert("No SubGroups found in the selected MCI");
+        errorAlert("No NodeGroups found in the selected Infra");
       }
     })
     .catch(function (error) {
-      console.log("Failed to get SubGroup list:", error);
-      errorAlert("Failed to load SubGroup list. Please check your connection.");
+      console.log("Failed to get NodeGroup list:", error);
+      errorAlert("Failed to load NodeGroup list. Please check your connection.");
     })
     .finally(function () {
       removeSpinnerTask(spinnerId);
@@ -18463,17 +18463,17 @@ function showSubGroupSelectionForScaleOut(selectedMciId, namespace, hostname, po
 }
 
 // Step 3: Show scale out configuration dialog
-function showScaleOutConfiguration(mciId, subGroupId, namespace, hostname, port, username, password) {
+function showScaleOutConfiguration(infraId, nodeGroupId, namespace, hostname, port, username, password) {
   Swal.fire({
     title: "Configure Scale Out",
     width: 600,
     html:
       "<div style='text-align: left; margin: 20px;'>" +
       "<p><b>Step 3:</b> Configure the scale out operation</p>" +
-      "<p><b>Selected MCI:</b> " + mciId + "</p>" +
-      "<p><b>Selected SubGroup:</b> " + subGroupId + "</p>" +
+      "<p><b>Selected Infra:</b> " + infraId + "</p>" +
+      "<p><b>Selected NodeGroup:</b> " + nodeGroupId + "</p>" +
       "<hr>" +
-      "<p><b>Enter the number of VMs to add:</b></p>" +
+      "<p><b>Enter the number of Nodes to add:</b></p>" +
       "</div>",
     input: "number",
     inputValue: 1,
@@ -18492,22 +18492,22 @@ function showScaleOutConfiguration(mciId, subGroupId, namespace, hostname, port,
         return 'Please enter a valid number (minimum 1)';
       }
       if (value > 20) {
-        return 'Maximum 20 VMs can be added at once';
+        return 'Maximum 20 Nodes can be added at once';
       }
     }
   }).then((result) => {
     if (result.isConfirmed) {
-      var numVMsToAdd = parseInt(result.value);
+      var numNodesToAdd = parseInt(result.value);
       
       // Final confirmation dialog
       Swal.fire({
         title: "Confirm Scale Out",
         html: 
           "<div style='text-align: left; margin: 20px;'>" +
-          "<p>You are about to add <b>" + numVMsToAdd + " VM(s)</b> to:</p>" +
+          "<p>You are about to add <b>" + numNodesToAdd + " Node(s)</b> to:</p>" +
           "<ul>" +
-          "<li>MCI: <b>" + mciId + "</b></li>" +
-          "<li>SubGroup: <b>" + subGroupId + "</b></li>" +
+          "<li>Infra: <b>" + infraId + "</b></li>" +
+          "<li>NodeGroup: <b>" + nodeGroupId + "</b></li>" +
           "</ul>" +
           "<p style='color: #dc3545; margin-top: 15px;'><b>⚠️ Warning:</b> This will incur additional costs.</p>" +
           "</div>",
@@ -18519,31 +18519,31 @@ function showScaleOutConfiguration(mciId, subGroupId, namespace, hostname, port,
         cancelButtonColor: "#dc3545"
       }).then((confirmResult) => {
         if (confirmResult.isConfirmed) {
-          executeScaleOut(namespace, mciId, subGroupId, numVMsToAdd, hostname, port, username, password);
+          executeScaleOut(namespace, infraId, nodeGroupId, numNodesToAdd, hostname, port, username, password);
         }
       });
     } else if (result.dismiss === Swal.DismissReason.cancel) {
-      // Go back to SubGroup selection
-      showSubGroupSelectionForScaleOut(mciId, namespace, hostname, port, username, password);
+      // Go back to NodeGroup selection
+      showNodeGroupSelectionForScaleOut(infraId, namespace, hostname, port, username, password);
     }
   });
 }
 
 // Function to execute the scale out operation
-function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, port, username, password) {
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciid}/subgroup/${subgroupid}`;
+function executeScaleOut(namespace, infraid, nodegroupid, numNodesToAdd, hostname, port, username, password) {
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/nodegroup/${nodegroupid}`;
   
   var scaleOutReq = {
-    numVMsToAdd: numVMsToAdd
+    numNodesToAdd: numNodesToAdd
   };
 
   var jsonBody = JSON.stringify(scaleOutReq, undefined, 4);
   
-  console.log(` Scaling out SubGroup ${subgroupid} by adding ${numVMsToAdd} VM(s)...`);
-  var spinnerId = addSpinnerTask(`Scale Out: ${mciid}/${subgroupid} (+${numVMsToAdd} VMs)`);
-  infoAlert(`Starting Scale Out: Adding ${numVMsToAdd} VM(s) to ${subgroupid}`);
+  console.log(` Scaling out NodeGroup ${nodegroupid} by adding ${numNodesToAdd} Node(s)...`);
+  var spinnerId = addSpinnerTask(`Scale Out: ${infraid}/${nodegroupid} (+${numNodesToAdd} Nodes)`);
+  infoAlert(`Starting Scale Out: Adding ${numNodesToAdd} Node(s) to ${nodegroupid}`);
 
-  var requestId = generateRandomRequestId("scaleout-" + mciid + "-" + subgroupid + "-", 10);
+  var requestId = generateRandomRequestId("scaleout-" + infraid + "-" + nodegroupid + "-", 10);
   addRequestIdToSelect(requestId);
 
   axios({
@@ -18566,32 +18566,32 @@ function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, po
       displayJsonData(res.data, typeInfo);
       handleAxiosResponse(res);
       
-      console.log(`Successfully scaled out SubGroup ${subgroupid} by adding ${numVMsToAdd} VM(s)`);
+      console.log(`Successfully scaled out NodeGroup ${nodegroupid} by adding ${numNodesToAdd} Node(s)`);
       
       Swal.fire({
         icon: "success",
         title: "Scale Out Successful!",
         html: 
           "<div style='text-align: left;'>" +
-          "<p><b>" + numVMsToAdd + " VM(s)</b> have been successfully added to:</p>" +
+          "<p><b>" + numNodesToAdd + " Node(s)</b> have been successfully added to:</p>" +
           "<ul>" +
-          "<li>MCI: <b>" + mciid + "</b></li>" +
-          "<li>SubGroup: <b>" + subgroupid + "</b></li>" +
+          "<li>Infra: <b>" + infraid + "</b></li>" +
+          "<li>NodeGroup: <b>" + nodegroupid + "</b></li>" +
           "</ul>" +
-          "<p style='margin-top: 15px; color: #28a745;'>✓ The new VMs are being provisioned.</p>" +
+          "<p style='margin-top: 15px; color: #28a745;'>✓ The new Nodes are being provisioned.</p>" +
           "</div>",
         confirmButtonText: "OK"
       });
       
-      // Refresh MCI status after scale out
+      // Refresh Infra status after scale out
       setTimeout(() => {
-        getMci();
-        updateSubGroupList();
+        getInfra();
+        updateNodeGroupList();
         updateVmList();
       }, 3000);
     })
     .catch(function (error) {
-      var errorMsg = "Failed to scale out SubGroup";
+      var errorMsg = "Failed to scale out NodeGroup";
       
       if (error.response) {
         console.log(error.response.data);
@@ -18623,7 +18623,7 @@ function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, po
         title: "Scale Out Failed",
         html: 
           "<div style='text-align: left;'>" +
-          "<p>Failed to scale out SubGroup <b>" + subgroupid + "</b></p>" +
+          "<p>Failed to scale out NodeGroup <b>" + nodegroupid + "</b></p>" +
           "<p style='margin-top: 10px; color: #dc3545;'>Error: " + errorMsg + "</p>" +
           "</div>",
         confirmButtonText: "OK",
@@ -18637,22 +18637,22 @@ function executeScaleOut(namespace, mciid, subgroupid, numVMsToAdd, hostname, po
     });
 }
 
-// Function to show MCI Actions menu in SweetAlert
+// Function to show Infra Actions menu in SweetAlert
 function showActionsMenu() {
   var namespace = configNamespace;
-  var mciid = getSelectedMciId();
+  var infraid = getSelectedInfraId();
   
   if (!namespace) {
     errorAlert("Please select a namespace first");
     return;
   }
-  if (!mciid) {
-    errorAlert("Please select an MCI first");
+  if (!infraid) {
+    errorAlert("Please select an Infra first");
     return;
   }
 
   Swal.fire({
-    title: "Control MCI",
+    title: "Control Infra",
     width: 600,
     showCancelButton: true,
     showConfirmButton: false,
@@ -18662,7 +18662,7 @@ function showActionsMenu() {
     backdrop: `rgba(0, 0, 0, 0.4)`,
     html: `
       <div style="text-align: left; margin: 20px;">
-        <p><b>Selected MCI:</b> ${mciid}</p>
+        <p><b>Selected Infra:</b> ${infraid}</p>
         <hr>
         <p><b>Choose a lifecycle control action:</b></p>
         
@@ -18713,16 +18713,16 @@ function executeAction(action) {
   
   // Add confirmation for dangerous actions
   if (action === 'terminate') {
-    var mciid = getSelectedMciId();
+    var infraid = getSelectedInfraId();
     Swal.fire({
       title: "⚠️ Confirm Termination",
       html: `
         <div style="text-align: left; margin: 20px;">
-          <p>You are about to <b style="color: #dc3545;">TERMINATE</b> MCI:</p>
-          <p><b>${mciid}</b></p>
+          <p>You are about to <b style="color: #dc3545;">TERMINATE</b> Infra:</p>
+          <p><b>${infraid}</b></p>
           <br>
           <p style="color: #dc3545;"><b>⚠️ WARNING:</b> This action is <b>IRREVERSIBLE</b>!</p>
-          <p style="color: #dc3545;">All VMs and associated resources will be permanently deleted.</p>
+          <p style="color: #dc3545;">All Nodes and associated resources will be permanently deleted.</p>
         </div>
       `,
       icon: "warning",
@@ -18733,19 +18733,19 @@ function executeAction(action) {
       cancelButtonColor: "#6c757d"
     }).then((result) => {
       if (result.isConfirmed) {
-        controlMCI(action);
+        controlInfra(action);
       }
     });
   } else if (action === 'withdraw') {
-    var mciid = getSelectedMciId();
+    var infraid = getSelectedInfraId();
     Swal.fire({
       title: "⚠️ Confirm Withdraw",
       html: `
         <div style="text-align: left; margin: 20px;">
-          <p>You are about to <b style="color: #ffc107;">WITHDRAW</b> MCI:</p>
-          <p><b>${mciid}</b></p>
+          <p>You are about to <b style="color: #ffc107;">WITHDRAW</b> Infra:</p>
+          <p><b>${infraid}</b></p>
           <br>
-          <p style="color: #ffc107;"><b>⚠️ WARNING:</b> This will shut down all VMs in the MCI.</p>
+          <p style="color: #ffc107;"><b>⚠️ WARNING:</b> This will shut down all Nodes in the Infra.</p>
         </div>
       `,
       icon: "warning",
@@ -18756,20 +18756,20 @@ function executeAction(action) {
       cancelButtonColor: "#6c757d"
     }).then((result) => {
       if (result.isConfirmed) {
-        controlMCI(action);
+        controlInfra(action);
       }
     });
   } else if (action === 'delete') {
-    var mciid = getSelectedMciId();
+    var infraid = getSelectedInfraId();
     Swal.fire({
       title: "⚠️ Confirm Delete",
       html: `
         <div style="text-align: left; margin: 20px;">
-          <p>You are about to <b style="color: #dc3545;">DELETE</b> MCI:</p>
-          <p><b>${mciid}</b></p>
+          <p>You are about to <b style="color: #dc3545;">DELETE</b> Infra:</p>
+          <p><b>${infraid}</b></p>
           <br>
           <p style="color: #dc3545;"><b>⚠️ WARNING:</b> This action is <b>IRREVERSIBLE</b>!</p>
-          <p style="color: #dc3545;">The MCI and all associated resources will be permanently removed.</p>
+          <p style="color: #dc3545;">The Infra and all associated resources will be permanently removed.</p>
         </div>
       `,
       icon: "warning",
@@ -18780,19 +18780,19 @@ function executeAction(action) {
       cancelButtonColor: "#6c757d"
     }).then((result) => {
       if (result.isConfirmed) {
-        deleteMCI();
+        deleteInfra();
       }
     });
   } else {
     // For other actions, execute directly with brief confirmation
-    var mciid = document.getElementById("mciid").value;
+    var infraid = document.getElementById("infraid").value;
     var actionName = action.charAt(0).toUpperCase() + action.slice(1);
     
     Swal.fire({
       title: `Confirm ${actionName}`,
       html: `
         <div style="text-align: center; margin: 20px;">
-          <p>Execute <b>${actionName}</b> on MCI: <b>${mciid}</b>?</p>
+          <p>Execute <b>${actionName}</b> on Infra: <b>${infraid}</b>?</p>
         </div>
       `,
       icon: "question",
@@ -18803,16 +18803,16 @@ function executeAction(action) {
       cancelButtonColor: "#6c757d"
     }).then((result) => {
       if (result.isConfirmed) {
-        controlMCI(action);
+        controlInfra(action);
       }
     });
   }
 }
 window.executeAction = executeAction;
 
-// Common function for ScaleOut operations - MCI selection dialog
-function showMciSelectionForScaleOut(title, description, successCallback) {
-  // Get MCI list specifically for ScaleOut operations
+// Common function for ScaleOut operations - Infra selection dialog
+function showInfraSelectionForScaleOut(title, description, successCallback) {
+  // Get Infra list specifically for ScaleOut operations
   var config = getConfig(); var hostname = config.hostname;
   var port = config.port;
   var username = config.username;
@@ -18824,8 +18824,8 @@ function showMciSelectionForScaleOut(title, description, successCallback) {
     return;
   }
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
-  var spinnerId = addSpinnerTask("Loading MCI list for ScaleOut");
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra?option=id`;
+  var spinnerId = addSpinnerTask("Loading Infra list for ScaleOut");
 
   axios({
     method: "get",
@@ -18837,31 +18837,31 @@ function showMciSelectionForScaleOut(title, description, successCallback) {
     timeout: 600000,
   })
     .then((res) => {
-      var mciOptions = '';
+      var infraOptions = '';
       
       if (res.data.output && res.data.output.length > 0) {
-        res.data.output.forEach((mciId) => {
-          if (mciId && mciId.trim() !== "") {
-            mciOptions += `<option value="${mciId}">${mciId}</option>`;
+        res.data.output.forEach((infraId) => {
+          if (infraId && infraId.trim() !== "") {
+            infraOptions += `<option value="${infraId}">${infraId}</option>`;
           }
         });
 
-        if (mciOptions) {
-          // Show MCI selection dialog
+        if (infraOptions) {
+          // Show Infra selection dialog
           Swal.fire({
             title: title,
             width: 600,
             html:
               "<div style='text-align: left; margin: 20px;'>" +
               "<p><b>Step 1:</b> " + description + "</p>" +
-              (vmSubGroupReqeustFromSpecList && vmSubGroupReqeustFromSpecList.length > 0 ? 
-                "<p><b>Available VM Configurations:</b> " + vmSubGroupReqeustFromSpecList.length + " location(s)</p>" : "") +
+              (nodeGroupRequestFromSpecList && nodeGroupRequestFromSpecList.length > 0 ? 
+                "<p><b>Available Node Configurations:</b> " + nodeGroupRequestFromSpecList.length + " location(s)</p>" : "") +
               "<hr>" +
               "<div class='form-group'>" +
-              "<label for='mci-select'><b>Available MCIs:</b></label>" +
-              "<select id='mci-select' class='form-control' style='margin-top: 10px;'>" +
-              "<option value=''>-- Select MCI --</option>" +
-              mciOptions +
+              "<label for='infra-select'><b>Available Infras:</b></label>" +
+              "<select id='infra-select' class='form-control' style='margin-top: 10px;'>" +
+              "<option value=''>-- Select Infra --</option>" +
+              infraOptions +
               "</select>" +
               "</div>" +
               "</div>",
@@ -18870,12 +18870,12 @@ function showMciSelectionForScaleOut(title, description, successCallback) {
             cancelButtonText: "Cancel",
             confirmButtonColor: "#28a745",
             preConfirm: () => {
-              const selectedMci = document.getElementById('mci-select').value;
-              if (!selectedMci) {
-                Swal.showValidationMessage('Please select an MCI');
+              const selectedInfra = document.getElementById('infra-select').value;
+              if (!selectedInfra) {
+                Swal.showValidationMessage('Please select an Infra');
                 return false;
               }
-              return selectedMci;
+              return selectedInfra;
             }
           }).then((result) => {
             if (result.isConfirmed) {
@@ -18883,23 +18883,23 @@ function showMciSelectionForScaleOut(title, description, successCallback) {
             }
           });
         } else {
-          errorAlert("No MCIs found in the selected namespace");
+          errorAlert("No Infras found in the selected namespace");
         }
       } else {
-        errorAlert("No MCIs found in the selected namespace");
+        errorAlert("No Infras found in the selected namespace");
       }
     })
     .catch(function (error) {
-      console.log("Failed to get MCI list for ScaleOut:", error);
-      errorAlert("Failed to load MCI list. Please check your connection.");
+      console.log("Failed to get Infra list for ScaleOut:", error);
+      errorAlert("Failed to load Infra list. Please check your connection.");
     })
     .finally(function () {
       removeSpinnerTask(spinnerId);
     });
 }
 
-// ScaleOut MCI function with current map configuration
-function scaleOutMciWithConfiguration() {
+// ScaleOut Infra function with current map configuration
+function scaleOutInfraWithConfiguration() {
   var config = getConfig(); var hostname = config.hostname;
   var port = config.port;
   var username = config.username;
@@ -18911,130 +18911,130 @@ function scaleOutMciWithConfiguration() {
     return;
   }
 
-  // Check if we have any VM configuration from the map
-  if (!vmSubGroupReqeustFromSpecList || vmSubGroupReqeustFromSpecList.length === 0) {
-    errorAlert("Please configure VM specifications first by clicking on the map or using the configuration form");
+  // Check if we have any Node configuration from the map
+  if (!nodeGroupRequestFromSpecList || nodeGroupRequestFromSpecList.length === 0) {
+    errorAlert("Please configure Node specifications first by clicking on the map or using the configuration form");
     return;
   }
 
-  // Use the common MCI selection dialog for ScaleOut operations
-  showMciSelectionForScaleOut(
-    "Select MCI for VM Addition",
-    "Select the MCI to add new VMs",
-    (selectedMciId) => {
-      showMciScaleOutConfiguration(selectedMciId, namespace, hostname, port, username, password);
+  // Use the common Infra selection dialog for ScaleOut operations
+  showInfraSelectionForScaleOut(
+    "Select Infra for Node Addition",
+    "Select the Infra to add new Nodes",
+    (selectedInfraId) => {
+      showInfraScaleOutConfiguration(selectedInfraId, namespace, hostname, port, username, password);
     }
   );
 }
-window.scaleOutMciWithConfiguration = scaleOutMciWithConfiguration;
+window.scaleOutInfraWithConfiguration = scaleOutInfraWithConfiguration;
 
-// Step 2: Show MCI scale out configuration dialog
-function showMciScaleOutConfiguration(selectedMciId, namespace, hostname, port, username, password) {
-  // Build VM configuration summary from current map settings
+// Step 2: Show Infra scale out configuration dialog
+function showInfraScaleOutConfiguration(selectedInfraId, namespace, hostname, port, username, password) {
+  // Build Node configuration summary from current map settings
   var vmConfigSummary = "";
-  var totalVMs = 0;
+  var totalNodes = 0;
   
-  if (vmSubGroupReqeustFromSpecList && vmSubGroupReqeustFromSpecList.length > 0) {
-    vmSubGroupReqeustFromSpecList.forEach((vmConfig, index) => {
-      var vmCount = 1; // Default VM count per location
-      totalVMs += vmCount;
+  if (nodeGroupRequestFromSpecList && nodeGroupRequestFromSpecList.length > 0) {
+    nodeGroupRequestFromSpecList.forEach((nodeConfig, index) => {
+      var ndCount = 1; // Default Node count per location
+      totalNodes += ndCount;
       vmConfigSummary += 
         "<div style='margin: 5px 0; padding: 8px; background: #f8f9fa; border-radius: 4px;'>" +
         "<b>Location " + (index + 1) + ":</b><br>" +
-        "Spec: " + (vmConfig.specId || "Auto-selected") + "<br>" +
-        "Image: " + (vmConfig.imageId || "Auto-selected") + "<br>" +
-        "Count: " + vmCount + " VM(s)" +
+        "Spec: " + (nodeConfig.specId || "Auto-selected") + "<br>" +
+        "Image: " + (nodeConfig.imageId || "Auto-selected") + "<br>" +
+        "Count: " + ndCount + " Node(s)" +
         "</div>";
     });
   }
 
   Swal.fire({
-    title: "Configure MCI Scale Out",
+    title: "Configure Infra Scale Out",
     width: 700,
     html:
       "<div style='text-align: left; margin: 20px;'>" +
-      "<p><b>Step 2:</b> Configure VM addition to MCI</p>" +
-      "<p><b>Selected MCI:</b> " + selectedMciId + "</p>" +
+      "<p><b>Step 2:</b> Configure Node addition to Infra</p>" +
+      "<p><b>Selected Infra:</b> " + selectedInfraId + "</p>" +
       "<hr>" +
       "<div style='margin-bottom: 15px;'>" +
-      "<label for='subgroup-name'><b>New SubGroup Name:</b></label>" +
-      "<input id='subgroup-name' class='form-control' style='margin-top: 5px;' " +
-      "placeholder='Enter subgroup name (e.g., web-servers-2)' value='dynamic-group-" + Date.now() + "'>" +
+      "<label for='nodegroup-name'><b>New NodeGroup Name:</b></label>" +
+      "<input id='nodegroup-name' class='form-control' style='margin-top: 5px;' " +
+      "placeholder='Enter nodegroup name (e.g., web-servers-2)' value='dynamic-group-" + Date.now() + "'>" +
       "</div>" +
       "<div style='margin-bottom: 15px;'>" +
-      "<label for='vm-count'><b>Number of VMs per location:</b></label>" +
-      "<input id='vm-count' type='number' class='form-control' style='margin-top: 5px;' " +
-      "min='1' max='10' value='1' placeholder='Enter number of VMs'>" +
+      "<label for='node-count'><b>Number of Nodes per location:</b></label>" +
+      "<input id='node-count' type='number' class='form-control' style='margin-top: 5px;' " +
+      "min='1' max='10' value='1' placeholder='Enter number of Nodes'>" +
       "</div>" +
       "<hr>" +
-      "<p><b>VM Configuration Summary:</b></p>" +
+      "<p><b>Node Configuration Summary:</b></p>" +
       "<div style='max-height: 200px; overflow-y: auto;'>" +
       vmConfigSummary +
       "</div>" +
       "<hr>" +
-      "<p><b>Total VMs to add:</b> <span id='total-vms'>" + totalVMs + "</span></p>" +
+      "<p><b>Total Nodes to add:</b> <span id='total-nodes'>" + totalNodes + "</span></p>" +
       "</div>",
     showCancelButton: true,
     confirmButtonText: "Review Configuration",
     cancelButtonText: "Back",
     confirmButtonColor: "#17a2b8",
     didOpen: () => {
-      // Update total VM count when VM count per location changes
-      document.getElementById('vm-count').addEventListener('input', function() {
+      // Update total Node count when Node count per location changes
+      document.getElementById('node-count').addEventListener('input', function() {
         var vmPerLocation = parseInt(this.value) || 1;
-        var totalLocations = vmSubGroupReqeustFromSpecList.length;
+        var totalLocations = nodeGroupRequestFromSpecList.length;
         var newTotal = vmPerLocation * totalLocations;
-        document.getElementById('total-vms').textContent = newTotal;
+        document.getElementById('total-nodes').textContent = newTotal;
       });
     },
     preConfirm: () => {
-      const subGroupName = document.getElementById('subgroup-name').value.trim();
-      const vmCount = parseInt(document.getElementById('vm-count').value) || 1;
+      const nodeGroupName = document.getElementById('nodegroup-name').value.trim();
+      const ndCount = parseInt(document.getElementById('node-count').value) || 1;
       
-      if (!subGroupName) {
-        Swal.showValidationMessage('Please enter a SubGroup name');
+      if (!nodeGroupName) {
+        Swal.showValidationMessage('Please enter a NodeGroup name');
         return false;
       }
       
-      if (vmCount < 1 || vmCount > 10) {
-        Swal.showValidationMessage('VM count must be between 1 and 10');
+      if (ndCount < 1 || ndCount > 10) {
+        Swal.showValidationMessage('Node count must be between 1 and 10');
         return false;
       }
       
-      return { subGroupName, vmCount };
+      return { nodeGroupName, ndCount };
     }
   }).then((result) => {
     if (result.isConfirmed) {
       var config = result.value;
       // Go to review step first
-      showMciScaleOutReview(selectedMciId, config.subGroupName, config.vmCount, namespace, hostname, port, username, password);
+      showInfraScaleOutReview(selectedInfraId, config.nodeGroupName, config.ndCount, namespace, hostname, port, username, password);
     } else if (result.dismiss === Swal.DismissReason.cancel) {
-      // Go back to MCI selection
-      scaleOutMciWithConfiguration();
+      // Go back to Infra selection
+      scaleOutInfraWithConfiguration();
     }
   });
 }
 
-// Step 2.5: Show MCI scale out review
-function showMciScaleOutReview(selectedMciId, subGroupName, vmCountPerLocation, namespace, hostname, port, username, password) {
-  // Use the first VM configuration from the map as the template for review
-  if (!vmSubGroupReqeustFromSpecList || vmSubGroupReqeustFromSpecList.length === 0) {
-    errorAlert("No VM configuration available for review");
+// Step 2.5: Show Infra scale out review
+function showInfraScaleOutReview(selectedInfraId, nodeGroupName, nodeCountPerLocation, namespace, hostname, port, username, password) {
+  // Use the first Node configuration from the map as the template for review
+  if (!nodeGroupRequestFromSpecList || nodeGroupRequestFromSpecList.length === 0) {
+    errorAlert("No Node configuration available for review");
     return;
   }
 
-  var vmTemplate = vmSubGroupReqeustFromSpecList[0];
+  var vmTemplate = nodeGroupRequestFromSpecList[0];
   
   // Build the review request using the template
   var reviewReq = {
-    name: subGroupName,
-    subGroupSize: vmCountPerLocation,
+    name: nodeGroupName,
+    nodeGroupSize: nodeCountPerLocation,
     specId: vmTemplate.specId,
     imageId: vmTemplate.imageId,
-    description: "Dynamically added via CB-MapUI Scale Out MCI",
+    description: "Dynamically added via CB-MapUI Scale Out Infra",
     label: {
       "created-by": "cb-mapui",
-      "creation-type": "scale-out-mci",
+      "creation-type": "scale-out-infra",
       "timestamp": new Date().toISOString()
     }
   };
@@ -19050,14 +19050,14 @@ function showMciScaleOutReview(selectedMciId, subGroupName, vmCountPerLocation, 
     reviewReq.connectionName = vmTemplate.connectionName;
   }
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${selectedMciId}/subGroupDynamicReview`;
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${selectedInfraId}/nodeGroupDynamicReview`;
   var jsonBody = JSON.stringify(reviewReq, undefined, 4);
   
-  console.log("Reviewing SubGroup configuration...");
-  var spinnerId = addSpinnerTask(`Reviewing SubGroup: ${subGroupName}`);
-  infoAlert(`Reviewing SubGroup configuration for ${selectedMciId}...`);
+  console.log("Reviewing NodeGroup configuration...");
+  var spinnerId = addSpinnerTask(`Reviewing NodeGroup: ${nodeGroupName}`);
+  infoAlert(`Reviewing NodeGroup configuration for ${selectedInfraId}...`);
 
-  var requestId = generateRandomRequestId("review-subgroup-" + selectedMciId + "-" + subGroupName + "-", 10);
+  var requestId = generateRandomRequestId("review-nodegroup-" + selectedInfraId + "-" + nodeGroupName + "-", 10);
   addRequestIdToSelect(requestId);
 
   axios({
@@ -19075,18 +19075,18 @@ function showMciScaleOutReview(selectedMciId, subGroupName, vmCountPerLocation, 
     timeout: 600000
   })
     .then((res) => {
-      console.log("SubGroup review completed successfully");
+      console.log("NodeGroup review completed successfully");
       console.log("Review response data:", res.data);
-      successAlert("SubGroup configuration reviewed successfully");
+      successAlert("NodeGroup configuration reviewed successfully");
       
       var reviewData = res.data;
-      showMciScaleOutReviewResults(selectedMciId, subGroupName, vmCountPerLocation, reviewData, namespace, hostname, port, username, password);
+      showInfraScaleOutReviewResults(selectedInfraId, nodeGroupName, nodeCountPerLocation, reviewData, namespace, hostname, port, username, password);
     })
     .catch(function (error) {
-      console.log("Failed to review SubGroup configuration:", error);
+      console.log("Failed to review NodeGroup configuration:", error);
       console.log("Error details:", error.response ? error.response.data : error.message);
       
-      var errorMsg = "Failed to review SubGroup configuration";
+      var errorMsg = "Failed to review NodeGroup configuration";
       if (error.response && error.response.data) {
         if (typeof error.response.data === 'string') {
           errorMsg += ": " + error.response.data;
@@ -19106,7 +19106,7 @@ function showMciScaleOutReview(selectedMciId, subGroupName, vmCountPerLocation, 
 }
 
 // Step 2.6: Show review results and proceed to confirmation
-function showMciScaleOutReviewResults(selectedMciId, subGroupName, vmCountPerLocation, reviewData, namespace, hostname, port, username, password) {
+function showInfraScaleOutReviewResults(selectedInfraId, nodeGroupName, nodeCountPerLocation, reviewData, namespace, hostname, port, username, password) {
   console.log("Processing review results:", reviewData);
   
   // Safely extract data with fallbacks
@@ -19163,22 +19163,22 @@ function showMciScaleOutReviewResults(selectedMciId, subGroupName, vmCountPerLoc
     infoHtml += '</ul></div>';
   }
   
-  var totalVMs = vmCountPerLocation * vmSubGroupReqeustFromSpecList.length;
+  var totalNodes = nodeCountPerLocation * nodeGroupRequestFromSpecList.length;
   
   Swal.fire({
-    title: "SubGroup Configuration Review",
+    title: "NodeGroup Configuration Review",
     width: 700,
     html:
       "<div style='text-align: left; margin: 20px;'>" +
-      "<p><b>Review Results for SubGroup Addition</b></p>" +
+      "<p><b>Review Results for NodeGroup Addition</b></p>" +
       "<hr>" +
       "<div style='background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;'>" +
       "<h5>📋 Configuration Summary</h5>" +
-      "<p><b>Target MCI:</b> " + selectedMciId + "</p>" +
-      "<p><b>SubGroup Name:</b> " + subGroupName + "</p>" +
-      "<p><b>VMs per location:</b> " + vmCountPerLocation + "</p>" +
-      "<p><b>Total locations:</b> " + vmSubGroupReqeustFromSpecList.length + "</p>" +
-      "<p><b>Total VMs to add:</b> " + totalVMs + "</p>" +
+      "<p><b>Target Infra:</b> " + selectedInfraId + "</p>" +
+      "<p><b>NodeGroup Name:</b> " + nodeGroupName + "</p>" +
+      "<p><b>Nodes per location:</b> " + nodeCountPerLocation + "</p>" +
+      "<p><b>Total locations:</b> " + nodeGroupRequestFromSpecList.length + "</p>" +
+      "<p><b>Total Nodes to add:</b> " + totalNodes + "</p>" +
       "<p><b>Estimated Cost:</b> " + estimatedCost + "</p>" +
       "</div>" +
       "<div style='background: " + statusColor + "20; padding: 15px; border-radius: 8px; border-left: 4px solid " + statusColor + "; margin-bottom: 15px;'>" +
@@ -19201,93 +19201,93 @@ function showMciScaleOutReviewResults(selectedMciId, subGroupName, vmCountPerLoc
     if (result.isConfirmed) {
       if (canCreate) {
         // Proceed to final confirmation
-        showMciScaleOutConfirmation(selectedMciId, subGroupName, vmCountPerLocation, namespace, hostname, port, username, password);
+        showInfraScaleOutConfirmation(selectedInfraId, nodeGroupName, nodeCountPerLocation, namespace, hostname, port, username, password);
       } else {
         // Go back to configuration
-        showMciScaleOutConfiguration(selectedMciId, namespace, hostname, port, username, password);
+        showInfraScaleOutConfiguration(selectedInfraId, namespace, hostname, port, username, password);
       }
     } else {
       // Cancel the entire operation
-      infoAlert("SubGroup addition cancelled");
+      infoAlert("NodeGroup addition cancelled");
     }
   });
 }
 
-// Step 3: Show final confirmation and execute MCI scale out
-function showMciScaleOutConfirmation(mciId, subGroupName, vmCountPerLocation, namespace, hostname, port, username, password) {
-  var totalVMs = vmCountPerLocation * vmSubGroupReqeustFromSpecList.length;
+// Step 3: Show final confirmation and execute Infra scale out
+function showInfraScaleOutConfirmation(infraId, nodeGroupName, nodeCountPerLocation, namespace, hostname, port, username, password) {
+  var totalNodes = nodeCountPerLocation * nodeGroupRequestFromSpecList.length;
   
   Swal.fire({
-    title: "Confirm MCI Scale Out",
+    title: "Confirm Infra Scale Out",
     html: 
       "<div style='text-align: left; margin: 20px;'>" +
-      "<p>You are about to add <b>" + totalVMs + " VM(s)</b> to MCI:</p>" +
+      "<p>You are about to add <b>" + totalNodes + " Node(s)</b> to Infra:</p>" +
       "<ul>" +
-      "<li>MCI: <b>" + mciId + "</b></li>" +
-      "<li>New SubGroup: <b>" + subGroupName + "</b></li>" +
-      "<li>VMs per location: <b>" + vmCountPerLocation + "</b></li>" +
-      "<li>Total locations: <b>" + vmSubGroupReqeustFromSpecList.length + "</b></li>" +
+      "<li>Infra: <b>" + infraId + "</b></li>" +
+      "<li>New NodeGroup: <b>" + nodeGroupName + "</b></li>" +
+      "<li>Nodes per location: <b>" + nodeCountPerLocation + "</b></li>" +
+      "<li>Total locations: <b>" + nodeGroupRequestFromSpecList.length + "</b></li>" +
       "</ul>" +
       "<p style='color: #dc3545; margin-top: 15px;'><b>⚠️ Warning:</b> This will incur additional costs.</p>" +
       "</div>",
     icon: "warning",
     showCancelButton: true,
-    confirmButtonText: "Proceed with VM Addition",
+    confirmButtonText: "Proceed with Node Addition",
     cancelButtonText: "Cancel",
     confirmButtonColor: "#28a745",
     cancelButtonColor: "#dc3545"
   }).then((confirmResult) => {
     if (confirmResult.isConfirmed) {
-      executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, hostname, port, username, password);
+      executeInfraScaleOut(namespace, infraId, nodeGroupName, nodeCountPerLocation, hostname, port, username, password);
     }
   });
 }
 
-// Execute MCI scale out operation
-function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, hostname, port, username, password) {
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mciId}/subGroupDynamic`;
+// Execute Infra scale out operation
+function executeInfraScaleOut(namespace, infraId, nodeGroupName, nodeCountPerLocation, hostname, port, username, password) {
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraId}/nodeGroupDynamic`;
   
   // Build the request body using current map configuration
-  var subGroupDynamicReq = {
-    name: subGroupName,
-    subGroupSize: vmCountPerLocation,
-    description: "Dynamically added via CB-MapUI Scale Out MCI",
+  var nodeGroupDynamicReq = {
+    name: nodeGroupName,
+    nodeGroupSize: nodeCountPerLocation,
+    description: "Dynamically added via CB-MapUI Scale Out Infra",
     label: {
       "created-by": "cb-mapui",
-      "creation-type": "scale-out-mci",
+      "creation-type": "scale-out-infra",
       "timestamp": new Date().toISOString()
     }
   };
 
-  // Use the first VM configuration from the map as the template
+  // Use the first Node configuration from the map as the template
   // In a real scenario, you might want to let users select which configuration to use
-  if (vmSubGroupReqeustFromSpecList && vmSubGroupReqeustFromSpecList.length > 0) {
-    var templateVm = vmSubGroupReqeustFromSpecList[0];
+  if (nodeGroupRequestFromSpecList && nodeGroupRequestFromSpecList.length > 0) {
+    var templateVm = nodeGroupRequestFromSpecList[0];
     
     if (templateVm.specId) {
-      subGroupDynamicReq.specId = templateVm.specId;
+      nodeGroupDynamicReq.specId = templateVm.specId;
     }
     if (templateVm.imageId) {
-      subGroupDynamicReq.imageId = templateVm.imageId;
+      nodeGroupDynamicReq.imageId = templateVm.imageId;
     }
     if (templateVm.rootDiskType) {
-      subGroupDynamicReq.rootDiskType = templateVm.rootDiskType;
+      nodeGroupDynamicReq.rootDiskType = templateVm.rootDiskType;
     }
     if (templateVm.rootDiskSize) {
-      subGroupDynamicReq.rootDiskSize = templateVm.rootDiskSize;
+      nodeGroupDynamicReq.rootDiskSize = templateVm.rootDiskSize;
     }
     if (templateVm.connectionName) {
-      subGroupDynamicReq.connectionName = templateVm.connectionName;
+      nodeGroupDynamicReq.connectionName = templateVm.connectionName;
     }
   }
 
-  var jsonBody = JSON.stringify(subGroupDynamicReq, undefined, 4);
+  var jsonBody = JSON.stringify(nodeGroupDynamicReq, undefined, 4);
   
-  console.log(`Adding VMs to MCI ${mciId} with subgroup ${subGroupName}...`);
-  var spinnerId = addSpinnerTask(`Scale Out MCI: ${mciId} (+${vmCountPerLocation * vmSubGroupReqeustFromSpecList.length} VMs)`);
-  infoAlert(`Starting MCI Scale Out: Adding ${vmCountPerLocation * vmSubGroupReqeustFromSpecList.length} VM(s) to ${mciId}`);
+  console.log(`Adding Nodes to Infra ${infraId} with nodegroup ${nodeGroupName}...`);
+  var spinnerId = addSpinnerTask(`Scale Out Infra: ${infraId} (+${nodeCountPerLocation * nodeGroupRequestFromSpecList.length} Nodes)`);
+  infoAlert(`Starting Infra Scale Out: Adding ${nodeCountPerLocation * nodeGroupRequestFromSpecList.length} Node(s) to ${infraId}`);
 
-  var requestId = generateRandomRequestId("mci-scaleout-" + mciId + "-" + subGroupName + "-", 10);
+  var requestId = generateRandomRequestId("infra-scaleout-" + infraId + "-" + nodeGroupName + "-", 10);
   addRequestIdToSelect(requestId);
 
   axios({
@@ -19305,12 +19305,12 @@ function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, 
     timeout: 600000  // 10 minutes timeout for scale out operation
   })
     .then((res) => {
-      console.log("MCI scale out response:", res);
+      console.log("Infra scale out response:", res);
       
       displayJsonData(res.data, typeInfo);
       handleAxiosResponse(res);
       
-      // Switch to Control tab after successful scale out (like createMci)
+      // Switch to Control tab after successful scale out (like createInfra)
       try {
         // Deactivate all tabs first
         document.querySelectorAll('.nav-link').forEach(tab => {
@@ -19337,33 +19337,33 @@ function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, 
         console.log('Failed to activate control tab:', error);
       }
       
-      console.log(`Successfully added VMs to MCI ${mciId}`);
+      console.log(`Successfully added Nodes to Infra ${infraId}`);
       
       Swal.fire({
         icon: "success",
-        title: "MCI Scale Out Successful!",
+        title: "Infra Scale Out Successful!",
         html: 
           "<div style='text-align: left;'>" +
-          "<p><b>" + (vmCountPerLocation * vmSubGroupReqeustFromSpecList.length) + " VM(s)</b> have been successfully added to:</p>" +
+          "<p><b>" + (nodeCountPerLocation * nodeGroupRequestFromSpecList.length) + " Node(s)</b> have been successfully added to:</p>" +
           "<ul>" +
-          "<li>MCI: <b>" + mciId + "</b></li>" +
-          "<li>SubGroup: <b>" + subGroupName + "</b></li>" +
+          "<li>Infra: <b>" + infraId + "</b></li>" +
+          "<li>NodeGroup: <b>" + nodeGroupName + "</b></li>" +
           "</ul>" +
-          "<p style='margin-top: 15px; color: #28a745;'>✓ The new VMs are being provisioned.</p>" +
+          "<p style='margin-top: 15px; color: #28a745;'>✓ The new Nodes are being provisioned.</p>" +
           "</div>",
         confirmButtonText: "OK"
       });
       
       // Keep configuration for reuse - user can manually clear if needed
       
-      // Refresh MCI status after scale out
+      // Refresh Infra status after scale out
       setTimeout(() => {
-        getMci();
-        updateMciList();
+        getInfra();
+        updateInfraList();
       }, 3000);
     })
     .catch(function (error) {
-      var errorMsg = "Failed to scale out MCI";
+      var errorMsg = "Failed to scale out Infra";
       
       if (error.response) {
         console.log(error.response.data);
@@ -19392,10 +19392,10 @@ function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, 
       
       Swal.fire({
         icon: "error",
-        title: "MCI Scale Out Failed",
+        title: "Infra Scale Out Failed",
         html: 
           "<div style='text-align: left;'>" +
-          "<p>Failed to scale out MCI <b>" + mciId + "</b></p>" +
+          "<p>Failed to scale out Infra <b>" + infraId + "</b></p>" +
           "<p style='margin-top: 10px; color: #dc3545;'>Error: " + errorMsg + "</p>" +
           "</div>",
         confirmButtonText: "OK",
@@ -19413,7 +19413,7 @@ function executeMciScaleOut(namespace, mciId, subGroupName, vmCountPerLocation, 
 // Draw Objects to the Map
 function drawObjects(event) {
 
-  // Update locationless MCI positions in real-time for smooth animation
+  // Update locationless Infra positions in real-time for smooth animation
   // Calculate map view bounds once outside the loop to avoid redundant calculations per frame
   var mapView = map.getView();
   var mapExtent = mapView.calculateExtent(map.getSize());
@@ -19421,12 +19421,12 @@ function drawObjects(event) {
   var rightBound = mapExtent[2];
   var bottomBound = mapExtent[1];
   var topBound = mapExtent[3];
-  var verticalSpacing = (topBound - bottomBound) * LOCATIONLESS_MCI_VERTICAL_SPACING;
-  var defaultLon = leftBound + (rightBound - leftBound) * LOCATIONLESS_MCI_LEFT_OFFSET;
-  var baseDefaultLat = topBound - (topBound - bottomBound) * LOCATIONLESS_MCI_TOP_OFFSET;
+  var verticalSpacing = (topBound - bottomBound) * LOCATIONLESS_Infra_VERTICAL_SPACING;
+  var defaultLon = leftBound + (rightBound - leftBound) * LOCATIONLESS_Infra_LEFT_OFFSET;
+  var baseDefaultLat = topBound - (topBound - bottomBound) * LOCATIONLESS_Infra_TOP_OFFSET;
 
   var locationlessIdx = 0;
-  for (const [, data] of mciRenderMap) {
+  for (const [, data] of infraRenderMap) {
     if (data.isLocationless) {
       var defaultLat = baseDefaultLat - verticalSpacing * locationlessIdx;
       data.geometry.setCoordinates([defaultLon, defaultLat]);
@@ -19465,10 +19465,10 @@ function drawObjects(event) {
     }
   });
 
-  // Draw MCI Geometry (polygons and points from mciRenderMap)
+  // Draw Infra Geometry (polygons and points from infraRenderMap)
   {
     let colorIdx = 0;
-    for (const [, data] of mciRenderMap) {
+    for (const [, data] of infraRenderMap) {
       if (data.geometry) {
         var polyStyle = new Style({
           stroke: new Stroke({
@@ -19492,7 +19492,7 @@ function drawObjects(event) {
       stroke: new Stroke({
         width: 2,
         color: [75, 0, 130, 0.8], // Indigo color for K8s groups
-        lineDash: [8, 4] // Dashed line to distinguish from MCI
+        lineDash: [8, 4] // Dashed line to distinguish from Infra
       }),
       fill: new Fill({
         color: [138, 43, 226, 0.15], // BlueViolet with transparency
@@ -19510,7 +19510,7 @@ function drawObjects(event) {
     vectorContext.setStyle(iconStyleCircle);
     vectorContext.drawGeometry(geoCspPointsCircle[0]);
     
-    // Draw convex hull polygon for configuration points (like existing MCI VMs)
+    // Draw convex hull polygon for configuration points (like existing Infra VMs)
     if (cspPointsCircle.length >= 3) {
       // Create deep copy to avoid modifying original array (convexHull sorts input)
       const pointsCopy = cspPointsCircle.map(point => [point[0], point[1]]);
@@ -19565,29 +19565,29 @@ function drawObjects(event) {
     vectorContext.drawGeometry(geoResourceLocation.vpn[0]);
   }
 
-  // Draw MCI Points and Individual VM Status Badges
-  for (const [, data] of mciRenderMap) {
+  // Draw Infra Points and Individual Node Status Badges
+  for (const [, data] of infraRenderMap) {
     const geometryPoint = data.geometryPoints;
     
-    // Skip if no geometry point (e.g., preparing/prepared MCI)
+    // Skip if no geometry point (e.g., preparing/prepared Infra)
     if (!geometryPoint) {
       continue;
     }
     
-    // Check if geometryPoint has the new structure with VM data
+    // Check if geometryPoint has the new structure with Node data
     if (geometryPoint && typeof geometryPoint === 'object' && geometryPoint.geometry) {
-      const { geometry, vmPoints, vmStatuses, vmProviders, vmCommandStatuses } = geometryPoint;
+      const { geometry, nodePoints, nodeStatuses, nodeProviders, nodeCommandStatuses } = geometryPoint;
       const vmBaseScale = changeSizeStatus(data.name + data.status);
       
-      if (vmPoints && vmStatuses) {
-        vmStatuses.forEach((vmStatus, vmIndex) => {
-          if (vmPoints[vmIndex]) {
-            const vmCoords = vmPoints[vmIndex];
-            const vmProvider = vmProviders ? vmProviders[vmIndex] : null;
-            const commandStatus = vmCommandStatuses ? vmCommandStatuses[vmIndex] : "None";
-            const vmStyles = createVmStyleWithStatusBadge(vmStatus, vmProvider, vmBaseScale, vmCoords, commandStatus);
+      if (nodePoints && nodeStatuses) {
+        nodeStatuses.forEach((nodeStatus, nodeIndex) => {
+          if (nodePoints[nodeIndex]) {
+            const nodeCoords = nodePoints[nodeIndex];
+            const vmProvider = nodeProviders ? nodeProviders[nodeIndex] : null;
+            const commandStatus = nodeCommandStatuses ? nodeCommandStatuses[nodeIndex] : "None";
+            const vmStyles = createNodeStyleWithStatusBadge(nodeStatus, vmProvider, vmBaseScale, nodeCoords, commandStatus);
             
-            const vmPoint = new Point(vmCoords);
+            const vmPoint = new Point(nodeCoords);
             vmStyles.forEach(style => {
               vectorContext.setStyle(style);
               vectorContext.drawGeometry(vmPoint);
@@ -19596,11 +19596,11 @@ function drawObjects(event) {
         });
       }
     } else {
-      // Legacy structure: Draw single MCI icon (fallback)
+      // Legacy structure: Draw single Infra icon (fallback)
       if (data.name.includes("NLB")) {
         vectorContext.setStyle(iconStyleNlb);
       } else {
-        vectorContext.setStyle(iconStyleVm);
+        vectorContext.setStyle(iconStyleNode);
       }
       if (geometryPoint) {
         vectorContext.drawGeometry(geometryPoint);
@@ -19616,7 +19616,7 @@ function drawObjects(event) {
       
       // Split K8s cluster name into lines for better display
       const nameLines = splitK8sNameToLines(k8sName[i]);
-      const lineHeight = 28; // Spacing between lines (slightly larger than MCI due to bigger font)
+      const lineHeight = 28; // Spacing between lines (slightly larger than Infra due to bigger font)
       const baseOffsetY = 30; // Position below the icon
       
       // Draw each line of the K8s cluster name
@@ -19666,11 +19666,11 @@ function drawObjects(event) {
     }
   }
 
-  // Draw MCI name text
+  // Draw Infra name text
   {
-    let mciDrawIdx = 0;
-    for (const [, data] of mciRenderMap) {
-      const nameLines = splitMciNameToLines(data.name);
+    let infraDrawIdx = 0;
+    for (const [, data] of infraRenderMap) {
+      const nameLines = splitInfraNameToLines(data.name);
       const baseScale = changeSizeByName(data.name + data.status) + 0.1;
       const baseOffsetY = 32 * changeSizeByName(data.name + data.status);
       const lineHeight = 12 * baseScale;
@@ -19680,7 +19680,7 @@ function drawObjects(event) {
         
         if (lineIndex === 0 && data.targetAction) {
           const spinChars = ['⠿', '⠷', '⠯', '⠟', '⠻', '⠽', '⠾', '⠷','⠿'];
-          const animIndex = Math.floor(drawCounter / 10 + mciDrawIdx) % spinChars.length;
+          const animIndex = Math.floor(drawCounter / 10 + infraDrawIdx) % spinChars.length;
           displayText = spinChars[animIndex] + ' ' + displayText;
         }
         
@@ -19707,15 +19707,15 @@ function drawObjects(event) {
         vectorContext.setStyle(polyNameTextStyle);
         vectorContext.drawGeometry(data.geometry);
       });
-      mciDrawIdx++;
+      infraDrawIdx++;
     }
   }
 
-  // Draw MCI status text
-  for (const [, data] of mciRenderMap) {
-    const statusColors = getVmStatusColor(data.status);
+  // Draw Infra status text
+  for (const [, data] of infraRenderMap) {
+    const statusColors = getNodeStatusColor(data.status);
     
-    const nameLines = splitMciNameToLines(data.name);
+    const nameLines = splitInfraNameToLines(data.name);
     const baseScale = changeSizeByName(data.name + data.status) + 0.1;
     const lineHeight = 12 * baseScale;
     const nameHeight = nameLines.length * lineHeight;
@@ -19777,32 +19777,32 @@ tileLayer.on("postrender", function (event) {
   drawObjects(event);
 });
 
-// Function to sync MCI selection from Dashboard
-function syncMciSelectionFromDashboard(mciId) {
-  console.log(`[SYNC] Attempting to sync MCI selection: ${mciId}`);
-  console.log(`[SYNC] mciidElement exists:`, !!mciidElement);
+// Function to sync Infra selection from Dashboard
+function syncInfraSelectionFromDashboard(infraId) {
+  console.log(`[SYNC] Attempting to sync Infra selection: ${infraId}`);
+  console.log(`[SYNC] infraidElement exists:`, !!infraidElement);
   
-  if (mciidElement && mciId) {
-    console.log(`[SYNC] Current value: ${mciidElement.value}, New value: ${mciId}`);
+  if (infraidElement && infraId) {
+    console.log(`[SYNC] Current value: ${infraidElement.value}, New value: ${infraId}`);
     
     // Check if the option exists in the select element
-    const optionExists = Array.from(mciidElement.options).some(option => option.value === mciId);
+    const optionExists = Array.from(infraidElement.options).some(option => option.value === infraId);
     console.log(`[SYNC] Option exists in select:`, optionExists);
     
     if (optionExists) {
-      // Set the value in the MCI select element
-      mciidElement.value = mciId;
+      // Set the value in the Infra select element
+      infraidElement.value = infraId;
       
       // Trigger change event to update dependent dropdowns
       const changeEvent = new Event('change', { bubbles: true });
-      mciidElement.dispatchEvent(changeEvent);
+      infraidElement.dispatchEvent(changeEvent);
       
-      console.log(`[SYNC] MCI selection synced successfully: ${mciId}`);
+      console.log(`[SYNC] Infra selection synced successfully: ${infraId}`);
     } else {
-      console.log(`[SYNC] MCI ${mciId} not found in select options`);
+      console.log(`[SYNC] Infra ${infraId} not found in select options`);
     }
   } else {
-    console.log(`[SYNC] Failed - mciidElement:`, !!mciidElement, `mciId:`, mciId);
+    console.log(`[SYNC] Failed - infraidElement:`, !!infraidElement, `infraId:`, infraId);
   }
 }
 
@@ -19968,29 +19968,29 @@ function loadK8sClusterData() {
     });
 }
 
-// Load VPN data from all MCIs (reusing existing MCI data)
-async function loadVpnDataFromMcis() {
+// Load VPN data from all Infras (reusing existing Infra data)
+async function loadVpnDataFromInfras() {
   try {
     const config = getConfig();
     const { hostname, port, username, password } = config;
     const namespace = configNamespace || config.username;
     
-    // Use existing MCI data from central store - no fallback API call
-    let mciData = [];
-    if (window.cloudBaristaCentralData && window.cloudBaristaCentralData.mci) {
-      mciData = window.cloudBaristaCentralData.mci;
-      debugLog.resource('Using cached MCI data for VPN loading:', mciData.length, 'MCIs');
+    // Use existing Infra data from central store - no fallback API call
+    let infraData = [];
+    if (window.cloudBaristaCentralData && window.cloudBaristaCentralData.infra) {
+      infraData = window.cloudBaristaCentralData.infra;
+      debugLog.resource('Using cached Infra data for VPN loading:', infraData.length, 'Infras');
     } else {
-      debugLog.resource('Central MCI data not available, skipping VPN loading');
-      // Clear VPN data and return early - no point in loading VPN without MCIs
+      debugLog.resource('Central Infra data not available, skipping VPN loading');
+      // Clear VPN data and return early - no point in loading VPN without Infras
       window.cloudBaristaCentralData.vpn = [];
       geoResourceLocation.vpn = [];
       return;
     }
     
-    // If no MCIs exist, no point in trying to load VPN data
-    if (!mciData || mciData.length === 0) {
-      debugLog.resource('No MCIs available, skipping VPN loading');
+    // If no Infras exist, no point in trying to load VPN data
+    if (!infraData || infraData.length === 0) {
+      debugLog.resource('No Infras available, skipping VPN loading');
       window.cloudBaristaCentralData.vpn = [];
       geoResourceLocation.vpn = [];
       return;
@@ -19999,10 +19999,10 @@ async function loadVpnDataFromMcis() {
     let allVpnData = [];
     let resourceLocation = [];
     
-    // Load VPN data from each MCI
-    for (const mci of mciData) {
+    // Load VPN data from each Infra
+    for (const infra of infraData) {
       try {
-        const vpnUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci/${mci.id}/vpn`;
+        const vpnUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infra.id}/vpn`;
         const vpnResponse = await axios({
           method: "get",
           url: vpnUrl,
@@ -20011,11 +20011,11 @@ async function loadVpnDataFromMcis() {
         });
         
         const vpnData = vpnResponse.data?.vpn || [];
-        debugLog.api(`VPN data for MCI ${mci.id}:`, vpnData.length, 'VPNs');
+        debugLog.api(`VPN data for Infra ${infra.id}:`, vpnData.length, 'VPNs');
         
-        // Add MCI ID to each VPN for reference
+        // Add Infra ID to each VPN for reference
         vpnData.forEach(vpn => {
-          vpn.mciId = mci.id;
+          vpn.infraId = infra.id;
           allVpnData.push(vpn);
           
           // Extract location data for map display
@@ -20037,14 +20037,14 @@ async function loadVpnDataFromMcis() {
         });
         
       } catch (vpnError) {
-        // Silently continue if VPN API fails for individual MCI
-        debugLog.api(`VPN API error for MCI ${mci.id}:`, vpnError.message);
+        // Silently continue if VPN API fails for individual Infra
+        debugLog.api(`VPN API error for Infra ${infra.id}:`, vpnError.message);
       }
     }
     
     // Store VPN data in central store
     window.cloudBaristaCentralData.vpn = allVpnData;
-    debugLog.resource('Total VPN data stored:', allVpnData.length, 'VPNs from', mciData.length, 'MCIs');
+    debugLog.resource('Total VPN data stored:', allVpnData.length, 'VPNs from', infraData.length, 'Infras');
     
     // Notify Dashboard subscribers about VPN data update
     notifyDataSubscribers();
@@ -20065,7 +20065,7 @@ async function loadVpnDataFromMcis() {
 }
 
 // Make function available globally for Dashboard to call
-window.syncMciSelectionFromDashboard = syncMciSelectionFromDashboard;
+window.syncInfraSelectionFromDashboard = syncInfraSelectionFromDashboard;
 
 // ============================================
 // Snapshot Management Functions
@@ -20102,20 +20102,20 @@ async function showSnapshotManagementModal() {
     return;
   }
 
-  // Get pre-selected MCI from control panel (if any)
-  const preSelectedMci = document.getElementById('mciid')?.value || '';
+  // Get pre-selected Infra from control panel (if any)
+  const preSelectedInfra = document.getElementById('infraid')?.value || '';
 
-  // Load MCI list
+  // Load Infra list
   const config = getConfig();
-  let mciList = [];
+  let infraList = [];
   try {
-    const response = await axios.get(`http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/mci`, {
+    const response = await axios.get(`http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/infra`, {
       auth: { username: config.username, password: config.password },
       headers: { 'Content-Type': 'application/json' }
     });
-    mciList = response.data.mci || [];
+    infraList = response.data.infra || [];
   } catch (error) {
-    console.error('Error loading MCI list:', error);
+    console.error('Error loading Infra list:', error);
   }
 
   Swal.fire({
@@ -20133,21 +20133,21 @@ async function showSnapshotManagementModal() {
         .snapshot-compact-form .btn { margin: 8px 0; }
       </style>
       <div class="snapshot-compact-form">
-        <h5>Create VM Snapshot</h5>
+        <h5>Create Node Snapshot</h5>
         <div class="form-row">
           <div class="form-col">
-            <label>Select MCI:</label>
-            <select id="snapshotMciSelect" class="form-control form-control-sm">
-              <option value="">-- Select MCI --</option>
-              ${mciList.map(mci => `<option value="${mci.id}" ${mci.id === preSelectedMci ? 'selected' : ''}>${mci.id}</option>`).join('')}
+            <label>Select Infra:</label>
+            <select id="snapshotInfraSelect" class="form-control form-control-sm">
+              <option value="">-- Select Infra --</option>
+              ${infraList.map(infra => `<option value="${infra.id}" ${infra.id === preSelectedInfra ? 'selected' : ''}>${infra.id}</option>`).join('')}
             </select>
           </div>
           <div class="form-col">
-            <label>Select VM:</label>
-            <select id="snapshotVmSelect" class="form-control form-control-sm">
-              <option value="">-- Select MCI First --</option>
+            <label>Select Node:</label>
+            <select id="snapshotNodeSelect" class="form-control form-control-sm">
+              <option value="">-- Select Infra First --</option>
             </select>
-            <small class="form-text text-muted" style="margin-top: 2px;">Select "🌐 All VMs" for MCI-wide snapshot</small>
+            <small class="form-text text-muted" style="margin-top: 2px;">Select "🌐 All Nodes" for Infra-wide snapshot</small>
           </div>
         </div>
         <div class="form-row">
@@ -20160,7 +20160,7 @@ async function showSnapshotManagementModal() {
             <input type="text" id="snapshotDescription" class="form-control form-control-sm" placeholder="Snapshot description">
           </div>
         </div>
-        <button onclick="createVmSnapshotFromModal()" class="btn btn-primary btn-block">📸 Create Snapshot</button>
+        <button onclick="createNodeSnapshotFromModal()" class="btn btn-primary btn-block">📸 Create Snapshot</button>
         
         <hr>
         
@@ -20191,43 +20191,43 @@ async function showSnapshotManagementModal() {
       // Store namespace in window for access from modal functions
       window.currentSnapshotNamespace = namespace;
       
-      // MCI selection change handler
-      const loadVmsForMci = async function(mciId) {
-        const vmSelect = document.getElementById('snapshotVmSelect');
-        vmSelect.innerHTML = '<option value="">-- Loading VMs --</option>';
+      // Infra selection change handler
+      const loadVmsForInfra = async function(infraId) {
+        const nodeSelect = document.getElementById('snapshotNodeSelect');
+        nodeSelect.innerHTML = '<option value="">-- Loading Nodes --</option>';
         
-        if (!mciId) {
-          vmSelect.innerHTML = '<option value="">-- Select MCI First --</option>';
+        if (!infraId) {
+          nodeSelect.innerHTML = '<option value="">-- Select Infra First --</option>';
           return;
         }
 
         try {
           const response = await axios.get(
-            `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/mci/${mciId}`,
+            `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/infra/${infraId}`,
             {
               auth: { username: config.username, password: config.password },
               headers: { 'Content-Type': 'application/json' }
             }
           );
           
-          const vms = response.data.vm || [];
-          // Add "All VMs" option for MCI-wide snapshot
-          vmSelect.innerHTML = '<option value="">-- Select VM or All --</option>' + 
-            '<option value="__ALL_VMS__">🌐 All VMs (MCI Snapshot - one per subgroup)</option>' +
-            vms.map(vm => `<option value="${vm.id}">${vm.id} (${vm.status})</option>`).join('');
+          const nodes = response.data.node || [];
+          // Add "All Nodes" option for Infra-wide snapshot
+          nodeSelect.innerHTML = '<option value="">-- Select Node or All --</option>' + 
+            '<option value="__ALL_NODES__">🌐 All Nodes (Infra Snapshot - one per nodegroup)</option>' +
+            nodes.map(nd => `<option value="${nd.id}">${nd.id} (${nd.status})</option>`).join('');
         } catch (error) {
-          console.error('Error loading VM list:', error);
-          vmSelect.innerHTML = '<option value="">-- Error loading VMs --</option>';
+          console.error('Error loading Node list:', error);
+          nodeSelect.innerHTML = '<option value="">-- Error loading Nodes --</option>';
         }
       };
       
-      document.getElementById('snapshotMciSelect').addEventListener('change', async function() {
-        await loadVmsForMci(this.value);
+      document.getElementById('snapshotInfraSelect').addEventListener('change', async function() {
+        await loadVmsForInfra(this.value);
       });
       
-      // If MCI is pre-selected, auto-load its VMs
-      if (preSelectedMci) {
-        await loadVmsForMci(preSelectedMci);
+      // If Infra is pre-selected, auto-load its VMs
+      if (preSelectedInfra) {
+        await loadVmsForInfra(preSelectedInfra);
       }
       
       // Auto-refresh setup (5 seconds interval)
@@ -20288,27 +20288,27 @@ async function showSnapshotManagementModal() {
   });
 }
 
-// Create VM Snapshot (supports both single VM and MCI-wide snapshots)
-async function createVmSnapshotFromModal() {
+// Create Node Snapshot (supports both single Node and Infra-wide snapshots)
+async function createNodeSnapshotFromModal() {
   const namespace = configNamespace;
-  const mciId = document.getElementById('snapshotMciSelect').value;
-  const vmId = document.getElementById('snapshotVmSelect').value;
+  const infraId = document.getElementById('snapshotInfraSelect').value;
+  const nodeId = document.getElementById('snapshotNodeSelect').value;
   const snapshotName = document.getElementById('snapshotName').value;
   const description = document.getElementById('snapshotDescription').value;
 
-  if (!mciId || !vmId) {
-    Swal.fire('Warning', 'Please select MCI and VM (or All VMs)', 'warning');
+  if (!infraId || !nodeId) {
+    Swal.fire('Warning', 'Please select Infra and Node (or All Nodes)', 'warning');
     return;
   }
 
   const config = getConfig();
-  const isMciSnapshot = (vmId === '__ALL_VMS__');
+  const isInfraSnapshot = (nodeId === '__ALL_NODES__');
   
   try {
     Swal.fire({
-      title: isMciSnapshot ? 'Creating MCI Snapshots...' : 'Creating VM Snapshot...',
-      html: isMciSnapshot ? 
-        'Creating snapshots for all subgroups in parallel...<br>This may take several minutes...' : 
+      title: isInfraSnapshot ? 'Creating Infra Snapshots...' : 'Creating Node Snapshot...',
+      html: isInfraSnapshot ? 
+        'Creating snapshots for all nodegroups in parallel...<br>This may take several minutes...' : 
         'This may take a few minutes...',
       allowOutsideClick: false,
       didOpen: () => { Swal.showLoading(); }
@@ -20320,10 +20320,10 @@ async function createVmSnapshotFromModal() {
     };
 
     let response;
-    if (isMciSnapshot) {
-      // MCI-wide snapshot (all subgroups)
+    if (isInfraSnapshot) {
+      // Infra-wide snapshot (all nodegroups)
       response = await axios.post(
-        `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/mci/${mciId}/snapshot`,
+        `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/infra/${infraId}/snapshot`,
         requestBody,
         {
           auth: { username: config.username, password: config.password },
@@ -20331,7 +20331,7 @@ async function createVmSnapshotFromModal() {
         }
       );
       
-      // Display MCI snapshot results
+      // Display Infra snapshot results
       const results = response.data.results || [];
       const successCount = response.data.successCount || 0;
       const failCount = response.data.failCount || 0;
@@ -20345,8 +20345,8 @@ async function createVmSnapshotFromModal() {
         return `
           <tr>
             <td>${statusIcon}</td>
-            <td>${result.subGroupId}</td>
-            <td>${result.vmId}</td>
+            <td>${result.nodeGroupId}</td>
+            <td>${result.nodeId}</td>
             <td>${result.imageId || 'N/A'} ${statusBadge}</td>
             <td><span class="badge badge-${statusClass}">${result.status}</span></td>
             <td style="font-size: 11px; color: ${result.error ? 'red' : 'inherit'};">${result.error || '-'}</td>
@@ -20356,10 +20356,10 @@ async function createVmSnapshotFromModal() {
       
       Swal.fire({
         icon: successCount > 0 ? 'success' : 'error',
-        title: 'MCI Snapshot Completed',
+        title: 'Infra Snapshot Completed',
         html: `
           <div style="text-align: left; padding: 10px;">
-            <p><strong>MCI ID:</strong> ${response.data.mciId}</p>
+            <p><strong>Infra ID:</strong> ${response.data.infraId}</p>
             <p><strong>Summary:</strong> 
               <span class="badge badge-success">${successCount} Success</span> 
               <span class="badge badge-danger">${failCount} Failed</span>
@@ -20369,8 +20369,8 @@ async function createVmSnapshotFromModal() {
                 <thead>
                   <tr>
                     <th>Status</th>
-                    <th>SubGroup</th>
-                    <th>VM ID</th>
+                    <th>NodeGroup</th>
+                    <th>Node ID</th>
                     <th>Image ID</th>
                     <th>Result</th>
                     <th>Error</th>
@@ -20393,9 +20393,9 @@ async function createVmSnapshotFromModal() {
       });
       
     } else {
-      // Single VM snapshot
+      // Single Node snapshot
       response = await axios.post(
-        `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/mci/${mciId}/vm/${vmId}/snapshot`,
+        `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/infra/${infraId}/node/${nodeId}/snapshot`,
         requestBody,
         {
           auth: { username: config.username, password: config.password },
@@ -20410,7 +20410,7 @@ async function createVmSnapshotFromModal() {
       
       Swal.fire({
         icon: 'success',
-        title: 'VM Snapshot Created!',
+        title: 'Node Snapshot Created!',
         html: `
           <div style="text-align: left; padding: 10px;">
             <p><strong>Image ID:</strong> ${response.data.id}</p>
@@ -20503,7 +20503,7 @@ async function loadCustomImagesInModal(namespace) {
       return;
     }
 
-    let html = '<div style="overflow-x: auto;"><table class="table table-sm table-striped" style="font-size: 12px;"><thead><tr><th>Provider (Region)</th><th>ID (Status)</th><th>OS (Arch)</th><th>Description</th><th>Source VM UID</th><th>Created</th><th>Action</th></tr></thead><tbody>';
+    let html = '<div style="overflow-x: auto;"><table class="table table-sm table-striped" style="font-size: 12px;"><thead><tr><th>Provider (Region)</th><th>ID (Status)</th><th>OS (Arch)</th><th>Description</th><th>Source Node UID</th><th>Created</th><th>Action</th></tr></thead><tbody>';
     
     images.forEach(img => {
       // Enhanced status badge with icons and colors
@@ -20536,7 +20536,7 @@ async function loadCustomImagesInModal(namespace) {
           <td title="${img.id} - Status: ${img.imageStatus}">${idWithStatus}</td>
           <td>${osInfo}</td>
           <td title="${img.description || 'N/A'}">${descShort}</td>
-          <td title="${img.sourceVmUid || 'N/A'}">${img.sourceVmUid ? img.sourceVmUid.substring(0, 12) + '...' : 'N/A'}</td>
+          <td title="${img.sourceNodeUid || 'N/A'}">${img.sourceNodeUid ? img.sourceNodeUid.substring(0, 12) + '...' : 'N/A'}</td>
           <td>${img.creationDate ? new Date(img.creationDate).toLocaleDateString() : 'N/A'}</td>
           <td style="white-space: nowrap;">
             <button onclick="viewCustomImageDetails('${img.id}')" class="btn btn-sm btn-info" title="View Details">👁️</button>
@@ -20583,7 +20583,7 @@ async function viewCustomImageDetails(imageId) {
     if (img.imageStatus === 'Available') {
       statusIcon = '✅';
       statusClass = 'success';
-      statusMessage = '<p class="text-success"><strong>This snapshot is ready to use for VM creation.</strong></p>';
+      statusMessage = '<p class="text-success"><strong>This snapshot is ready to use for Node creation.</strong></p>';
     } else if (img.imageStatus === 'Creating') {
       statusIcon = '🔄';
       statusClass = 'info';
@@ -20615,7 +20615,7 @@ async function viewCustomImageDetails(imageId) {
           <p><strong>OS Architecture:</strong> ${img.osArchitecture || 'N/A'}</p>
           <p><strong>Description:</strong> ${img.description || 'N/A'}</p>
           <p><strong>Created:</strong> ${img.creationDate || 'N/A'}</p>
-          <p><strong>Source VM UID:</strong> ${img.sourceVmUid || 'N/A'}</p>
+          <p><strong>Source Node UID:</strong> ${img.sourceNodeUid || 'N/A'}</p>
         </div>
       `,
       confirmButtonText: 'Close',
@@ -20681,7 +20681,7 @@ async function deleteCustomImageFromModal(imageId) {
 
 // Make functions globally available
 window.showSnapshotManagementModal = showSnapshotManagementModal;
-window.createVmSnapshotFromModal = createVmSnapshotFromModal;
+window.createNodeSnapshotFromModal = createNodeSnapshotFromModal;
 window.loadCustomImagesInModal = loadCustomImagesInModal;
 window.viewCustomImageDetails = viewCustomImageDetails;
 window.deleteCustomImageFromModal = deleteCustomImageFromModal;
@@ -20696,14 +20696,14 @@ window.taskAutoRefreshInterval = null;
 window.taskLastData = null; // Store last task data to prevent unnecessary re-renders
 
 // Load task list and update the modal content
-async function loadTaskListInModal(namespace, mciid) {
+async function loadTaskListInModal(namespace, infraid) {
   var config = getConfig();
   var hostname = config.hostname;
   var port = config.port;
   var username = config.username;
   var password = config.password;
 
-  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/mci/${mciid}/task`;
+  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/infra/${infraid}/task`;
 
   try {
     const res = await axios.get(url, {
@@ -20743,7 +20743,7 @@ async function loadTaskListInModal(namespace, mciid) {
           <thead>
             <tr style="background-color: #f2f2f2;">
               <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Command</th>
-              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">MCI / VM</th>
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Infra / Node</th>
               <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd;">Status</th>
               <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd;">Started At</th>
               <th style="padding: 8px; text-align: center; border-bottom: 2px solid #ddd;">Duration</th>
@@ -20800,12 +20800,12 @@ async function loadTaskListInModal(namespace, mciid) {
         // Also escape cmdTruncated for HTML content
         const cmdTruncatedEscaped = cmdTruncated.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         
-        // Format target - show VM info
-        let targetText = task.vmId || 'N/A';
-        if (task.mciId && task.vmId) {
-          targetText = `${task.mciId} / ${task.vmId}`;
-        } else if (task.mciId) {
-          targetText = task.mciId;
+        // Format target - show Node info
+        let targetText = task.nodeId || 'N/A';
+        if (task.infraId && task.nodeId) {
+          targetText = `${task.infraId} / ${task.nodeId}`;
+        } else if (task.infraId) {
+          targetText = task.infraId;
         }
         // Escape for HTML content
         const targetTextEscaped = targetText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -20856,10 +20856,10 @@ async function loadTaskListInModal(namespace, mciid) {
         // Can cancel if task is actively running (Handling or Queued)
         const canCancel = statusLower === 'handling' || statusLower === 'queued';
         
-        // Escape taskId, nsId, mciId for safe use in data attributes
+        // Escape taskId, nsId, infraId for safe use in data attributes
         const taskIdEscaped = (task.taskId || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
         const nsIdEscaped = (task.nsId || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-        const mciIdEscaped = (task.mciId || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+        const infraIdEscaped = (task.infraId || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
         const statusEscaped = (task.status || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         
         tasksHtml += `
@@ -20880,7 +20880,7 @@ async function loadTaskListInModal(namespace, mciid) {
             </td>
             <td style="padding: 8px; text-align: center;">
               ${canCancel ? 
-                `<button class="task-cancel-btn" data-task-id="${taskIdEscaped}" data-ns-id="${nsIdEscaped}" data-mci-id="${mciIdEscaped}"
+                `<button class="task-cancel-btn" data-task-id="${taskIdEscaped}" data-ns-id="${nsIdEscaped}" data-infra-id="${infraIdEscaped}"
                   style="background-color: #dc3545; color: white; border: none; padding: 4px 12px; border-radius: 3px; cursor: pointer; font-size: 12px;">
                   Cancel
                 </button>` : 
@@ -20904,8 +20904,8 @@ async function loadTaskListInModal(namespace, mciid) {
         btn.addEventListener('click', function() {
           const taskId = this.dataset.taskId;
           const nsId = this.dataset.nsId;
-          const mciId = this.dataset.mciId;
-          cancelTaskFromModal(taskId, nsId, mciId);
+          const infraId = this.dataset.infraId;
+          cancelTaskFromModal(taskId, nsId, infraId);
         });
       });
     }
@@ -20942,7 +20942,7 @@ async function showTaskManagementModal() {
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var mciid = getSelectedMciId();
+  var infraid = getSelectedInfraId();
 
   if (!namespace) {
     Swal.fire({
@@ -20954,38 +20954,38 @@ async function showTaskManagementModal() {
     return;
   }
 
-  // Fetch MCI list for selector
-  let mciListOptions = [];
+  // Fetch Infra list for selector
+  let infraListOptions = [];
   try {
-    const mciListUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/mci?option=id`;
-    const mciRes = await axios.get(mciListUrl, {
+    const infraListUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra?option=id`;
+    const infraRes = await axios.get(infraListUrl, {
       auth: { username: username, password: password }
     });
-    if (mciRes.data.output && mciRes.data.output.length > 0) {
-      mciListOptions = mciRes.data.output;
+    if (infraRes.data.output && infraRes.data.output.length > 0) {
+      infraListOptions = infraRes.data.output;
     }
   } catch (err) {
-    console.error("Failed to fetch MCI list:", err);
+    console.error("Failed to fetch Infra list:", err);
   }
 
-  if (mciListOptions.length === 0) {
+  if (infraListOptions.length === 0) {
     Swal.fire({
       icon: 'info',
-      title: 'No MCI Available',
-      text: 'No MCI available in this namespace. Please create an MCI first.',
+      title: 'No Infra Available',
+      text: 'No Infra available in this namespace. Please create an Infra first.',
       confirmButtonColor: '#3085d6'
     });
     return;
   }
 
-  // If no MCI selected, use the first one from the list
-  if (!mciid) {
-    mciid = mciListOptions[0];
+  // If no Infra selected, use the first one from the list
+  if (!infraid) {
+    infraid = infraListOptions[0];
   }
 
-  // Build MCI selector options HTML
-  const mciOptionsHtml = mciListOptions.map(m => 
-    `<option value="${m}" ${m === mciid ? 'selected' : ''}>${m}</option>`
+  // Build Infra selector options HTML
+  const infraOptionsHtml = infraListOptions.map(m => 
+    `<option value="${m}" ${m === infraid ? 'selected' : ''}>${m}</option>`
   ).join('');
 
   Swal.fire({
@@ -20994,9 +20994,9 @@ async function showTaskManagementModal() {
       <div style="text-align: left;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
           <div style="display: flex; align-items: center; gap: 10px;">
-            <label style="font-weight: bold; margin: 0;">MCI:</label>
-            <select id="taskMciSelector" style="padding: 5px; min-width: 200px;">
-              ${mciOptionsHtml}
+            <label style="font-weight: bold; margin: 0;">Infra:</label>
+            <select id="taskInfraSelector" style="padding: 5px; min-width: 200px;">
+              ${infraOptionsHtml}
             </select>
           </div>
           <div>
@@ -21019,20 +21019,20 @@ async function showTaskManagementModal() {
     didOpen: async () => {
       // Store context for access from modal functions
       window.currentTaskNamespace = namespace;
-      window.currentTaskMciId = mciid;
+      window.currentTaskInfraId = infraid;
       
       // Auto-refresh setup
       window.taskAutoRefreshEnabled = true;
       window.taskAutoRefreshInterval = null;
       window.taskLastData = null; // Reset cached data
       
-      // MCI selector change handler
-      const mciSelector = document.getElementById('taskMciSelector');
-      if (mciSelector) {
-        mciSelector.addEventListener('change', function() {
-          window.currentTaskMciId = this.value;
-          window.taskLastData = null; // Force refresh on MCI change
-          loadTaskListInModal(window.currentTaskNamespace, window.currentTaskMciId);
+      // Infra selector change handler
+      const infraSelector = document.getElementById('taskInfraSelector');
+      if (infraSelector) {
+        infraSelector.addEventListener('change', function() {
+          window.currentTaskInfraId = this.value;
+          window.taskLastData = null; // Force refresh on Infra change
+          loadTaskListInModal(window.currentTaskNamespace, window.currentTaskInfraId);
         });
       }
       
@@ -21041,7 +21041,7 @@ async function showTaskManagementModal() {
       if (refreshNowBtn) {
         refreshNowBtn.addEventListener('click', function() {
           window.taskLastData = null; // Force refresh
-          loadTaskListInModal(window.currentTaskNamespace, window.currentTaskMciId);
+          loadTaskListInModal(window.currentTaskNamespace, window.currentTaskInfraId);
         });
       }
       
@@ -21067,7 +21067,7 @@ async function showTaskManagementModal() {
       
       // Initial load with slight delay to ensure DOM is ready
       setTimeout(() => {
-        loadTaskListInModal(window.currentTaskNamespace, window.currentTaskMciId);
+        loadTaskListInModal(window.currentTaskNamespace, window.currentTaskInfraId);
       }, 100);
       
       // Clear any existing interval before creating a new one (prevent memory leaks)
@@ -21078,7 +21078,7 @@ async function showTaskManagementModal() {
       // Start auto-refresh timer (3 seconds for tasks - faster than snapshots)
       window.taskAutoRefreshInterval = setInterval(() => {
         if (window.taskAutoRefreshEnabled) {
-          loadTaskListInModal(window.currentTaskNamespace, window.currentTaskMciId);
+          loadTaskListInModal(window.currentTaskNamespace, window.currentTaskInfraId);
         }
       }, 3000); // 3 seconds
     },
@@ -21096,25 +21096,25 @@ async function showTaskManagementModal() {
 window.showTaskManagementModal = showTaskManagementModal;
 
 // Cancel a specific task from the modal
-async function cancelTaskFromModal(taskId, nsId, mciId) {
+async function cancelTaskFromModal(taskId, nsId, infraId) {
   var config = getConfig();
   var hostname = config.hostname;
   var port = config.port;
   var username = config.username;
   var password = config.password;
 
-  // nsId and mciId are required (passed from task data)
-  if (!nsId || !mciId || nsId === 'undefined' || mciId === 'undefined') {
+  // nsId and infraId are required (passed from task data)
+  if (!nsId || !infraId || nsId === 'undefined' || infraId === 'undefined') {
     Swal.fire({
       icon: 'error',
       title: 'Error',
-      text: 'Missing namespace or MCI information for this task.',
+      text: 'Missing namespace or Infra information for this task.',
       confirmButtonColor: '#3085d6'
     });
     return;
   }
 
-  const url = `http://${hostname}:${port}/tumblebug/ns/${nsId}/cmd/mci/${mciId}/task/${taskId}/cancel`;
+  const url = `http://${hostname}:${port}/tumblebug/ns/${nsId}/cmd/infra/${infraId}/task/${taskId}/cancel`;
 
   const result = await Swal.fire({
     title: 'Cancel Task?',
@@ -21147,8 +21147,8 @@ async function cancelTaskFromModal(taskId, nsId, mciId) {
     
     // Force refresh the task list immediately
     window.taskLastData = null;
-    if (window.currentTaskNamespace && window.currentTaskMciId) {
-      loadTaskListInModal(window.currentTaskNamespace, window.currentTaskMciId);
+    if (window.currentTaskNamespace && window.currentTaskInfraId) {
+      loadTaskListInModal(window.currentTaskNamespace, window.currentTaskInfraId);
     }
 
   } catch (error) {
@@ -21171,21 +21171,21 @@ window.cancelTaskFromModal = cancelTaskFromModal;
 // Template type registry — add new types here for extensibility
 const TEMPLATE_TYPES = [
   {
-    key: 'mci',
-    label: 'MCI',
+    key: 'infra',
+    label: 'Infra',
     icon: '🚀',
     badgeClass: 'badge-primary',
-    bodyFieldName: 'mciDynamicReq',
-    applyUrlFn: (baseUrl, templateId) => `${baseUrl}/mci/template/${templateId}`,
-    directCreateUrlFn: (baseUrl) => `${baseUrl}/mciDynamic`,
+    bodyFieldName: 'infraDynamicReq',
+    applyUrlFn: (baseUrl, templateId) => `${baseUrl}/infra/template/${templateId}`,
+    directCreateUrlFn: (baseUrl) => `${baseUrl}/infraDynamic`,
     placeholder: `{
-  "name": "my-mci",
+  "name": "my-infra",
   "installMonAgent": "no",
-  "description": "My MCI",
-  "subGroups": [
+  "description": "My Infra",
+  "nodeGroups": [
     {
       "name": "web",
-      "subGroupSize": 1,
+      "nodeGroupSize": 1,
       "specId": "aws+ap-northeast-2+t3.small"
     }
   ]
@@ -21432,7 +21432,7 @@ function renderTemplateCard(t, typeMeta, namespace) {
         </div>
         <div class="tmpl-card-actions">
           <button onclick="viewTemplateDetail('${safeNs}', '${safeType}', '${safeId}')" class="btn btn-sm btn-outline-info" title="View">👁️</button>
-          ${typeMeta.key === 'mci' ? `<button onclick="loadTemplateToMciConfig('${safeNs}', '${safeId}')" class="btn btn-sm btn-outline-primary" title="Load to MC-Infra Configuration">📋 Load to Config</button>` : ''}
+          ${typeMeta.key === 'infra' ? `<button onclick="loadTemplateToInfraConfig('${safeNs}', '${safeId}')" class="btn btn-sm btn-outline-primary" title="Load to MC-Infra Configuration">📋 Load to Config</button>` : ''}
           <button onclick="applyTemplate('${safeNs}', '${safeType}', '${safeId}')" class="btn btn-sm btn-outline-success" title="Apply">▶️</button>
           <button onclick="deleteTemplate('${safeNs}', '${safeType}', '${safeId}')" class="btn btn-sm btn-outline-danger" title="Delete">🗑️</button>
         </div>
@@ -21555,7 +21555,7 @@ async function viewTemplateDetail(namespace, type, templateId) {
           <pre id="tmplDetailJson" style="background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;max-height:450px;overflow:auto;font-family:monospace;font-size:12px;white-space:pre-wrap;"></pre>
           <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn btn-success btn-sm tmpl-detail-apply">▶️ Apply This Template</button>
-            ${type === 'mci' ? `<button class="btn btn-outline-primary btn-sm tmpl-detail-load">📋 Load to Config</button>` : ''}
+            ${type === 'infra' ? `<button class="btn btn-outline-primary btn-sm tmpl-detail-load">📋 Load to Config</button>` : ''}
             <button class="btn btn-outline-secondary btn-sm tmpl-detail-copy">📋 Copy JSON</button>
             <button class="btn btn-outline-primary btn-sm tmpl-detail-back">⬅️ Back to List</button>
           </div>
@@ -21571,7 +21571,7 @@ async function viewTemplateDetail(namespace, type, templateId) {
         if (jsonEl) jsonEl.textContent = jsonText;
         window._lastTemplateJson = jsonText;
         popup.querySelector('.tmpl-detail-apply')?.addEventListener('click', () => applyTemplate(namespace, type, templateId));
-        popup.querySelector('.tmpl-detail-load')?.addEventListener('click', () => loadTemplateToMciConfig(namespace, templateId));
+        popup.querySelector('.tmpl-detail-load')?.addEventListener('click', () => loadTemplateToInfraConfig(namespace, templateId));
         popup.querySelector('.tmpl-detail-copy')?.addEventListener('click', () => copyTemplateJson());
         popup.querySelector('.tmpl-detail-back')?.addEventListener('click', () => showTemplateManagement(namespace));
       }
@@ -21646,7 +21646,7 @@ async function applyTemplate(sourceNs, type, templateId) {
         </div>
         <div style="margin-bottom:10px;">
           <label style="font-size:13px;font-weight:500;">Name <span style="color:red;">*</span></label>
-          <input id="tmplApplyName" class="swal2-input" placeholder="my-new-resource" value="mc-${generateMciName()}" style="margin:4px 0;width:100%;font-size:14px;">
+          <input id="tmplApplyName" class="swal2-input" placeholder="my-new-resource" value="mc-${generateInfraName()}" style="margin:4px 0;width:100%;font-size:14px;">
         </div>
         <div style="margin-bottom:10px;">
           <label style="font-size:13px;font-weight:500;">Description (optional)</label>
@@ -21842,20 +21842,20 @@ async function createTemplateDialog(namespace, type) {
 }
 window.createTemplateDialog = createTemplateDialog;
 
-// Save MCI config as template - called from copyMciConfig flow
-async function saveConfigAsTemplate(namespace, mciId, mciReq) {
+// Save Infra config as template - called from copyInfraConfig flow
+async function saveConfigAsTemplate(namespace, infraId, infraReq) {
   const { value: formValues } = await Swal.fire({
-    title: '📄 Save as MCI Template',
+    title: '📄 Save as Infra Template',
     html: `
       <div style="text-align:left;">
-        <p style="font-size:13px;color:#555;">Save the extracted MCI configuration from <b>${window.escapeHtml(mciId)}</b> as a reusable template.</p>
+        <p style="font-size:13px;color:#555;">Save the extracted Infra configuration from <b>${window.escapeHtml(infraId)}</b> as a reusable template.</p>
         <div style="margin-bottom:8px;">
           <label style="font-size:13px;font-weight:500;">Template Name <span style="color:red;">*</span></label>
-          <input id="saveTmplName" class="swal2-input" value="${window.escapeHtml(mciId)}-template" style="margin:4px 0;width:100%;font-size:14px;">
+          <input id="saveTmplName" class="swal2-input" value="${window.escapeHtml(infraId)}-template" style="margin:4px 0;width:100%;font-size:14px;">
         </div>
         <div style="margin-bottom:8px;">
           <label style="font-size:13px;font-weight:500;">Description</label>
-          <input id="saveTmplDesc" class="swal2-input" value="Template extracted from MCI: ${window.escapeHtml(mciId)}" style="margin:4px 0;width:100%;font-size:14px;">
+          <input id="saveTmplDesc" class="swal2-input" value="Template extracted from Infra: ${window.escapeHtml(infraId)}" style="margin:4px 0;width:100%;font-size:14px;">
         </div>
         <div style="margin-bottom:8px;">
           <label style="font-size:13px;font-weight:500;">Configuration Preview</label>
@@ -21870,7 +21870,7 @@ async function saveConfigAsTemplate(namespace, mciId, mciReq) {
     width: '650px',
     didOpen: (popup) => {
       const previewEl = popup.querySelector('#saveTmplConfigPreview');
-      if (previewEl) previewEl.textContent = JSON.stringify(mciReq, null, 2);
+      if (previewEl) previewEl.textContent = JSON.stringify(infraReq, null, 2);
     },
     preConfirm: () => {
       const name = document.getElementById('saveTmplName')?.value?.trim();
@@ -21881,7 +21881,7 @@ async function saveConfigAsTemplate(namespace, mciId, mciReq) {
       return {
         name: name,
         description: document.getElementById('saveTmplDesc')?.value?.trim() || '',
-        mciDynamicReq: mciReq
+        infraDynamicReq: infraReq
       };
     }
   });
@@ -21890,7 +21890,7 @@ async function saveConfigAsTemplate(namespace, mciId, mciReq) {
 
   const config = getConfig();
   const { hostname, port, username, password } = config;
-  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/template/mci`;
+  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/template/infra`;
 
   const spinnerId = addSpinnerTask('Saving template');
   try {
@@ -21910,11 +21910,11 @@ async function saveConfigAsTemplate(namespace, mciId, mciReq) {
 }
 window.saveConfigAsTemplate = saveConfigAsTemplate;
 
-// Load an MCI template into the MC-Infra Configuration panel (same as Copy Config)
-async function loadTemplateToMciConfig(namespace, templateId) {
+// Load an Infra template into the MC-Infra Configuration panel (same as Copy Config)
+async function loadTemplateToInfraConfig(namespace, templateId) {
   const config = getConfig();
   const { hostname, port, username, password } = config;
-  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/template/mci/${templateId}`;
+  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/template/infra/${templateId}`;
 
   const spinnerId = addSpinnerTask('Loading template to MC-Infra Configuration');
   let data;
@@ -21927,10 +21927,10 @@ async function loadTemplateToMciConfig(namespace, templateId) {
     return;
   }
 
-  const mciReq = data.mciDynamicReq;
-  if (!mciReq || !mciReq.subGroups || mciReq.subGroups.length === 0) {
+  const infraReq = data.infraDynamicReq;
+  if (!infraReq || !infraReq.nodeGroups || infraReq.nodeGroups.length === 0) {
     removeSpinnerTask(spinnerId);
-    Swal.fire('⚠️ Warning', 'No SubGroup configuration found in this template.', 'warning');
+    Swal.fire('⚠️ Warning', 'No NodeGroup configuration found in this template.', 'warning');
     return;
   }
 
@@ -21940,23 +21940,23 @@ async function loadTemplateToMciConfig(namespace, templateId) {
   // Clear existing configuration
   clearCircle('');
 
-  // Populate vmSubGroupReqeustFromSpecList and recommendedSpecList (mirrors copyMciConfig logic)
-  // Fetch spec details for each subGroup in parallel via specId
-  const specFetches = mciReq.subGroups.map(function(sg) {
-    var vmConfig = $.extend({}, createMciReqVmTmplt);
-    vmConfig.name           = sg.name           || ('g' + (vmSubGroupReqeustFromSpecList.length + 1));
-    vmConfig.specId         = sg.specId          || '';
-    vmConfig.imageId        = sg.imageId         || 'ubuntu22.04';
-    vmConfig.rootDiskType   = sg.rootDiskType    || 'default';
-    vmConfig.rootDiskSize   = sg.rootDiskSize    || 0;
-    vmConfig.subGroupSize   = sg.subGroupSize    || 1;
-    vmConfig.description    = sg.description     || 'mapui';
-    vmConfig.connectionName = sg.connectionName  || '';
-    vmConfig.zone           = sg.zone            || '';
+  // Populate nodeGroupRequestFromSpecList and recommendedSpecList (mirrors copyInfraConfig logic)
+  // Fetch spec details for each nodeGroup in parallel via specId
+  const specFetches = infraReq.nodeGroups.map(function(sg) {
+    var nodeConfig = $.extend({}, createInfraReqVmTmplt);
+    nodeConfig.name           = sg.name           || ('g' + (nodeGroupRequestFromSpecList.length + 1));
+    nodeConfig.specId         = sg.specId          || '';
+    nodeConfig.imageId        = sg.imageId         || 'ubuntu22.04';
+    nodeConfig.rootDiskType   = sg.rootDiskType    || 'default';
+    nodeConfig.rootDiskSize   = sg.rootDiskSize    || 0;
+    nodeConfig.nodeGroupSize   = sg.nodeGroupSize    || 1;
+    nodeConfig.description    = sg.description     || 'mapui';
+    nodeConfig.connectionName = sg.connectionName  || '';
+    nodeConfig.zone           = sg.zone            || '';
     if (sg.label && Object.keys(sg.label).length > 0) {
-      vmConfig.label = sg.label;
+      nodeConfig.label = sg.label;
     }
-    vmSubGroupReqeustFromSpecList.push(vmConfig);
+    nodeGroupRequestFromSpecList.push(nodeConfig);
 
     // Fetch spec details if specId is available
     if (sg.specId) {
@@ -22023,7 +22023,7 @@ async function loadTemplateToMciConfig(namespace, templateId) {
     specInfoList.forEach(function(specInfo) {
       recommendedSpecList.push(specInfo);
     });
-    updateSubGroupReview();
+    updateNodeGroupReview();
 
     // Switch to Provision tab
     var provisionTab = document.getElementById('provision-tab');
@@ -22042,20 +22042,20 @@ async function loadTemplateToMciConfig(namespace, templateId) {
     removeSpinnerTask(spinnerId);
   }
 }
-window.loadTemplateToMciConfig = loadTemplateToMciConfig;
+window.loadTemplateToInfraConfig = loadTemplateToInfraConfig;
 
 // =====================================================================
 // Global DNS Management (Route53)
 // =====================================================================
 
-async function showDnsManagementModal(preselectedMciId) {
+async function showDnsManagementModal(preselectedInfraId) {
   const config = getConfig();
   const namespace = configNamespace || 'default';
 
-  // Build MCI source section - if preselectedMciId, pre-fill it
-  const mciSourceChecked = preselectedMciId ? 'checked' : '';
-  const ipsSourceChecked = preselectedMciId ? '' : 'checked';
-  const mciIdValue = preselectedMciId || '';
+  // Build Infra source section - if preselectedInfraId, pre-fill it
+  const infraSourceChecked = preselectedInfraId ? 'checked' : '';
+  const ipsSourceChecked = preselectedInfraId ? '' : 'checked';
+  const infraIdValue = preselectedInfraId || '';
 
   // Load hosted zones dynamically
   let hostedZoneOptions = '<option value="">Loading...</option>';
@@ -22155,38 +22155,38 @@ async function showDnsManagementModal(preselectedMciId) {
         </div>
 
         <div id="dns-geoproxy-info" style="display: none; margin-top: 8px; padding: 8px; background: #e8f4f8; border-radius: 4px; font-size: 12px; color: #0c5460;">
-          ℹ️ <strong>Geoproximity</strong>: Each VM gets its own record with lat/lng coordinates. Route53 routes users to the nearest server. MCI source required (VM location data needed).
+          ℹ️ <strong>Geoproximity</strong>: Each Node gets its own record with lat/lng coordinates. Route53 routes users to the nearest server. Infra source required (Node location data needed).
         </div>
 
         <div style="margin-top: 12px;">
           <label style="font-size: 12px; color: #6c757d; font-weight: bold;">IP Source (choose one):</label>
           
           <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px;">
-            <!-- Method 1: MCI + optional Label filter -->
+            <!-- Method 1: Infra + optional Label filter -->
             <div style="background: white; border: 1px solid #dee2e6; border-radius: 6px; padding: 10px;">
               <label style="font-size: 13px; cursor: pointer;">
-                <input type="radio" name="dns-ip-source" value="mci" ${mciSourceChecked} style="margin-right: 6px;">
-                <strong>MCI</strong> — Collect Public IPs from VMs in MCI
+                <input type="radio" name="dns-ip-source" value="infra" ${infraSourceChecked} style="margin-right: 6px;">
+                <strong>Infra</strong> — Collect Public IPs from Nodes in Infra
               </label>
-              <div id="dns-source-mci-fields" style="margin-top: 6px; display: ${preselectedMciId ? 'block' : 'none'};">
+              <div id="dns-source-infra-fields" style="margin-top: 6px; display: ${preselectedInfraId ? 'block' : 'none'};">
                 <div style="display: flex; gap: 8px; align-items: center;">
                   <div style="flex: 1;">
                     <label style="font-size: 11px; color: #888;">Namespace</label>
-                    <input type="text" id="dns-mci-nsid" class="swal2-input" style="margin: 2px 0; font-size: 12px;" placeholder="Namespace" value="${namespace}">
+                    <input type="text" id="dns-infra-nsid" class="swal2-input" style="margin: 2px 0; font-size: 12px;" placeholder="Namespace" value="${namespace}">
                   </div>
                   <div style="flex: 1;">
-                    <label style="font-size: 11px; color: #888;">MCI</label>
-                    <select id="dns-mci-id" class="swal2-input" style="margin: 2px 0; font-size: 12px; height: 38px;">
+                    <label style="font-size: 11px; color: #888;">Infra</label>
+                    <select id="dns-infra-id" class="swal2-input" style="margin: 2px 0; font-size: 12px; height: 38px;">
                       <option value="">Loading...</option>
                     </select>
                   </div>
                 </div>
                 <!-- Optional Label Filter -->
                 <div style="margin-top: 10px; border-top: 1px dashed #dee2e6; padding-top: 8px;">
-                  <div style="font-size: 11px; color: #495057; margin-bottom: 6px;">🏷️ <strong>Label Filter</strong> <span style="color: #888;">(optional — narrow down VMs by labels)</span></div>
+                  <div style="font-size: 11px; color: #495057; margin-bottom: 6px;">🏷️ <strong>Label Filter</strong> <span style="color: #888;">(optional — narrow down Nodes by labels)</span></div>
                   <div id="selectedLabelsDisplay" style="min-height: 28px; padding: 4px 8px; border: 1px solid #ced4da; border-radius: 4px;
                        background: white; margin-bottom: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;">
-                    <span id="labelPlaceholder" style="color: #999; font-size: 11px;">No filter — all VMs in MCI will be used</span>
+                    <span id="labelPlaceholder" style="color: #999; font-size: 11px;">No filter — all Nodes in Infra will be used</span>
                   </div>
                   <input type="hidden" id="labelSelector" value="">
                   <div style="margin-bottom: 6px;">
@@ -22197,11 +22197,11 @@ async function showDnsManagementModal(preselectedMciId) {
                   </div>
                   <div style="font-size: 11px; color: #666; margin-bottom: 4px;"><strong>Available Labels</strong> (click to add/remove)</div>
                   <div id="availableLabelsContainer" style="padding: 8px; background: #f8f9fa; border-radius: 4px; min-height: 36px;">
-                    <span style="color: #999; font-size: 11px;">Select an MCI to see available labels...</span>
+                    <span style="color: #999; font-size: 11px;">Select an Infra to see available labels...</span>
                   </div>
                   <div id="labelMatchPreview" style="margin-top: 6px; padding: 6px; background: #e7f3ff; border-radius: 4px; display: none;">
                     <span style="font-size: 11px; color: #0066cc;">
-                      <strong>Matching VMs:</strong> <span id="matchingVmCount">0</span> / <span id="totalVmCount">0</span>
+                      <strong>Matching Nodes:</strong> <span id="matchingNodeCount">0</span> / <span id="totalNodeCount">0</span>
                     </span>
                     <div id="matchingVmList" style="margin-top: 4px; font-size: 10px; color: #666; max-height: 50px; overflow-y: auto;"></div>
                   </div>
@@ -22215,7 +22215,7 @@ async function showDnsManagementModal(preselectedMciId) {
                 <input type="radio" name="dns-ip-source" value="ips" ${ipsSourceChecked} style="margin-right: 6px;">
                 <strong>Manual IPs</strong> — Enter IP addresses directly
               </label>
-              <div id="dns-source-ips-fields" style="margin-top: 6px; display: ${preselectedMciId ? 'none' : 'block'};">
+              <div id="dns-source-ips-fields" style="margin-top: 6px; display: ${preselectedInfraId ? 'none' : 'block'};">
                 <input type="text" id="dns-manual-ips" class="swal2-input" style="margin: 2px 0; font-size: 12px;" placeholder="1.2.3.4, 5.6.7.8 (comma-separated)">
               </div>
             </div>
@@ -22240,7 +22240,7 @@ async function showDnsManagementModal(preselectedMciId) {
     cancelButtonText: '❌ Close',
     width: '780px',
     customClass: {
-      popup: 'swal2-mci-context'
+      popup: 'swal2-infra-context'
     },
     didOpen: () => {
       // Routing policy toggle
@@ -22255,9 +22255,9 @@ async function showDnsManagementModal(preselectedMciId) {
         if (isGeo) {
           const ipsRadio = document.querySelector('input[name="dns-ip-source"][value="ips"]');
           if (ipsRadio.checked) {
-            const mciRadio = document.querySelector('input[name="dns-ip-source"][value="mci"]');
-            mciRadio.checked = true;
-            mciRadio.dispatchEvent(new Event('change'));
+            const infraRadio = document.querySelector('input[name="dns-ip-source"][value="infra"]');
+            infraRadio.checked = true;
+            infraRadio.dispatchEvent(new Event('change'));
           }
           ipsRadio.disabled = true;
         } else {
@@ -22268,14 +22268,14 @@ async function showDnsManagementModal(preselectedMciId) {
       // Radio button toggle for IP source fields
       document.querySelectorAll('input[name="dns-ip-source"]').forEach(radio => {
         radio.addEventListener('change', function() {
-          document.getElementById('dns-source-mci-fields').style.display = this.value === 'mci' ? 'block' : 'none';
+          document.getElementById('dns-source-infra-fields').style.display = this.value === 'infra' ? 'block' : 'none';
           document.getElementById('dns-source-ips-fields').style.display = this.value === 'ips' ? 'block' : 'none';
         });
       });
 
-      // When MCI dropdown changes, fetch VM data and update available labels
-      document.getElementById('dns-mci-id').addEventListener('change', async function() {
-        var mciId = this.value;
+      // When Infra dropdown changes, fetch Node data and update available labels
+      document.getElementById('dns-infra-id').addEventListener('change', async function() {
+        var infraId = this.value;
         var labelContainer = document.getElementById('availableLabelsContainer');
         var preview = document.getElementById('labelMatchPreview');
         // Clear label state
@@ -22284,50 +22284,50 @@ async function showDnsManagementModal(preselectedMciId) {
         if (window.updateSelectedLabelsDisplay) window.updateSelectedLabelsDisplay();
         if (preview) preview.style.display = 'none';
 
-        if (!mciId) {
-          if (labelContainer) labelContainer.innerHTML = '<span style="color: #999; font-size: 11px;">Select an MCI to see available labels...</span>';
+        if (!infraId) {
+          if (labelContainer) labelContainer.innerHTML = '<span style="color: #999; font-size: 11px;">Select an Infra to see available labels...</span>';
           return;
         }
-        // Always fetch fresh MCI detail (cached data may lack VM labels)
+        // Always fetch fresh Infra detail (cached data may lack Node labels)
         if (labelContainer) labelContainer.innerHTML = '<span style="color: #999; font-size: 11px;"><i class="fas fa-spinner fa-spin"></i> Loading labels...</span>';
         try {
-          var nsId = document.getElementById('dns-mci-nsid').value.trim();
-          var mciDetailUrl = 'http://' + config.hostname + ':' + config.port + '/tumblebug/ns/' + nsId + '/mci/' + mciId;
-          var resp = await axios.get(mciDetailUrl, { auth: { username: config.username, password: config.password }, timeout: 15000 });
-          var mciDetail = resp.data;
-          if (mciDetail && mciDetail.vm) {
+          var nsId = document.getElementById('dns-infra-nsid').value.trim();
+          var infraDetailUrl = 'http://' + config.hostname + ':' + config.port + '/tumblebug/ns/' + nsId + '/infra/' + infraId;
+          var resp = await axios.get(infraDetailUrl, { auth: { username: config.username, password: config.password }, timeout: 15000 });
+          var infraDetail = resp.data;
+          if (infraDetail && infraDetail.node) {
             if (!window.cloudBaristaCentralData) window.cloudBaristaCentralData = {};
-            if (!window.cloudBaristaCentralData.mciData) window.cloudBaristaCentralData.mciData = [];
-            window.cloudBaristaCentralData.mciData = window.cloudBaristaCentralData.mciData.filter(function(m) { return m.id !== mciId; });
-            window.cloudBaristaCentralData.mciData.push(mciDetail);
+            if (!window.cloudBaristaCentralData.infraData) window.cloudBaristaCentralData.infraData = [];
+            window.cloudBaristaCentralData.infraData = window.cloudBaristaCentralData.infraData.filter(function(m) { return m.id !== infraId; });
+            window.cloudBaristaCentralData.infraData.push(infraDetail);
           }
         } catch (e) {
-          console.error('[DNS] Failed to fetch MCI detail for labels:', e);
+          console.error('[DNS] Failed to fetch Infra detail for labels:', e);
           if (labelContainer) labelContainer.innerHTML = '<span style="color: #dc3545; font-size: 11px;">Failed to load labels</span>';
         }
         if (window.updateAvailableLabels) {
-          window.updateAvailableLabels(mciId);
+          window.updateAvailableLabels(infraId);
           if (window.setupClearLabelButtonListener) window.setupClearLabelButtonListener();
           if (window.setupSelectedLabelsEventListeners) window.setupSelectedLabelsEventListeners();
         }
       });
 
-      // Helper: Load MCI list into a <select> element
-      async function loadMciList(nsId, selectEl, preselect) {
+      // Helper: Load Infra list into a <select> element
+      async function loadInfraList(nsId, selectEl, preselect) {
         selectEl.innerHTML = '<option value="">Loading...</option>';
         if (!nsId) { selectEl.innerHTML = '<option value="">(No namespace)</option>'; return; }
         try {
-          var mciUrl = 'http://' + config.hostname + ':' + config.port + '/tumblebug/ns/' + nsId + '/mci?option=id';
-          const mciResp = await axios.get(mciUrl, {
+          var infraUrl = 'http://' + config.hostname + ':' + config.port + '/tumblebug/ns/' + nsId + '/infra?option=id';
+          const infraResp = await axios.get(infraUrl, {
             auth: { username: config.username, password: config.password }, timeout: 15000
           });
-          const mciList = mciResp.data?.output || [];
-          if (mciList.length === 0) {
-            selectEl.innerHTML = '<option value="">(No MCIs found)</option>';
+          const infraList = infraResp.data?.output || [];
+          if (infraList.length === 0) {
+            selectEl.innerHTML = '<option value="">(No Infras found)</option>';
             return;
           }
           selectEl.innerHTML = '';
-          mciList.forEach(m => {
+          infraList.forEach(m => {
             const opt = document.createElement('option');
             opt.value = m;
             opt.textContent = m;
@@ -22339,20 +22339,20 @@ async function showDnsManagementModal(preselectedMciId) {
         }
       }
 
-      // Initialize MCI dropdown and auto-load labels
-      const mciSelect = document.getElementById('dns-mci-id');
-      loadMciList(namespace, mciSelect, mciIdValue).then(function() {
-        if (mciSelect.value) {
-          mciSelect.dispatchEvent(new Event('change'));
+      // Initialize Infra dropdown and auto-load labels
+      const infraSelect = document.getElementById('dns-infra-id');
+      loadInfraList(namespace, infraSelect, infraIdValue).then(function() {
+        if (infraSelect.value) {
+          infraSelect.dispatchEvent(new Event('change'));
         }
       });
 
-      // Reload MCI list when namespace changes
-      const nsInput = document.getElementById('dns-mci-nsid');
+      // Reload Infra list when namespace changes
+      const nsInput = document.getElementById('dns-infra-nsid');
       if (nsInput) {
         nsInput.addEventListener('change', function() {
-          loadMciList(this.value, mciSelect, '').then(function() {
-            if (mciSelect.value) mciSelect.dispatchEvent(new Event('change'));
+          loadInfraList(this.value, infraSelect, '').then(function() {
+            if (infraSelect.value) infraSelect.dispatchEvent(new Event('change'));
           });
         });
       }
@@ -22499,7 +22499,7 @@ async function showDnsManagementModal(preselectedMciId) {
                 } catch (e) {
                   Swal.fire({ icon: 'error', title: 'Bulk Delete Failed', text: e.response?.data?.message || e.message });
                 }
-                setTimeout(() => showDnsManagementModal(preselectedMciId), 2100);
+                setTimeout(() => showDnsManagementModal(preselectedInfraId), 2100);
               });
             }
 
@@ -22533,7 +22533,7 @@ async function showDnsManagementModal(preselectedMciId) {
                   });
                   Swal.fire({ icon: 'success', title: 'Deleted', text: 'Record deleted successfully.', timer: 2000, showConfirmButton: false });
                   // Re-open the DNS modal to refresh
-                  setTimeout(() => showDnsManagementModal(preselectedMciId), 2100);
+                  setTimeout(() => showDnsManagementModal(preselectedInfraId), 2100);
                 } catch (err) {
                   Swal.fire({ icon: 'error', title: 'Delete Failed', text: err.response?.data?.message || err.message });
                 }
@@ -22559,7 +22559,7 @@ async function showDnsManagementModal(preselectedMciId) {
         const source = document.querySelector('input[name="dns-ip-source"]:checked')?.value;
 
         if (routingPolicy === 'geoproximity' && source === 'ips') {
-          Swal.showValidationMessage('Geoproximity routing requires MCI or Label source (for VM location data).');
+          Swal.showValidationMessage('Geoproximity routing requires Infra or Label source (for Node location data).');
           return;
         }
 
@@ -22572,21 +22572,21 @@ async function showDnsManagementModal(preselectedMciId) {
           setBy: {}
         };
 
-        if (source === 'mci') {
-          const nsId = document.getElementById('dns-mci-nsid').value.trim();
-          const mciId = document.getElementById('dns-mci-id').value;
-          if (!nsId || !mciId) {
-            Swal.showValidationMessage('Namespace and MCI are required.');
+        if (source === 'infra') {
+          const nsId = document.getElementById('dns-infra-nsid').value.trim();
+          const infraId = document.getElementById('dns-infra-id').value;
+          if (!nsId || !infraId) {
+            Swal.showValidationMessage('Namespace and Infra are required.');
             return;
           }
-          // If label filter is set, use label source; otherwise use mci source
+          // If label filter is set, use label source; otherwise use infra source
           const labelSelector = document.getElementById('labelSelector').value.trim();
           if (labelSelector) {
-            // Prepend sys.mciId to scope label query within the selected MCI
-            const scopedSelector = 'sys.mciId=' + mciId + ',' + labelSelector;
+            // Prepend sys.infraId to scope label query within the selected Infra
+            const scopedSelector = 'sys.infraId=' + infraId + ',' + labelSelector;
             body.setBy.label = { nsId, labelSelector: scopedSelector };
           } else {
-            body.setBy.mci = { nsId, mciId };
+            body.setBy.infra = { nsId, infraId };
           }
         } else {
           const ipsStr = document.getElementById('dns-manual-ips').value.trim();

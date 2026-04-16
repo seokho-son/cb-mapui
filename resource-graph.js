@@ -4,11 +4,11 @@
  * Interactive resource relationship visualization using Cytoscape.js
  * 
  * Features:
- * - Automatic resource tree generation from MCI data
+ * - Automatic resource tree generation from Infra data
  * - Expand/collapse compound nodes
  * - Click to focus on related resources
  * - Right-click context menu for actions
- * - Real-time updates when MCI data changes
+ * - Real-time updates when Infra data changes
  * 
  * @author Cloud-Barista
  * @license Apache-2.0
@@ -33,9 +33,9 @@ const GRAPH_CONFIG = {
   // Node colors by resource type
   nodeColors: {
     namespace: '#e8eaed',    // Very light gray - namespace container
-    mci: '#007bff',
-    subgroup: '#6610f2',   // Indigo - distinct from subnet
-    vm: '#28a745',         // Green - VM nodes
+    infra: '#007bff',
+    nodegroup: '#6610f2',   // Indigo - distinct from subnet
+    node: '#28a745',       // Green - Node
     gpu: '#ff6b6b',        // Coral red - GPU/Accelerator (AI workload emphasis)
     vnet: '#e6a700',       // Dark Gold - parent network
     subnet: '#ffc107',     // Yellow/Gold - child of vnet
@@ -56,9 +56,9 @@ const GRAPH_CONFIG = {
   // Node shapes by resource type
   nodeShapes: {
     namespace: 'round-rectangle',
-    mci: 'round-rectangle',
-    subgroup: 'round-rectangle',
-    vm: 'ellipse',
+    infra: 'round-rectangle',
+    nodegroup: 'round-rectangle',
+    node: 'ellipse',
     gpu: 'rhomboid',        // Parallelogram shape - distinct for GPU
     vnet: 'diamond',
     subnet: 'diamond',
@@ -123,10 +123,10 @@ const GRAPH_CONFIG = {
         csp: 5,
         region: 4,
         zone: 3,
-        mci: 4,
-        subgroup: 3,
-        vm: 2,
-        gpu: 2,   // Same level as VM (attached to VM)
+        infra: 4,
+        nodegroup: 3,
+        node: 2,
+        gpu: 2,   // Same level as Node (attached to Node)
         vnet: 2,
         subnet: 1,
         securityGroup: 1,
@@ -165,10 +165,10 @@ let isCompactViewActive = false; // Whether compact view is active
 // Some types are disabled by default to reduce visual complexity
 const nodeTypeVisibility = {
   // Infrastructure (toggleable)
-  mci: true,
-  subgroup: true,
-  vm: true,
-  gpu: true,  // GPU nodes attached to VMs (enabled by default for AI workload visibility)
+  infra: true,
+  nodegroup: true,
+  node: true,
+  gpu: true,  // GPU nodes attached to Nodes (enabled by default for AI workload visibility)
   // Network resources
   vnet: true,
   subnet: false,  // Disabled by default (child of VNet)
@@ -197,10 +197,10 @@ const nodeTypeDependencies = {
   csp: ['cspRoot'],
   // Network hierarchy: subnet -> vnet
   subnet: ['vnet'],
-  // Infrastructure hierarchy: gpu -> vm -> subgroup -> mci
-  gpu: ['vm', 'subgroup', 'mci'],
-  vm: ['subgroup', 'mci'],
-  subgroup: ['mci']
+  // Infrastructure hierarchy: gpu -> node -> nodegroup -> infra
+  gpu: ['node', 'nodegroup', 'infra'],
+  node: ['nodegroup', 'infra'],
+  nodegroup: ['infra']
 };
 
 // Reverse dependencies: parent -> children
@@ -210,9 +210,9 @@ const nodeTypeChildren = {
   csp: ['region', 'zone'],
   region: ['zone'],
   vnet: ['subnet'],
-  mci: ['subgroup', 'vm', 'gpu'],
-  subgroup: ['vm', 'gpu'],
-  vm: ['gpu']
+  infra: ['nodegroup', 'node', 'gpu'],
+  nodegroup: ['node', 'gpu'],
+  node: ['gpu']
 };
 
 /**
@@ -225,13 +225,13 @@ function getNodeMaxWidth(type) {
     case 'namespace':
     case 'cspRoot':
       return 200;
-    case 'mci':
+    case 'infra':
     case 'csp':
       return 160;
-    case 'subgroup':
+    case 'nodegroup':
     case 'region':
       return 140;
-    case 'vm':
+    case 'node':
     case 'zone':
       return 130;
     case 'gpu':
@@ -269,7 +269,7 @@ function getMaxCharsPerLine(type) {
  * @returns {boolean} - True if compound node
  */
 function isCompoundNodeType(type) {
-  const compoundTypes = ['namespace', 'mci', 'subgroup', 'vnet', 'cspRoot', 'csp', 'region'];
+  const compoundTypes = ['namespace', 'infra', 'nodegroup', 'vnet', 'cspRoot', 'csp', 'region'];
   return compoundTypes.includes(type);
 }
 
@@ -629,7 +629,7 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
           'z-index': 999
         }
       },
-      // Status-based text colors for VM and MCI (text-outline stays black for contrast)
+      // Status-based text colors for Node and Infra (text-outline stays black for contrast)
       // Running states - Green
       {
         selector: 'node[status="Running"]',
@@ -644,7 +644,7 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
           'color': '#3b82f6'  // blue-500
         }
       },
-      // Registering state - Teal (registering existing CSP VM)
+      // Registering state - Teal (registering existing CSP Node)
       {
         selector: 'node[status="Registering"]',
         style: {
@@ -823,12 +823,12 @@ function registerGraphEvents() {
 // ============================================================================
 
 /**
- * Transform MCI data to Cytoscape graph format
- * @param {Array} mciList - Array of MCI objects from CB-Tumblebug
+ * Transform Infra data to Cytoscape graph format
+ * @param {Array} infraList - Array of Infra objects from CB-Tumblebug
  * @param {string} namespace - Current namespace
  * @returns {Object} - { nodes: [], edges: [] }
  */
-export function mciDataToGraph(mciList, namespace) {
+export function infraDataToGraph(infraList, namespace) {
   const nodes = [];
   const edges = [];
   const resourceSet = new Set(); // Track unique resources
@@ -1256,7 +1256,7 @@ export function mciDataToGraph(mciList, namespace) {
           type: 'customImage',
           color: GRAPH_CONFIG.nodeColors.customImage,
           fullId: img.id,
-          sourceVmId: img.sourceVmId || '',
+          sourceNodeId: img.sourceNodeId || '',
           status: img.status || '',
           originalData: img
         }
@@ -1280,57 +1280,57 @@ export function mciDataToGraph(mciList, namespace) {
     });
   }
 
-  // Return early if no MCI data (but we still show resources)
-  if (!mciList || mciList.length === 0) {
+  // Return early if no Infra data (but we still show resources)
+  if (!infraList || infraList.length === 0) {
     return { nodes, edges };
   }
 
-  const mciNodeIds = [];  // Track for sibling edges
+  const infraNodeIds = [];  // Track for sibling edges
   const specNodeIds = [];  // Track Spec nodes for sibling edges
   const imageNodeIds = [];  // Track Image nodes for sibling edges
 
-  mciList.forEach(mci => {
-    // Skip MCI if visibility disabled
-    if (!nodeTypeVisibility.mci) return;
+  infraList.forEach(infra => {
+    // Skip Infra if visibility disabled
+    if (!nodeTypeVisibility.infra) return;
     
-    const mciId = `mci-${mci.id}`;
-    mciNodeIds.push(mciId);  // Track for sibling edges
+    const infraId = `infra-${infra.id}`;
+    infraNodeIds.push(infraId);  // Track for sibling edges
     
-    // MCI node (compound parent)
+    // Infra node (compound parent)
     nodes.push({
       data: {
-        id: mciId,
-        label: formatLabel('🖥️', mci.name || mci.id, getMaxCharsPerLine('mci'), 'mci'),
+        id: infraId,
+        label: formatLabel('🖥️', infra.name || infra.id, getMaxCharsPerLine('infra'), 'infra'),
         parent: nsId,
-        type: 'mci',
-        status: mci.status,
-        color: GRAPH_CONFIG.nodeColors.mci,
-        originalData: mci
+        type: 'infra',
+        status: infra.status,
+        color: GRAPH_CONFIG.nodeColors.infra,
+        originalData: infra
       }
     });
 
-    // Process VMs
-    if (mci.vm && Array.isArray(mci.vm)) {
-      // Group VMs by subGroupId
-      const subGroups = {};
+    // Process Nodes
+    if (infra.node && Array.isArray(infra.node)) {
+      // Group Nodes by nodeGroupId
+      const nodeGroups = {};
       
-      mci.vm.forEach(vm => {
-        const sgId = vm.subGroupId || 'default';
-        if (!subGroups[sgId]) {
-          subGroups[sgId] = [];
+      infra.node.forEach(nd => {
+        const sgId = nd.nodeGroupId || 'default';
+        if (!nodeGroups[sgId]) {
+          nodeGroups[sgId] = [];
         }
-        subGroups[sgId].push(vm);
+        nodeGroups[sgId].push(nd);
       });
 
-      // Always create subgroup nodes (even if only 1 subgroup)
-      const subGroupIds = Object.keys(subGroups);
-      const hasSingleSubGroup = subGroupIds.length === 1;
+      // Always create nodegroup nodes (even if only 1 nodegroup)
+      const nodeGroupIds = Object.keys(nodeGroups);
+      const hasSingleNodeGroup = nodeGroupIds.length === 1;
       
-      // Track subgroup node IDs for invisible sibling edges
-      const subGroupNodeIds = [];
+      // Track nodegroup node IDs for invisible sibling edges
+      const nodeGroupNodeIds = [];
 
       // Track edges at different levels for consolidation
-      const mciEdges = {
+      const infraEdges = {
         vNets: new Set(),
         subnets: new Set(),
         securityGroups: new Set(),
@@ -1340,26 +1340,26 @@ export function mciDataToGraph(mciList, namespace) {
         dataDisks: new Set()
       };
 
-      Object.entries(subGroups).forEach(([subGroupId, vms]) => {
-        const subGroupNodeId = `subgroup-${mci.id}-${subGroupId}`;
-        subGroupNodeIds.push(subGroupNodeId);  // Track for sibling edges
+      Object.entries(nodeGroups).forEach(([nodeGroupId, groupNodes]) => {
+        const nodeGroupNodeId = `nodegroup-${infra.id}-${nodeGroupId}`;
+        nodeGroupNodeIds.push(nodeGroupNodeId);  // Track for sibling edges
         
-        // Create subgroup node only if visibility enabled
-        if (nodeTypeVisibility.subgroup) {
+        // Create nodegroup node only if visibility enabled
+        if (nodeTypeVisibility.nodegroup) {
           nodes.push({
             data: {
-              id: subGroupNodeId,
-              label: formatLabel('📦', subGroupId, getMaxCharsPerLine('subgroup'), 'subgroup'),
-              parent: mciId,
-              type: 'subgroup',
-              color: GRAPH_CONFIG.nodeColors.subgroup,
-              originalData: { id: subGroupId, type: 'subgroup', mciId: mci.id }
+              id: nodeGroupNodeId,
+              label: formatLabel('📦', nodeGroupId, getMaxCharsPerLine('nodegroup'), 'nodegroup'),
+              parent: infraId,
+              type: 'nodegroup',
+              color: GRAPH_CONFIG.nodeColors.nodegroup,
+              originalData: { id: nodeGroupId, type: 'nodegroup', infraId: infra.id, nodeCount: groupNodes.length }
             }
           });
         }
 
-        // Track edges at subgroup level for consolidation
-        const subGroupEdges = {
+        // Track edges at nodegroup level for consolidation
+        const nodeGroupEdges = {
           vNets: new Set(),
           subnets: new Set(),
           securityGroups: new Set(),
@@ -1369,84 +1369,84 @@ export function mciDataToGraph(mciList, namespace) {
           dataDisks: new Set()
         };
 
-        // Track VM node IDs for invisible sibling edges within subgroup
-        const vmNodeIds = [];
+        // Track Node IDs for invisible sibling edges within nodegroup
+        const computeNodeIds = [];
 
-        vms.forEach(vm => {
-          // Include MCI ID in VM node ID to ensure uniqueness across MCIs
-          const vmNodeId = `vm-${mci.id}-${vm.id}`;
-          vmNodeIds.push(vmNodeId);  // Track for sibling edges
+        groupNodes.forEach(nd => {
+          // Include Infra ID in Node ID to ensure uniqueness across Infras
+          const computeNodeId = `node-${infra.id}-${nd.id}`;
+          computeNodeIds.push(computeNodeId);  // Track for sibling edges
           
-          // Skip VM node creation if visibility disabled
-          if (!nodeTypeVisibility.vm) return;
+          // Skip Node creation if visibility disabled
+          if (!nodeTypeVisibility.node) return;
           
-          // Debug: Log dataDiskIds for each VM
-          if (vm.dataDiskIds && vm.dataDiskIds.length > 0) {
-            console.debug(`[ResourceGraph] VM ${vm.id} has dataDiskIds:`, vm.dataDiskIds);
+          // Debug: Log dataDiskIds for each Node
+          if (nd.dataDiskIds && nd.dataDiskIds.length > 0) {
+            console.debug(`[ResourceGraph] Node ${nd.id} has dataDiskIds:`, nd.dataDiskIds);
           }
           
-          // VM node - parent is subgroup if visible, otherwise MCI
-          const vmParent = nodeTypeVisibility.subgroup ? subGroupNodeId : mciId;
+          // Node - parent is nodegroup if visible, otherwise Infra
+          const nodeParent = nodeTypeVisibility.nodegroup ? nodeGroupNodeId : infraId;
 
-          // Determine VM icon based on GPU/accelerator availability
+          // Determine Node icon based on GPU/accelerator availability
           // Note: spec/image fields contain summary info (not specSummary/imageSummary)
-          const vmSpec = vm.spec || vm.specSummary || {};
-          const hasGpu = vmSpec.acceleratorType?.toLowerCase() === 'gpu' ||
-                        vmSpec.acceleratorModel ||
-                        vmSpec.acceleratorCount > 0;
+          const nodeSpec = nd.spec || nd.specSummary || {};
+          const hasGpu = nodeSpec.acceleratorType?.toLowerCase() === 'gpu' ||
+                        nodeSpec.acceleratorModel ||
+                        nodeSpec.acceleratorCount > 0;
 
-          // VM label: "💻 vm-name" (GPU indicator removed - separate GPU node exists)
-          const vmName = vm.name || vm.id;
-          const vmLabelText = vmName;
+          // Node label: "💻 node-name" (GPU indicator removed - separate GPU node exists)
+          const ndName = nd.name || nd.id;
+          const ndLabelText = ndName;
 
           nodes.push({
             data: {
-              id: vmNodeId,
-              label: formatLabel('💻', vmLabelText, getMaxCharsPerLine('vm')),
-              parent: vmParent,
-              type: 'vm',
-              status: vm.status,
-              color: GRAPH_CONFIG.nodeColors.vm,
-              publicIP: vm.publicIP,
-              privateIP: vm.privateIP,
+              id: computeNodeId,
+              label: formatLabel('💻', ndLabelText, getMaxCharsPerLine('node')),
+              parent: nodeParent,
+              type: 'node',
+              status: nd.status,
+              color: GRAPH_CONFIG.nodeColors.node,
+              publicIP: nd.publicIP,
+              privateIP: nd.privateIP,
               hasGpu: hasGpu,
-              originalData: vm
+              originalData: nd
             }
           });
 
-          // Create GPU node if VM has GPU and gpu visibility is enabled
+          // Create GPU node if Node has GPU and gpu visibility is enabled
           if (hasGpu && nodeTypeVisibility.gpu) {
-            const gpuNodeId = `gpu-${mci.id}-${vm.id}`;
+            const gpuNodeId = `gpu-${infra.id}-${nd.id}`;
 
             // GPU label: model name only (details available in View Details)
-            const gpuLabel = vmSpec.acceleratorModel || 'GPU';
+            const gpuLabel = nodeSpec.acceleratorModel || 'GPU';
 
             nodes.push({
               data: {
                 id: gpuNodeId,
                 label: gpuLabel,  // No icon, model + details on separate lines
-                parent: vmParent,  // Same parent as VM (subgroup or MCI)
+                parent: nodeParent,  // Same parent as Node (nodegroup or Infra)
                 type: 'gpu',
                 color: GRAPH_CONFIG.nodeColors.gpu,
-                acceleratorModel: vmSpec.acceleratorModel,
-                acceleratorCount: vmSpec.acceleratorCount,
-                acceleratorMemoryGB: vmSpec.acceleratorMemoryGB,
-                acceleratorType: vmSpec.acceleratorType,
+                acceleratorModel: nodeSpec.acceleratorModel,
+                acceleratorCount: nodeSpec.acceleratorCount,
+                acceleratorMemoryGB: nodeSpec.acceleratorMemoryGB,
+                acceleratorType: nodeSpec.acceleratorType,
                 originalData: {
                   id: gpuNodeId,
                   type: 'gpu',
-                  vmId: vm.id,
-                  vmName: vm.name,
-                  ...vmSpec
+                  nodeId: nd.id,
+                  ndName: nd.name,
+                  ...nodeSpec
                 }
               }
             });
 
-            // Create edge from VM to GPU (tight coupling)
+            // Create edge from Node to GPU (tight coupling)
             edges.push({
               data: {
-                id: `edge-${vmNodeId}-${gpuNodeId}`,
-                source: vmNodeId,
+                id: `edge-${computeNodeId}-${gpuNodeId}`,
+                source: computeNodeId,
                 target: gpuNodeId,
                 relationship: 'has-gpu',
                 type: 'gpu-link'  // Mark for special styling if needed
@@ -1455,16 +1455,16 @@ export function mciDataToGraph(mciList, namespace) {
           }
 
           // Create edge to CSP/Region/Zone if location info exists
-          createLocationEdge(vmNodeId, vm, locationEdgeSet);
+          createLocationEdge(computeNodeId, nd, locationEdgeSet);
 
           // Collect subnet connections for consolidation
           // Collect VNet and Subnet connections for consolidation (only if visibility enabled)
-          if (vm.subnetId && nodeTypeVisibility.vnet) {
-            const isSubnetUnknown = vm.subnetId === 'unknown';
-            const isVNetUnknown = !vm.vNetId || vm.vNetId === 'unknown';
+          if (nd.subnetId && nodeTypeVisibility.vnet) {
+            const isSubnetUnknown = nd.subnetId === 'unknown';
+            const isVNetUnknown = !nd.vNetId || nd.vNetId === 'unknown';
             
             // Determine VNet node ID
-            const vnetNodeId = isVNetUnknown ? 'vnet-unknown' : `vnet-${vm.vNetId}`;
+            const vnetNodeId = isVNetUnknown ? 'vnet-unknown' : `vnet-${nd.vNetId}`;
             
             // Create VNet node if unknown (known VNets are created from vNetList)
             if (isVNetUnknown && !resourceSet.has(vnetNodeId)) {
@@ -1484,20 +1484,20 @@ export function mciDataToGraph(mciList, namespace) {
             }
             
             // Track VNet edge
-            subGroupEdges.vNets.add(vnetNodeId);
+            nodeGroupEdges.vNets.add(vnetNodeId);
             
             // Subnet node ID includes VNet ID for uniqueness (same subnet ID can exist in different VNets)
-            const vnetIdForSubnet = isVNetUnknown ? 'unknown' : vm.vNetId;
+            const vnetIdForSubnet = isVNetUnknown ? 'unknown' : nd.vNetId;
             const subnetNodeId = isSubnetUnknown 
               ? 'subnet-unknown'  // Single shared node for all unknown subnets
-              : `subnet-${vnetIdForSubnet}-${vm.subnetId}`;
+              : `subnet-${vnetIdForSubnet}-${nd.subnetId}`;
             
             // Create subnet node only if it doesn't exist and subnet visibility is enabled
             if (nodeTypeVisibility.subnet && !resourceSet.has(subnetNodeId)) {
               resourceSet.add(subnetNodeId);
               const subnetText = isSubnetUnknown 
                 ? 'Subnet (unknown)'
-                : vm.subnetId;
+                : nd.subnetId;
               
               nodes.push({
                 data: {
@@ -1507,18 +1507,18 @@ export function mciDataToGraph(mciList, namespace) {
                   type: 'subnet',
                   color: GRAPH_CONFIG.nodeColors.subnet,
                   isUnknown: isSubnetUnknown,
-                  fullId: vm.subnetId,
+                  fullId: nd.subnetId,
                   vNetId: vnetIdForSubnet,
-                  originalData: { id: vm.subnetId, vNetId: vnetIdForSubnet, type: 'subnet' }
+                  originalData: { id: nd.subnetId, vNetId: vnetIdForSubnet, type: 'subnet' }
                 }
               });
             }
-            if (nodeTypeVisibility.subnet) subGroupEdges.subnets.add(subnetNodeId);
+            if (nodeTypeVisibility.subnet) nodeGroupEdges.subnets.add(subnetNodeId);
           }
 
           // Collect SecurityGroup connections for consolidation (only if visibility enabled)
-          if (nodeTypeVisibility.securityGroup && vm.securityGroupIds && Array.isArray(vm.securityGroupIds)) {
-            vm.securityGroupIds.forEach(sgId => {
+          if (nodeTypeVisibility.securityGroup && nd.securityGroupIds && Array.isArray(nd.securityGroupIds)) {
+            nd.securityGroupIds.forEach(sgId => {
               if (!sgId) return;
               
               const sgNodeId = `sg-${sgId}`;
@@ -1540,18 +1540,18 @@ export function mciDataToGraph(mciList, namespace) {
                   }
                 });
               }
-              subGroupEdges.securityGroups.add(sgNodeId);
+              nodeGroupEdges.securityGroups.add(sgNodeId);
             });
           }
 
           // Collect SSHKey connections for consolidation (only if visibility enabled)
-          if (vm.sshKeyId && nodeTypeVisibility.sshKey) {
-            const isUnknown = vm.sshKeyId === 'unknown';
-            const sshKeyNodeId = `sshkey-${vm.sshKeyId}`;  // Shared node for unknown
+          if (nd.sshKeyId && nodeTypeVisibility.sshKey) {
+            const isUnknown = nd.sshKeyId === 'unknown';
+            const sshKeyNodeId = `sshkey-${nd.sshKeyId}`;  // Shared node for unknown
             
             if (!resourceSet.has(sshKeyNodeId)) {
               resourceSet.add(sshKeyNodeId);
-              const sshText = isUnknown ? 'SSHKey (unknown)' : vm.sshKeyId;
+              const sshText = isUnknown ? 'SSHKey (unknown)' : nd.sshKeyId;
               nodes.push({
                 data: {
                   id: sshKeyNodeId,
@@ -1559,19 +1559,19 @@ export function mciDataToGraph(mciList, namespace) {
                   parent: nsId,
                   type: 'sshKey',
                   color: GRAPH_CONFIG.nodeColors.sshKey,
-                  fullId: vm.sshKeyId,
+                  fullId: nd.sshKeyId,
                   isUnknown: isUnknown,
-                  originalData: { id: vm.sshKeyId, type: 'sshKey' }
+                  originalData: { id: nd.sshKeyId, type: 'sshKey' }
                 }
               });
             }
-            subGroupEdges.sshKeys.add(sshKeyNodeId);
+            nodeGroupEdges.sshKeys.add(sshKeyNodeId);
           }
 
           // Collect Spec connections for consolidation (only if spec visibility enabled)
-          if (vm.specId && nodeTypeVisibility.spec) {
-            const isUnknown = vm.specId === 'unknown';
-            const specNodeId = `spec-${vm.specId}`;  // Shared node for unknown
+          if (nd.specId && nodeTypeVisibility.spec) {
+            const isUnknown = nd.specId === 'unknown';
+            const specNodeId = `spec-${nd.specId}`;  // Shared node for unknown
 
             if (!resourceSet.has(specNodeId)) {
               resourceSet.add(specNodeId);
@@ -1579,15 +1579,15 @@ export function mciDataToGraph(mciList, namespace) {
               const specText = isUnknown
                 ? 'Spec (unknown)'
                 : (() => {
-                    const specParts = vm.specId.split('+');
+                    const specParts = nd.specId.split('+');
                     return specParts.length === 3
                       ? `${specParts[0]}/${specParts[2]}`
-                      : vm.specId;
+                      : nd.specId;
                   })();
 
               // Determine icon based on GPU availability
               // Note: spec field contains summary info (not specSummary)
-              const specData = vm.spec || vm.specSummary || {};
+              const specData = nd.spec || nd.specSummary || {};
               const specHasGpu = specData.acceleratorType?.toLowerCase() === 'gpu' ||
                                 specData.acceleratorModel ||
                                 specData.acceleratorCount > 0;
@@ -1599,42 +1599,42 @@ export function mciDataToGraph(mciList, namespace) {
                   label: formatLabel(specIcon, specText, getMaxCharsPerLine('spec')),
                   type: 'spec',
                   color: GRAPH_CONFIG.nodeColors.spec,
-                  fullId: vm.specId,
+                  fullId: nd.specId,
                   isUnknown: isUnknown,
                   hasGpu: specHasGpu,
                   // Include spec data for detailed view
                   originalData: {
-                    id: vm.specId,
+                    id: nd.specId,
                     type: 'spec',
                     ...specData
                   }
                 }
               });
             }
-            subGroupEdges.specs.add(specNodeId);
+            nodeGroupEdges.specs.add(specNodeId);
           }
 
           // Collect Image connections for consolidation
           // Note: resourceType can be "image" (public) or "customImage" (user snapshot)
-          if (vm.imageId) {
-            const isUnknown = vm.imageId === 'unknown';
-            const imageData = vm.image || vm.imageSummary || {};
+          if (nd.imageId) {
+            const isUnknown = nd.imageId === 'unknown';
+            const imageData = nd.image || nd.imageSummary || {};
             const isCustomImage = imageData.resourceType === 'customImage';
 
             // Determine which node type to connect based on resourceType
             // customImage nodes use 'customimg-' prefix, image nodes use 'image-' prefix
             if (isCustomImage && nodeTypeVisibility.customImage) {
               // Connect to customImage node
-              const customImageNodeId = `customimg-${vm.imageId}`;
+              const customImageNodeId = `customimg-${nd.imageId}`;
 
-              // Create customImage node if it doesn't exist (VM references unknown customImage)
+              // Create customImage node if it doesn't exist (Node references unknown customImage)
               if (!resourceSet.has(customImageNodeId)) {
                 resourceSet.add(customImageNodeId);
                 customImageNodeIds.push(customImageNodeId);
 
                 const imageLabel = isUnknown
                   ? 'CustomImage (unknown)'
-                  : (imageData.osDistribution || imageData.osType || vm.imageId);
+                  : (imageData.osDistribution || imageData.osType || nd.imageId);
 
                 nodes.push({
                   data: {
@@ -1643,21 +1643,21 @@ export function mciDataToGraph(mciList, namespace) {
                     parent: nsId,
                     type: 'customImage',
                     color: GRAPH_CONFIG.nodeColors.customImage,
-                    fullId: vm.imageId,
+                    fullId: nd.imageId,
                     isUnknown: isUnknown,
                     originalData: {
-                      id: vm.imageId,
+                      id: nd.imageId,
                       type: 'customImage',
                       ...imageData
                     }
                   }
                 });
               }
-              subGroupEdges.images.add(customImageNodeId);
+              nodeGroupEdges.images.add(customImageNodeId);
 
             } else if (nodeTypeVisibility.image) {
               // Connect to regular image node (public CSP image)
-              const imageNodeId = `image-${vm.imageId}`;
+              const imageNodeId = `image-${nd.imageId}`;
 
               if (!resourceSet.has(imageNodeId)) {
                 resourceSet.add(imageNodeId);
@@ -1665,7 +1665,7 @@ export function mciDataToGraph(mciList, namespace) {
 
                 const imageLabel = isUnknown
                   ? 'Image (unknown)'
-                  : (imageData.osDistribution || imageData.osType || vm.imageId);
+                  : (imageData.osDistribution || imageData.osType || nd.imageId);
 
                 nodes.push({
                   data: {
@@ -1673,24 +1673,24 @@ export function mciDataToGraph(mciList, namespace) {
                     label: formatLabel('🖼️', imageLabel, getMaxCharsPerLine('image')),
                     type: 'image',
                     color: GRAPH_CONFIG.nodeColors.image,
-                    fullId: vm.imageId,
+                    fullId: nd.imageId,
                     isUnknown: isUnknown,
                     originalData: {
-                      id: vm.imageId,
+                      id: nd.imageId,
                       type: 'image',
                       ...imageData
                     }
                   }
                 });
               }
-              subGroupEdges.images.add(imageNodeId);
+              nodeGroupEdges.images.add(imageNodeId);
             }
           }
 
-          // DataDisk connections - always individual (each VM has its own disks)
-          // No subgroup/MCI level consolidation - each VM connects directly to its disks
-          if (nodeTypeVisibility.dataDisk && vm.dataDiskIds && Array.isArray(vm.dataDiskIds) && vm.dataDiskIds.length > 0) {
-            vm.dataDiskIds.forEach(diskId => {
+          // DataDisk connections - always individual (each Node has its own disks)
+          // No nodegroup/Infra level consolidation - each Node connects directly to its disks
+          if (nodeTypeVisibility.dataDisk && nd.dataDiskIds && Array.isArray(nd.dataDiskIds) && nd.dataDiskIds.length > 0) {
+            nd.dataDiskIds.forEach(diskId => {
               if (!diskId) return;
               
               const isUnknown = diskId === 'unknown';
@@ -1699,7 +1699,7 @@ export function mciDataToGraph(mciList, namespace) {
               // Check if disk exists in namespace-level dataDiskMap
               const diskData = dataDiskMap.get(diskId);
               
-              // Create node only if not already created (from namespace-level or previous VM)
+              // Create node only if not already created (from namespace-level or previous Node)
               if (!resourceSet.has(diskNodeId)) {
                 resourceSet.add(diskNodeId);
                 const diskText = isUnknown ? 'Disk (unknown)' : diskId;
@@ -1721,38 +1721,38 @@ export function mciDataToGraph(mciList, namespace) {
               
               edges.push({
                 data: {
-                  id: `edge-${vmNodeId}-${diskNodeId}`,
-                  source: vmNodeId,
+                  id: `edge-${computeNodeId}-${diskNodeId}`,
+                  source: computeNodeId,
                   target: diskNodeId,
                   relationship: 'attached'
                 }
               });
             });
           }
-        }); // end vms.forEach
+        }); // end nodes.forEach
 
-        // VMs within SubGroup rely on tiling for compact layout (no invisible edges)
+        // VMs within NodeGroup rely on tiling for compact layout (no invisible edges)
 
-        // Check if all VMs in subgroup share the same resources
-        const allVmsShareVNet = subGroupEdges.vNets.size === 1 && vms.every(vm => vm.vNetId || vm.subnetId);
-        const allVmsShareSubnet = subGroupEdges.subnets.size === 1 && vms.every(vm => vm.subnetId);
-        const allVmsShareSG = subGroupEdges.securityGroups.size > 0 && 
-          vms.every(vm => vm.securityGroupIds && vm.securityGroupIds.length > 0);
-        const allVmsShareSSHKey = subGroupEdges.sshKeys.size === 1 && vms.every(vm => vm.sshKeyId);
-        const allVmsShareSpec = subGroupEdges.specs.size === 1 && vms.every(vm => vm.specId);
-        const allVmsShareImage = subGroupEdges.images.size === 1 && vms.every(vm => vm.imageId);
+        // Check if all VMs in nodegroup share the same resources
+        const allNodesShareVNet = nodeGroupEdges.vNets.size === 1 && nodes.every(nd => nd.vNetId || nd.subnetId);
+        const allNodesShareSubnet = nodeGroupEdges.subnets.size === 1 && nodes.every(nd => nd.subnetId);
+        const allNodesShareSG = nodeGroupEdges.securityGroups.size > 0 && 
+          nodes.every(nd => nd.securityGroupIds && nd.securityGroupIds.length > 0);
+        const allNodesShareSSHKey = nodeGroupEdges.sshKeys.size === 1 && nodes.every(nd => nd.sshKeyId);
+        const allNodesShareSpec = nodeGroupEdges.specs.size === 1 && nodes.every(nd => nd.specId);
+        const allNodesShareImage = nodeGroupEdges.images.size === 1 && nodes.every(nd => nd.imageId);
 
-        // Create edges from subgroup if all VMs share the same target, else from individual VMs
+        // Create edges from nodegroup if all VMs share the same target, else from individual VMs
         // VNet edges
-        if (allVmsShareVNet) {
-          subGroupEdges.vNets.forEach(target => mciEdges.vNets.add(target));
+        if (allNodesShareVNet) {
+          nodeGroupEdges.vNets.forEach(target => infraEdges.vNets.add(target));
           
-          if (!hasSingleSubGroup) {
-            subGroupEdges.vNets.forEach(target => {
+          if (!hasSingleNodeGroup) {
+            nodeGroupEdges.vNets.forEach(target => {
               edges.push({
                 data: {
-                  id: `edge-${subGroupNodeId}-${target}`,
-                  source: subGroupNodeId,
+                  id: `edge-${nodeGroupNodeId}-${target}`,
+                  source: nodeGroupNodeId,
                   target: target,
                   relationship: 'uses'
                 }
@@ -1761,14 +1761,14 @@ export function mciDataToGraph(mciList, namespace) {
           }
         } else {
           // Create individual edges from VMs to VNet
-          vms.forEach(vm => {
-            const vmNodeId = `vm-${mci.id}-${vm.id}`;
-            const isVNetUnknown = !vm.vNetId || vm.vNetId === 'unknown';
-            const vnetNodeId = isVNetUnknown ? 'vnet-unknown' : `vnet-${vm.vNetId}`;
+          nodes.forEach(nd => {
+            const computeNodeId = `node-${infra.id}-${nd.id}`;
+            const isVNetUnknown = !nd.vNetId || nd.vNetId === 'unknown';
+            const vnetNodeId = isVNetUnknown ? 'vnet-unknown' : `vnet-${nd.vNetId}`;
             edges.push({
               data: {
-                id: `edge-${vmNodeId}-${vnetNodeId}`,
-                source: vmNodeId,
+                id: `edge-${computeNodeId}-${vnetNodeId}`,
+                source: computeNodeId,
                 target: vnetNodeId,
                 relationship: 'uses'
               }
@@ -1777,17 +1777,17 @@ export function mciDataToGraph(mciList, namespace) {
         }
 
         // Subnet edges
-        if (allVmsShareSubnet) {
-          // Add to MCI-level tracking for further consolidation
-          subGroupEdges.subnets.forEach(target => mciEdges.subnets.add(target));
+        if (allNodesShareSubnet) {
+          // Add to Infra-level tracking for further consolidation
+          nodeGroupEdges.subnets.forEach(target => infraEdges.subnets.add(target));
           
-          // If not single subgroup, create edge from subgroup
-          if (!hasSingleSubGroup) {
-            subGroupEdges.subnets.forEach(target => {
+          // If not single nodegroup, create edge from nodegroup
+          if (!hasSingleNodeGroup) {
+            nodeGroupEdges.subnets.forEach(target => {
               edges.push({
                 data: {
-                  id: `edge-${subGroupNodeId}-${target}`,
-                  source: subGroupNodeId,
+                  id: `edge-${nodeGroupNodeId}-${target}`,
+                  source: nodeGroupNodeId,
                   target: target,
                   relationship: 'uses'
                 }
@@ -1796,19 +1796,19 @@ export function mciDataToGraph(mciList, namespace) {
           }
         } else {
           // Create individual edges from VMs to Subnet
-          vms.forEach(vm => {
-            if (vm.subnetId) {
-              const vmNodeId = `vm-${mci.id}-${vm.id}`;
-              const isSubnetUnknown = vm.subnetId === 'unknown';
-              const isVNetUnknown = !vm.vNetId || vm.vNetId === 'unknown';
-              const vnetIdForSubnet = isVNetUnknown ? 'unknown' : vm.vNetId;
+          nodes.forEach(nd => {
+            if (nd.subnetId) {
+              const computeNodeId = `node-${infra.id}-${nd.id}`;
+              const isSubnetUnknown = nd.subnetId === 'unknown';
+              const isVNetUnknown = !nd.vNetId || nd.vNetId === 'unknown';
+              const vnetIdForSubnet = isVNetUnknown ? 'unknown' : nd.vNetId;
               const subnetNodeId = isSubnetUnknown 
                 ? 'subnet-unknown' 
-                : `subnet-${vnetIdForSubnet}-${vm.subnetId}`;
+                : `subnet-${vnetIdForSubnet}-${nd.subnetId}`;
               edges.push({
                 data: {
-                  id: `edge-${vmNodeId}-${subnetNodeId}`,
-                  source: vmNodeId,
+                  id: `edge-${computeNodeId}-${subnetNodeId}`,
+                  source: computeNodeId,
                   target: subnetNodeId,
                   relationship: 'uses'
                 }
@@ -1818,15 +1818,15 @@ export function mciDataToGraph(mciList, namespace) {
         }
 
         // SecurityGroup edges
-        if (allVmsShareSG && subGroupEdges.securityGroups.size <= 2) {
-          subGroupEdges.securityGroups.forEach(target => mciEdges.securityGroups.add(target));
+        if (allNodesShareSG && nodeGroupEdges.securityGroups.size <= 2) {
+          nodeGroupEdges.securityGroups.forEach(target => infraEdges.securityGroups.add(target));
           
-          if (!hasSingleSubGroup) {
-            subGroupEdges.securityGroups.forEach(target => {
+          if (!hasSingleNodeGroup) {
+            nodeGroupEdges.securityGroups.forEach(target => {
               edges.push({
                 data: {
-                  id: `edge-${subGroupNodeId}-${target}`,
-                  source: subGroupNodeId,
+                  id: `edge-${nodeGroupNodeId}-${target}`,
+                  source: nodeGroupNodeId,
                   target: target,
                   relationship: 'protected-by'
                 }
@@ -1834,15 +1834,15 @@ export function mciDataToGraph(mciList, namespace) {
             });
           }
         } else {
-          vms.forEach(vm => {
-            if (vm.securityGroupIds && Array.isArray(vm.securityGroupIds)) {
-              const vmNodeId = `vm-${mci.id}-${vm.id}`;
-              vm.securityGroupIds.forEach(sgId => {
+          nodes.forEach(nd => {
+            if (nd.securityGroupIds && Array.isArray(nd.securityGroupIds)) {
+              const computeNodeId = `node-${infra.id}-${nd.id}`;
+              nd.securityGroupIds.forEach(sgId => {
                 if (sgId) {
                   edges.push({
                     data: {
-                      id: `edge-${vmNodeId}-sg-${sgId}`,
-                      source: vmNodeId,
+                      id: `edge-${computeNodeId}-sg-${sgId}`,
+                      source: computeNodeId,
                       target: `sg-${sgId}`,
                       relationship: 'protected-by'
                     }
@@ -1854,15 +1854,15 @@ export function mciDataToGraph(mciList, namespace) {
         }
 
         // SSHKey edges
-        if (allVmsShareSSHKey) {
-          subGroupEdges.sshKeys.forEach(target => mciEdges.sshKeys.add(target));
+        if (allNodesShareSSHKey) {
+          nodeGroupEdges.sshKeys.forEach(target => infraEdges.sshKeys.add(target));
           
-          if (!hasSingleSubGroup) {
-            subGroupEdges.sshKeys.forEach(target => {
+          if (!hasSingleNodeGroup) {
+            nodeGroupEdges.sshKeys.forEach(target => {
               edges.push({
                 data: {
-                  id: `edge-${subGroupNodeId}-${target}`,
-                  source: subGroupNodeId,
+                  id: `edge-${nodeGroupNodeId}-${target}`,
+                  source: nodeGroupNodeId,
                   target: target,
                   relationship: 'uses'
                 }
@@ -1870,14 +1870,14 @@ export function mciDataToGraph(mciList, namespace) {
             });
           }
         } else {
-          vms.forEach(vm => {
-            if (vm.sshKeyId && vm.sshKeyId !== 'unknown') {
-              const vmNodeId = `vm-${mci.id}-${vm.id}`;
+          nodes.forEach(nd => {
+            if (nd.sshKeyId && nd.sshKeyId !== 'unknown') {
+              const computeNodeId = `node-${infra.id}-${nd.id}`;
               edges.push({
                 data: {
-                  id: `edge-${vmNodeId}-sshkey-${vm.sshKeyId}`,
-                  source: vmNodeId,
-                  target: `sshkey-${vm.sshKeyId}`,
+                  id: `edge-${computeNodeId}-sshkey-${nd.sshKeyId}`,
+                  source: computeNodeId,
+                  target: `sshkey-${nd.sshKeyId}`,
                   relationship: 'uses'
                 }
               });
@@ -1886,15 +1886,15 @@ export function mciDataToGraph(mciList, namespace) {
         }
 
         // Spec edges
-        if (allVmsShareSpec) {
-          subGroupEdges.specs.forEach(target => mciEdges.specs.add(target));
+        if (allNodesShareSpec) {
+          nodeGroupEdges.specs.forEach(target => infraEdges.specs.add(target));
           
-          if (!hasSingleSubGroup) {
-            subGroupEdges.specs.forEach(target => {
+          if (!hasSingleNodeGroup) {
+            nodeGroupEdges.specs.forEach(target => {
               edges.push({
                 data: {
-                  id: `edge-${subGroupNodeId}-${target}`,
-                  source: subGroupNodeId,
+                  id: `edge-${nodeGroupNodeId}-${target}`,
+                  source: nodeGroupNodeId,
                   target: target,
                   relationship: 'instance-of'
                 }
@@ -1902,14 +1902,14 @@ export function mciDataToGraph(mciList, namespace) {
             });
           }
         } else {
-          vms.forEach(vm => {
-            if (vm.specId && vm.specId !== 'unknown') {
-              const vmNodeId = `vm-${mci.id}-${vm.id}`;
+          nodes.forEach(nd => {
+            if (nd.specId && nd.specId !== 'unknown') {
+              const computeNodeId = `node-${infra.id}-${nd.id}`;
               edges.push({
                 data: {
-                  id: `edge-${vmNodeId}-spec-${vm.specId}`,
-                  source: vmNodeId,
-                  target: `spec-${vm.specId}`,
+                  id: `edge-${computeNodeId}-spec-${nd.specId}`,
+                  source: computeNodeId,
+                  target: `spec-${nd.specId}`,
                   relationship: 'instance-of'
                 }
               });
@@ -1918,15 +1918,15 @@ export function mciDataToGraph(mciList, namespace) {
         }
 
         // Image edges
-        if (allVmsShareImage) {
-          subGroupEdges.images.forEach(target => mciEdges.images.add(target));
+        if (allNodesShareImage) {
+          nodeGroupEdges.images.forEach(target => infraEdges.images.add(target));
           
-          if (!hasSingleSubGroup) {
-            subGroupEdges.images.forEach(target => {
+          if (!hasSingleNodeGroup) {
+            nodeGroupEdges.images.forEach(target => {
               edges.push({
                 data: {
-                  id: `edge-${subGroupNodeId}-${target}`,
-                  source: subGroupNodeId,
+                  id: `edge-${nodeGroupNodeId}-${target}`,
+                  source: nodeGroupNodeId,
                   target: target,
                   relationship: 'based-on'
                 }
@@ -1934,16 +1934,16 @@ export function mciDataToGraph(mciList, namespace) {
             });
           }
         } else {
-          vms.forEach(vm => {
-            if (vm.imageId && vm.imageId !== 'unknown') {
-              const vmNodeId = `vm-${mci.id}-${vm.id}`;
-              const vmImageData = vm.image || vm.imageSummary || {};
-              const isCustomImage = vmImageData.resourceType === 'customImage';
+          nodes.forEach(nd => {
+            if (nd.imageId && nd.imageId !== 'unknown') {
+              const computeNodeId = `node-${infra.id}-${nd.id}`;
+              const ndImageData = nd.image || nd.imageSummary || {};
+              const isCustomImage = ndImageData.resourceType === 'customImage';
 
               // Determine target node based on resourceType
               const targetNodeId = isCustomImage
-                ? `customimg-${vm.imageId}`
-                : `image-${vm.imageId}`;
+                ? `customimg-${nd.imageId}`
+                : `image-${nd.imageId}`;
 
               // Only create edge if target visibility is enabled
               const shouldCreateEdge = isCustomImage
@@ -1953,8 +1953,8 @@ export function mciDataToGraph(mciList, namespace) {
               if (shouldCreateEdge) {
                 edges.push({
                   data: {
-                    id: `edge-${vmNodeId}-${isCustomImage ? 'customimg' : 'image'}-${vm.imageId}`,
-                    source: vmNodeId,
+                    id: `edge-${computeNodeId}-${isCustomImage ? 'customimg' : 'image'}-${nd.imageId}`,
+                    source: computeNodeId,
                     target: targetNodeId,
                     relationship: 'based-on'
                   }
@@ -1963,96 +1963,96 @@ export function mciDataToGraph(mciList, namespace) {
             }
           });
         }
-      }); // end subGroups forEach
+      }); // end nodeGroups forEach
 
-      // Add invisible edges between subgroups in the same MCI to keep them close
-      for (let i = 0; i < subGroupNodeIds.length - 1; i++) {
+      // Add invisible edges between nodegroups in the same Infra to keep them close
+      for (let i = 0; i < nodeGroupNodeIds.length - 1; i++) {
         edges.push({
           data: {
-            id: `subgroup-link-${mciId}-${i}`,
-            source: subGroupNodeIds[i],
-            target: subGroupNodeIds[i + 1],
-            type: 'subgroup-sibling',
+            id: `nodegroup-link-${infraId}-${i}`,
+            source: nodeGroupNodeIds[i],
+            target: nodeGroupNodeIds[i + 1],
+            type: 'nodegroup-sibling',
             invisible: true
           }
         });
       }
 
-      // If single subgroup and all share same resources, create edges from MCI
-      if (hasSingleSubGroup) {
-        mciEdges.vNets.forEach(target => {
+      // If single nodegroup and all share same resources, create edges from Infra
+      if (hasSingleNodeGroup) {
+        infraEdges.vNets.forEach(target => {
           edges.push({
             data: {
-              id: `edge-${mciId}-${target}`,
-              source: mciId,
+              id: `edge-${infraId}-${target}`,
+              source: infraId,
               target: target,
               relationship: 'uses'
             }
           });
         });
-        mciEdges.subnets.forEach(target => {
+        infraEdges.subnets.forEach(target => {
           edges.push({
             data: {
-              id: `edge-${mciId}-${target}`,
-              source: mciId,
+              id: `edge-${infraId}-${target}`,
+              source: infraId,
               target: target,
               relationship: 'uses'
             }
           });
         });
-        mciEdges.securityGroups.forEach(target => {
+        infraEdges.securityGroups.forEach(target => {
           edges.push({
             data: {
-              id: `edge-${mciId}-${target}`,
-              source: mciId,
+              id: `edge-${infraId}-${target}`,
+              source: infraId,
               target: target,
               relationship: 'protected-by'
             }
           });
         });
-        mciEdges.sshKeys.forEach(target => {
+        infraEdges.sshKeys.forEach(target => {
           edges.push({
             data: {
-              id: `edge-${mciId}-${target}`,
-              source: mciId,
+              id: `edge-${infraId}-${target}`,
+              source: infraId,
               target: target,
               relationship: 'uses'
             }
           });
         });
-        mciEdges.specs.forEach(target => {
+        infraEdges.specs.forEach(target => {
           edges.push({
             data: {
-              id: `edge-${mciId}-${target}`,
-              source: mciId,
+              id: `edge-${infraId}-${target}`,
+              source: infraId,
               target: target,
               relationship: 'instance-of'
             }
           });
         });
-        mciEdges.images.forEach(target => {
+        infraEdges.images.forEach(target => {
           edges.push({
             data: {
-              id: `edge-${mciId}-${target}`,
-              source: mciId,
+              id: `edge-${infraId}-${target}`,
+              source: infraId,
               target: target,
               relationship: 'based-on'
             }
           });
         });
-        // Note: DataDisk edges are always from individual VMs, not consolidated to MCI level
+        // Note: DataDisk edges are always from individual VMs, not consolidated to Infra level
       }
     }
   });
 
-  // Add invisible edges between MCIs to keep them grouped
-  for (let i = 0; i < mciNodeIds.length - 1; i++) {
+  // Add invisible edges between Infras to keep them grouped
+  for (let i = 0; i < infraNodeIds.length - 1; i++) {
     edges.push({
       data: {
-        id: `mci-link-${i}`,
-        source: mciNodeIds[i],
-        target: mciNodeIds[i + 1],
-        type: 'mci-sibling',
+        id: `infra-link-${i}`,
+        source: infraNodeIds[i],
+        target: infraNodeIds[i + 1],
+        type: 'infra-sibling',
         invisible: true
       }
     });
@@ -2133,7 +2133,7 @@ export function mciDataToGraph(mciList, namespace) {
   
   // Count visible edges per node (excluding invisible sibling edges and location edges)
   const visibleEdgeCount = new Map();
-  const locationEdgeTypes = ['location', 'vm-location', 'vnet-location', 'sg-location', 'sshkey-location', 'disk-location', 'ns-anchor'];
+  const locationEdgeTypes = ['location', 'node-location', 'vnet-location', 'sg-location', 'sshkey-location', 'disk-location', 'ns-anchor'];
   
   edges.forEach(edge => {
     // Skip invisible edges and location edges (they connect to CSP/Region/Zone which is everywhere)
@@ -2169,7 +2169,7 @@ export function mciDataToGraph(mciList, namespace) {
   // Isolated resource groups (no visible edges) would float away from main cluster.
   // Connect first node of each isolated group to the most connected node (hub).
   
-  // Find the hub node (most visible connections, preferring MCI/SubGroup/VM)
+  // Find the hub node (most visible connections, preferring Infra/NodeGroup/Node)
   let hubNodeId = null;
   let hubConnectionCount = 0;
   
@@ -2180,10 +2180,10 @@ export function mciDataToGraph(mciList, namespace) {
     }
   });
   
-  // If no hub found (no visible edges at all), use first MCI node as fallback
+  // If no hub found (no visible edges at all), use first Infra node as fallback
   if (!hubNodeId) {
-    const mciNode = nodes.find(n => n.data.type === 'mci');
-    if (mciNode) hubNodeId = mciNode.data.id;
+    const infraNode = nodes.find(n => n.data.type === 'infra');
+    if (infraNode) hubNodeId = infraNode.data.id;
   }
   
   // Resource types that can be isolated
@@ -2215,9 +2215,9 @@ export function mciDataToGraph(mciList, namespace) {
   }
 
   // ========== Group Unused Resources ==========
-  // Find resources not connected to MCI/SubGroup/VM and group them under "Unused Resources"
+  // Find resources not connected to Infra/NodeGroup/Node and group them under "Unused Resources"
   if (nodeTypeVisibility.unusedGroup) {
-    const infraTypes = new Set(['mci', 'subgroup', 'vm']);
+    const infraTypes = new Set(['infra', 'nodegroup', 'node']);
     const resourceTypes = new Set(['vnet', 'subnet', 'securityGroup', 'sshKey', 'dataDisk']);
     const nodeMap = new Map(nodes.map(n => [n.data.id, n]));
     
@@ -2303,12 +2303,12 @@ export function mciDataToGraph(mciList, namespace) {
 
 /**
  * Update graph with new data
- * @param {Array} mciList - MCI data array
+ * @param {Array} infraList - Infra data array
  * @param {string} namespace - Current namespace
  * @param {boolean} force - Force update even if data unchanged
  * @param {Object} centralData - Full central data object for change detection
  */
-export function updateGraph(mciList, namespace, force = false, centralData = null) {
+export function updateGraph(infraList, namespace, force = false, centralData = null) {
   console.debug(`[ResourceGraph] updateGraph called: force=${force}, focusedNodeIds=${focusedNodeIds.size}, compact=${isCompactViewActive}`);
   
   if (!cy) {
@@ -2317,16 +2317,16 @@ export function updateGraph(mciList, namespace, force = false, centralData = nul
   }
 
   // Check if data has changed (skip update if unchanged)
-  // Hash all resource data to detect any changes (MCI, VNet, SG, SSHKey, etc.)
+  // Hash all resource data to detect any changes (Infra, VNet, SG, SSHKey, etc.)
   const dataForHash = centralData ? {
     namespace,
-    mciData: centralData.mciData,
+    infraData: centralData.infraData,
     vNet: centralData.vNet,
     securityGroup: centralData.securityGroup,
     sshKey: centralData.sshKey,
     dataDisk: centralData.dataDisk,
     customImage: centralData.customImage
-  } : { mciList, namespace };
+  } : { infraList, namespace };
   
   const newHash = generateDataHash(dataForHash);
   
@@ -2339,7 +2339,7 @@ export function updateGraph(mciList, namespace, force = false, centralData = nul
   lastDataHash = newHash;
 
   currentNamespace = namespace;
-  const graphData = mciDataToGraph(mciList, namespace);
+  const graphData = infraDataToGraph(infraList, namespace);
 
   // Build set of node IDs for edge validation
   const nodeIdSet = new Set(graphData.nodes.map(n => n.data.id));
@@ -2531,7 +2531,7 @@ export function focusOnNeighbors(node, reset = false) {
   const neighborDescendants = filteredNeighbors.descendants();
   
   // Get neighbors of parent nodes (for consolidated edges), excluding invisible edges
-  // When edges are consolidated at SubGroup/MCI level, VM/SubGroup nodes need to show parent's connections
+  // When edges are consolidated at NodeGroup/Infra level, Node/NodeGroup nodes need to show parent's connections
   let parentNeighbors = cy.collection();
   parents.forEach(parent => {
     const parentVisibleEdges = parent.connectedEdges().filter(edge => !edge.data('invisible'));
@@ -2546,8 +2546,8 @@ export function focusOnNeighbors(node, reset = false) {
   const filteredParentNeighbors = filterContainerNodes(parentNeighbors.nodes());
   const parentNeighborDescendants = filteredParentNeighbors.descendants();
   
-  // Get neighbors of child nodes (for compound nodes like MCI, SubGroup, VNet)
-  // When MCI is selected, show all connections of its SubGroups and VMs
+  // Get neighbors of child nodes (for compound nodes like Infra, NodeGroup, VNet)
+  // When Infra is selected, show all connections of its NodeGroups and VMs
   let childNeighbors = cy.collection();
   children.forEach(child => {
     const childVisibleEdges = child.connectedEdges().filter(edge => !edge.data('invisible'));
@@ -2968,9 +2968,9 @@ function showNodeInfo(node) {
  */
 function buildSummaryContent(type, originalData, data) {
   switch (type) {
-    case 'vm':
+    case 'node':
       // Build Spec Summary section
-      // Note: VM data uses 'spec' field (not 'specSummary')
+      // Note: Node data uses 'spec' field (not 'specSummary')
       const specInfo = originalData.spec || originalData.specSummary || {};
       const hasGpuSpec = specInfo.acceleratorType?.toLowerCase() === 'gpu' ||
                          specInfo.acceleratorModel ||
@@ -2994,7 +2994,7 @@ function buildSummaryContent(type, originalData, data) {
       }
 
       // Build Image Summary section
-      // Note: VM data uses 'image' field (not 'imageSummary')
+      // Note: Node data uses 'image' field (not 'imageSummary')
       const imageInfo = originalData.image || originalData.imageSummary || {};
       let imageSection = '';
       if (imageInfo.osType || imageInfo.osDistribution || imageInfo.cspImageName) {
@@ -3024,13 +3024,13 @@ function buildSummaryContent(type, originalData, data) {
         </div>
       `;
 
-    case 'mci':
+    case 'infra':
       return `
         <div style="text-align: left;">
           <p><strong>Name:</strong> ${originalData.name || 'N/A'}</p>
           <p><strong>ID:</strong> ${originalData.id || 'N/A'}</p>
           <p><strong>Status:</strong> <span style="color: ${getStatusColor(originalData.status)}">${originalData.status || 'N/A'}</span></p>
-          <p><strong>VMs:</strong> ${originalData.vm?.length || 0}</p>
+          <p><strong>Nodes:</strong> ${originalData.node?.length || 0}</p>
           <p><strong>Description:</strong> ${originalData.description || 'N/A'}</p>
           <p><strong>Install Mon Agent:</strong> ${originalData.installMonAgent || 'N/A'}</p>
         </div>
@@ -3100,12 +3100,12 @@ function buildSummaryContent(type, originalData, data) {
       return `
         <div style="text-align: left;">
           <p><strong>ID:</strong> ${originalData.id || 'N/A'}</p>
-          <p>📷 <strong>Type:</strong> Custom Image (VM Snapshot)</p>
+          <p>📷 <strong>Type:</strong> Custom Image (Node Snapshot)</p>
           ${originalData.osDistribution ? `<p>🖼️ <strong>OS:</strong> ${originalData.osDistribution}</p>` :
             originalData.osType ? `<p>🖼️ <strong>OS:</strong> ${originalData.osType}</p>` : ''}
           ${originalData.osArchitecture ? `<p>🏗️ <strong>Architecture:</strong> ${originalData.osArchitecture}</p>` : ''}
           ${originalData.cspImageName ? `<p>☁️ <strong>CSP Image:</strong> ${originalData.cspImageName}</p>` : ''}
-          ${originalData.sourceVmId ? `<p>💻 <strong>Source VM:</strong> ${originalData.sourceVmId}</p>` : ''}
+          ${originalData.sourceNodeId ? `<p>💻 <strong>Source Node:</strong> ${originalData.sourceNodeId}</p>` : ''}
           ${originalData.status ? `<p>📊 <strong>Status:</strong> ${originalData.status}</p>` : ''}
           ${originalData.connectionName ? `<p>🔗 <strong>Connection:</strong> ${originalData.connectionName}</p>` : ''}
         </div>
@@ -3121,7 +3121,7 @@ function buildSummaryContent(type, originalData, data) {
             ${originalData.acceleratorCount ? `<p style="margin: 4px 0;"><strong>Count:</strong> ${originalData.acceleratorCount}</p>` : ''}
             ${originalData.acceleratorMemoryGB ? `<p style="margin: 4px 0;"><strong>Memory:</strong> ${originalData.acceleratorMemoryGB} GB</p>` : ''}
           </div>
-          ${originalData.vmName ? `<p style="margin-top: 10px;">💻 <strong>Attached to VM:</strong> ${originalData.vmName}</p>` : ''}
+          ${originalData.ndName ? `<p style="margin-top: 10px;">💻 <strong>Attached to Node:</strong> ${originalData.ndName}</p>` : ''}
           ${originalData.cspSpecName ? `<p>🖥️ <strong>Spec:</strong> ${originalData.cspSpecName}</p>` : ''}
           ${originalData.costPerHour ? `<p>💰 <strong>Cost:</strong> $${originalData.costPerHour}/hr</p>` : ''}
         </div>
@@ -3163,12 +3163,12 @@ function buildSummaryContent(type, originalData, data) {
         </div>
       `;
 
-    case 'subgroup':
+    case 'nodegroup':
       return `
         <div style="text-align: left;">
           <p><strong>Name:</strong> ${originalData.name || data.label || 'N/A'}</p>
           <p><strong>ID:</strong> ${originalData.id || data.id || 'N/A'}</p>
-          <p><strong>VMs:</strong> ${originalData.vmCount || 'N/A'}</p>
+          <p><strong>Nodes:</strong> ${originalData.nodeCount || 'N/A'}</p>
         </div>
       `;
 
@@ -3292,9 +3292,9 @@ function getStatusColor(status) {
 function getTypeEmoji(type) {
   const emojis = {
     namespace: '📁',
-    mci: '🖥️',
-    subgroup: '📦',
-    vm: '💻',
+    infra: '🖥️',
+    nodegroup: '📦',
+    node: '💻',
     gpu: '🧮',
     vnet: '🌐',
     subnet: '🔀',
@@ -3330,12 +3330,12 @@ function showContextMenu(node, position) {
   ];
 
   // Type-specific menu items
-  if (type === 'vm' && originalData.publicIP) {
+  if (type === 'node' && originalData.publicIP) {
     menuItems.push({ label: '🔗 Copy Public IP', action: () => copyToClipboard(originalData.publicIP) });
   }
 
-  if (type === 'mci') {
-    menuItems.push({ label: '📋 Show VMs', action: () => highlightMciVms(node) });
+  if (type === 'infra') {
+    menuItems.push({ label: '📋 Show Nodes', action: () => highlightInfraNodes(node) });
   }
 
   // Create menu element
@@ -3453,13 +3453,13 @@ function copyToClipboard(text) {
   });
 }
 
-function highlightMciVms(mciNode) {
-  const vms = mciNode.descendants().filter('[type="vm"]');
-  if (vms.length > 0) {
+function highlightInfraNodes(infraNode) {
+  const nodes = infraNode.descendants().filter('[type="node"]');
+  if (nodes.length > 0) {
     cy.elements().addClass('faded');
-    vms.removeClass('faded').addClass('highlighted');
-    mciNode.removeClass('faded');
-    cy.fit(vms, 30);
+    nodes.removeClass('faded').addClass('highlighted');
+    infraNode.removeClass('faded');
+    cy.fit(nodes, 30);
   }
 }
 
@@ -3490,7 +3490,7 @@ function showTooltip(node, position) {
   if (status) {
     tooltipText += ` (${status})`;
   }
-  if (type === 'vm' && originalData.publicIP) {
+  if (type === 'node' && originalData.publicIP) {
     tooltipText += `\n${originalData.publicIP}`;
   }
   // GPU node: show accelerator details in tooltip
@@ -3558,12 +3558,12 @@ export function showResourceGraph() {
     }
 
     // Get current data
-    const mciData = window.cloudBaristaCentralData?.mciData || [];
+    const infraData = window.cloudBaristaCentralData?.infraData || [];
     const namespace = window.configNamespace || '';
     
     // Always try to update graph if namespace is available (even with empty data)
     if (namespace) {
-      updateGraph(mciData, namespace);
+      updateGraph(infraData, namespace);
     } else {
       // Show loading message if no namespace selected
       console.log('[ResourceGraph] No namespace selected, waiting for data...');
@@ -3638,7 +3638,7 @@ export function subscribeToUpdates() {
         const namespace = window.configNamespace || '';
         if (namespace) {
           // Pass full centralData for comprehensive change detection
-          updateGraph(centralData.mciData || [], namespace, false, centralData);
+          updateGraph(centralData.infraData || [], namespace, false, centralData);
         }
       }
     });
@@ -3735,15 +3735,15 @@ export function toggleNodeType(nodeType) {
   console.log(`[ResourceGraph] ${nodeType} visibility: ${newState ? 'ON' : 'OFF'}${affectedTypes.length > 1 ? ` (also affected: ${affectedTypes.slice(1).join(', ')})` : ''}`);
   
   // For visibility toggle, we need to regenerate the graph because:
-  // - When enabling: nodes don't exist yet (filtered out in mciDataToGraph)
+  // - When enabling: nodes don't exist yet (filtered out in infraDataToGraph)
   // - When disabling: we could hide with CSS, but regenerating is simpler and consistent
   // 
   // The key is to preserve focus state through the regeneration
   lastDataHash = null;  // Reset hash to force update
   
   const centralData = window.cloudBaristaCentralData;
-  if (centralData && centralData.mciData && currentNamespace) {
-    updateGraph(centralData.mciData, currentNamespace, true, centralData);
+  if (centralData && centralData.infraData && currentNamespace) {
+    updateGraph(centralData.infraData, currentNamespace, true, centralData);
   }
   
   // Return both the new state and affected types for UI update
