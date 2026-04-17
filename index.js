@@ -164,6 +164,11 @@ var k8sCoords = new Array(); // Store individual coordinates for text rendering
 var k8sClusterGroups = new Array(); // Store cluster group polygons (from clustergroup label)
 var k8sClusterGroupNames = new Array(); // Store cluster group names
 
+// Infra VNet cluster visualization storage
+var infraClusterPolygons = new Map(); // Map<infraId, Array of cluster polygons>
+var infraClusterNames = new Map();    // Map<infraId, Array of cluster vNetIds>
+var infraClusterColors = new Map();   // Map<clusterId, color>
+
 var cspListDisplayEnabled = document.getElementById("displayOn");
 var recommendPolicy = document.getElementById("recommendPolicy");
 var selectApp = document.getElementById("selectApp");
@@ -1682,6 +1687,16 @@ function getProviderIcon(providerName) {
 }
 
 
+// Helper function to convert hex color to RGB array [r, g, b]
+function hexToRgb(hex) {
+  // Remove # if present
+  const cleanHex = hex.replace('#', '');
+  const r = parseInt(cleanHex.substr(0, 2), 16);
+  const g = parseInt(cleanHex.substr(2, 2), 16);
+  const b = parseInt(cleanHex.substr(4, 2), 16);
+  return [r, g, b];
+}
+
 // Helper function to calculate luminance and determine contrast color
 function getContrastColor(hexColor) {
   // Remove # if present and handle alpha values
@@ -2301,6 +2316,59 @@ function makePolyArray(infraEntry, nodePoints) {
 
 function cross(a, b, o) {
   return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+}
+
+// Build a visible polygon ring for a cluster even when it has only 1-2 nodes.
+function buildClusterPolygonRing(clusterPoints, zoomLevel, radius) {
+  if (!clusterPoints || clusterPoints.length === 0) {
+    return null;
+  }
+
+  const safeZoom = Math.max(zoomLevel || 1, 1);
+  const delta = (2.5 / safeZoom) * radius;
+
+  // 1-node cluster: draw a small diamond around the point.
+  if (clusterPoints.length === 1) {
+    const [x, y] = clusterPoints[0];
+    return [
+      [x, y + delta],
+      [x + delta, y],
+      [x, y - delta],
+      [x - delta, y],
+      [x, y + delta]
+    ];
+  }
+
+  // 2-node cluster: draw a slim rectangle around the segment.
+  if (clusterPoints.length === 2) {
+    const [p1, p2] = clusterPoints;
+    const dx = p2[0] - p1[0];
+    const dy = p2[1] - p1[1];
+    const len = Math.hypot(dx, dy);
+
+    if (len < 1e-12) {
+      return buildClusterPolygonRing([p1], zoomLevel, radius);
+    }
+
+    const nx = -dy / len;
+    const ny = dx / len;
+    const halfWidth = delta * 0.9;
+
+    const a = [p1[0] + nx * halfWidth, p1[1] + ny * halfWidth];
+    const b = [p2[0] + nx * halfWidth, p2[1] + ny * halfWidth];
+    const c = [p2[0] - nx * halfWidth, p2[1] - ny * halfWidth];
+    const d = [p1[0] - nx * halfWidth, p1[1] - ny * halfWidth];
+
+    return [a, b, c, d, a];
+  }
+
+  // 3+ nodes: standard convex hull.
+  const hull = convexHull(clusterPoints.map((p) => [p[0], p[1]]));
+  if (!hull || hull.length < 3) {
+    return null;
+  }
+
+  return [...hull, hull[0]];
 }
 
 /**
@@ -3424,6 +3492,76 @@ function getInfra() {
               makePolyDot(infraEntry, vmGeo, nodeStatuses, nodeProviders, nodeCommandStatuses);
               vmGeo = convexHull(vmGeo);
               makePolyArray(infraEntry, vmGeo);
+
+              // Process cluster polygons (if cluster data exists)
+              if (item.cluster && Array.isArray(item.cluster) && item.cluster.length > 0) {
+                console.debug(`[ClusterPolygon] Processing ${item.cluster.length} clusters for infra: ${item.id}`);
+                
+                const clusterPolygons = [];
+                const clusterNames = [];
+                const clusterColorMap = new Map();
+                
+                // Generate distinct colors for clusters
+                const baseColors = ['#FF5733', '#33FF57', '#3357FF', '#FF33F7', '#F7FF33', '#33FFF7', '#FF8C33', '#8C33FF'];
+                
+                item.cluster.forEach((cluster, idx) => {
+                  const clusterColor = baseColors[idx % baseColors.length];
+                  clusterColorMap.set(cluster.id, clusterColor);
+                  clusterNames.push(cluster.id);
+                  
+                  // Collect node coordinates for this cluster
+                  const clusterNodeGeo = [];
+                  
+                  if (cluster.nodeIds && Array.isArray(cluster.nodeIds)) {
+                    cluster.nodeIds.forEach(nodeId => {
+                      // Find node in item.node array
+                      const node = item.node.find(n => n.id === nodeId);
+                      if (node && node.location && node.location.longitude !== undefined && node.location.latitude !== undefined) {
+                        // Calculate adjusted coordinates (same logic as main infra polygon)
+                        const locKey = Math.round(node.location.longitude * 2) / 2 + ',' + Math.round(node.location.latitude * 2) / 2;
+                        const idx = infraLocationIndex.get(item.id + ':' + locKey) || 0;
+                        const total = locationInfraCounter.get(locKey) || 1;
+                        const offset = getInfraLocationOffset(idx, total);
+                        const offX = (offset.ox / zoomLevel) * radius;
+                        const offY = (offset.oy / zoomLevel) * radius;
+                        
+                        clusterNodeGeo.push([
+                          node.location.longitude * 1 + offX,
+                          node.location.latitude * 1 + offY
+                        ]);
+                      }
+                    });
+                  }
+                  
+                  // Generate visible polygon for this cluster (supports 1/2/3+ nodes)
+                  if (clusterNodeGeo.length > 0) {
+                    const clusterRing = buildClusterPolygonRing(clusterNodeGeo, zoomLevel, radius);
+                    if (clusterRing && clusterRing.length >= 4) {
+                      const clusterPolygon = new Polygon([clusterRing]);
+                      clusterPolygon.set('fill', true);
+                      clusterPolygon.set('fillColor', clusterColor);
+                      clusterPolygon.set('fillOpacity', 0.18);
+                      clusterPolygon.set('stroke', true);
+                      clusterPolygon.set('strokeColor', clusterColor);
+                      clusterPolygon.set('strokeWidth', 2.5);
+                      clusterPolygon.set('strokeOpacity', 0.95);
+                      clusterPolygon.set('clusterNodeCount', clusterNodeGeo.length);
+                      clusterPolygon.set('name', `Cluster: ${cluster.id}`);
+                      
+                      clusterPolygons.push(clusterPolygon);
+                      console.debug(`[ClusterPolygon] Created polygon for cluster ${cluster.id}: ${clusterNodeGeo.length} nodes`);
+                    }
+                  }
+                });
+                
+                // Store cluster polygons and names for rendering
+                if (clusterPolygons.length > 0) {
+                  infraClusterPolygons.set(item.id, clusterPolygons);
+                  infraClusterNames.set(item.id, clusterNames);
+                  infraClusterColors.set(item.id, clusterColorMap);
+                  console.debug(`[ClusterPolygon] Stored ${clusterPolygons.length} cluster polygons for infra: ${item.id}`);
+                }
+              }
 
               infraRenderMap.set(item.id, infraEntry);
             }
@@ -19503,6 +19641,39 @@ function drawObjects(event) {
     vectorContext.drawGeometry(k8sClusterGroups[i]);
   }
 
+  // Draw Infra Cluster Geometry (clusters within infra)
+  if (infraClusterPolygons.size > 0) {
+    for (const [infraId, polygons] of infraClusterPolygons) {
+      if (Array.isArray(polygons)) {
+        polygons.forEach((polygon, idx) => {
+          // Get cluster color and info
+          const clusterNames = infraClusterNames.get(infraId) || [];
+          const clusterColors = infraClusterColors.get(infraId) || new Map();
+          const clusterName = clusterNames[idx] || `Cluster ${idx}`;
+          const clusterColor = clusterColors.get(clusterName) || '#FF5733';
+          
+          // Parse hex color to RGBA
+          const rgbColor = hexToRgb(clusterColor);
+          const clusterNodeCount = polygon.get('clusterNodeCount') || 0;
+          const isSmallCluster = clusterNodeCount <= 2;
+          const clusterStyle = new Style({
+            stroke: new Stroke({
+              width: isSmallCluster ? 3.2 : 2.8,
+              lineDash: isSmallCluster ? [6, 4] : undefined,
+              color: [...rgbColor, 0.9]
+            }),
+            fill: new Fill({
+              color: [...rgbColor, isSmallCluster ? 0.2 : 0.12]
+            })
+          });
+          
+          vectorContext.setStyle(clusterStyle);
+          vectorContext.drawGeometry(polygon);
+        });
+      }
+    }
+  }
+
   if (cspPointsCircle.length) {
     //console.log("cspPointsCircle.length:" +cspPointsCircle.length + "cspPointsCircle["+cspPointsCircle+"]")
     // Fix: Create MultiPoint with proper coordinate structure
@@ -19740,6 +19911,49 @@ function drawObjects(event) {
     vectorContext.drawGeometry(data.geometry);
   }
 
+  // Draw Infra Cluster labels (drawn last to appear on top of polygons)
+  if (infraClusterPolygons.size > 0) {
+    for (const [infraId, polygons] of infraClusterPolygons) {
+      if (Array.isArray(polygons)) {
+        const clusterNames = infraClusterNames.get(infraId) || [];
+        const clusterColors = infraClusterColors.get(infraId) || new Map();
+        
+        polygons.forEach((polygon, idx) => {
+          if (polygon && clusterNames[idx]) {
+            const extent = polygon.getExtent();
+            const centerX = (extent[0] + extent[2]) / 2;
+            const topY = extent[3]; // Use top of polygon
+            const labelPoint = new Point([centerX, topY]);
+            
+            const clusterName = clusterNames[idx];
+            const clusterColor = clusterColors.get(clusterName) || '#FF5733';
+            const rgbColor = hexToRgb(clusterColor);
+            
+            const clusterNodeCount = polygon.get('clusterNodeCount') || 0;
+            const infraClusterNameStyle = new Style({
+              text: new Text({
+                text: `${clusterName} (${clusterNodeCount})`,
+                font: "bold 14px sans-serif",
+                scale: 1.0,
+                offsetY: 0,
+                stroke: new Stroke({
+                  color: [255, 255, 255, 1],
+                  width: 2,
+                }),
+                fill: new Fill({
+                  color: rgbColor,
+                }),
+              }),
+            });
+            
+            vectorContext.setStyle(infraClusterNameStyle);
+            vectorContext.drawGeometry(labelPoint);
+          }
+        });
+      }
+    }
+  }
+
   // Draw K8s Cluster Group labels (drawn last to appear on top of polygons)
   for (i = k8sClusterGroups.length - 1; i >= 0; --i) {
     if (k8sClusterGroupNames[i]) {
@@ -19870,6 +20084,10 @@ function loadK8sClusterData() {
       k8sCoords = [];
       k8sClusterGroups = [];
       k8sClusterGroupNames = [];
+      // Clear previous Infra cluster data
+      infraClusterPolygons.clear();
+      infraClusterNames.clear();
+      infraClusterColors.clear();
       
       // Temporary object to group clusters by clustergroup label
       // Note: Using plain object instead of Map because 'Map' is overridden by OpenLayers import

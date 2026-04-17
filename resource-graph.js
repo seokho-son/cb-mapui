@@ -34,6 +34,7 @@ const GRAPH_CONFIG = {
   nodeColors: {
     namespace: '#e8eaed',    // Very light gray - namespace container
     infra: '#007bff',
+    cluster: '#17a2b8',      // Teal - infra cluster (vNet-based grouping)
     nodegroup: '#6610f2',   // Indigo - distinct from subnet
     node: '#28a745',       // Green - Node
     gpu: '#ff6b6b',        // Coral red - GPU/Accelerator (AI workload emphasis)
@@ -57,6 +58,7 @@ const GRAPH_CONFIG = {
   nodeShapes: {
     namespace: 'round-rectangle',
     infra: 'round-rectangle',
+    cluster: 'round-rectangle',
     nodegroup: 'round-rectangle',
     node: 'ellipse',
     gpu: 'rhomboid',        // Parallelogram shape - distinct for GPU
@@ -124,6 +126,7 @@ const GRAPH_CONFIG = {
         region: 4,
         zone: 3,
         infra: 4,
+        cluster: 3.5,
         nodegroup: 3,
         node: 2,
         gpu: 2,   // Same level as Node (attached to Node)
@@ -166,6 +169,7 @@ let isCompactViewActive = false; // Whether compact view is active
 const nodeTypeVisibility = {
   // Infrastructure (toggleable)
   infra: true,
+  cluster: true,
   nodegroup: true,
   node: true,
   gpu: true,  // GPU nodes attached to Nodes (enabled by default for AI workload visibility)
@@ -197,10 +201,11 @@ const nodeTypeDependencies = {
   csp: ['cspRoot'],
   // Network hierarchy: subnet -> vnet
   subnet: ['vnet'],
-  // Infrastructure hierarchy: gpu -> node -> nodegroup -> infra
-  gpu: ['node', 'nodegroup', 'infra'],
-  node: ['nodegroup', 'infra'],
-  nodegroup: ['infra']
+  // Infrastructure hierarchy: gpu -> node -> nodegroup -> cluster -> infra
+  gpu: ['node', 'nodegroup', 'cluster', 'infra'],
+  node: ['nodegroup', 'cluster', 'infra'],
+  nodegroup: ['cluster', 'infra'],
+  cluster: ['infra']
 };
 
 // Reverse dependencies: parent -> children
@@ -210,7 +215,8 @@ const nodeTypeChildren = {
   csp: ['region', 'zone'],
   region: ['zone'],
   vnet: ['subnet'],
-  infra: ['nodegroup', 'node', 'gpu'],
+  infra: ['cluster', 'nodegroup', 'node', 'gpu'],
+  cluster: ['nodegroup', 'node', 'gpu'],
   nodegroup: ['node', 'gpu'],
   node: ['gpu']
 };
@@ -228,6 +234,7 @@ function getNodeMaxWidth(type) {
     case 'infra':
     case 'csp':
       return 160;
+    case 'cluster':
     case 'nodegroup':
     case 'region':
       return 140;
@@ -269,7 +276,7 @@ function getMaxCharsPerLine(type) {
  * @returns {boolean} - True if compound node
  */
 function isCompoundNodeType(type) {
-  const compoundTypes = ['namespace', 'infra', 'nodegroup', 'vnet', 'cspRoot', 'csp', 'region'];
+  const compoundTypes = ['namespace', 'infra', 'cluster', 'nodegroup', 'vnet', 'cspRoot', 'csp', 'region'];
   return compoundTypes.includes(type);
 }
 
@@ -468,7 +475,7 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
 
   cy = cytoscape({
     container: container,
-    wheelSensitivity: 0.8,  // Smooth zoom control with mouse wheel (default: 1)
+    // wheelSensitivity: 0.8,  // Removed: custom value causes unnatural zoom with standard mice
     minZoom: GRAPH_CONFIG.zoom.min,
     maxZoom: GRAPH_CONFIG.zoom.max,
     
@@ -504,13 +511,11 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
             return Math.max(36, lines * 16 + 12);  // 16px per line + padding
           },
           'padding': '6px',
-          // Shadow effect using underlay - light from top-left, shadow to bottom-right
+          // Shadow effect using underlay
           'underlay-color': '#555',
           'underlay-opacity': 0.18,
           'underlay-padding': 2,
-          'underlay-shape': 'round-rectangle',
-          'underlay-offset-x': 4,
-          'underlay-offset-y': 4
+          'underlay-shape': 'round-rectangle'
         }
       },
       // Compound node (parent) style - manual line breaks for group labels
@@ -525,13 +530,11 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
           'border-width': 2,
           'border-color': 'data(color)',
           'padding': '20px',
-          // Shadow effect for compound nodes - light from top-left, shadow to bottom-right
+          // Shadow effect for compound nodes
           'underlay-color': '#666',
           'underlay-opacity': 0.15,
           'underlay-padding': 3,
-          'underlay-shape': 'round-rectangle',
-          'underlay-offset-x': 5,
-          'underlay-offset-y': 5
+          'underlay-shape': 'round-rectangle'
         }
       },
       // VNet compound node - distinct style
@@ -1311,6 +1314,37 @@ export function infraDataToGraph(infraList, namespace) {
 
     // Process Nodes
     if (infra.node && Array.isArray(infra.node)) {
+      console.debug(`[ResourceGraph] Processing infra "${infra.id}" with ${infra.node.length} nodes. First node sample:`, infra.node[0]);
+      
+      // Build cluster lookup: nodeGroupId -> clusterId
+      const nodeGroupToCluster = {};
+      if (infra.cluster && Array.isArray(infra.cluster)) {
+        infra.cluster.forEach(cluster => {
+          if (cluster.nodeGroupIds && Array.isArray(cluster.nodeGroupIds)) {
+            cluster.nodeGroupIds.forEach(ngId => {
+              nodeGroupToCluster[ngId] = cluster.id;
+            });
+          }
+        });
+        
+        // Create cluster compound nodes
+        if (nodeTypeVisibility.cluster) {
+          infra.cluster.forEach(cluster => {
+            const clusterNodeId = `cluster-${infra.id}-${cluster.id}`;
+            nodes.push({
+              data: {
+                id: clusterNodeId,
+                label: formatLabel('🗂️', cluster.id, getMaxCharsPerLine('cluster'), 'cluster'),
+                parent: infraId,
+                type: 'cluster',
+                color: GRAPH_CONFIG.nodeColors.cluster,
+                originalData: { id: cluster.id, type: 'cluster', infraId: infra.id, vNetId: cluster.vNetId, nodeCount: cluster.nodeCount, connectionNames: cluster.connectionNames }
+              }
+            });
+          });
+        }
+      }
+      
       // Group Nodes by nodeGroupId
       const nodeGroups = {};
       
@@ -1346,11 +1380,15 @@ export function infraDataToGraph(infraList, namespace) {
         
         // Create nodegroup node only if visibility enabled
         if (nodeTypeVisibility.nodegroup) {
+          const clusterOfThisGroup = nodeGroupToCluster[nodeGroupId];
+          const nodegroupParent = (clusterOfThisGroup && nodeTypeVisibility.cluster)
+            ? `cluster-${infra.id}-${clusterOfThisGroup}`
+            : infraId;
           nodes.push({
             data: {
               id: nodeGroupNodeId,
               label: formatLabel('📦', nodeGroupId, getMaxCharsPerLine('nodegroup'), 'nodegroup'),
-              parent: infraId,
+              parent: nodegroupParent,
               type: 'nodegroup',
               color: GRAPH_CONFIG.nodeColors.nodegroup,
               originalData: { id: nodeGroupId, type: 'nodegroup', infraId: infra.id, nodeCount: groupNodes.length }
@@ -1729,18 +1767,18 @@ export function infraDataToGraph(infraList, namespace) {
               });
             });
           }
-        }); // end nodes.forEach
+        }); // end groupNodes.forEach
 
         // VMs within NodeGroup rely on tiling for compact layout (no invisible edges)
 
         // Check if all VMs in nodegroup share the same resources
-        const allNodesShareVNet = nodeGroupEdges.vNets.size === 1 && nodes.every(nd => nd.vNetId || nd.subnetId);
-        const allNodesShareSubnet = nodeGroupEdges.subnets.size === 1 && nodes.every(nd => nd.subnetId);
+        const allNodesShareVNet = nodeGroupEdges.vNets.size === 1 && groupNodes.every(nd => nd.vNetId || nd.subnetId);
+        const allNodesShareSubnet = nodeGroupEdges.subnets.size === 1 && groupNodes.every(nd => nd.subnetId);
         const allNodesShareSG = nodeGroupEdges.securityGroups.size > 0 && 
-          nodes.every(nd => nd.securityGroupIds && nd.securityGroupIds.length > 0);
-        const allNodesShareSSHKey = nodeGroupEdges.sshKeys.size === 1 && nodes.every(nd => nd.sshKeyId);
-        const allNodesShareSpec = nodeGroupEdges.specs.size === 1 && nodes.every(nd => nd.specId);
-        const allNodesShareImage = nodeGroupEdges.images.size === 1 && nodes.every(nd => nd.imageId);
+          groupNodes.every(nd => nd.securityGroupIds && nd.securityGroupIds.length > 0);
+        const allNodesShareSSHKey = nodeGroupEdges.sshKeys.size === 1 && groupNodes.every(nd => nd.sshKeyId);
+        const allNodesShareSpec = nodeGroupEdges.specs.size === 1 && groupNodes.every(nd => nd.specId);
+        const allNodesShareImage = nodeGroupEdges.images.size === 1 && groupNodes.every(nd => nd.imageId);
 
         // Create edges from nodegroup if all VMs share the same target, else from individual VMs
         // VNet edges
@@ -1760,8 +1798,8 @@ export function infraDataToGraph(infraList, namespace) {
             });
           }
         } else {
-          // Create individual edges from VMs to VNet
-          nodes.forEach(nd => {
+          // Create individual edges from Nodes to VNet
+          groupNodes.forEach(nd => {
             const computeNodeId = `node-${infra.id}-${nd.id}`;
             const isVNetUnknown = !nd.vNetId || nd.vNetId === 'unknown';
             const vnetNodeId = isVNetUnknown ? 'vnet-unknown' : `vnet-${nd.vNetId}`;
@@ -1795,8 +1833,8 @@ export function infraDataToGraph(infraList, namespace) {
             });
           }
         } else {
-          // Create individual edges from VMs to Subnet
-          nodes.forEach(nd => {
+          // Create individual edges from Nodes to Subnet
+          groupNodes.forEach(nd => {
             if (nd.subnetId) {
               const computeNodeId = `node-${infra.id}-${nd.id}`;
               const isSubnetUnknown = nd.subnetId === 'unknown';
@@ -1834,7 +1872,8 @@ export function infraDataToGraph(infraList, namespace) {
             });
           }
         } else {
-          nodes.forEach(nd => {
+          // Create individual edges from Nodes to SecurityGroup
+          groupNodes.forEach(nd => {
             if (nd.securityGroupIds && Array.isArray(nd.securityGroupIds)) {
               const computeNodeId = `node-${infra.id}-${nd.id}`;
               nd.securityGroupIds.forEach(sgId => {
@@ -1870,7 +1909,7 @@ export function infraDataToGraph(infraList, namespace) {
             });
           }
         } else {
-          nodes.forEach(nd => {
+          groupNodes.forEach(nd => {
             if (nd.sshKeyId && nd.sshKeyId !== 'unknown') {
               const computeNodeId = `node-${infra.id}-${nd.id}`;
               edges.push({
@@ -1902,7 +1941,7 @@ export function infraDataToGraph(infraList, namespace) {
             });
           }
         } else {
-          nodes.forEach(nd => {
+          groupNodes.forEach(nd => {
             if (nd.specId && nd.specId !== 'unknown') {
               const computeNodeId = `node-${infra.id}-${nd.id}`;
               edges.push({
@@ -1934,7 +1973,7 @@ export function infraDataToGraph(infraList, namespace) {
             });
           }
         } else {
-          nodes.forEach(nd => {
+          groupNodes.forEach(nd => {
             if (nd.imageId && nd.imageId !== 'unknown') {
               const computeNodeId = `node-${infra.id}-${nd.id}`;
               const ndImageData = nd.image || nd.imageSummary || {};
@@ -2317,7 +2356,7 @@ export function updateGraph(infraList, namespace, force = false, centralData = n
   }
 
   // Check if data has changed (skip update if unchanged)
-  // Hash all resource data to detect any changes (Infra, VNet, SG, SSHKey, etc.)
+  // Hash only the actual resource data (exclude subscribers, lastUpdated, apiStatus etc.)
   const dataForHash = centralData ? {
     namespace,
     infraData: centralData.infraData,
@@ -2325,7 +2364,9 @@ export function updateGraph(infraList, namespace, force = false, centralData = n
     securityGroup: centralData.securityGroup,
     sshKey: centralData.sshKey,
     dataDisk: centralData.dataDisk,
-    customImage: centralData.customImage
+    customImage: centralData.customImage,
+    k8sCluster: centralData.k8sCluster,
+    vpn: centralData.vpn
   } : { infraList, namespace };
   
   const newHash = generateDataHash(dataForHash);
@@ -3160,6 +3201,16 @@ function buildSummaryContent(type, originalData, data) {
           ${originalData.osArchitecture ? `<p>🏗️ <strong>Architecture:</strong> ${originalData.osArchitecture}</p>` : ''}
           ${originalData.resourceType ? `<p>📦 <strong>Resource Type:</strong> ${originalData.resourceType}</p>` : ''}
           ${originalData.cspImageName ? `<p>☁️ <strong>CSP Image:</strong> ${originalData.cspImageName}</p>` : ''}
+        </div>
+      `;
+
+    case 'cluster':
+      return `
+        <div style="text-align: left;">
+          <p><strong>Cluster ID:</strong> ${originalData.id || data.id || 'N/A'}</p>
+          <p><strong>VNet ID:</strong> ${originalData.vNetId || 'N/A'}</p>
+          <p><strong>Nodes:</strong> ${originalData.nodeCount || 'N/A'}</p>
+          ${originalData.connectionNames ? `<p><strong>Connections:</strong> ${(originalData.connectionNames || []).join(', ')}</p>` : ''}
         </div>
       `;
 
