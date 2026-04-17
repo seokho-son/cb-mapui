@@ -201,11 +201,11 @@ const nodeTypeDependencies = {
   csp: ['cspRoot'],
   // Network hierarchy: subnet -> vnet
   subnet: ['vnet'],
-  // Infrastructure hierarchy: gpu -> node -> nodegroup -> cluster -> infra
-  gpu: ['node', 'nodegroup', 'cluster', 'infra'],
-  node: ['nodegroup', 'cluster', 'infra'],
-  nodegroup: ['cluster', 'infra'],
-  cluster: ['infra']
+  // Infrastructure hierarchy: gpu -> node -> nodegroup -> infra (cluster is optional)
+  gpu: ['node', 'nodegroup', 'infra'],
+  node: ['nodegroup', 'infra'],
+  nodegroup: ['infra'],
+  cluster: ['infra'],
 };
 
 // Reverse dependencies: parent -> children
@@ -216,7 +216,7 @@ const nodeTypeChildren = {
   region: ['zone'],
   vnet: ['subnet'],
   infra: ['cluster', 'nodegroup', 'node', 'gpu'],
-  cluster: ['nodegroup', 'node', 'gpu'],
+  cluster: [],
   nodegroup: ['node', 'gpu'],
   node: ['gpu']
 };
@@ -1314,8 +1314,6 @@ export function infraDataToGraph(infraList, namespace) {
 
     // Process Nodes
     if (infra.node && Array.isArray(infra.node)) {
-      console.debug(`[ResourceGraph] Processing infra "${infra.id}" with ${infra.node.length} nodes. First node sample:`, infra.node[0]);
-      
       // Build cluster lookup: nodeGroupId -> clusterId
       const nodeGroupToCluster = {};
       if (infra.cluster && Array.isArray(infra.cluster)) {
@@ -3007,6 +3005,16 @@ function showNodeInfo(node) {
 /**
  * Build summary HTML content for a node based on its type
  */
+function escapeHtml(value) {
+  const str = String(value ?? '');
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function buildSummaryContent(type, originalData, data) {
   switch (type) {
     case 'node':
@@ -3205,12 +3213,18 @@ function buildSummaryContent(type, originalData, data) {
       `;
 
     case 'cluster':
+      const clusterId = escapeHtml(originalData.id || data.id || 'N/A');
+      const vNetId = escapeHtml(originalData.vNetId || 'N/A');
+      const nodeCount = escapeHtml(originalData.nodeCount ?? 'N/A');
+      const connections = Array.isArray(originalData.connectionNames)
+        ? originalData.connectionNames.map(name => escapeHtml(name)).join(', ')
+        : '';
       return `
         <div style="text-align: left;">
-          <p><strong>Cluster ID:</strong> ${originalData.id || data.id || 'N/A'}</p>
-          <p><strong>VNet ID:</strong> ${originalData.vNetId || 'N/A'}</p>
-          <p><strong>Nodes:</strong> ${originalData.nodeCount || 'N/A'}</p>
-          ${originalData.connectionNames ? `<p><strong>Connections:</strong> ${(originalData.connectionNames || []).join(', ')}</p>` : ''}
+          <p><strong>Cluster ID:</strong> ${clusterId}</p>
+          <p><strong>VNet ID:</strong> ${vNetId}</p>
+          <p><strong>Nodes:</strong> ${nodeCount}</p>
+          ${connections ? `<p><strong>Connections:</strong> ${connections}</p>` : ''}
         </div>
       `;
 

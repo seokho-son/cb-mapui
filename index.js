@@ -165,13 +165,14 @@ var k8sClusterGroups = new Array(); // Store cluster group polygons (from cluste
 var k8sClusterGroupNames = new Array(); // Store cluster group names
 
 // Infra VNet cluster visualization storage
-var infraClusterPolygons = new Map(); // Map<infraId, Array of cluster polygons>
-var infraClusterNames = new Map();    // Map<infraId, Array of cluster vNetIds>
-var infraClusterColors = new Map();   // Map<clusterId, color>
+var infraClusterPolygons = new globalThis.Map(); // Map<infraId, Array<Polygon>>
+var infraClusterNames = new globalThis.Map();    // Map<infraId, Array<clusterId>>
+var infraClusterColors = new globalThis.Map();   // Map<infraId, Map<clusterId, color>>
 
 var cspListDisplayEnabled = document.getElementById("displayOn");
 var recommendPolicy = document.getElementById("recommendPolicy");
 var selectApp = document.getElementById("selectApp");
+var showInfraClusterLabels = false;
 
 // Configuration variables (previously from removed form elements)
 var configHostname = "localhost";
@@ -316,6 +317,7 @@ function showMapSettings() {
 
   // Generic icon mode
   const genericIconChecked = useGenericCspIcons ? 'checked' : '';
+  const infraClusterLabelChecked = showInfraClusterLabels ? 'checked' : '';
 
   // Build namespace options
   const nsOptions = cachedNamespaceList.map(ns => {
@@ -401,6 +403,17 @@ function showMapSettings() {
         }).join('')}
       </div>
     </div>
+
+    <hr class="settings-divider">
+
+    <div class="settings-section">
+      <div class="settings-label"><i class="fas fa-font"></i> Cluster Labels</div>
+      <label class="settings-toggle">
+        <input type="checkbox" id="infraClusterLabelToggle" ${infraClusterLabelChecked}>
+        <span>Show infra cluster labels on map</span>
+      </label>
+      <div class="settings-hint">Display cluster IDs above cluster boundaries</div>
+    </div>
   `,
     showCancelButton: true,
     confirmButtonText: 'Apply',
@@ -418,9 +431,16 @@ function showMapSettings() {
         return false;
       }
       const genericIconEnabled = document.getElementById('genericIconToggle')?.checked || false;
+      const infraClusterLabelEnabled = document.getElementById('infraClusterLabelToggle')?.checked || false;
       const selectedHolder = document.getElementById('settings-credentialHolder')?.value || configCredentialHolder;
       const selectedNs = document.getElementById('settings-namespace')?.value || configNamespace;
-      return { refreshInterval: selectedInterval.value, genericIcons: genericIconEnabled, credentialHolder: selectedHolder, namespace: selectedNs };
+      return {
+        refreshInterval: selectedInterval.value,
+        genericIcons: genericIconEnabled,
+        infraClusterLabels: infraClusterLabelEnabled,
+        credentialHolder: selectedHolder,
+        namespace: selectedNs
+      };
     }
   }).then((result) => {
     if (result.isConfirmed) {
@@ -433,6 +453,7 @@ function showMapSettings() {
       // Update generic icon mode
       useGenericCspIcons = result.value.genericIcons;
       window.useGenericCspIcons = useGenericCspIcons;
+      showInfraClusterLabels = result.value.infraClusterLabels;
       // Clear cached generic styles so they can be regenerated if needed
       Object.keys(cspGenericStyles).forEach(k => delete cspGenericStyles[k]);
       Object.keys(nodeGenericCloudStyleCache).forEach(k => delete nodeGenericCloudStyleCache[k]);
@@ -458,6 +479,7 @@ function showMapSettings() {
       statusParts.push(`Holder: ${result.value.credentialHolder}`);
       statusParts.push(`Refresh: ${newRefreshInterval}s`);
       if (useGenericCspIcons) statusParts.push('Generic icons: ON');
+      if (showInfraClusterLabels) statusParts.push('Cluster labels: ON');
       
       Swal.fire({
         icon: 'success',
@@ -3271,6 +3293,9 @@ function getInfra() {
 
         // Rebuild infraRenderMap from fresh API data
         infraRenderMap.clear();
+        infraClusterPolygons.clear();
+        infraClusterNames.clear();
+        infraClusterColors.clear();
         
         // Track how many Infras share each base location, so overlapping Infras get offset
         // Key: "roundedLon,roundedLat" → counter (incremented per Infra at that location)
@@ -3339,6 +3364,9 @@ function getInfra() {
                 vmGroupInfo.set(indices[gi], { indexInGroup: gi, groupSize: indices.length });
               }
             }
+
+            // Build per-Node render point lookup to keep cluster geometry aligned with node dots.
+            const nodeRenderPointById = new globalThis.Map();
 
             var validateNum = 0;
             for (j = 0; j < item.node.length; j++) {
@@ -3468,6 +3496,10 @@ function getInfra() {
                   nd.location.longitude * 1 + infraOffX2 + intraOffX2,
                   nd.location.latitude * 1 + infraOffY2 + intraOffY2,
                 ]);
+
+                if (nd.id) {
+                  nodeRenderPointById.set(nd.id, nodePoints[nodePoints.length - 1]);
+                }
               }
 
               var newName = item.name;
@@ -3495,11 +3527,11 @@ function getInfra() {
 
               // Process cluster polygons (if cluster data exists)
               if (item.cluster && Array.isArray(item.cluster) && item.cluster.length > 0) {
-                console.debug(`[ClusterPolygon] Processing ${item.cluster.length} clusters for infra: ${item.id}`);
+                debugLog.mapOp(`[ClusterPolygon] Processing ${item.cluster.length} clusters for infra: ${item.id}`);
                 
                 const clusterPolygons = [];
                 const clusterNames = [];
-                const clusterColorMap = new Map();
+                const clusterColorMap = new globalThis.Map();
                 
                 // Generate distinct colors for clusters
                 const baseColors = ['#FF5733', '#33FF57', '#3357FF', '#FF33F7', '#F7FF33', '#33FFF7', '#FF8C33', '#8C33FF'];
@@ -3514,21 +3546,9 @@ function getInfra() {
                   
                   if (cluster.nodeIds && Array.isArray(cluster.nodeIds)) {
                     cluster.nodeIds.forEach(nodeId => {
-                      // Find node in item.node array
-                      const node = item.node.find(n => n.id === nodeId);
-                      if (node && node.location && node.location.longitude !== undefined && node.location.latitude !== undefined) {
-                        // Calculate adjusted coordinates (same logic as main infra polygon)
-                        const locKey = Math.round(node.location.longitude * 2) / 2 + ',' + Math.round(node.location.latitude * 2) / 2;
-                        const idx = infraLocationIndex.get(item.id + ':' + locKey) || 0;
-                        const total = locationInfraCounter.get(locKey) || 1;
-                        const offset = getInfraLocationOffset(idx, total);
-                        const offX = (offset.ox / zoomLevel) * radius;
-                        const offY = (offset.oy / zoomLevel) * radius;
-                        
-                        clusterNodeGeo.push([
-                          node.location.longitude * 1 + offX,
-                          node.location.latitude * 1 + offY
-                        ]);
+                      const renderPoint = nodeRenderPointById.get(nodeId);
+                      if (renderPoint && renderPoint.length === 2) {
+                        clusterNodeGeo.push([renderPoint[0], renderPoint[1]]);
                       }
                     });
                   }
@@ -3549,7 +3569,7 @@ function getInfra() {
                       clusterPolygon.set('name', `Cluster: ${cluster.id}`);
                       
                       clusterPolygons.push(clusterPolygon);
-                      console.debug(`[ClusterPolygon] Created polygon for cluster ${cluster.id}: ${clusterNodeGeo.length} nodes`);
+                      debugLog.mapOp(`[ClusterPolygon] Created polygon for cluster ${cluster.id}: ${clusterNodeGeo.length} nodes`);
                     }
                   }
                 });
@@ -3559,7 +3579,7 @@ function getInfra() {
                   infraClusterPolygons.set(item.id, clusterPolygons);
                   infraClusterNames.set(item.id, clusterNames);
                   infraClusterColors.set(item.id, clusterColorMap);
-                  console.debug(`[ClusterPolygon] Stored ${clusterPolygons.length} cluster polygons for infra: ${item.id}`);
+                  debugLog.mapOp(`[ClusterPolygon] Stored ${clusterPolygons.length} cluster polygons for infra: ${item.id}`);
                 }
               }
 
@@ -19648,7 +19668,7 @@ function drawObjects(event) {
         polygons.forEach((polygon, idx) => {
           // Get cluster color and info
           const clusterNames = infraClusterNames.get(infraId) || [];
-          const clusterColors = infraClusterColors.get(infraId) || new Map();
+          const clusterColors = infraClusterColors.get(infraId) || new globalThis.Map();
           const clusterName = clusterNames[idx] || `Cluster ${idx}`;
           const clusterColor = clusterColors.get(clusterName) || '#FF5733';
           
@@ -19912,11 +19932,11 @@ function drawObjects(event) {
   }
 
   // Draw Infra Cluster labels (drawn last to appear on top of polygons)
-  if (infraClusterPolygons.size > 0) {
+  if (showInfraClusterLabels && infraClusterPolygons.size > 0) {
     for (const [infraId, polygons] of infraClusterPolygons) {
       if (Array.isArray(polygons)) {
         const clusterNames = infraClusterNames.get(infraId) || [];
-        const clusterColors = infraClusterColors.get(infraId) || new Map();
+        const clusterColors = infraClusterColors.get(infraId) || new globalThis.Map();
         
         polygons.forEach((polygon, idx) => {
           if (polygon && clusterNames[idx]) {
@@ -20084,10 +20104,6 @@ function loadK8sClusterData() {
       k8sCoords = [];
       k8sClusterGroups = [];
       k8sClusterGroupNames = [];
-      // Clear previous Infra cluster data
-      infraClusterPolygons.clear();
-      infraClusterNames.clear();
-      infraClusterColors.clear();
       
       // Temporary object to group clusters by clustergroup label
       // Note: Using plain object instead of Map because 'Map' is overridden by OpenLayers import
