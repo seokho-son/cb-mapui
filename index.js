@@ -1066,9 +1066,8 @@ function findNearestInfra(clickCoord) {
       if (data.geometry.getType() === 'Point') {
         infraCoord = data.geometry.getCoordinates();
       } else if (data.geometry.getType() === 'Polygon') {
-        // Use interior point to match OpenLayers text rendering anchor
-        const ip = data.geometry.getInteriorPoint().getCoordinates();
-        infraCoord = [ip[0], ip[1]];
+        // Use cached interior point to match OpenLayers text rendering anchor
+        infraCoord = data.anchorCoord || data.geometry.getInteriorPoint().getCoordinates();
       }
       
       if (infraCoord) {
@@ -2335,6 +2334,9 @@ function makePolyArray(infraEntry, nodePoints) {
   resourcePoints.push(nodePoints[0]);
   infraEntry.geometry = new Polygon([resourcePoints]);
   infraEntry.geo = new Polygon([resourcePoints]);
+  // Cache interior point for fast lookup in findNearestInfra (avoids recomputing on every pointermove)
+  const ip = infraEntry.geometry.getInteriorPoint().getCoordinates();
+  infraEntry.anchorCoord = [ip[0], ip[1]];
 }
 
 function cross(a, b, o) {
@@ -2356,10 +2358,11 @@ function buildClusterPolygonRing(clusterPoints, zoomLevel, radius) {
     const [cx, cy] = clusterPoints[0];
     const r = delta;
     const ring = [];
-    for (let i = 0; i <= circleSegments; i++) {
+    for (let i = 0; i < circleSegments; i++) {
       const angle = (2 * Math.PI * i) / circleSegments;
       ring.push([cx + r * Math.cos(angle), cy + r * Math.sin(angle)]);
     }
+    ring.push(ring[0]);
     return ring;
   }
 
@@ -2371,10 +2374,11 @@ function buildClusterPolygonRing(clusterPoints, zoomLevel, radius) {
     const halfDist = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / 2;
     const r = halfDist + delta * 0.5;
     const ring = [];
-    for (let i = 0; i <= circleSegments; i++) {
+    for (let i = 0; i < circleSegments; i++) {
       const angle = (2 * Math.PI * i) / circleSegments;
       ring.push([cx + r * Math.cos(angle), cy + r * Math.sin(angle)]);
     }
+    ring.push(ring[0]);
     return ring;
   }
 
