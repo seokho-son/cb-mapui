@@ -650,6 +650,16 @@ document.addEventListener('DOMContentLoaded', function() {
       // Update UI components
       updateStatistics();
       updateCharts();
+
+      // Blur any focused pagination button before table updates.
+      // DataTables _pagingDraw re-triggers focus() on the active page button
+      // whenever a draw or column-sizing event fires, which scrolls the
+      // viewport to that button.  Clearing focus here prevents that.
+      const active = document.activeElement;
+      if (active && active !== document.body && active.closest && active.closest('.dt-paging')) {
+        active.blur();
+      }
+
       updateInfraTable();
       updateNodeTable();
       updateAllResourceTables();
@@ -1004,6 +1014,13 @@ async function refreshDashboard() {
       updateStatistics();
       updateCharts();
       updateK8sCharts();
+
+      // Blur any focused pagination button before table updates (see subscription callback comment).
+      const activeEl = document.activeElement;
+      if (activeEl && activeEl !== document.body && activeEl.closest && activeEl.closest('.dt-paging')) {
+        activeEl.blur();
+      }
+
       updateInfraTable();
       updateNodeTable();
       updateAllResourceTables();
@@ -1241,7 +1258,7 @@ function updateStatistics() {
   
   const totalNode = nodeData.length;
   
-  // Get unique providers from both VMs and K8s clusters
+  // Get unique providers from both NODEs and K8s clusters
   const providers = new Set();
   
   // Add providers from Nodes
@@ -1621,7 +1638,7 @@ function updateProviderRegionChart() {
         region = nd.regionZoneInfoList[0].regionName;
       }
       
-      // Skip VMs without proper provider/region info
+      // Skip NODEs without proper provider/region info
       if (!provider || !region) {
         return;
       }
@@ -1631,7 +1648,7 @@ function updateProviderRegionChart() {
         providerRegionData[provider] = {};
       }
       
-      // Count VMs by provider and region
+      // Count NODEs by provider and region
       providerRegionData[provider][region] = (providerRegionData[provider][region] || 0) + 1;
     });
   }
@@ -2002,9 +2019,9 @@ function updateInfraTable() {
     
     // Get provider distribution for this Infra
     const providers = new Set();
-    let vmCount = 0;
+    let nodeCount = 0;
     if (infra.node && Array.isArray(infra.node)) {
-      vmCount = infra.node.length;
+      nodeCount = infra.node.length;
       infra.node.forEach(nd => {
         if (nd.connectionConfig && nd.connectionConfig.providerName) {
           providers.add(nd.connectionConfig.providerName);
@@ -2053,7 +2070,7 @@ function updateInfraTable() {
       <td title="${infra.id}"><strong><a class="item-id-link" onclick="viewInfraDetails('${_escapeHtml(infra.id)}')">${smartTruncate(infra.id, 'id')}</a></strong></td>
       <td><span class="status-badge status-${statusClass}">${infra.status}</span></td>
       <td title="${providerList || 'N/A'}">${smartTruncate(providerList || 'N/A', 'provider')}</td>
-      <td>${vmCount}</td>
+      <td>${nodeCount}</td>
       <td title="${infra.targetAction || 'None'}">${smartTruncate(infra.targetAction || 'None', 'default')}</td>
       <td title="${infra.description || 'N/A'}">${smartTruncate(infra.description || 'N/A', 'description')}</td>
     `;
@@ -2115,11 +2132,11 @@ function selectInfra(infraId) {
   
   // Update Node section header - use safer selector approach
   const nodeTable = document.getElementById('nodeTable');
-  const vmContentCard = nodeTable ? nodeTable.closest('.content-card') : null;
-  const vmHeader = vmContentCard ? vmContentCard.querySelector('h5') : null;
+  const nodeContentCard = nodeTable ? nodeTable.closest('.content-card') : null;
+  const nodeHeader = nodeContentCard ? nodeContentCard.querySelector('h5') : null;
   
-  if (vmHeader) {
-    vmHeader.innerHTML = `<i class="fas fa-server me-2"></i> Node Details - ${infraId} <span class="badge badge-secondary ml-2" id="nodeCountBadge">0</span>`;
+  if (nodeHeader) {
+    nodeHeader.innerHTML = `<i class="fas fa-server me-2"></i> Node Details - ${infraId} <span class="badge badge-secondary ml-2" id="nodeCountBadge">0</span>`;
   } else {
     console.warn('Node header not found in selectInfra, trying alternative selector');
     // Fallback: try to find the header directly
@@ -2136,7 +2153,7 @@ function selectInfra(infraId) {
   updateShowAllButton();
 }
 
-// Show all VMs (clear Infra selection)
+// Show all NODEs (clear Infra selection)
 function showAllNodes() {
   selectedInfraId = null;
   console.log('Showing all Nodes, selectedInfraId set to:', selectedInfraId);
@@ -2146,11 +2163,11 @@ function showAllNodes() {
   
   // Update Node section header - use safer selector approach
   const nodeTable = document.getElementById('nodeTable');
-  const vmContentCard = nodeTable ? nodeTable.closest('.content-card') : null;
-  const vmHeader = vmContentCard ? vmContentCard.querySelector('h5') : null;
+  const nodeContentCard = nodeTable ? nodeTable.closest('.content-card') : null;
+  const nodeHeader = nodeContentCard ? nodeContentCard.querySelector('h5') : null;
   
-  if (vmHeader) {
-    vmHeader.innerHTML = `<i class="fas fa-server me-2"></i> Node Details <span class="badge badge-secondary ml-2" id="nodeCountBadge">0</span>`;
+  if (nodeHeader) {
+    nodeHeader.innerHTML = `<i class="fas fa-server me-2"></i> Node Details <span class="badge badge-secondary ml-2" id="nodeCountBadge">0</span>`;
   } else {
     console.warn('Node header not found, trying alternative selector');
     // Fallback: try to find the header directly
@@ -2195,13 +2212,13 @@ function updateNodeTable() {
   const tbody = document.getElementById('nodeTableBody');
   destroyDataTable('nodeTable');
   tbody.innerHTML = '';
-  const vmCountElement = document.getElementById('nodeCountBadge');
-  if (vmCountElement) {
-    vmCountElement.textContent = filteredNodes.length;
+  const nodeCountElement = document.getElementById('nodeCountBadge');
+  if (nodeCountElement) {
+    nodeCountElement.textContent = filteredNodes.length;
   }
   
   if (filteredNodes.length === 0 && selectedInfraId) {
-    // Show message when no VMs found for selected Infra
+    // Show message when no NODEs found for selected Infra
     const row = document.createElement('tr');
     row.innerHTML = `
       <td colspan="9" class="text-center text-muted py-4">
@@ -3191,7 +3208,7 @@ function updateK8sNodeGroupTable() {
     const nodesInfo = `${actualNodes}/${desiredNodes}`;
     
     // Spec ID - using actual field name  
-    const specId = nodeGroup.specId || nodeGroup.vmSpecName || 'N/A';
+    const specId = nodeGroup.specId || nodeGroup.nodeSpecName || 'N/A';
     
     // Image ID - use actual field name
     const imageId = nodeGroup.imageId || 'N/A';
@@ -4599,7 +4616,7 @@ function initializeDataTables() {
     {
       id: 'infraTable',
       config: {
-        pageLength: 25,
+        pageLength: 100,
         autoWidth: false,
         dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
@@ -4633,7 +4650,7 @@ function initializeDataTables() {
     {
       id: 'nodeTable',
       config: {
-        pageLength: 25,
+        pageLength: 100,
         autoWidth: false,
         dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
@@ -4667,7 +4684,7 @@ function initializeDataTables() {
     {
       id: 'vNetTable',
       config: {
-        pageLength: 25,
+        pageLength: 100,
         autoWidth: false,
         dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
@@ -4693,7 +4710,7 @@ function initializeDataTables() {
     {
       id: 'securityGroupTable',
       config: {
-        pageLength: 25,
+        pageLength: 100,
         autoWidth: false,
         dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
@@ -4719,7 +4736,7 @@ function initializeDataTables() {
     {
       id: 'sshKeyTable',
       config: {
-        pageLength: 25,
+        pageLength: 100,
         autoWidth: false,
         dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
@@ -4745,7 +4762,7 @@ function initializeDataTables() {
     {
       id: 'k8sClusterTable',
       config: {
-        pageLength: 25,
+        pageLength: 100,
         autoWidth: false,
         dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
@@ -4771,7 +4788,7 @@ function initializeDataTables() {
     {
       id: 'vpnTable',
       config: {
-        pageLength: 25,
+        pageLength: 100,
         autoWidth: false,
         dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
@@ -4797,7 +4814,7 @@ function initializeDataTables() {
     {
       id: 'k8sNodeGroupTable',
       config: {
-        pageLength: 25,
+        pageLength: 100,
         autoWidth: false,
         dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
@@ -4817,7 +4834,7 @@ function initializeDataTables() {
     {
       id: 'dataDiskTable',
       config: {
-        pageLength: 25,
+        pageLength: 100,
         autoWidth: false,
         dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
@@ -4837,7 +4854,7 @@ function initializeDataTables() {
     {
       id: 'customImageTable',
       config: {
-        pageLength: 25,
+        pageLength: 100,
         autoWidth: false,
         dom: '<"row"<"col-sm-12"l>>' +
              '<"row"<"col-sm-12"tr>>' +
@@ -4926,7 +4943,6 @@ function tableHasDataRows(tableId) {
   return false;
 }
 
-// Function to reinitialize a single DataTable after innerHTML update
 // Destroy existing DataTable instance (must be called BEFORE updating tbody content)
 function destroyDataTable(tableId) {
   if (typeof $ === 'undefined' || !$.fn.DataTable) return;
@@ -4965,7 +4981,7 @@ function initDataTable(tableId) {
     }
 
     const config = {
-      pageLength: 25,
+      pageLength: 100,
       autoWidth: false,
       searching: true,
       ordering: true,
@@ -5020,8 +5036,8 @@ function reinitializeDataTablesIfNeeded() {
     const table = dataTableInstances[tableId];
     if (table) {
       try {
-        // Trigger a redraw to refresh the table
-        table.draw();
+        // Trigger a redraw without resetting pagination
+        table.draw(false);
       } catch (error) {
         console.warn(`[DataTables] Failed to redraw table ${tableId}:`, error);
       }
@@ -5274,9 +5290,9 @@ function setupTableEnhancements() {
     `,
     node: `
       <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('node')" title="View Details"><i class="fas fa-eye"></i> View</button>
-      <button class="btn btn-sm btn-outline-success" onclick="bulkControlVm('resume')" title="Resume"><i class="fas fa-play"></i> Resume</button>
-      <button class="btn btn-sm btn-outline-warning" onclick="bulkControlVm('suspend')" title="Suspend"><i class="fas fa-pause"></i> Suspend</button>
-      <button class="btn btn-sm btn-outline-info" onclick="bulkControlVm('restart')" title="Restart"><i class="fas fa-sync-alt"></i> Restart</button>
+      <button class="btn btn-sm btn-outline-success" onclick="bulkControlNode('resume')" title="Resume"><i class="fas fa-play"></i> Resume</button>
+      <button class="btn btn-sm btn-outline-warning" onclick="bulkControlNode('suspend')" title="Suspend"><i class="fas fa-pause"></i> Suspend</button>
+      <button class="btn btn-sm btn-outline-info" onclick="bulkControlNode('restart')" title="Restart"><i class="fas fa-sync-alt"></i> Restart</button>
       <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('node')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
     `,
     k8sCluster: `
@@ -5404,7 +5420,7 @@ async function bulkControlInfra(action) {
 }
 
 // Bulk control Node (resume/suspend/restart)
-async function bulkControlVm(action) {
+async function bulkControlNode(action) {
   const selected = getSelectedItems('node');
   if (selected.length === 0) return;
 
@@ -5644,6 +5660,6 @@ window.toggleSelectAll = toggleSelectAll;
 window.filterTableRows = filterTableRows;
 window.bulkViewDetails = bulkViewDetails;
 window.bulkControlInfra = bulkControlInfra;
-window.bulkControlVm = bulkControlVm;
+window.bulkControlNode = bulkControlNode;
 window.bulkDeleteItems = bulkDeleteItems;
 window.clearTableSelection = clearTableSelection;
