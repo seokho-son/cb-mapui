@@ -1066,8 +1066,9 @@ function findNearestInfra(clickCoord) {
       if (data.geometry.getType() === 'Point') {
         infraCoord = data.geometry.getCoordinates();
       } else if (data.geometry.getType() === 'Polygon') {
-        const extent = data.geometry.getExtent();
-        infraCoord = [(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2];
+        // Use interior point to match OpenLayers text rendering anchor
+        const ip = data.geometry.getInteriorPoint().getCoordinates();
+        infraCoord = [ip[0], ip[1]];
       }
       
       if (infraCoord) {
@@ -2348,40 +2349,33 @@ function buildClusterPolygonRing(clusterPoints, zoomLevel, radius) {
 
   const safeZoom = Math.max(zoomLevel || 1, 1);
   const delta = (2.5 / safeZoom) * radius;
+  const circleSegments = 32;
 
-  // 1-node cluster: draw a small diamond around the point.
+  // 1-node cluster: draw a circle centered on the point.
   if (clusterPoints.length === 1) {
-    const [x, y] = clusterPoints[0];
-    return [
-      [x, y + delta],
-      [x + delta, y],
-      [x, y - delta],
-      [x - delta, y],
-      [x, y + delta]
-    ];
+    const [cx, cy] = clusterPoints[0];
+    const r = delta;
+    const ring = [];
+    for (let i = 0; i <= circleSegments; i++) {
+      const angle = (2 * Math.PI * i) / circleSegments;
+      ring.push([cx + r * Math.cos(angle), cy + r * Math.sin(angle)]);
+    }
+    return ring;
   }
 
-  // 2-node cluster: draw a slim rectangle around the segment.
+  // 2-node cluster: draw a circle enclosing both nodes.
   if (clusterPoints.length === 2) {
     const [p1, p2] = clusterPoints;
-    const dx = p2[0] - p1[0];
-    const dy = p2[1] - p1[1];
-    const len = Math.hypot(dx, dy);
-
-    if (len < 1e-12) {
-      return buildClusterPolygonRing([p1], zoomLevel, radius);
+    const cx = (p1[0] + p2[0]) / 2;
+    const cy = (p1[1] + p2[1]) / 2;
+    const halfDist = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / 2;
+    const r = halfDist + delta * 0.5;
+    const ring = [];
+    for (let i = 0; i <= circleSegments; i++) {
+      const angle = (2 * Math.PI * i) / circleSegments;
+      ring.push([cx + r * Math.cos(angle), cy + r * Math.sin(angle)]);
     }
-
-    const nx = -dy / len;
-    const ny = dx / len;
-    const halfWidth = delta * 0.9;
-
-    const a = [p1[0] + nx * halfWidth, p1[1] + ny * halfWidth];
-    const b = [p2[0] + nx * halfWidth, p2[1] + ny * halfWidth];
-    const c = [p2[0] - nx * halfWidth, p2[1] - ny * halfWidth];
-    const d = [p1[0] - nx * halfWidth, p1[1] - ny * halfWidth];
-
-    return [a, b, c, d, a];
+    return ring;
   }
 
   // 3+ nodes: standard convex hull.
@@ -3522,8 +3516,11 @@ function getInfra() {
 
               // Build Node dots and polygon geometry into the entry
               makePolyDot(infraEntry, vmGeo, nodeStatuses, nodeProviders, nodeCommandStatuses);
-              vmGeo = convexHull(vmGeo);
-              makePolyArray(infraEntry, vmGeo);
+              // convexHull sorts in-place; pass a copy so vmGeo (stored in
+              // geometryPoints.nodePoints by reference) keeps the original
+              // item.node order aligned with nodeProviders/nodeStatuses.
+              const hullGeo = convexHull([...vmGeo]);
+              makePolyArray(infraEntry, hullGeo);
 
               // Process cluster polygons (if cluster data exists)
               if (item.cluster && Array.isArray(item.cluster) && item.cluster.length > 0) {
