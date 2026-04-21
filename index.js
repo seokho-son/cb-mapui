@@ -8742,15 +8742,46 @@ function getRecommendedSpec(idx, latitude, longitude) {
             }),
 
             didOpen: () => {
-              // Call specImagePairReview API
+              // Helper: read current dropdown values for refining the review.
+              // Empty/"default" rootDiskType means "let CSP/Spider pick its
+              // default"; the backend treats both as the same sentinel.
+              const getReviewRefinements = () => {
+                const rdtEl = document.getElementById('rootDiskTypeSelect');
+                const zoneEl = document.getElementById('zoneSelect');
+                return {
+                  rootDiskType: rdtEl ? rdtEl.value : '',
+                  zone: zoneEl ? zoneEl.value : ''
+                };
+              };
+
+              // Call specImagePairReview API. Re-fires whenever rootDiskType
+              // or zone changes so the user sees real-time stock feedback.
+              // A monotonic request counter ensures that out-of-order responses
+              // (a slower earlier request resolving after a newer one) cannot
+              // overwrite the UI with stale validity/suggestions.
+              let reviewRequestSeq = 0;
               const reviewSpecImagePair = async () => {
                 const statusEl = document.getElementById('specImageReviewStatus');
                 const spinnerEl = document.getElementById('specImageReviewSpinner');
                 const detailsEl = document.getElementById('specImageReviewDetails');
                 const sectionEl = document.getElementById('specImageReviewSection');
-                
+
+                if (!statusEl || !detailsEl || !sectionEl) return;
+
+                const mySeq = ++reviewRequestSeq;
+
+                if (spinnerEl) spinnerEl.style.display = '';
+                statusEl.textContent = 'Checking...';
+                statusEl.style.backgroundColor = '#6c757d';
+                statusEl.style.color = '#fff';
+
+                const refinements = getReviewRefinements();
+
                 try {
-                  const response = await fetch(`http://${hostname}:${port}/tumblebug/specImagePairReview`, {
+                  // Match the page protocol so HTTPS deployments don't trip
+                  // mixed-content blocking on this fetch.
+                  const reviewApiProtocol = window.location.protocol === 'https:' ? 'https' : 'http';
+                  const response = await fetch(`${reviewApiProtocol}://${hostname}:${port}/tumblebug/specImagePairReview`, {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
@@ -8758,7 +8789,9 @@ function getRecommendedSpec(idx, latitude, longitude) {
                     },
                     body: JSON.stringify({
                       specId: selectedSpec.id,
-                      imageId: selectedImageId
+                      imageId: selectedImageId,
+                      rootDiskType: refinements.rootDiskType,
+                      zone: refinements.zone
                     })
                   });
                   
@@ -8767,11 +8800,26 @@ function getRecommendedSpec(idx, latitude, longitude) {
                   }
                   
                   const result = await response.json();
-                  spinnerEl.style.display = 'none';
+                  // Drop stale responses: a newer review has been kicked off
+                  // since this one started.
+                  if (mySeq !== reviewRequestSeq) return;
+                  if (spinnerEl) spinnerEl.style.display = 'none';
                   
                   // Helper function to escape HTML (prevent XSS)
                   const escapeHtml = (str) => $('<div>').text(str).html();
-                  
+
+                  // Build a "suggestion" line from availability hints.
+                  const suggestionParts = [];
+                  if (result.suggestedZone) {
+                    suggestionParts.push('Suggested zone: ' + escapeHtml(result.suggestedZone));
+                  }
+                  if (result.suggestedSystemDisk) {
+                    suggestionParts.push('Suggested rootDiskType: ' + escapeHtml(result.suggestedSystemDisk));
+                  }
+                  const suggestionLine = suggestionParts.length > 0
+                    ? '<br><span style="color:#0c5460;">💡 ' + suggestionParts.join(' · ') + '</span>'
+                    : '';
+
                   if (result.isValid) {
                     statusEl.textContent = '✓ Valid';
                     statusEl.style.backgroundColor = '#28a745';
@@ -8783,12 +8831,11 @@ function getRecommendedSpec(idx, latitude, longitude) {
                     if (result.message) details.push(escapeHtml(result.message));
                     if (result.estimatedCost) details.push('Cost: ' + escapeHtml(result.estimatedCost));
                     if (result.info && result.info.length > 0) details.push(...result.info.map(escapeHtml));
+                    let html = details.join(' | ');
                     if (result.warnings && result.warnings.length > 0) {
-                      detailsEl.innerHTML = details.join(' | ') + 
-                        '<br><span style="color:#856404;">⚠ ' + result.warnings.map(escapeHtml).join('<br>⚠ ') + '</span>';
-                    } else {
-                      detailsEl.innerHTML = details.join(' | ');
+                      html += '<br><span style="color:#856404;">⚠ ' + result.warnings.map(escapeHtml).join('<br>⚠ ') + '</span>';
                     }
+                    detailsEl.innerHTML = html + suggestionLine;
                   } else {
                     statusEl.textContent = '✗ Risk Detected';
                     statusEl.style.backgroundColor = '#dc3545';
@@ -8804,10 +8851,11 @@ function getRecommendedSpec(idx, latitude, longitude) {
                     if (errors.length > 0) {
                       content += '<br><span style="color:#dc3545;">' + errors.map(escapeHtml).join('<br>') + '</span>';
                     }
-                    detailsEl.innerHTML = content;
+                    detailsEl.innerHTML = content + suggestionLine;
                   }
                 } catch (error) {
-                  spinnerEl.style.display = 'none';
+                  if (mySeq !== reviewRequestSeq) return;
+                  if (spinnerEl) spinnerEl.style.display = 'none';
                   statusEl.textContent = '⚠ Check Failed';
                   statusEl.style.backgroundColor = '#ffc107';
                   statusEl.style.color = '#212529';
@@ -8815,13 +8863,39 @@ function getRecommendedSpec(idx, latitude, longitude) {
                   detailsEl.style.color = '#856404';
                 }
               };
-              reviewSpecImagePair();
 
               // Populate RootDiskType dropdown based on CSP (using common helper)
               populateRootDiskTypeSelect('rootDiskTypeSelect', selectedSpec.providerName, selectedSpec.rootDiskType || 'default');
 
               // Fetch and populate Zone dropdown using the new availableZonesForSpec API (GET method)
-              populateZoneSelect('zoneSelect', 'zoneLoadingSpinner', selectedSpec.id, '', 'zoneStatusMessage');
+              const zonePopulatePromise = populateZoneSelect('zoneSelect', 'zoneLoadingSpinner', selectedSpec.id, '', 'zoneStatusMessage');
+
+              // Re-fire the pair review whenever the user refines rootDiskType
+              // or zone, so the suggestion/warning reflects the actual choice.
+              // Debounced to avoid bursting the API on rapid changes.
+              let reviewDebounce = null;
+              const scheduleReview = () => {
+                if (reviewDebounce) clearTimeout(reviewDebounce);
+                reviewDebounce = setTimeout(reviewSpecImagePair, 250);
+              };
+              const rdtEl = document.getElementById('rootDiskTypeSelect');
+              if (rdtEl) rdtEl.addEventListener('change', scheduleReview);
+              const zoneEl = document.getElementById('zoneSelect');
+              if (zoneEl) zoneEl.addEventListener('change', scheduleReview);
+
+              // Initial review (uses whatever default values the dropdowns have).
+              reviewSpecImagePair();
+
+              // populateZoneSelect is async; once zones are loaded the select
+              // may have a non-empty default value. Re-run the review so the
+              // first result reflects the actually-selected zone instead of
+              // the empty placeholder.
+              if (zonePopulatePromise && typeof zonePopulatePromise.then === 'function') {
+                zonePopulatePromise.then(() => {
+                  const zSel = document.getElementById('zoneSelect');
+                  if (zSel && zSel.value) scheduleReview();
+                }).catch(() => { /* populateZoneSelect logs its own errors */ });
+              }
 
               // Focus on the Node count input for better user experience
               const vmCountInput = document.getElementById('ndCount');
