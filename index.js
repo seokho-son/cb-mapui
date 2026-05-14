@@ -601,6 +601,7 @@ window.updateMapConnectionStatus = updateMapConnectionStatus;
 window.showMapSettings = showMapSettings;
 window.showMapRefreshIndicator = showMapRefreshIndicator;
 window.performMapCleanup = performMapCleanup;
+window.getInfra = getInfra;
 
 const typeStringConnection = "connection";
 const typeStringProvider = "provider";
@@ -14901,21 +14902,34 @@ function openStreamingSessionModal(xRequestId) {
     if (stdoutText) {
       html += `
       <div style="margin-bottom:4px;">
-        <div style="background:#e8f5e9;padding:2px 8px;font-size:10px;color:#2e7d32;font-weight:600;">stdout (${nd.stdoutLines.length} lines)</div>
-        <pre style="margin:0;padding:6px 8px;background:#1e1e1e;color:#d4d4d4;font-size:11px;line-height:1.4;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;">${_escAndLinkify(stdoutText)}</pre>
+        <div style="background:#e8f5e9;padding:2px 8px;font-size:10px;color:#2e7d32;font-weight:600;display:flex;align-items:center;justify-content:space-between;">
+          <span>stdout (${nd.stdoutLines.length} lines)</span>
+          <button class="stream-copy-btn" data-nodeid="${window.escapeHtml(nodeId)}" data-type="stdout" type="button"
+            title="Copy stdout to clipboard"
+            style="padding:0 5px;font-size:10px;line-height:1.6;border:1px solid #a5d6a7;border-radius:3px;cursor:pointer;background:#fff;color:#2e7d32;">📋 Copy</button>
+        </div>
+        <pre data-scrollkey="${window.escapeHtml(nodeId)}-stdout" style="margin:0;padding:6px 8px;background:#1e1e1e;color:#d4d4d4;font-size:11px;line-height:1.4;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;">${_escAndLinkify(stdoutText)}</pre>
       </div>`;
     }
 
     if (stderrText) {
       html += `
       <div style="margin-bottom:4px;">
-        <div style="background:#fff3e0;padding:2px 8px;font-size:10px;color:#e65100;font-weight:600;">stderr (${nd.stderrLines.length} lines)</div>
-        <pre style="margin:0;padding:6px 8px;background:#2e1e1e;color:#ffab91;font-size:11px;line-height:1.4;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;">${_escAndLinkify(stderrText)}</pre>
+        <div style="background:#fff3e0;padding:2px 8px;font-size:10px;color:#e65100;font-weight:600;display:flex;align-items:center;justify-content:space-between;">
+          <span>stderr (${nd.stderrLines.length} lines)</span>
+          <button class="stream-copy-btn" data-nodeid="${window.escapeHtml(nodeId)}" data-type="stderr" type="button"
+            title="Copy stderr to clipboard"
+            style="padding:0 5px;font-size:10px;line-height:1.6;border:1px solid #ffcc80;border-radius:3px;cursor:pointer;background:#fff;color:#e65100;">📋 Copy</button>
+        </div>
+        <pre data-scrollkey="${window.escapeHtml(nodeId)}-stderr" style="margin:0;padding:6px 8px;background:#2e1e1e;color:#ffab91;font-size:11px;line-height:1.4;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;">${_escAndLinkify(stderrText)}</pre>
       </div>`;
     }
 
     return html;
   };
+
+  // Auto-scroll toggle state (default: on)
+  let autoScroll = true;
 
   // Throttled rebuild
   let rebuildTimer = null;
@@ -14933,6 +14947,12 @@ function openStreamingSessionModal(xRequestId) {
     if (!popup) return;
     const container = popup.querySelector('#stream-body');
     if (!container) return;
+
+    // Save scroll positions before innerHTML replacement (used when autoScroll is OFF)
+    const savedScrollPositions = {};
+    container.querySelectorAll('pre[data-scrollkey]').forEach(pre => {
+      savedScrollPositions[pre.dataset.scrollkey] = pre.scrollTop;
+    });
 
     const nodeIds = Object.keys(session.nodeState).sort();
     const totalNodes = nodeIds.length;
@@ -15054,8 +15074,47 @@ function openStreamingSessionModal(xRequestId) {
       });
     });
 
-    // Auto-scroll
-    container.querySelectorAll('pre').forEach(pre => { pre.scrollTop = pre.scrollHeight; });
+    // Copy-to-clipboard buttons
+    container.querySelectorAll('.stream-copy-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const nd = session.nodeState[btn.dataset.nodeid];
+        if (!nd) return;
+        const text = btn.dataset.type === 'stdout' ? nd.stdoutLines.join('\n') : nd.stderrLines.join('\n');
+        const markCopied = () => {
+          btn.textContent = '✅ Copied!';
+          setTimeout(() => { btn.textContent = '📋 Copy'; }, 1500);
+        };
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(text).then(markCopied).catch(() => {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            markCopied();
+          });
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          markCopied();
+        }
+      });
+    });
+
+    // Auto-scroll: scroll to bottom when ON, restore previous position when OFF
+    if (autoScroll) {
+      container.querySelectorAll('pre').forEach(pre => { pre.scrollTop = pre.scrollHeight; });
+    } else {
+      container.querySelectorAll('pre[data-scrollkey]').forEach(pre => {
+        const saved = savedScrollPositions[pre.dataset.scrollkey];
+        if (saved !== undefined) pre.scrollTop = saved;
+      });
+    }
   };
 
   // Register rebuild callback on the session
@@ -15064,11 +15123,18 @@ function openStreamingSessionModal(xRequestId) {
   Swal.fire({
     title: '🖥️ Remote Command (Streaming)',
     width: 750,
-    html: `<div id="stream-body" style="text-align:left;max-height:65vh;overflow-y:auto;">
-      <div style="padding:20px;text-align:center;color:#888;">
-        <span style="font-size:24px;">⏳</span><br>Connecting to stream...
+    html: `
+      <div style="display:flex;justify-content:flex-end;margin-bottom:4px;">
+        <button id="auto-scroll-toggle" type="button"
+          style="padding:2px 10px;font-size:11px;font-weight:600;border:none;border-radius:4px;cursor:pointer;background:#198754;color:#fff;">
+          ⬇️ Auto-scroll: ON
+        </button>
       </div>
-    </div>`,
+      <div id="stream-body" style="text-align:left;max-height:70vh;overflow-y:auto;">
+        <div style="padding:20px;text-align:center;color:#888;">
+          <span style="font-size:24px;">⏳</span><br>Connecting to stream...
+        </div>
+      </div>`,
     showConfirmButton: true,
     confirmButtonText: 'Close',
     showCancelButton: !session.doneSummary,
@@ -15078,6 +15144,20 @@ function openStreamingSessionModal(xRequestId) {
     didOpen: () => {
       // Render current state immediately (for re-open case)
       rebuildModal();
+      // Wire up auto-scroll toggle button
+      const toggleBtn = Swal.getPopup().querySelector('#auto-scroll-toggle');
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+          autoScroll = !autoScroll;
+          toggleBtn.textContent = autoScroll ? '⬇️ Auto-scroll: ON' : '⏸️ Auto-scroll: OFF';
+          toggleBtn.style.background = autoScroll ? '#198754' : '#6c757d';
+          if (autoScroll) {
+            // Immediately scroll to bottom when re-enabling
+            const container = Swal.getPopup().querySelector('#stream-body');
+            if (container) container.querySelectorAll('pre').forEach(pre => { pre.scrollTop = pre.scrollHeight; });
+          }
+        });
+      }
     },
     willClose: () => {
       // Detach view callback — stream continues in background
