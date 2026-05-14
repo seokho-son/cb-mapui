@@ -18,6 +18,7 @@ import cytoscape from 'cytoscape';
 import fcose from 'cytoscape-fcose';
 import Swal from 'sweetalert2';
 import JSONFormatter from 'json-formatter-js';
+import axios from 'axios';
 
 // Register layout extension
 cytoscape.use(fcose);
@@ -1446,6 +1447,7 @@ export function infraDataToGraph(infraList, namespace) {
               publicIP: nd.publicIP,
               privateIP: nd.privateIP,
               hasGpu: hasGpu,
+              infraId: infra.id,
               originalData: nd
             }
           });
@@ -3403,6 +3405,24 @@ function showContextMenu(node, position) {
     menuItems.push({ label: '📋 Show Nodes', action: () => highlightInfraNodes(node) });
   }
 
+  // Deregister / Delete action items for resource nodes
+  const resourceId = originalData.id;
+  const infraId = data.infraId || null;
+  const actionableTypes = ['node', 'vnet', 'securityGroup', 'sshKey', 'dataDisk', 'customImage'];
+  if (actionableTypes.includes(type) && resourceId && resourceId !== 'unknown') {
+    menuItems.push({ separator: true });
+    menuItems.push({
+      label: '🔓 Deregister',
+      color: '#e67e22',
+      action: () => performGraphDeregister(type, resourceId, infraId)
+    });
+    menuItems.push({
+      label: '🗑️ Delete',
+      color: '#e74c3c',
+      action: () => performGraphDelete(type, resourceId, infraId)
+    });
+  }
+
   // Create menu element
   contextMenuElement = document.createElement('div');
   contextMenuElement.id = 'resource-graph-context-menu';
@@ -3415,11 +3435,17 @@ function showContextMenu(node, position) {
     border-radius: 6px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     z-index: 10000;
-    min-width: 150px;
+    min-width: 160px;
     padding: 4px 0;
   `;
 
   menuItems.forEach(item => {
+    if (item.separator) {
+      const sep = document.createElement('hr');
+      sep.style.cssText = 'margin: 4px 0; border: none; border-top: 1px solid #e8e8e8;';
+      contextMenuElement.appendChild(sep);
+      return;
+    }
     const menuItem = document.createElement('div');
     menuItem.textContent = item.label;
     menuItem.style.cssText = `
@@ -3427,6 +3453,7 @@ function showContextMenu(node, position) {
       cursor: pointer;
       font-size: 13px;
       transition: background 0.2s;
+      ${item.color ? `color: ${item.color}; font-weight: 500;` : ''}
     `;
     menuItem.onmouseover = () => menuItem.style.background = '#f0f0f0';
     menuItem.onmouseout = () => menuItem.style.background = 'transparent';
@@ -3475,6 +3502,151 @@ function hideContextMenu() {
   if (contextMenuElement) {
     contextMenuElement.remove();
     contextMenuElement = null;
+  }
+}
+
+function _escapeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function _getGraphApiConfig() {
+  const cfg = window.getConfig ? window.getConfig() : {};
+  return {
+    hostname: cfg.hostname || 'localhost',
+    port: cfg.port || '1323',
+    username: cfg.username || 'default',
+    password: cfg.password || 'default',
+    credentialHolder: cfg.credentialHolder || 'admin'
+  };
+}
+
+function _graphDeregisterEndpoint(type, resourceId, infraId, ns) {
+  switch (type) {
+    case 'node':
+      return infraId ? `/ns/${ns}/deregisterResource/infra/${infraId}/node/${resourceId}` : null;
+    case 'vnet':
+      return `/ns/${ns}/deregisterResource/vNet/${resourceId}?withSubnets=true`;
+    case 'securityGroup':
+      return `/ns/${ns}/deregisterResource/securityGroup/${resourceId}`;
+    case 'sshKey':
+      return `/ns/${ns}/deregisterResource/sshKey/${resourceId}`;
+    case 'customImage':
+      return `/ns/${ns}/deregisterResource/customImage/${resourceId}`;
+    case 'dataDisk':
+      return `/ns/${ns}/deregisterResource/dataDisk/${resourceId}`;
+    default:
+      return null;
+  }
+}
+
+function _graphDeleteEndpoint(type, resourceId, infraId, ns) {
+  switch (type) {
+    case 'node':
+      return infraId ? `/ns/${ns}/infra/${infraId}/node/${resourceId}` : null;
+    case 'vnet':
+      return `/ns/${ns}/resources/vNet/${resourceId}?action=withsubnets`;
+    case 'securityGroup':
+      return `/ns/${ns}/resources/securityGroup/${resourceId}`;
+    case 'sshKey':
+      return `/ns/${ns}/resources/sshKey/${resourceId}`;
+    case 'customImage':
+      return `/ns/${ns}/resources/customImage/${resourceId}`;
+    case 'dataDisk':
+      return `/ns/${ns}/resources/dataDisk/${resourceId}`;
+    default:
+      return null;
+  }
+}
+
+async function performGraphDeregister(type, resourceId, infraId) {
+  const typeLabels = {
+    node: 'Node', vnet: 'vNet', securityGroup: 'Security Group',
+    sshKey: 'SSH Key', dataDisk: 'Data Disk', customImage: 'Custom Image'
+  };
+  const label = typeLabels[type] || type;
+  const ns = window.configNamespace || 'default';
+
+  if (type === 'node' && !infraId) {
+    await Swal.fire('Error', 'Could not determine Infra ID for this node.', 'error');
+    return;
+  }
+
+  const endpoint = _graphDeregisterEndpoint(type, resourceId, infraId, ns);
+  if (!endpoint) return;
+
+  const confirm = await Swal.fire({
+    title: `Deregister ${label}?`,
+    html: `<p><strong>${_escapeHtml(resourceId)}</strong> will be removed from the CB-Tumblebug registry only.</p>
+           <p><strong>The actual CSP resource will NOT be deleted.</strong></p>`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#e67e22',
+    confirmButtonText: 'Yes, deregister',
+    cancelButtonText: 'Cancel'
+  });
+  if (!confirm.isConfirmed) return;
+
+  const cfg = _getGraphApiConfig();
+  try {
+    Swal.fire({ title: 'Deregistering...', allowOutsideClick: true, didOpen: () => Swal.showLoading() });
+    await axios({
+      method: 'DELETE',
+      url: `http://${cfg.hostname}:${cfg.port}/tumblebug${endpoint}`,
+      headers: { 'X-Credential-Holder': cfg.credentialHolder },
+      auth: { username: cfg.username, password: cfg.password },
+      timeout: 60000
+    });
+    await Swal.fire({ title: 'Deregistered!', text: `${label} "${resourceId}" removed from registry.`, icon: 'success', timer: 2000, showConfirmButton: false });
+    if (window.getInfra) window.getInfra();
+  } catch (err) {
+    const msg = err?.response?.data?.message || err?.message || 'Unknown error';
+    await Swal.fire({ title: 'Deregister Failed', text: msg, icon: 'error' });
+  }
+}
+
+async function performGraphDelete(type, resourceId, infraId) {
+  const typeLabels = {
+    node: 'Node', vnet: 'vNet', securityGroup: 'Security Group',
+    sshKey: 'SSH Key', dataDisk: 'Data Disk', customImage: 'Custom Image'
+  };
+  const label = typeLabels[type] || type;
+  const ns = window.configNamespace || 'default';
+
+  if (type === 'node' && !infraId) {
+    await Swal.fire('Error', 'Could not determine Infra ID for this node.', 'error');
+    return;
+  }
+
+  const endpoint = _graphDeleteEndpoint(type, resourceId, infraId, ns);
+  if (!endpoint) return;
+
+  const confirm = await Swal.fire({
+    title: `Delete ${label}?`,
+    html: `<p>Are you sure you want to delete <strong>${_escapeHtml(resourceId)}</strong>?</p>
+           <p style="color:#e74c3c;">This will permanently delete the actual CSP resource.</p>`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#e74c3c',
+    confirmButtonText: 'Yes, delete',
+    cancelButtonText: 'Cancel'
+  });
+  if (!confirm.isConfirmed) return;
+
+  const cfg = _getGraphApiConfig();
+  try {
+    Swal.fire({ title: 'Deleting...', allowOutsideClick: true, didOpen: () => Swal.showLoading() });
+    await axios({
+      method: 'DELETE',
+      url: `http://${cfg.hostname}:${cfg.port}/tumblebug${endpoint}`,
+      headers: { 'X-Credential-Holder': cfg.credentialHolder },
+      auth: { username: cfg.username, password: cfg.password },
+      timeout: 120000
+    });
+    await Swal.fire({ title: 'Deleted!', text: `${label} "${resourceId}" has been deleted.`, icon: 'success', timer: 2000, showConfirmButton: false });
+    if (window.getInfra) window.getInfra();
+  } catch (err) {
+    const msg = err?.response?.data?.message || err?.message || 'Unknown error';
+    await Swal.fire({ title: 'Delete Failed', text: msg, icon: 'error' });
   }
 }
 

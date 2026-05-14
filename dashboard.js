@@ -5293,6 +5293,7 @@ function setupTableEnhancements() {
       <button class="btn btn-sm btn-outline-success" onclick="bulkControlNode('resume')" title="Resume"><i class="fas fa-play"></i> Resume</button>
       <button class="btn btn-sm btn-outline-warning" onclick="bulkControlNode('suspend')" title="Suspend"><i class="fas fa-pause"></i> Suspend</button>
       <button class="btn btn-sm btn-outline-info" onclick="bulkControlNode('restart')" title="Restart"><i class="fas fa-sync-alt"></i> Restart</button>
+      <button class="btn btn-sm btn-outline-warning" onclick="bulkDeregisterItems('node')" title="Deregister (remove from registry only, CSP resource kept)"><i class="fas fa-unlink"></i> Deregister</button>
       <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('node')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
     `,
     k8sCluster: `
@@ -5305,22 +5306,27 @@ function setupTableEnhancements() {
     `,
     vNet: `
       <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('vNet')" title="View Details"><i class="fas fa-eye"></i> View</button>
+      <button class="btn btn-sm btn-outline-warning" onclick="bulkDeregisterItems('vNet')" title="Deregister (remove from registry only, CSP resource kept)"><i class="fas fa-unlink"></i> Deregister</button>
       <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('vNet')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
     `,
     securityGroup: `
       <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('securityGroup')" title="View Details"><i class="fas fa-eye"></i> View</button>
+      <button class="btn btn-sm btn-outline-warning" onclick="bulkDeregisterItems('securityGroup')" title="Deregister (remove from registry only, CSP resource kept)"><i class="fas fa-unlink"></i> Deregister</button>
       <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('securityGroup')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
     `,
     sshKey: `
       <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('sshKey')" title="View Details"><i class="fas fa-eye"></i> View</button>
+      <button class="btn btn-sm btn-outline-warning" onclick="bulkDeregisterItems('sshKey')" title="Deregister (remove from registry only, CSP resource kept)"><i class="fas fa-unlink"></i> Deregister</button>
       <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('sshKey')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
     `,
     customImage: `
       <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('customImage')" title="View Details"><i class="fas fa-eye"></i> View</button>
+      <button class="btn btn-sm btn-outline-warning" onclick="bulkDeregisterItems('customImage')" title="Deregister (remove from registry only, CSP resource kept)"><i class="fas fa-unlink"></i> Deregister</button>
       <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('customImage')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
     `,
     dataDisk: `
       <button class="btn btn-sm btn-outline-primary single-action-btn" onclick="bulkViewDetails('dataDisk')" title="View Details"><i class="fas fa-eye"></i> View</button>
+      <button class="btn btn-sm btn-outline-warning" onclick="bulkDeregisterItems('dataDisk')" title="Deregister (remove from registry only, CSP resource kept)"><i class="fas fa-unlink"></i> Deregister</button>
       <button class="btn btn-sm btn-outline-danger" onclick="bulkDeleteItems('dataDisk')" title="Delete"><i class="fas fa-trash"></i> Delete</button>
     `,
     vpn: `
@@ -5647,6 +5653,143 @@ async function bulkDeleteItems(tableType) {
   scheduleFreshFetch();
 }
 
+async function bulkDeregisterItems(tableType) {
+  const selected = getSelectedItems(tableType);
+  if (selected.length === 0) return;
+
+  const typeLabels = {
+    node: 'Node',
+    vNet: 'vNet', securityGroup: 'Security Group', sshKey: 'SSH Key',
+    customImage: 'Custom Image', dataDisk: 'Data Disk'
+  };
+  const label = typeLabels[tableType] || tableType;
+
+  const result = await Swal.fire({
+    title: `Deregister ${selected.length} ${label}(s)?`,
+    html: `<p>Selected items will be removed from the CB-Tumblebug registry only.</p>
+           <p><strong>The actual CSP resources will NOT be deleted.</strong></p>
+           <p style="font-size:0.85rem;color:#6c757d;">${selected.map(id => _escapeHtml(id)).join('<br>')}</p>`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#e67e22',
+    confirmButtonText: 'Yes, deregister',
+    cancelButtonText: 'Cancel'
+  });
+  if (!result.isConfirmed) return;
+
+  const parentConfig = window.parent?.getConfig?.() || { hostname: 'localhost', port: '1323', username: 'default', password: 'default' };
+  const ns = window.parent?.configNamespace || 'default';
+  const credentialHolder = parentConfig.credentialHolder || 'admin';
+  let successCount = 0;
+  let errors = [];
+
+  Swal.fire({ title: 'Deregistering...', text: `Deregistering ${selected.length} item(s)...`, allowOutsideClick: true, didOpen: () => Swal.showLoading() });
+
+  // Build nodeId→infraId map from currently checked checkboxes to avoid wrong-first-match via querySelector
+  const nodeInfraMap = new Map();
+  document.querySelectorAll('#nodeTableBody .row-select-checkbox:checked').forEach(cb => {
+    const nId = cb.getAttribute('data-item-id');
+    const iId = cb.getAttribute('data-infra-id');
+    if (nId && iId) nodeInfraMap.set(nId, iId);
+  });
+
+  const tasks = [];
+  for (const itemId of selected) {
+    let endpoint = '';
+    switch (tableType) {
+      case 'node': {
+        const infraId = nodeInfraMap.get(itemId) || null;
+        if (!infraId) { errors.push(`Node ${itemId}: unknown Infra`); continue; }
+        endpoint = `/ns/${ns}/deregisterResource/infra/${infraId}/node/${itemId}`;
+        break;
+      }
+      case 'vNet':
+        endpoint = `/ns/${ns}/deregisterResource/vNet/${itemId}?withSubnets=true`;
+        break;
+      case 'securityGroup':
+        endpoint = `/ns/${ns}/deregisterResource/securityGroup/${itemId}`;
+        break;
+      case 'sshKey':
+        endpoint = `/ns/${ns}/deregisterResource/sshKey/${itemId}`;
+        break;
+      case 'customImage':
+        endpoint = `/ns/${ns}/deregisterResource/customImage/${itemId}`;
+        break;
+      case 'dataDisk':
+        endpoint = `/ns/${ns}/deregisterResource/dataDisk/${itemId}`;
+        break;
+      default:
+        continue;
+    }
+
+    tasks.push({ itemId, fn: () => axios({ method: 'DELETE', url: `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug${endpoint}`,
+      headers: { 'X-Credential-Holder': credentialHolder },
+      auth: { username: parentConfig.username, password: parentConfig.password }, timeout: 60000
+    }) });
+  }
+
+  const results = await runInBatches(tasks.map(t => t.fn), 10);
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') {
+      successCount++;
+    } else {
+      const msg = r.reason?.response?.data?.message || r.reason?.message || 'Unknown error';
+      errors.push(`${tasks[i].itemId}: ${msg}`);
+    }
+  });
+
+  if (errors.length > 0) {
+    await Swal.fire({
+      title: `Deregistered ${successCount}/${selected.length}`,
+      html: `<p>${errors.length} error(s):</p><pre style="text-align:left;font-size:0.8rem;max-height:200px;overflow:auto;">${errors.map(e => _escapeHtml(e)).join('\n')}</pre>`,
+      icon: successCount > 0 ? 'warning' : 'error',
+    });
+  } else {
+    await Swal.fire({ title: 'Deregistered!', text: `Successfully deregistered ${successCount} item(s).`, icon: 'success', timer: 2500, showConfirmButton: false });
+  }
+
+  clearTableSelection(tableType);
+
+  const deregisteredIds = new Set();
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') deregisteredIds.add(tasks[i].itemId);
+  });
+
+  if (deregisteredIds.size > 0) {
+    switch (tableType) {
+      case 'node':
+        nodeData = nodeData.filter(v => !deregisteredIds.has(v.id));
+        updateNodeTable();
+        break;
+      case 'vNet':
+        if (centralData?.vNet) centralData.vNet = centralData.vNet.filter(v => !deregisteredIds.has(v.id));
+        updateVNetTable();
+        break;
+      case 'securityGroup':
+        if (centralData?.securityGroup) centralData.securityGroup = centralData.securityGroup.filter(sg => !deregisteredIds.has(sg.id));
+        updateSecurityGroupTable();
+        break;
+      case 'sshKey':
+        if (centralData?.sshKey) centralData.sshKey = centralData.sshKey.filter(sk => !deregisteredIds.has(sk.id));
+        updateSshKeyTable();
+        break;
+      case 'customImage':
+        if (centralData?.customImage) centralData.customImage = centralData.customImage.filter(ci => !deregisteredIds.has(ci.id));
+        updateCustomImageTable();
+        break;
+      case 'dataDisk':
+        if (centralData?.dataDisk) centralData.dataDisk = centralData.dataDisk.filter(dd => !deregisteredIds.has(dd.id));
+        updateDataDiskTable();
+        break;
+    }
+    updateStatistics();
+    updateCharts();
+  }
+
+  startMutationCooldown();
+  scheduleFreshFetch();
+}
+
 // Initialize enhancements on DOM ready
 document.addEventListener('DOMContentLoaded', function() {
   setTimeout(() => {
@@ -5662,4 +5805,5 @@ window.bulkViewDetails = bulkViewDetails;
 window.bulkControlInfra = bulkControlInfra;
 window.bulkControlNode = bulkControlNode;
 window.bulkDeleteItems = bulkDeleteItems;
+window.bulkDeregisterItems = bulkDeregisterItems;
 window.clearTableSelection = clearTableSelection;

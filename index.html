@@ -537,7 +537,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <div class="form-group">
                     <div class="input-group">
                       <div class="input-group-prepend">
-                        <span class="input-group-text">💾 Mem(Gi)</span>
+                        <span class="input-group-text">🖥️ Mem(Gi)</span>
                       </div>
                       <input type="number" class="form-control m-0" id='minRAM' value="0.5" min="0.5" max="99912288"
                         step="0.5">
@@ -547,112 +547,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                     </div>
                   </div>
 
-                  <!-- Spec Name Field -->
-                  <div class="form-group">
-                    <div class="input-group">
-                      <div class="input-group-prepend">
-                        <span class="input-group-text">🏷️ SpecID</span>
-                      </div>
-                      <input type="text" class="form-control" id="specName" name="specName" value=""
-                        placeholder="Ex: 2xlarge">
-                    </div>
-                  </div>
-
-                  <!-- Spec Architecture Type Field -->
-                  <!-- "osArchitecture": [
-                    "arm64",
-                    "arm64_mac",
-                    "na",
-                    "s390x",
-                    "x86_32",
-                    "x86_64",
-                    "x86_64_mac"
-                  ], -->
-                  <div class="form-group">
-                    <div class="input-group">
-                      <div class="input-group-prepend">
-                        <span class="input-group-text">🏗️ SpecArch</span>
-                      </div>
-                      <select id="architecture" name="architecture" class="form-control">
-                        <option value="">Any</option>
-                        <option value="x86_64" selected="selected">x86_64</option>
-                        <option value="x86_64_mac">x86_64_mac</option>
-                        <option value="x86_32">x86_32</option>
-                        <option value="arm64">arm64</option>
-                        <option value="arm64_mac">arm64_mac</option>
-                        <option value="s390x">s390x</option>
-                        <option value="na">Undefined</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <!-- OS Image Type Field -->
-                  <div class="form-group">
-                    <div class="input-group">
-                      <div class="input-group-prepend">
-                        <span class="input-group-text">💽 Image</span>
-                      </div>
-                      <select id="osImage" name="osImage" class="form-control">
-                        <option value="">Any</option>
-                        <option value="Ubuntu 20.04">Ubuntu 20.04</option>
-                        <option value="Ubuntu 22.04" selected="selected">Ubuntu 22.04</option>
-                        <option value="Ubuntu 24.04">Ubuntu 24.04</option>
-                        <option value="Debian 10">Debian 10</option>
-                        <option value="Debian 11">Debian 11</option>
-                        <option value="Debian 12">Debian 12</option>
-                        <option value="Windows 2022">Windows 2022</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <!-- Disk Size Field -->
-                  <div class="form-group">
-                    <div class="input-group">
-                      <div class="input-group-prepend">
-                        <span class="input-group-text">💿 Disk(GB)</span>
-                      </div>
-                      <input type="text" class="form-control" id="diskSize" name="diskSize" placeholder="Ex: 250">
-                    </div>
-                  </div>
-
-                  <!-- Workload Type Toggle -->
-                  <div class="form-group">
-                    <div class="input-group">
-                      <div class="input-group-prepend">
-                        <span class="input-group-text">⚙️ Workload</span>
-                      </div>
-                      <div class="btn-group btn-group-toggle w-100" data-toggle="buttons" style="flex: 1;">
-                        <label class="btn btn-outline-success active" style="flex: 1;">
-                          <input type="radio" name="workloadType" id="nodeMode" value="node" checked onchange="toggleWorkloadType()"> 
-                          <i class="fas fa-server"></i> Node
-                        </label>
-                        <label class="btn btn-outline-success" style="flex: 1;">
-                          <input type="radio" name="workloadType" id="k8sMode" value="k8s" onchange="toggleWorkloadType()"> 
-                          <i class="fas fa-dharmachakra"></i> K8s
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
                   <!-- Accelerator Configuration Field -->
                   <div class="form-group">
-                    <div id="headingAccelerator">
-                      <button class="btn btn-outline-primary w-100" type="button" data-toggle="collapse"
-                        data-target="#collapseAccelerator" aria-expanded="false" aria-controls="collapseAccelerator">
-                        🧮 GPU Config
-                    </div>
-                    <div id="collapseAccelerator" class="collapse" aria-labelledby="headingAccelerator"
-                      data-parent="#infra-configuration-form">
-                      <div class="px-0 py-0">
-
                         <!-- Accelerator Model Field -->
                         <div class="form-group">
                           <div class="input-group">
                             <div class="input-group-prepend">
-                              <span class="input-group-text">🔧 Model</span>
+                              <span class="input-group-text">🤖 GPU</span>
                             </div>
                             <select class="form-control" id="acceleratorModel" name="acceleratorModel">
-                              <option value="" selected="selected">-- Select GPU Model --</option>
+                              <option value="" selected="selected">select</option>
                               <optgroup label="General Options">
                                 <option value="any">Any GPU - All Models</option>
                                 <option value="NVIDIA">NVIDIA - Any Model</option>
@@ -720,22 +624,113 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                         <div class="form-group">
                           <div class="input-group">
                             <div class="input-group-prepend">
-                              <span class="input-group-text">🧠 Mem(GB)</span>
+                              <span class="input-group-text">🧮 VRAM(GB)</span>
                             </div>
                             <input type="number" class="form-control" id='minAMEM' min="1" max="999998" step="1">
                             <span class="mx-1">~</span>
                             <input type="number" class="form-control" id='maxAMEM' min="1" max="999999" step="1">
                           </div>
                         </div>
+                  </div>
 
+                  <!-- Spec Name Field -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">🏷️ SpecID</span>
+                      </div>
+                      <input type="text" class="form-control" id="specName" name="specName" value=""
+                        placeholder="Ex: 2xlarge">
+                    </div>
+                  </div>
+
+                  <!-- Spec Architecture Type Field -->
+                  <!-- "osArchitecture": [
+                    "arm64",
+                    "arm64_mac",
+                    "na",
+                    "s390x",
+                    "x86_32",
+                    "x86_64",
+                    "x86_64_mac"
+                  ], -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">🏗️ SpecArch</span>
+                      </div>
+                      <select id="architecture" name="architecture" class="form-control">
+                        <option value="">Any</option>
+                        <option value="x86_64" selected="selected">x86_64</option>
+                        <option value="x86_64_mac">x86_64_mac</option>
+                        <option value="x86_32">x86_32</option>
+                        <option value="arm64">arm64</option>
+                        <option value="arm64_mac">arm64_mac</option>
+                        <option value="s390x">s390x</option>
+                        <option value="na">Undefined</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- OS Image Type Field -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">💽 Image</span>
+                      </div>
+                      <select id="osImage" name="osImage" class="form-control">
+                        <option value="">Any</option>
+                        <option value="Ubuntu 20.04">Ubuntu 20.04</option>
+                        <option value="Ubuntu 22.04" selected="selected">Ubuntu 22.04</option>
+                        <option value="Ubuntu 24.04">Ubuntu 24.04</option>
+                        <option value="Debian 10">Debian 10</option>
+                        <option value="Debian 11">Debian 11</option>
+                        <option value="Debian 12">Debian 12</option>
+                        <option value="Windows 2022">Windows 2022</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- Disk Size Field -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">💾 Disk(GB)</span>
+                      </div>
+                      <input type="text" class="form-control" id="diskSize" name="diskSize" placeholder="Ex: 250">
+                    </div>
+                  </div>
+
+
+                  <!-- Workload Type Toggle -->
+                  <div class="form-group">
+                    <div class="input-group">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text">⚙️ Workload</span>
+                      </div>
+                      <div class="btn-group btn-group-toggle w-100" data-toggle="buttons" style="flex: 1;">
+                        <label class="btn btn-outline-success active" style="flex: 1;">
+                          <input type="radio" name="workloadType" id="nodeMode" value="node" checked onchange="toggleWorkloadType()"> 
+                          <i class="fas fa-server"></i> Node
+                        </label>
+                        <label class="btn btn-outline-success" style="flex: 1;">
+                          <input type="radio" name="workloadType" id="k8sMode" value="k8s" onchange="toggleWorkloadType()"> 
+                          <i class="fas fa-dharmachakra"></i> K8s
+                        </label>
                       </div>
                     </div>
+                  </div>
+
+                  <!-- Schedule Resource Registration Field -->
+                  <div class="form-group">
+                    <button type="button" id="scheduleJobsBtn" onClick="showScheduleJobManagement();"
+                      class="btn btn-outline-primary w-100">📥 Register Resources</button>
                   </div>
 
                   <!-- Template Management Field -->
                   <div class="form-group">
                     <button type="button" id="templateMgmtBtn" onClick="showTemplateManagement();"
-                      class="btn btn-outline-primary w-100">📄 Template Management</button>
+                      class="btn btn-outline-primary w-100">📝 Template Management</button>
                   </div>
 
                 </form>
@@ -916,12 +911,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                         Existing
                         Resources</a>
                     </div>
-                  </div>
-
-                  <!-- Schedule Resource Registration Field -->
-                  <div class="form-group col-12">
-                    <button type="button" id="scheduleJobsBtn" onClick="showScheduleJobManagement();"
-                      class="btn btn-success w-100">📅 Schedule Jobs Management</button>
                   </div>
 
 

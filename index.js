@@ -601,6 +601,7 @@ window.updateMapConnectionStatus = updateMapConnectionStatus;
 window.showMapSettings = showMapSettings;
 window.showMapRefreshIndicator = showMapRefreshIndicator;
 window.performMapCleanup = performMapCleanup;
+window.getInfra = getInfra;
 
 const typeStringConnection = "connection";
 const typeStringProvider = "provider";
@@ -15079,10 +15080,29 @@ function openStreamingSessionModal(xRequestId) {
         const nd = session.nodeState[btn.dataset.nodeid];
         if (!nd) return;
         const text = btn.dataset.type === 'stdout' ? nd.stdoutLines.join('\n') : nd.stderrLines.join('\n');
-        navigator.clipboard.writeText(text).then(() => {
+        const markCopied = () => {
           btn.textContent = '✅ Copied!';
           setTimeout(() => { btn.textContent = '📋 Copy'; }, 1500);
-        });
+        };
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(text).then(markCopied).catch(() => {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            markCopied();
+          });
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          markCopied();
+        }
       });
     });
 
