@@ -8871,6 +8871,38 @@ function getRecommendedSpec(idx, latitude, longitude) {
                     ? '<br><span style="color:#0c5460;">💡 ' + suggestionParts.join(' · ') + '</span>'
                     : '';
 
+                  // Add CSP-reported available disk types to dropdown
+                  const rdtSelect = document.getElementById('rootDiskTypeSelect');
+                  if (rdtSelect && result.availability && result.availability.zones) {
+                    const allDisks = new Set();
+                    result.availability.zones.forEach(z => {
+                      if (z.available && z.supportedDisks) {
+                        z.supportedDisks.forEach(d => { if (d) allDisks.add(d); });
+                      }
+                    });
+                    const newDisks = Array.from(allDisks).filter(
+                      disk => !Array.from(rdtSelect.options).some(o => o.value === disk)
+                    );
+                    if (newDisks.length > 0) {
+                      // Remove existing validation group if re-triggered
+                      const existingGroup = rdtSelect.querySelector('optgroup[data-validation]');
+                      if (existingGroup) existingGroup.remove();
+                      const group = document.createElement('optgroup');
+                      group.label = '💡 Available (from validation)';
+                      group.setAttribute('data-validation', '1');
+                      newDisks.forEach(disk => {
+                        const opt = document.createElement('option');
+                        opt.value = disk;
+                        opt.textContent = disk;
+                        group.appendChild(opt);
+                      });
+                      rdtSelect.appendChild(group);
+                    }
+                    if (result.suggestedSystemDisk && (rdtSelect.value === 'default' || rdtSelect.value === '')) {
+                      rdtSelect.value = result.suggestedSystemDisk;
+                    }
+                  }
+
                   if (result.isValid) {
                     statusEl.textContent = '✓ Valid';
                     statusEl.style.backgroundColor = '#28a745';
