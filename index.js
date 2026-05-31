@@ -1051,6 +1051,7 @@ map.on("contextmenu", function (event) {
       html: `
         <div style="display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px;">
           <button onclick="showDnsManagementModal(); Swal.close();" class="btn btn-info btn-context">🌐 Global DNS Management</button>
+          <button onclick="showGatewayModal(); Swal.close();" class="btn btn-info btn-context">🔀 Nginx Gateway</button>
         </div>
       `,
       showConfirmButton: false,
@@ -1200,6 +1201,7 @@ function showInfraContextMenu(pixel, infraInfo) {
         <button onclick="showTaskManagementModal(); Swal.close();" class="btn btn-warning btn-context">📋 Cmd Status</button>
         <button onclick="transferFileToInfra(); Swal.close();" class="btn btn-warning btn-context">📁 File Transfer</button>
         <button class="btn btn-warning btn-context btn-infra-action" data-action="dns">🌐 Global DNS</button>
+        <button class="btn btn-warning btn-context btn-infra-action" data-action="gateway">🔀 Gateway</button>
         <button onclick="setBastionNode(); Swal.close();" class="btn btn-warning btn-context">🔗 Set Bastion</button>
 
         <button class="btn btn-info btn-context btn-infra-action" data-action="nlb">⚖️ NLB</button>
@@ -1234,7 +1236,8 @@ function showInfraContextMenu(pixel, infraInfo) {
           if (action === 'scaleOut') scaleOutInfraFromContext(infraName);
           else if (action === 'copyConfig') copyInfraConfig(infraName);
           else if (action === 'saveTemplate') saveInfraAsTemplate(infraName);
-          else if (action === 'dns') showDnsManagementModal(infraName);
+          else if (action === 'dns')     showDnsManagementModal(infraName);
+          else if (action === 'gateway') showGatewayModal(infraName);
           Swal.close();
         });
       });
@@ -23027,9 +23030,14 @@ async function showDnsManagementModal(preselectedInfraId) {
             <label style="font-size: 12px; color: #6c757d;">Routing Policy</label>
             <select id="dns-routing-policy" class="swal2-input" style="margin: 4px 0; font-size: 13px; height: 40px;">
               <option value="simple">Simple (all IPs returned)</option>
+              <option value="weighted">Weighted 1:1:1 (Route53 picks one per query)</option>
               <option value="geoproximity">Geoproximity (nearest server)</option>
             </select>
           </div>
+        </div>
+
+        <div id="dns-weighted-info" style="display: none; margin-top: 8px; padding: 8px; background: #fff3cd; border-radius: 4px; font-size: 12px; color: #856404;">
+          ℹ️ <strong>Weighted</strong>: One A-record per IP, each with weight 1. Route53 picks one record per DNS query in proportion to its weight. TTL 30s recommended.
         </div>
 
         <div id="dns-geoproxy-info" style="display: none; margin-top: 8px; padding: 8px; background: #e8f4f8; border-radius: 4px; font-size: 12px; color: #0c5460;">
@@ -23123,12 +23131,19 @@ async function showDnsManagementModal(preselectedInfraId) {
     didOpen: () => {
       // Routing policy toggle
       const policySelect = document.getElementById('dns-routing-policy');
-      const geoInfo = document.getElementById('dns-geoproxy-info');
+      const geoInfo     = document.getElementById('dns-geoproxy-info');
+      const weightedInfo = document.getElementById('dns-weighted-info');
       const ipsContainer = document.getElementById('dns-source-ips-container');
+      const ttlInput = document.getElementById('dns-upsert-ttl');
 
       policySelect.addEventListener('change', function() {
-        const isGeo = this.value === 'geoproximity';
-        geoInfo.style.display = isGeo ? 'block' : 'none';
+        const isGeo      = this.value === 'geoproximity';
+        const isWeighted = this.value === 'weighted';
+        geoInfo.style.display      = isGeo      ? 'block' : 'none';
+        weightedInfo.style.display = isWeighted ? 'block' : 'none';
+        // Suggest TTL 30s for weighted, restore 300 otherwise
+        if (isWeighted && ttlInput && ttlInput.value === '300') ttlInput.value = '30';
+        if (!isWeighted && ttlInput && ttlInput.value === '30') ttlInput.value = '300';
         ipsContainer.style.opacity = isGeo ? '0.5' : '1';
         if (isGeo) {
           const ipsRadio = document.querySelector('input[name="dns-ip-source"][value="ips"]');
@@ -23277,6 +23292,8 @@ async function showDnsManagementModal(preselectedInfraId) {
               const esc = window.escapeHtml;
               const policyBadge = r.routingPolicy === 'geoproximity'
                 ? `<span style="background: #17a2b8; color: white; padding: 1px 5px; border-radius: 3px; font-size: 10px;">geo</span> ${esc(r.geoLatitude || '')},${esc(r.geoLongitude || '')}`
+                : r.routingPolicy === 'weighted'
+                ? `<span style="background: #fd7e14; color: white; padding: 1px 5px; border-radius: 3px; font-size: 10px;">weighted</span>`
                 : `<span style="background: #6c757d; color: white; padding: 1px 5px; border-radius: 3px; font-size: 10px;">${esc(r.routingPolicy || 'simple')}</span>`;
               const setIdInfo = r.setIdentifier ? `<br><span style="color: #888; font-size: 10px;">id: ${esc(r.setIdentifier)}</span>` : '';
               const isDeletable = r.type !== 'NS' && r.type !== 'SOA';
@@ -23504,6 +23521,8 @@ async function showDnsManagementModal(preselectedInfraId) {
                 const esc = window.escapeHtml;
                 const policyBadge = r.routingPolicy === 'geoproximity'
                   ? `<span style="background: #17a2b8; color: white; padding: 1px 5px; border-radius: 3px; font-size: 10px;">geo</span> ${esc(r.geoLatitude || '')},${esc(r.geoLongitude || '')}`
+                  : r.routingPolicy === 'weighted'
+                  ? `<span style="background: #fd7e14; color: white; padding: 1px 5px; border-radius: 3px; font-size: 10px;">weighted</span>`
                   : `<span style="background: #6c757d; color: white; padding: 1px 5px; border-radius: 3px; font-size: 10px;">${esc(r.routingPolicy || 'simple')}</span>`;
                 const setIdInfo = r.setIdentifier ? `<br><span style="color: #888; font-size: 10px;">id: ${esc(r.setIdentifier)}</span>` : '';
                 html += `<tr>
@@ -23534,3 +23553,159 @@ async function showDnsManagementModal(preselectedInfraId) {
   });
 }
 window.showDnsManagementModal = showDnsManagementModal;
+
+// ============================================================
+// Nginx Gateway (Load Balancer)
+// ============================================================
+async function showGatewayModal(preselectedInfraId) {
+  const cfg  = getConfig();
+  const ns   = configNamespace || 'default';
+  const auth = { username: cfg.username, password: cfg.password };
+  const base = `http://${cfg.hostname}:${cfg.port}/tumblebug`;
+
+  let infraList = [];
+  try {
+    const r = await axios.get(`${base}/ns/${ns}/infra?option=id`, { auth });
+    infraList = r.data.output || [];
+  } catch(e) {}
+
+  const makeOpts = (selected) => infraList.map(id =>
+    `<option value="${window.escapeHtml(id)}"${id === selected ? ' selected' : ''}>${window.escapeHtml(id)}</option>`
+  ).join('');
+
+  const result = await Swal.fire({
+    title: '🔀 Nginx Gateway (Load Balancer)',
+    width: 700,
+    html: `${POPUP_STYLES}
+      <div class="popup-container">
+        <div class="popup-section">
+          <div class="popup-section-title">🖥️ Gateway Node (will run nginx)</div>
+          <div class="popup-row">
+            <div class="popup-col" style="flex:2"><div class="popup-field">
+              <label class="popup-label">Infra</label>
+              <select id="gw-infra" class="popup-select"><option value="">Select</option>${makeOpts(preselectedInfraId)}</select>
+            </div></div>
+            <div class="popup-col" style="flex:2"><div class="popup-field">
+              <label class="popup-label">Node ID <span style="font-weight:normal;color:#888">(blank = all)</span></label>
+              <input id="gw-node" class="popup-input" placeholder="e.g. g1-1">
+            </div></div>
+            <div class="popup-col" style="flex:1"><div class="popup-field">
+              <label class="popup-label">Listen Port</label>
+              <input id="gw-lport" type="number" class="popup-input" value="80">
+            </div></div>
+          </div>
+        </div>
+
+        <div class="popup-section">
+          <div class="popup-section-title">🎯 Backend Nodes</div>
+          <div style="display:flex;gap:16px;margin-bottom:8px;font-size:0.85rem">
+            <label><input type="radio" name="gw-src" value="infra" checked> Infra</label>
+            <label><input type="radio" name="gw-src" value="label"> Label Selector</label>
+            <label><input type="radio" name="gw-src" value="ips"> Manual IPs</label>
+          </div>
+          <div id="gw-src-infra">
+            <div class="popup-field">
+              <label class="popup-label">Backend Infra <span style="font-weight:normal;color:#888">(can differ from gateway)</span></label>
+              <select id="gw-backend-infra" class="popup-select"><option value="">Select</option>${makeOpts(preselectedInfraId)}</select>
+            </div>
+          </div>
+          <div id="gw-src-label" style="display:none">
+            <div class="popup-field">
+              <label class="popup-label">Label Selector <span style="font-weight:normal;color:#888">(searches across all infras)</span></label>
+              <input id="gw-label" class="popup-input" placeholder="e.g. app=hermes-agent">
+            </div>
+          </div>
+          <div id="gw-src-ips" style="display:none">
+            <div class="popup-field">
+              <label class="popup-label">Backend IPs</label>
+              <input id="gw-ips" class="popup-input" placeholder="1.2.3.4, 5.6.7.8, ...">
+            </div>
+          </div>
+          <div style="margin-top:8px;max-width:160px"><div class="popup-field">
+            <label class="popup-label">Backend Port</label>
+            <input id="gw-bport" type="number" class="popup-input" value="9120">
+          </div></div>
+        </div>
+
+        <div style="font-size:0.75rem;color:#888;padding:4px 0">
+          ℹ️ nginx round-robin upstream — one request per backend in turn, regardless of DNS caching.
+        </div>
+      </div>`,
+    showCancelButton: true,
+    confirmButtonText: '🚀 Deploy nginx',
+    didOpen: () => {
+      document.querySelectorAll('input[name="gw-src"]').forEach(r =>
+        r.addEventListener('change', function() {
+          document.getElementById('gw-src-infra').style.display  = this.value === 'infra'  ? '' : 'none';
+          document.getElementById('gw-src-label').style.display  = this.value === 'label'  ? '' : 'none';
+          document.getElementById('gw-src-ips').style.display    = this.value === 'ips'    ? '' : 'none';
+        })
+      );
+    },
+    preConfirm: async () => {
+      const gwInfraId = document.getElementById('gw-infra').value;
+      const nodeId    = document.getElementById('gw-node').value.trim();
+      const src       = document.querySelector('input[name="gw-src"]:checked').value;
+      const lport     = document.getElementById('gw-lport').value || '80';
+      const bport     = document.getElementById('gw-bport').value || '9120';
+      if (!gwInfraId) { Swal.showValidationMessage('Select a Gateway Infra.'); return false; }
+
+      let backends;
+      if (src === 'ips') {
+        const v = document.getElementById('gw-ips').value.trim();
+        if (!v) { Swal.showValidationMessage('Enter backend IPs.'); return false; }
+        backends = v.split(/[\s,]+/).filter(Boolean).join(' ');
+      } else if (src === 'label') {
+        const v = document.getElementById('gw-label').value.trim();
+        if (!v) { Swal.showValidationMessage('Enter a label selector.'); return false; }
+        backends = `$$Func(GetPublicIPs(separator=' ', label='${v}'))`;
+      } else {
+        // Infra source — resolve IPs from the (possibly different) backend infra
+        const bkInfraId = document.getElementById('gw-backend-infra').value;
+        if (!bkInfraId) { Swal.showValidationMessage('Select a Backend Infra.'); return false; }
+        try {
+          const r = await axios.get(`${base}/ns/${ns}/infra/${bkInfraId}`, { auth });
+          const ips = (r.data.node || []).map(nd => nd.publicIP).filter(Boolean);
+          if (!ips.length) { Swal.showValidationMessage('No public IPs found in the selected Backend Infra.'); return false; }
+          backends = ips.join(' ');
+        } catch(e) {
+          Swal.showValidationMessage('Failed to fetch backend IPs: ' + (e.message || '')); return false;
+        }
+      }
+      return { gwInfraId, nodeId, backends, lport, bport };
+    }
+  });
+
+  if (!result.isConfirmed || !result.value) return;
+  const { gwInfraId, nodeId, backends, lport, bport } = result.value;
+
+  // Cookie-based sticky session: each browser gets a unique cookie on first visit.
+  // Works correctly behind corporate NAT (unlike ip_hash which fails when all
+  // users share the same external IP). The map directive assigns $request_id as
+  // the initial cookie value; subsequent requests reuse the existing cookie value,
+  // ensuring consistent backend routing per browser session.
+  // WebSocket headers are included for long-lived connections.
+  const deployCmd =
+    `UPSTREAMS=$(echo "${backends}" | awk -v p=${bport} '{for(i=1;i<=NF;i++) printf "  server %s:%s;\\n",$i,p}') && ` +
+    `printf 'map $cookie_gw_id $gw_uid {\\n  default "$request_id";\\n  "~." "$cookie_gw_id";\\n}\\nupstream cb_gw {\\n  hash $gw_uid consistent;\\n%s\\n}\\nserver {\\n  listen ${lport};\\n  location / {\\n    add_header Set-Cookie "gw_id=$gw_uid; Path=/; Max-Age=31536000; SameSite=Lax" always;\\n    proxy_pass http://cb_gw;\\n    proxy_http_version 1.1;\\n    proxy_set_header Upgrade $http_upgrade;\\n    proxy_set_header Connection "upgrade";\\n    proxy_set_header Host $host;\\n    proxy_set_header X-Real-IP $remote_addr;\\n    proxy_read_timeout 3600s;\\n    proxy_send_timeout 3600s;\\n  }\\n}\\n' "$UPSTREAMS" | sudo tee /etc/nginx/conf.d/cb-gateway.conf > /dev/null && ` +
+    `sudo rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/default.conf 2>/dev/null; ` +
+    `sudo nginx -t && sudo systemctl enable nginx && sudo systemctl restart nginx && ` +
+    `echo "✅ Gateway :${lport} → ${backends} (cookie sticky, WebSocket ready)"` ;
+
+  let url = `${base}/ns/${ns}/cmd/infra/${gwInfraId}`;
+  if (nodeId) url += `?nodeId=${encodeURIComponent(nodeId)}`;
+
+  try {
+    const r = await axios.post(url, {
+      command: [
+        `sudo apt-get install -y nginx -q 2>/dev/null || sudo yum install -y nginx -q 2>/dev/null; true`,
+        deployCmd
+      ],
+      timeoutMinutes: 10
+    }, { auth });
+    showRemoteCmdResult(r.data, null);
+  } catch(e) {
+    errorAlert(e.response?.data?.message || e.message || 'Deploy failed');
+  }
+}
+window.showGatewayModal = showGatewayModal;
