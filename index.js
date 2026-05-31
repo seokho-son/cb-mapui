@@ -13296,15 +13296,105 @@ window.extractPlaceholders = function(text) {
 };
 
 /**
- * Render placeholder input fields below each command textarea that contains placeholders.
- * Preserves existing input values when re-rendering (e.g., after textarea edit).
+ * Render placeholder input fields for <PLACEHOLDER> patterns detected in commands.
+ *
+ * Consolidated mode (when #cmdParamsPanel exists in the DOM):
+ *   Scans all commands, deduplicates placeholders, and renders them in one shared
+ *   section (#cmdParamsSection / #cmdParamsPanel) placed above the commands area.
+ *   The user fills each parameter once; collectCommands() substitutes the value into
+ *   every command that contains that placeholder.
+ *
+ * Inline legacy mode (old popups without #cmdParamsPanel):
+ *   Falls back to per-command input panels appended below each textarea.
  */
 window.renderPlaceholderInputs = function() {
   const cmdContainer = document.getElementById('cmdContainer');
   if (!cmdContainer) return;
 
-  // Collect all existing placeholder values before removing any panels
-  const savedValues = {}; // { cmdIndex: { placeholderName: value } }
+  const paramsSection = document.getElementById('cmdParamsSection');
+  const paramsPanel   = document.getElementById('cmdParamsPanel');
+
+  if (paramsPanel) {
+    // ── Consolidated mode ──────────────────────────────────────────────────
+    // Save existing values by placeholder name
+    const savedValues = {};
+    paramsPanel.querySelectorAll('.placeholder-input').forEach(input => {
+      if (input.value && input.dataset.placeholderName) {
+        savedValues[input.dataset.placeholderName] = input.value;
+      }
+    });
+    paramsPanel.innerHTML = '';
+    // Remove any stale inline panels
+    cmdContainer.querySelectorAll('.placeholder-panel').forEach(p => p.remove());
+
+    // Collect unique placeholders across all commands
+    const phMap = {}; // name → { ph, cmdIndices[] }
+    cmdContainer.querySelectorAll('[id^="cmdDiv"]').forEach((div, idx) => {
+      const ta = document.getElementById(`cmd${idx + 1}`);
+      if (!ta) return;
+      window.extractPlaceholders(ta.value).forEach(ph => {
+        if (!phMap[ph.name]) phMap[ph.name] = { ph, cmdIndices: [] };
+        phMap[ph.name].cmdIndices.push(idx + 1);
+      });
+    });
+
+    if (Object.keys(phMap).length === 0) {
+      if (paramsSection) paramsSection.style.display = 'none';
+      return;
+    }
+    if (paramsSection) paramsSection.style.display = '';
+
+    Object.entries(phMap).forEach(([name, { ph, cmdIndices }]) => {
+      const inputId = `ph_param_${name}`;
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;';
+
+      const label = document.createElement('label');
+      label.htmlFor = inputId;
+      label.style.cssText = 'min-width:130px; font-weight:600; color:#0d6efd; font-size:0.78rem; white-space:nowrap;';
+      label.textContent = (ph.isSecret ? '🔒 ' : '📝 ') + name;
+
+      const input = document.createElement('input');
+      input.id = inputId;
+      input.type = ph.isSecret ? 'password' : 'text';
+      input.className = 'popup-input placeholder-input';
+      input.dataset.placeholderName = name;
+      input.dataset.fullMatch = ph.fullMatch;
+      input.dataset.isSecret = String(ph.isSecret);
+      input.placeholder = ph.hint || `Enter ${name.replace(/_/g, ' ').toLowerCase()}`;
+      input.style.cssText = 'flex:1; min-width:160px; padding:4px 8px; font-size:0.8rem;';
+      if (savedValues[name]) input.value = savedValues[name];
+
+      row.appendChild(label);
+      row.appendChild(input);
+
+      if (ph.isSecret) {
+        const toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.textContent = '👁';
+        toggleBtn.title = 'Show / hide value';
+        toggleBtn.style.cssText = 'padding:2px 8px; border:1px solid #ccc; border-radius:3px; background:#f8f9fa; cursor:pointer; font-size:0.85rem;';
+        toggleBtn.onclick = () => {
+          input.type = input.type === 'password' ? 'text' : 'password';
+          toggleBtn.textContent = input.type === 'password' ? '👁' : '🙈';
+        };
+        row.appendChild(toggleBtn);
+      }
+
+      const meta = document.createElement('span');
+      meta.style.cssText = 'font-size:0.68rem; color:#888;';
+      const descText = ph.description || '';
+      const cmdText  = `cmd ${cmdIndices.join(', ')}`;
+      meta.textContent = descText ? `${descText}  •  ${cmdText}` : cmdText;
+      row.appendChild(meta);
+
+      paramsPanel.appendChild(row);
+    });
+    return;
+  }
+
+  // ── Inline legacy mode (old popups without #cmdParamsPanel) ───────────────
+  const savedValues = {};
   cmdContainer.querySelectorAll('.placeholder-panel').forEach(panel => {
     panel.querySelectorAll('.placeholder-input').forEach(input => {
       if (input.value && input.dataset.cmdIndex && input.dataset.placeholderName) {
@@ -13316,34 +13406,29 @@ window.renderPlaceholderInputs = function() {
     panel.remove();
   });
 
-  const cmdDivs = cmdContainer.querySelectorAll('[id^="cmdDiv"]');
-  cmdDivs.forEach((div, idx) => {
+  cmdContainer.querySelectorAll('[id^="cmdDiv"]').forEach((div, idx) => {
     const cmdIndex = idx + 1;
     const textarea = document.getElementById(`cmd${cmdIndex}`);
     if (!textarea) return;
 
     const placeholders = window.extractPlaceholders(textarea.value);
-    const existingValues = savedValues[String(cmdIndex)] || {};
-
     if (placeholders.length === 0) return;
 
-    // Create placeholder input panel
+    const existingValues = savedValues[String(cmdIndex)] || {};
     const panel = document.createElement('div');
     panel.className = 'placeholder-panel';
-    panel.style.cssText = 'margin: 4px 0 8px 0; padding: 8px 12px; background: #f0f7ff; border: 1px solid #b3d7ff; border-radius: 6px; font-size: 0.8rem;';
+    panel.style.cssText = 'margin:4px 0 8px 0; padding:8px 12px; background:#f0f7ff; border:1px solid #b3d7ff; border-radius:6px; font-size:0.8rem;';
 
     placeholders.forEach(ph => {
       const inputId = `ph_cmd${cmdIndex}_${ph.name}`;
       const row = document.createElement('div');
-      row.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 4px;';
+      row.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:4px;';
 
-      // Label
       const label = document.createElement('label');
       label.htmlFor = inputId;
-      label.style.cssText = 'min-width: 100px; font-weight: 600; color: #0d6efd; font-size: 0.75rem; white-space: nowrap;';
+      label.style.cssText = 'min-width:100px; font-weight:600; color:#0d6efd; font-size:0.75rem; white-space:nowrap;';
       label.textContent = (ph.isSecret ? '🔒 ' : '📝 ') + ph.name;
 
-      // Input field
       const input = document.createElement('input');
       input.id = inputId;
       input.type = ph.isSecret ? 'password' : 'text';
@@ -13353,23 +13438,18 @@ window.renderPlaceholderInputs = function() {
       input.dataset.fullMatch = ph.fullMatch;
       input.dataset.isSecret = String(ph.isSecret);
       input.placeholder = ph.hint || `Enter ${ph.name.replace(/_/g, ' ').toLowerCase()}`;
-      input.style.cssText = 'flex: 1; padding: 4px 8px; font-size: 0.8rem; border: 1px solid #b3d7ff; border-radius: 4px;';
-
-      // Restore previous value
-      if (existingValues[ph.name]) {
-        input.value = existingValues[ph.name];
-      }
+      input.style.cssText = 'flex:1; padding:4px 8px; font-size:0.8rem; border:1px solid #b3d7ff; border-radius:4px;';
+      if (existingValues[ph.name]) input.value = existingValues[ph.name];
 
       row.appendChild(label);
       row.appendChild(input);
 
-      // Toggle visibility button for secret fields
       if (ph.isSecret) {
         const toggleBtn = document.createElement('button');
         toggleBtn.type = 'button';
         toggleBtn.textContent = '👁';
         toggleBtn.title = 'Toggle visibility';
-        toggleBtn.style.cssText = 'padding: 2px 6px; border: 1px solid #ccc; border-radius: 3px; background: #f8f9fa; cursor: pointer; font-size: 0.8rem;';
+        toggleBtn.style.cssText = 'padding:2px 6px; border:1px solid #ccc; border-radius:3px; background:#f8f9fa; cursor:pointer; font-size:0.8rem;';
         toggleBtn.onclick = () => {
           input.type = input.type === 'password' ? 'text' : 'password';
           toggleBtn.textContent = input.type === 'password' ? '👁' : '🙈';
@@ -13377,10 +13457,9 @@ window.renderPlaceholderInputs = function() {
         row.appendChild(toggleBtn);
       }
 
-      // Description
       if (ph.description) {
         const desc = document.createElement('span');
-        desc.style.cssText = 'font-size: 0.65rem; color: #888; white-space: nowrap;';
+        desc.style.cssText = 'font-size:0.65rem; color:#888; white-space:nowrap;';
         desc.textContent = ph.description;
         row.appendChild(desc);
       }
@@ -14261,28 +14340,44 @@ window.setupCommandsPopup = function (maxCommands = 10) {
   window.renderPlaceholderInputs();
 };
 
-// Collect commands from popup (call in preConfirm)
-// Substitutes placeholder values from placeholder input fields before returning.
+// Collect commands from popup (call in preConfirm).
+// Substitutes <PLACEHOLDER> tokens with values before returning.
+// - Consolidated mode (#cmdParamsPanel present): reads from shared params panel;
+//   each unique param is entered once and substituted into all commands.
+// - Legacy inline mode: reads per-command .placeholder-input panels.
 window.collectCommands = function () {
   const commands = [];
   const cmdContainer = document.getElementById('cmdContainer');
   if (!cmdContainer) return commands;
 
-  const cmdDivs = cmdContainer.querySelectorAll('[id^="cmdDiv"]');
-  cmdDivs.forEach((div, index) => {
+  // Build consolidated substitution map from #cmdParamsPanel (if present)
+  const consolidatedMap = {}; // fullMatch → value
+  const paramsPanel = document.getElementById('cmdParamsPanel');
+  if (paramsPanel) {
+    paramsPanel.querySelectorAll('.placeholder-input').forEach(input => {
+      const fullMatch = input.dataset.fullMatch;
+      const value = input.value;
+      if (fullMatch && value) consolidatedMap[fullMatch] = value;
+    });
+  }
+  const useConsolidated = paramsPanel !== null;
+
+  cmdContainer.querySelectorAll('[id^="cmdDiv"]').forEach((div, index) => {
     const cmdInput = document.getElementById(`cmd${index + 1}`);
     if (cmdInput && cmdInput.value && cmdInput.value.trim()) {
       let cmdText = cmdInput.value.trim();
 
-      // Substitute placeholders with values from placeholder input fields
-      const phInputs = div.querySelectorAll('.placeholder-input');
-      phInputs.forEach(phInput => {
-        const fullMatch = phInput.dataset.fullMatch;
-        const value = phInput.value;
-        if (fullMatch && value) {
+      if (useConsolidated) {
+        Object.entries(consolidatedMap).forEach(([fullMatch, value]) => {
           cmdText = cmdText.replaceAll(fullMatch, value);
-        }
-      });
+        });
+      } else {
+        div.querySelectorAll('.placeholder-input').forEach(phInput => {
+          const fullMatch = phInput.dataset.fullMatch;
+          const value = phInput.value;
+          if (fullMatch && value) cmdText = cmdText.replaceAll(fullMatch, value);
+        });
+      }
 
       commands.push(cmdText);
     }
@@ -16038,6 +16133,15 @@ async function executeRemoteCmd() {
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Parameters Section: auto-shown when commands contain <PLACEHOLDER> tokens -->
+      <div id="cmdParamsSection" class="popup-section" style="display:none; border:1px solid #b3d7ff; background:#f0f7ff;">
+        <div class="popup-section-title" style="color:#0d6efd;">
+          📋 Parameters
+          <span style="font-weight:normal; font-size:0.72rem; color:#555; margin-left:6px;">— detected from commands. Fill values before executing.</span>
+        </div>
+        <div id="cmdParamsPanel"></div>
       </div>
 
       <!-- Commands Section -->
