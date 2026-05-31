@@ -12737,6 +12737,13 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "ls -la ~/guidellm_bench/bench_*";
       defaultRemoteCommand[2] = "";
       break;
+    case "HermesAgent":
+      // All-in-one Hermes Agent deployment: vLLM + Hermes Gateway/Dashboard + nginx reverse proxy
+      // Dashboard accessible via nginx on port 9120 after deployment
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployHermesAgent.sh -o /tmp/deployHermesAgent.sh && bash /tmp/deployHermesAgent.sh --run-as-user cb-user --vllm-version \"<VLLM_VERSION>\" --model \"<HERMES_MODEL>\" --ctx-len \"<CTX_LEN>\" --hermes-api-key \"<HERMES_API_KEY>\" --hf-token \"<HF_TOKEN>\" --discord-token \"<DISCORD_TOKEN>\" --discord-home-channel \"<DISCORD_HOME_CHANNEL>\" --discord-home-channel-name \"<DISCORD_HOME_CHANNEL_NAME>\" --ntfy-topic \"<NTFY_TOPIC>\" --tavily-api-key \"<TAVILY_API_KEY>\"";
+      defaultRemoteCommand[1] = "echo 'Hermes Dashboard: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:9120))'";
+      defaultRemoteCommand[2] = "";
+      break;
     case "RayHead-Deploy":
       defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/ray/ray-head-setup.sh";
       defaultRemoteCommand[1] = "chmod +x ~/ray-head-setup.sh";
@@ -13265,6 +13272,58 @@ window.PLACEHOLDER_METADATA = {
     hint: '1',
     secret: false,
   },
+  // Hermes Agent
+  'HERMES_API_KEY': {
+    description: 'Hermes API key (leave blank to auto-generate)',
+    hint: '',
+    secret: true,
+  },
+  'VLLM_VERSION': {
+    description: 'vLLM version to install',
+    hint: '0.22.0',
+    default: '0.22.0',
+    secret: false,
+  },
+  'HERMES_MODEL': {
+    description: 'LLM model for Hermes Agent',
+    hint: 'Qwen/Qwen3-30B-A3B-Instruct-2507-FP8',
+    default: 'Qwen/Qwen3-30B-A3B-Instruct-2507-FP8',
+    secret: false,
+  },
+  'CTX_LEN': {
+    description: 'Maximum context length',
+    hint: '65536',
+    default: '65536',
+    secret: false,
+  },
+  'DISCORD_TOKEN': {
+    description: 'Discord bot token',
+    hint: 'your-discord-bot-token',
+    secret: true,
+  },
+  'DISCORD_HOME_CHANNEL': {
+    description: 'Discord home channel ID',
+    hint: '1509132101184913488',
+    default: '1509132101184913488',
+    secret: false,
+  },
+  'DISCORD_HOME_CHANNEL_NAME': {
+    description: 'Discord home channel name',
+    hint: 'hermes-bot',
+    default: 'hermes-bot',
+    secret: false,
+  },
+  'NTFY_TOPIC': {
+    description: 'ntfy notification topic',
+    hint: 'etri-son-hermes-agent',
+    default: 'etri-son-hermes-agent',
+    secret: false,
+  },
+  'TAVILY_API_KEY': {
+    description: 'Tavily search API key',
+    hint: 'tvly-xxxxxxxxxxxxxxxx',
+    secret: true,
+  },
 };
 
 /**
@@ -13290,6 +13349,7 @@ window.extractPlaceholders = function(text) {
       isSecret: meta.secret === true,
       description: meta.description || '',
       hint: meta.hint || '',
+      default: meta.default || '',
     });
   }
   return placeholders;
@@ -13363,7 +13423,13 @@ window.renderPlaceholderInputs = function() {
       input.dataset.isSecret = String(ph.isSecret);
       input.placeholder = ph.hint || `Enter ${name.replace(/_/g, ' ').toLowerCase()}`;
       input.style.cssText = 'flex:1; min-width:160px; padding:4px 8px; font-size:0.8rem;';
-      if (savedValues[name]) input.value = savedValues[name];
+      // Pre-fill non-secret fields with the hint value as a sensible default;
+      // secret fields (tokens, keys) are intentionally left blank.
+      if (savedValues[name]) {
+        input.value = savedValues[name];
+      } else if (!ph.isSecret && ph.default) {
+        input.value = ph.default;
+      }
 
       row.appendChild(label);
       row.appendChild(input);
@@ -13439,7 +13505,11 @@ window.renderPlaceholderInputs = function() {
       input.dataset.isSecret = String(ph.isSecret);
       input.placeholder = ph.hint || `Enter ${ph.name.replace(/_/g, ' ').toLowerCase()}`;
       input.style.cssText = 'flex:1; padding:4px 8px; font-size:0.8rem; border:1px solid #b3d7ff; border-radius:4px;';
-      if (existingValues[ph.name]) input.value = existingValues[ph.name];
+      if (existingValues[ph.name]) {
+        input.value = existingValues[ph.name];
+      } else if (!ph.isSecret && ph.default) {
+        input.value = ph.default;
+      }
 
       row.appendChild(label);
       row.appendChild(input);
@@ -13526,7 +13596,8 @@ window.predefinedScriptCategories = {
       { value: 'OpenWebUI-vLLM', label: '7. Install Open WebUI (vLLM)', step: 7 },
       { value: 'TelemetrySensor', label: '8. Setup GPU Telemetry Sensor', step: 8, experimental: true, targetLabel: 'accelerator=gpu' },
       { value: 'TelemetryMonitor', label: '9. Setup Monitoring Server', step: 9, experimental: true, targetLabel: 'role=observability' },
-      { value: 'TelemetryExport', label: '10. Export Metrics to CSV', step: 10, experimental: true, targetLabel: 'role=observability' }
+      { value: 'TelemetryExport', label: '10. Export Metrics to CSV', step: 10, experimental: true, targetLabel: 'role=observability' },
+      { value: 'HermesAgent', label: 'Deploy Hermes Agent', targetLabel: 'accelerator=gpu' }
     ]
   },
   'llm-benchmark': {
@@ -14356,8 +14427,8 @@ window.collectCommands = function () {
   if (paramsPanel) {
     paramsPanel.querySelectorAll('.placeholder-input').forEach(input => {
       const fullMatch = input.dataset.fullMatch;
-      const value = input.value;
-      if (fullMatch && value) consolidatedMap[fullMatch] = value;
+      // Always substitute: empty value → empty string (prevents literal <TOKEN> reaching remote)
+      if (fullMatch) consolidatedMap[fullMatch] = input.value;
     });
   }
   const useConsolidated = paramsPanel !== null;
@@ -14374,8 +14445,7 @@ window.collectCommands = function () {
       } else {
         div.querySelectorAll('.placeholder-input').forEach(phInput => {
           const fullMatch = phInput.dataset.fullMatch;
-          const value = phInput.value;
-          if (fullMatch && value) cmdText = cmdText.replaceAll(fullMatch, value);
+          if (fullMatch) cmdText = cmdText.replaceAll(fullMatch, phInput.value);
         });
       }
 
