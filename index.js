@@ -12740,7 +12740,7 @@ function setDefaultRemoteCommandsByApp(appName) {
     case "HermesAgent":
       // All-in-one Hermes Agent deployment: vLLM + Hermes Gateway/Dashboard + nginx reverse proxy
       // Dashboard accessible via nginx on port 9120 after deployment
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployHermesAgent.sh -o /tmp/deployHermesAgent.sh && bash /tmp/deployHermesAgent.sh --run-as-user cb-user --vllm-version <VLLM_VERSION> --model <HERMES_MODEL> --ctx-len <CTX_LEN> --hermes-api-key <HERMES_API_KEY> --hf-token <HF_TOKEN> --discord-token <DISCORD_TOKEN> --discord-home-channel <DISCORD_HOME_CHANNEL> --discord-home-channel-name <DISCORD_HOME_CHANNEL_NAME> --ntfy-topic <NTFY_TOPIC> --tavily-api-key <TAVILY_API_KEY>";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployHermesAgent.sh -o /tmp/deployHermesAgent.sh && bash /tmp/deployHermesAgent.sh --run-as-user cb-user --vllm-version \"<VLLM_VERSION>\" --model \"<HERMES_MODEL>\" --ctx-len \"<CTX_LEN>\" --hermes-api-key \"<HERMES_API_KEY>\" --hf-token \"<HF_TOKEN>\" --discord-token \"<DISCORD_TOKEN>\" --discord-home-channel \"<DISCORD_HOME_CHANNEL>\" --discord-home-channel-name \"<DISCORD_HOME_CHANNEL_NAME>\" --ntfy-topic \"<NTFY_TOPIC>\" --tavily-api-key \"<TAVILY_API_KEY>\"";
       defaultRemoteCommand[1] = "echo 'Hermes Dashboard: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:9120))'";
       defaultRemoteCommand[2] = "";
       break;
@@ -13281,16 +13281,19 @@ window.PLACEHOLDER_METADATA = {
   'VLLM_VERSION': {
     description: 'vLLM version to install',
     hint: '0.22.0',
+    default: '0.22.0',
     secret: false,
   },
   'HERMES_MODEL': {
     description: 'LLM model for Hermes Agent',
     hint: 'Qwen/Qwen3-30B-A3B-Instruct-2507-FP8',
+    default: 'Qwen/Qwen3-30B-A3B-Instruct-2507-FP8',
     secret: false,
   },
   'CTX_LEN': {
     description: 'Maximum context length',
     hint: '65536',
+    default: '65536',
     secret: false,
   },
   'DISCORD_TOKEN': {
@@ -13301,16 +13304,19 @@ window.PLACEHOLDER_METADATA = {
   'DISCORD_HOME_CHANNEL': {
     description: 'Discord home channel ID',
     hint: '1509132101184913488',
+    default: '1509132101184913488',
     secret: false,
   },
   'DISCORD_HOME_CHANNEL_NAME': {
     description: 'Discord home channel name',
     hint: 'hermes-bot',
+    default: 'hermes-bot',
     secret: false,
   },
   'NTFY_TOPIC': {
     description: 'ntfy notification topic',
-    hint: 'my-hermes-agent',
+    hint: 'etri-son-hermes-agent',
+    default: 'etri-son-hermes-agent',
     secret: false,
   },
   'TAVILY_API_KEY': {
@@ -13343,6 +13349,7 @@ window.extractPlaceholders = function(text) {
       isSecret: meta.secret === true,
       description: meta.description || '',
       hint: meta.hint || '',
+      default: meta.default || '',
     });
   }
   return placeholders;
@@ -13420,8 +13427,8 @@ window.renderPlaceholderInputs = function() {
       // secret fields (tokens, keys) are intentionally left blank.
       if (savedValues[name]) {
         input.value = savedValues[name];
-      } else if (!ph.isSecret && ph.hint) {
-        input.value = ph.hint;
+      } else if (!ph.isSecret && ph.default) {
+        input.value = ph.default;
       }
 
       row.appendChild(label);
@@ -13500,8 +13507,8 @@ window.renderPlaceholderInputs = function() {
       input.style.cssText = 'flex:1; padding:4px 8px; font-size:0.8rem; border:1px solid #b3d7ff; border-radius:4px;';
       if (existingValues[ph.name]) {
         input.value = existingValues[ph.name];
-      } else if (!ph.isSecret && ph.hint) {
-        input.value = ph.hint;
+      } else if (!ph.isSecret && ph.default) {
+        input.value = ph.default;
       }
 
       row.appendChild(label);
@@ -13590,7 +13597,7 @@ window.predefinedScriptCategories = {
       { value: 'TelemetrySensor', label: '8. Setup GPU Telemetry Sensor', step: 8, experimental: true, targetLabel: 'accelerator=gpu' },
       { value: 'TelemetryMonitor', label: '9. Setup Monitoring Server', step: 9, experimental: true, targetLabel: 'role=observability' },
       { value: 'TelemetryExport', label: '10. Export Metrics to CSV', step: 10, experimental: true, targetLabel: 'role=observability' },
-      { value: 'HermesAgent', label: 'Deploy Hermes Agent' }
+      { value: 'HermesAgent', label: 'Deploy Hermes Agent', targetLabel: 'accelerator=gpu' }
     ]
   },
   'llm-benchmark': {
