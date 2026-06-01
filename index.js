@@ -23565,9 +23565,12 @@ async function showGatewayModal(preselectedInfraId) {
 
   let infraList = [];
   try {
-    const r = await axios.get(`${base}/ns/${ns}/infra?option=id`, { auth });
+    const r = await axios.get(`${base}/ns/${ns}/infra?option=id`, { auth, timeout: 15000 });
     infraList = r.data.output || [];
-  } catch(e) {}
+  } catch(e) {
+    errorAlert(e.response?.data?.message || e.message || 'Failed to load Infra list');
+    return;
+  }
 
   const makeOpts = (selected) => infraList.map(id =>
     `<option value="${window.escapeHtml(id)}"${id === selected ? ' selected' : ''}>${window.escapeHtml(id)}</option>`
@@ -23650,11 +23653,20 @@ async function showGatewayModal(preselectedInfraId) {
       const bport     = document.getElementById('gw-bport').value || '9120';
       if (!gwInfraId) { Swal.showValidationMessage('Select a Gateway Infra.'); return false; }
 
+      const isValidPort = v => /^\d+$/.test(v) && +v >= 1 && +v <= 65535;
+      if (!isValidPort(lport)) { Swal.showValidationMessage('Listener port must be a number between 1 and 65535.'); return false; }
+      if (!isValidPort(bport)) { Swal.showValidationMessage('Backend port must be a number between 1 and 65535.'); return false; }
+
+      const isValidIP = v => /^(\d{1,3}\.){3}\d{1,3}$/.test(v) || /^[0-9a-fA-F:]+$/.test(v);
+
       let backends;
       if (src === 'ips') {
         const v = document.getElementById('gw-ips').value.trim();
         if (!v) { Swal.showValidationMessage('Enter backend IPs.'); return false; }
-        backends = v.split(/[\s,]+/).filter(Boolean).join(' ');
+        const ipList = v.split(/[\s,]+/).filter(Boolean);
+        const bad = ipList.find(ip => !isValidIP(ip));
+        if (bad) { Swal.showValidationMessage(`Invalid IP address: ${bad}`); return false; }
+        backends = ipList.join(' ');
       } else if (src === 'label') {
         const v = document.getElementById('gw-label').value.trim();
         if (!v) { Swal.showValidationMessage('Enter a label selector.'); return false; }
