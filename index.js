@@ -8262,6 +8262,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
               isGPUImage: img.isGPUImage || false,
               isKubernetesImage: img.isKubernetesImage || false,
               isBasicImage: img.isBasicImage || false,
+              isBasicGpuImage: img.isBasicGpuImage || false,
               isCustomImage: false,
               details: img.details || []
             }));
@@ -8305,6 +8306,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 isGPUImage: false,
                 isKubernetesImage: false,
                 isBasicImage: false,
+                isBasicGpuImage: false,
                 isCustomImage: true, // Mark as custom image
                 details: img.details || []
               }));
@@ -8321,12 +8323,30 @@ function getRecommendedSpec(idx, latitude, longitude) {
             return;
           }
 
+          // Detect GPU spec
+          const isGpuSpec = selectedSpec.acceleratorType === "gpu";
+
+          // Re-sort when GPU spec is selected: custom > basic GPU > basic OS > GPU > rest
+          if (isGpuSpec) {
+            const gpuSortScore = img =>
+              img.isCustomImage    ? 4 :
+              img.isBasicGpuImage  ? 3 :
+              img.isBasicImage     ? 2 :
+              img.isGPUImage       ? 1 : 0;
+            availableImages.sort((a, b) => gpuSortScore(b) - gpuSortScore(a));
+          }
+
           // Image selection popup
           Swal.fire({
             title: "Select an Image from the Image Search List",
             width: 1200,
             html: `
               <div class="compact-datatable">
+                ${isGpuSpec ? `
+                <div style="margin-bottom:8px;padding:6px 10px;background:linear-gradient(90deg,#fff3cd,#fff8e1);border:1px solid #ffc107;border-radius:5px;font-size:0.8rem;display:flex;align-items:center;gap:6px;">
+                  <span style="font-size:1.1em;">⚡</span>
+                  <span><b>GPU Spec selected</b> — <span style="color:#e74c3c;">⭐🧮 Basic GPU images</span> (GPU drivers pre-installed) are listed first. Plain OS images are also available.</span>
+                </div>` : ''}
                 <div class="table-responsive">
                   <table id="imageSelectionTable" class="display nowrap" style="width:100%">
                     <thead>
@@ -8341,16 +8361,22 @@ function getRecommendedSpec(idx, latitude, longitude) {
                     </thead>
                     <tbody>
                       ${availableImages.map((image, index) => {
-                        // Simple T/F display for GPU and Kubernetes support
-                        const gpuSupport = image.isGPUImage ? 'T' : 'F';
-                        const k8sSupport = image.isKubernetesImage ? 'T' : 'F';
-                        
-                        // Add special styling for custom images and basic images
+                        const isRecommendedGpu = isGpuSpec && image.isBasicGpuImage;
+
+                        // Row class
                         const isCustomClass = image.isCustomImage ? 'custom-image-row' : '';
-                        const isBasicClass = image.isBasicImage ? 'basic-image-row' : '';
+                        const rowClass = isRecommendedGpu ? 'recommended-gpu-image-row' : (image.isBasicImage ? 'basic-image-row' : '');
+
+                        // # column icons
                         const customIcon = image.isCustomImage ? ' <span class="custom-image-icon" title="Custom Image (Snapshot)">📸</span>' : '';
                         const basicIcon = image.isBasicImage ? ' <span class="basic-image-icon" title="Basic OS Image">⭐</span>' : '';
-                        const mlIcon = image.isGPUImage ? ' <span class="ml-image-icon" title="GPU Support">🧮</span>' : '';
+
+                        // Support column icons — always show GPU/k8s status regardless of spec type
+                        // isBasicGpuImage: GPU drivers pre-installed (recommended for GPU workloads)
+                        // isGPUImage without isBasicGpuImage: GPU-capable but no pre-installed drivers
+                        const gpuIcon = image.isBasicGpuImage
+                          ? ' <span class="recommended-gpu-icon" title="Basic GPU Image (GPU drivers pre-installed)">⭐🧮</span>'
+                          : (image.isGPUImage ? ' <span class="ml-image-icon" title="GPU Support">🧮</span>' : '');
                         const k8sIcon = image.isKubernetesImage ? ' <span class="k8s-image-icon" title="Kubernetes Support">☸️</span>' : '';
                         
                         // Truncate long text for better table layout - increased limits for more space
@@ -8363,12 +8389,12 @@ function getRecommendedSpec(idx, latitude, longitude) {
                         const truncatedDistribution = truncateText(image.osDistribution, 70);
                         
                         return `
-                          <tr id="image-row-${index}" class="${index === 0 ? 'selected-image' : ''} ${isCustomClass} ${isBasicClass}" data-index="${index}">
+                          <tr id="image-row-${index}" class="${index === 0 ? 'selected-image' : ''} ${isCustomClass} ${rowClass}" data-index="${index}">
                             <td class="text-left">${index + 1}${customIcon}${basicIcon}</td>
                             <td class="text-left">${image.osType}</td>
                             <td class="text-left" style="font-size: 0.85em; color: #0066cc;" title="${image.cspImageName}">${truncatedImageName}</td>
                             <td class="text-left" style="font-size: 0.9em;" title="${image.osDistribution}">${truncatedDistribution}</td>
-                            <td class="text-center">${mlIcon}${k8sIcon}</td>
+                            <td class="text-center">${gpuIcon}${k8sIcon}</td>
                             <td class="text-center">${image.osArchitecture}</td>
                           </tr>
                         `;
@@ -8476,6 +8502,21 @@ function getRecommendedSpec(idx, latitude, longitude) {
                   background-color: rgba(0, 123, 255, 0.08) !important;
                 }
                 
+                /* Recommended GPU Image row styling */
+                .recommended-gpu-image-row {
+                  background-color: rgba(231, 76, 60, 0.08) !important;
+                  border-left: 3px solid #e74c3c !important;
+                }
+                .recommended-gpu-image-row:hover {
+                  background-color: rgba(231, 76, 60, 0.14) !important;
+                }
+
+                /* Recommended GPU icon */
+                .recommended-gpu-icon {
+                  font-size: 1.1em;
+                  margin-left: 5px;
+                }
+
                 /* Basic Image row styling */
                 .basic-image-row {
                   background-color: rgba(255, 193, 7, 0.1) !important;
@@ -8602,6 +8643,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
                     ${image.isKubernetesImage ? `<div style="margin-bottom:3px; text-align: left;"><strong>K8s Support:</strong> <span style="color: blue; font-weight: bold;">✓ Yes</span></div>` : ''}
                     ${image.isGPUImage ? `<div style="margin-bottom:3px; text-align: left;"><strong>GPU Support:</strong> <span style="color: red; font-weight: bold;">✓ Yes</span></div>` : ''}
                     ${image.isBasicImage ? `<div style="margin-bottom:3px; text-align: left;"><strong>Basic Image:</strong> <span style="color: green; font-weight: bold;">✓ Yes</span></div>` : ''}
+                    ${image.isBasicGpuImage ? `<div style="margin-bottom:3px; text-align: left;"><strong>Basic GPU Image:</strong> <span style="color: red; font-weight: bold;">✓ Yes (GPU drivers pre-installed)</span></div>` : ''}
                   </div>
                 `;
 
