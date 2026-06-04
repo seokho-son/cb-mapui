@@ -8336,12 +8336,29 @@ function getRecommendedSpec(idx, latitude, longitude) {
             availableImages.sort((a, b) => gpuSortScore(b) - gpuSortScore(a));
           }
 
+          // Build spec summary for display in image selection popup
+          const esc = window.escapeHtml;
+          const specCost = (selectedSpec.costPerHour > 0)
+            ? `$${parseFloat(selectedSpec.costPerHour).toFixed(5)}/h`
+            : 'N/A';
+          const specAccel = (selectedSpec.acceleratorType === 'gpu' && selectedSpec.acceleratorModel)
+            ? `<span style="color:#c0392b;font-weight:bold;"> | GPU: ${esc(selectedSpec.acceleratorModel)} ×${esc(String(selectedSpec.acceleratorCount || '?'))} (${esc(String(selectedSpec.acceleratorMemoryGB || '?'))}GB/ea)</span>`
+            : '';
+
           // Image selection popup
           Swal.fire({
             title: "Select an Image from the Image Search List",
             width: 1200,
             html: `
               <div class="compact-datatable">
+                <div style="margin-bottom:8px;padding:6px 12px;background:#f0f4ff;border:1px solid #c5cae9;border-radius:5px;font-size:0.8rem;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                  <span style="font-weight:bold;color:#1565c0;">Selected Spec</span>
+                  <span style="font-family:monospace;color:#333;">${esc(selectedSpec.id || '')}</span>
+                  <span style="color:#555;">| ${esc((selectedSpec.providerName || '').toUpperCase())} ${esc(selectedSpec.regionName || '')}</span>
+                  <span style="color:#555;">| vCPU: ${esc(String(selectedSpec.vCPU || ''))} | Mem: ${esc(String(selectedSpec.memoryGiB || ''))} GiB | Arch: ${esc(selectedSpec.architecture || 'N/A')}</span>
+                  <span style="color:#555;">| ${esc(specCost)}</span>
+                  ${specAccel}
+                </div>
                 ${isGpuSpec ? `
                 <div style="margin-bottom:8px;padding:6px 10px;background:linear-gradient(90deg,#fff3cd,#fff8e1);border:1px solid #ffc107;border-radius:5px;font-size:0.8rem;display:flex;align-items:center;gap:6px;">
                   <span style="font-size:1.1em;">⚡</span>
