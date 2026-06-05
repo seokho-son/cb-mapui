@@ -9914,6 +9914,9 @@ function createNodeGroupItem(nodeConf, spec, index) {
         <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editNodeGroup(${index})" title="Edit" style="width: 28px; height: 28px; padding: 2px; font-size: 0.7rem;">
           ✏️
         </button>
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="findAlternativeNodeConfig(${index})" title="Find alternative config in another CSP/Region" aria-label="Find alternative node config in another CSP/Region" style="width: 28px; height: 28px; padding: 2px; font-size: 0.7rem;">
+          🔄
+        </button>
         <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeNodeGroup(${index})" title="Remove" style="width: 28px; height: 28px; padding: 2px; font-size: 0.7rem;">
           🗑️
         </button>
@@ -10153,6 +10156,516 @@ function editNodeGroup(index) {
   });
 }
 
+// ─── Find Alternative NodeGroup ─────────────────────────────────────────────
+
+async function findAlternativeNodeConfig(index) {
+  const hostname = configHostname;
+  const port     = configPort;
+  const username = configUsername;
+  const password = configPassword;
+  const nodeConf = nodeGroupRequestFromSpecList[index];
+  const spec     = recommendedSpecList[index];
+  if (!spec || !nodeConf) return;
+
+  const isGPU = spec.acceleratorType === 'gpu';
+  const esc   = window.escapeHtml;
+
+  // Helper: build a colour-coded diff badge
+  function diffBadge(val, unit = '', positiveIsGood = false) {
+    if (val == null) return '<span style="color:#555;">—</span>';
+    const num = Number(val);
+    if (!Number.isFinite(num) || num === 0) return '<span style="color:#555;">—</span>';
+    const sign   = num > 0 ? '+' : '';
+    const colour = positiveIsGood
+      ? (num > 0 ? '#27ae60' : '#e74c3c')
+      : (num > 0 ? '#e74c3c' : '#27ae60');
+    return `<span style="color:${colour};font-weight:bold;">${sign}${esc(String(num))}${esc(unit)}</span>`;
+  }
+
+  // ── Step 1: Target CSP / Region / Options ────────────────────────────────
+  const providerOptions = knownPlatforms
+    .map(p => `<option value="${p}">${p.toUpperCase()}</option>`)
+    .join('');
+
+  const sourceAccelHtml = isGPU
+    ? `<div style="color:#c0392b;font-size:0.78rem;margin-top:2px;">
+         GPU: ${esc(spec.acceleratorModel || 'N/A')} ×${spec.acceleratorCount || '?'} (${spec.acceleratorMemoryGB || '?'} GB/ea)
+       </div>` : '';
+
+  const step1Result = await Swal.fire({
+    title: 'Find Alternative Node Config',
+    width: 700,
+    html: `
+      <div style="font-size:0.85rem;text-align:left;">
+
+        <!-- Source summary -->
+        <div style="background:#f0f4ff;border:1px solid #c5cae9;border-radius:6px;padding:8px 12px;margin-bottom:14px;">
+          <div style="font-weight:bold;color:#1565c0;margin-bottom:4px;">Source NodeGroup: ${esc(nodeConf.name || `NodeGroup-${index+1}`)}</div>
+          <div style="font-family:monospace;font-size:0.8rem;">${esc(spec.id)}</div>
+          <div style="margin-top:3px;color:#555;">
+            ${esc((spec.providerName || '').toUpperCase())} ${esc(spec.regionName || '')}
+            &nbsp;|&nbsp; vCPU: ${spec.vCPU}
+            &nbsp;|&nbsp; Mem: ${spec.memoryGiB} GiB
+            &nbsp;|&nbsp; Arch: ${esc(spec.architecture || 'N/A')}
+            &nbsp;|&nbsp; ${spec.costPerHour > 0 ? '$' + parseFloat(spec.costPerHour).toFixed(5) + '/h' : 'cost N/A'}
+          </div>
+          ${sourceAccelHtml}
+        </div>
+
+        <!-- Target -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div>
+            <label style="font-weight:bold;display:block;margin-bottom:4px;">Target CSP <span style="color:red;">*</span></label>
+            <select id="eq-target-provider" style="width:100%;padding:6px;border:1px solid #ced4da;border-radius:4px;">
+              <option value="">— select CSP —</option>
+              ${providerOptions}
+            </select>
+          </div>
+          <div>
+            <label style="font-weight:bold;display:block;margin-bottom:4px;">Target Region <small style="font-weight:normal;color:#777;">(optional)</small></label>
+            <select id="eq-target-region" style="width:100%;padding:6px;border:1px solid #ced4da;border-radius:4px;" disabled>
+              <option value="">All regions</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Tolerance -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div>
+            <label style="font-weight:bold;display:block;margin-bottom:4px;">
+              Tolerance (%) <small style="font-weight:normal;color:#777;">for preferred fields</small>
+            </label>
+            <input id="eq-tolerance" type="number" min="0" max="200" value="20"
+              style="width:100%;padding:6px;border:1px solid #ced4da;border-radius:4px;">
+          </div>
+          <div>
+            <label style="font-weight:bold;display:block;margin-bottom:4px;">Max Results</label>
+            <input id="eq-limit" type="number" min="1" max="20" value="5"
+              style="width:100%;padding:6px;border:1px solid #ced4da;border-radius:4px;">
+          </div>
+        </div>
+
+        <!-- Advanced: match criteria -->
+        <details style="border:1px solid #dee2e6;border-radius:4px;padding:8px 12px;">
+          <summary style="cursor:pointer;font-weight:bold;color:#555;">Advanced: per-field match policy</summary>
+          <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.8rem;">
+            ${buildMatchCriteriaRow('architecture',    'Architecture',      'required', false)}
+            ${buildMatchCriteriaRow('vCPU',            'vCPU',             'preferred', false)}
+            ${buildMatchCriteriaRow('memoryGiB',       'Memory',           'preferred', false)}
+            ${buildMatchCriteriaRow('acceleratorType', 'Accel Type',       'required', false)}
+            ${isGPU ? buildMatchCriteriaRow('acceleratorModel','Accel Model','open', true) : ''}
+            ${isGPU ? buildMatchCriteriaRow('acceleratorCount','Accel Count','preferred', false) : ''}
+            ${isGPU ? buildMatchCriteriaRow('acceleratorMemoryGB','Accel Mem GB','preferred', false) : ''}
+            ${buildMatchCriteriaRow('costPerHour',     'Cost/h',           'open', false)}
+          </div>
+        </details>
+      </div>
+    `,
+    didOpen: () => {
+      const provSel = document.getElementById('eq-target-provider');
+      const regSel  = document.getElementById('eq-target-region');
+      provSel.addEventListener('change', async () => {
+        const prov = provSel.value;
+        regSel.innerHTML = '<option value="">All regions</option>';
+        regSel.disabled = !prov;
+        if (!prov) return;
+        try {
+          const res = await axios.get(
+            `http://${hostname}:${port}/tumblebug/provider/${prov}/region`,
+            { auth: { username, password } });
+          const regions = (res.data?.regions || [])
+            .filter(r => r.regionName)
+            .sort((a, b) => a.regionName.localeCompare(b.regionName));
+          regions.forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.regionName;
+            const display = r.location?.display;
+            opt.textContent = display ? `${r.regionName} (${display})` : r.regionName;
+            regSel.appendChild(opt);
+          });
+        } catch (e) {
+          // Region list unavailable; keep "All regions" only.
+        }
+      });
+    },
+    showCancelButton: true,
+    confirmButtonText: 'Search →',
+    confirmButtonColor: '#1565c0',
+    preConfirm: () => {
+      const provider = document.getElementById('eq-target-provider').value;
+      if (!provider) {
+        Swal.showValidationMessage('Please select a target CSP');
+        return false;
+      }
+      return {
+        provider,
+        region:    document.getElementById('eq-target-region').value,
+        tolerance: (() => { const v = parseInt(document.getElementById('eq-tolerance').value, 10); return Number.isNaN(v) ? 20 : v; })(),
+        limit:     (() => { const v = parseInt(document.getElementById('eq-limit').value, 10); return Number.isNaN(v) ? 5 : v; })(),
+        criteria:  readMatchCriteriaFromForm(),
+      };
+    }
+  });
+
+  if (!step1Result.isConfirmed) return;
+  const { provider, region, tolerance, limit, criteria } = step1Result.value;
+
+  // ── Call API ──────────────────────────────────────────────────────────────
+  Swal.fire({ title: 'Searching…', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+
+  let apiResp;
+  try {
+    const reqBody = {
+      sourceSpecId:          spec.id,
+      sourceImageId:         nodeConf.imageId || '',
+      targetProviderName:    provider,
+      targetRegionName:      region || '',
+      tolerancePercent:      tolerance,
+      specCandidateLimit:    limit,
+      imageAlternativeLimit: 3,
+      matchCriteria:         criteria,
+    };
+    const res = await axios.post(
+      `http://${hostname}:${port}/tumblebug/recommendAlternativeNodeConfig`,
+      reqBody,
+      { auth: { username, password } });
+    apiResp = res.data;
+  } catch (e) {
+    Swal.fire('Error', e?.response?.data?.message || e.message, 'error');
+    return;
+  }
+
+  if (!apiResp?.candidates?.length) {
+    Swal.fire('No Results',
+      'No alternative specs found in the target CSP/region with the given criteria. '
+      + 'Try relaxing the tolerance or match policies.', 'info');
+    return;
+  }
+
+  // ── Step 2: Show candidates ───────────────────────────────────────────────
+  const src = apiResp.sourceSpec;
+
+  const candidateRows = apiResp.candidates.map((c, i) => {
+    const s    = c.spec;
+    const d    = c.specDiff;
+    const imgName = c.primaryImage
+      ? `<span title="${esc(c.primaryImage.osDistribution || '')}" style="color:#0066cc;font-size:0.75rem;">${esc((c.primaryImage.cspImageName || '').substring(0, 30))}${(c.primaryImage.cspImageName||'').length > 30 ? '…' : ''}</span>`
+      : '<span style="color:#aaa;font-size:0.75rem;">none</span>';
+    const gpuInfo = s.acceleratorModel
+      ? `<div style="color:#c0392b;font-size:0.72rem;">${esc(s.acceleratorModel)} ×${s.acceleratorCount}</div>` : '';
+    const scoreColour = c.similarityScore >= 80 ? '#27ae60' : c.similarityScore >= 50 ? '#f39c12' : '#e74c3c';
+    const archWarn = d.architectureMatch === false
+      ? '<div style="color:#e74c3c;font-size:0.7rem;">⚠ arch</div>' : '';
+
+    return `
+      <tr class="eq-cand-row" data-index="${i}">
+        <td class="text-center eq-sel-indicator" style="width:32px;font-size:1rem;color:#999;">○</td>
+        <td style="font-size:0.78rem;padding:4px 6px;">
+          <div style="font-family:monospace;">${esc(s.cspSpecName || s.id)}</div>
+          <div style="color:#555;font-size:0.72rem;">${esc((s.providerName || '').toUpperCase())} ${esc(s.regionName || '')}</div>
+        </td>
+        <td class="text-center" style="font-size:0.8rem;">${esc(String(s.vCPU ?? ''))}<br>${diffBadge(d.vCPUDiff)}</td>
+        <td class="text-center" style="font-size:0.8rem;">${esc(String(s.memoryGiB ?? ''))}G<br>${diffBadge(d.memoryGiBDiff, 'G')}</td>
+        <td class="text-center" style="font-size:0.78rem;">
+          ${gpuInfo}
+          ${archWarn}
+        </td>
+        <td class="text-center" style="font-size:0.78rem;">
+          ${s.costPerHour > 0 ? '$' + parseFloat(s.costPerHour).toFixed(4) : 'N/A'}<br>
+          ${s.costPerHour > 0 && src.costPerHour > 0 ? diffBadge(parseFloat(d.costPerHourDiff.toFixed(4)), '', false) : ''}
+        </td>
+        <td style="font-size:0.8rem;padding:4px 6px;">${imgName}</td>
+        <td class="text-center">
+          <span style="font-weight:bold;color:${scoreColour};">${c.similarityScore.toFixed(1)}%</span>
+        </td>
+      </tr>`;
+  }).join('');
+
+  const step2Result = await Swal.fire({
+    title: `Alternative Configs in ${esc(provider.toUpperCase())}${region ? ' / ' + esc(region) : ''}`,
+    width: 1100,
+    html: `
+      <style>
+        .eq-cand-row { cursor: pointer; transition: background 0.12s; }
+        .eq-cand-row:hover td { background: #f0f4ff; }
+        .eq-cand-row.eq-selected td { background: #bbdefb !important; }
+        .eq-cand-row.eq-selected .eq-sel-indicator { color: #1565c0 !important; font-weight: bold; }
+      </style>
+      <div style="font-size:0.82rem;text-align:left;">
+        <!-- Source row -->
+        <div style="background:#f8f9fa;border:1px solid #dee2e6;border-radius:5px;
+                    padding:6px 12px;margin-bottom:10px;display:flex;gap:20px;flex-wrap:wrap;align-items:center;">
+          <span style="font-weight:bold;color:#1565c0;white-space:nowrap;">▶ Source</span>
+          <span style="font-family:monospace;font-size:0.78rem;">${esc(src.cspSpecName || src.id)}</span>
+          <span style="color:#555;white-space:nowrap;">${esc((src.providerName || '').toUpperCase())} ${esc(src.regionName || '')}</span>
+          <span style="white-space:nowrap;">vCPU: <b>${src.vCPU}</b> &nbsp; Mem: <b>${src.memoryGiB}G</b></span>
+          ${src.acceleratorModel ? `<span style="color:#c0392b;white-space:nowrap;">GPU: <b>${esc(src.acceleratorModel)} ×${src.acceleratorCount}</b></span>` : ''}
+          <span style="white-space:nowrap;">${src.costPerHour > 0 ? '$' + parseFloat(src.costPerHour).toFixed(5) + '/h' : 'cost N/A'}</span>
+        </div>
+
+        <table id="eq-cand-table" style="width:100%;border-collapse:collapse;font-size:0.8rem;">
+          <thead>
+            <tr style="background:#343a40;color:white;">
+              <th style="padding:5px 4px;width:32px;"></th>
+              <th style="padding:5px 8px;text-align:left;">Spec / Location</th>
+              <th style="padding:5px 4px;">vCPU</th>
+              <th style="padding:5px 4px;">Mem</th>
+              <th style="padding:5px 4px;">GPU / Arch</th>
+              <th style="padding:5px 4px;">Cost/h</th>
+              <th style="padding:5px 8px;text-align:left;">Primary Image</th>
+              <th style="padding:5px 4px;">Match %</th>
+            </tr>
+          </thead>
+          <tbody id="eq-cand-tbody">
+            ${candidateRows}
+          </tbody>
+        </table>
+        <div style="margin-top:6px;font-size:0.73rem;color:#888;">
+          Click a row to select &nbsp;|&nbsp; Green diff = improvement over source, red = regression
+        </div>
+        <input type="hidden" id="eq-selected-idx" value="0">
+      </div>
+    `,
+    didOpen: () => {
+      const tbody = document.getElementById('eq-cand-tbody');
+      const idxInput = document.getElementById('eq-selected-idx');
+
+      function selectRow(tr) {
+        tbody.querySelectorAll('tr.eq-cand-row').forEach(r => {
+          r.classList.remove('eq-selected');
+          const ind = r.querySelector('.eq-sel-indicator');
+          if (ind) ind.textContent = '○';
+        });
+        tr.classList.add('eq-selected');
+        const ind = tr.querySelector('.eq-sel-indicator');
+        if (ind) ind.textContent = '◉';
+        idxInput.value = tr.dataset.index;
+      }
+
+      tbody.querySelectorAll('tr.eq-cand-row').forEach(tr => {
+        tr.addEventListener('click', () => selectRow(tr));
+      });
+
+      // Auto-select first row
+      const firstRow = tbody.querySelector('tr.eq-cand-row');
+      if (firstRow) selectRow(firstRow);
+    },
+    showCancelButton: true,
+    showDenyButton:   true,
+    confirmButtonText: '➕ Add as New NodeGroup',
+    denyButtonText:    '🔄 Replace This NodeGroup',
+    cancelButtonText:  'Cancel',
+    confirmButtonColor: '#28a745',
+    denyButtonColor:    '#1565c0',
+    preConfirm: () => parseInt(document.getElementById('eq-selected-idx').value),
+    preDeny:    () => {
+      Swal.resetValidationMessage();
+      return parseInt(document.getElementById('eq-selected-idx').value);
+    }
+  });
+
+  if (!step2Result.isConfirmed && !step2Result.isDenied) return;
+
+  const selectedCandidateIdx = step2Result.value;
+  const candidate = apiResp.candidates[selectedCandidateIdx];
+  const isReplace = step2Result.isDenied;
+
+  // ── Step 3: Image selection (reuse existing image-selection flow) ─────────
+  // Build image list from candidate's primary + alternatives
+  const candImages = [
+    ...(candidate.primaryImage ? [candidate.primaryImage] : []),
+    ...(candidate.alternativeImages || []),
+  ].map(img => ({
+    id:             img.id || img.cspImageName,
+    cspImageName:   img.cspImageName || img.id,
+    osType:         img.osType || 'N/A',
+    osDistribution: img.osDistribution || '',
+    osArchitecture: img.osArchitecture || img.osArch || 'N/A',
+    creationDate:   img.creationDate || '',
+    description:    img.description || img.osDistribution || '',
+    imageStatus:    img.imageStatus || 'Available',
+    osPlatform:     img.osPlatform || '',
+    osDiskType:     img.osDiskType || '',
+    osDiskSizeGB:   img.osDiskSizeGB || '',
+    providerName:   img.providerName || '',
+    connectionName: img.connectionName || '',
+    infraType:      img.infraType || '',
+    isGPUImage:         img.isGPUImage || false,
+    isKubernetesImage:  img.isKubernetesImage || false,
+    isBasicImage:       img.isBasicImage || false,
+    isBasicGpuImage:    img.isBasicGpuImage || false,
+    isCustomImage:      false,
+    details:            img.details || [],
+  }));
+
+  if (!candImages.length) {
+    errorAlert('No images available for the selected spec.');
+    return;
+  }
+
+  const candSpec  = candidate.spec;
+  const candIsGPU = (candSpec.acceleratorType || '').toLowerCase() === 'gpu';
+
+  // Sort: basic GPU first if GPU spec, else basic OS first
+  if (candIsGPU) {
+    const gpuScore = img => img.isBasicGpuImage ? 3 : img.isBasicImage ? 2 : img.isGPUImage ? 1 : 0;
+    candImages.sort((a, b) => gpuScore(b) - gpuScore(a));
+  }
+
+  const escL = window.escapeHtml;
+  const candSpecCost = candSpec.costPerHour > 0
+    ? `$${parseFloat(candSpec.costPerHour).toFixed(5)}/h` : 'N/A';
+  const candAccel = (candSpec.acceleratorType === 'gpu' && candSpec.acceleratorModel)
+    ? `<span style="color:#c0392b;font-weight:bold;"> | GPU: ${escL(candSpec.acceleratorModel)} ×${escL(String(candSpec.acceleratorCount||'?'))} (${escL(String(candSpec.acceleratorMemoryGB||'?'))}GB/ea)</span>` : '';
+
+  const truncate = (t, n) => (!t || t.length <= n) ? (t || '') : t.substring(0, n) + '…';
+
+  const imgRows = candImages.map((image, idx) => {
+    const isRecGpu  = candIsGPU && image.isBasicGpuImage;
+    const rowBg     = isRecGpu ? 'rgba(231,76,60,0.07)' : (image.isBasicImage ? 'rgba(40,167,69,0.06)' : '');
+    const basicIcon = image.isBasicImage ? ' ⭐' : '';
+    const gpuIcon   = image.isBasicGpuImage ? ' ⭐🧮' : (image.isGPUImage ? ' 🧮' : '');
+    const k8sIcon   = image.isKubernetesImage ? ' ☸️' : '';
+    return `
+      <tr class="eq-img-row" data-index="${idx}" style="cursor:pointer;${rowBg ? 'background:' + rowBg + ';' : ''}">
+        <td class="eq-img-sel-indicator text-center" style="width:32px;font-size:1rem;color:#999;">○</td>
+        <td style="font-size:0.8rem;">${escL(image.osType || '')}</td>
+        <td style="font-size:0.78rem;color:#0066cc;" title="${escL(image.cspImageName || '')}">${escL(truncate(image.cspImageName, 55))}</td>
+        <td style="font-size:0.78rem;" title="${escL(image.osDistribution || '')}">${escL(truncate(image.osDistribution, 55))}</td>
+        <td class="text-center" style="font-size:0.9rem;">${gpuIcon}${k8sIcon}${basicIcon}</td>
+        <td class="text-center" style="font-size:0.8rem;">${escL(image.osArchitecture || '')}</td>
+      </tr>`;
+  }).join('');
+
+  const step3Result = await Swal.fire({
+    title: `Select Image — ${escL(candSpec.cspSpecName || candSpec.id || '')}`,
+    width: 1100,
+    html: `
+      <style>
+        .eq-img-row { transition: background 0.1s; }
+        .eq-img-row:hover td { background: rgba(0,123,255,0.08) !important; }
+        .eq-img-row.eq-img-selected td { background: rgba(40,167,69,0.25) !important; border-left: 3px solid #28a745; }
+        .eq-img-row.eq-img-selected .eq-img-sel-indicator { color: #28a745 !important; font-weight: bold; }
+      </style>
+      <div style="font-size:0.82rem;text-align:left;">
+        <div style="margin-bottom:8px;padding:6px 12px;background:#f0f4ff;border:1px solid #c5cae9;
+                    border-radius:5px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <span style="font-weight:bold;color:#1565c0;">Spec</span>
+          <span style="font-family:monospace;font-size:0.78rem;">${escL(candSpec.id||'')}</span>
+          <span style="white-space:nowrap;">| ${escL((candSpec.providerName||'').toUpperCase())} ${escL(candSpec.regionName||'')}</span>
+          <span style="white-space:nowrap;">| vCPU: <b>${escL(String(candSpec.vCPU||''))}</b> | Mem: <b>${escL(String(candSpec.memoryGiB||''))} GiB</b> | Arch: ${escL(candSpec.architecture||'N/A')}</span>
+          <span style="white-space:nowrap;">| ${escL(candSpecCost)}</span>${candAccel}
+        </div>
+        ${candIsGPU ? `<div style="margin-bottom:8px;padding:5px 10px;background:linear-gradient(90deg,#fff3cd,#fff8e1);
+                      border:1px solid #ffc107;border-radius:5px;font-size:0.8rem;">
+          ⚡ <b>GPU Spec</b> — <span style="color:#c0392b;">⭐🧮 Basic GPU images</span> (GPU drivers pre-installed) are listed first.
+        </div>` : ''}
+        <div style="max-height:380px;overflow-y:auto;border:1px solid #dee2e6;border-radius:4px;">
+          <table id="eqImgTable" style="width:100%;border-collapse:collapse;font-size:0.8rem;">
+            <thead>
+              <tr style="background:#343a40;color:white;position:sticky;top:0;z-index:1;">
+                <th style="padding:5px 4px;width:32px;"></th>
+                <th style="padding:5px 6px;text-align:left;">OS Type</th>
+                <th style="padding:5px 6px;text-align:left;">Image Name</th>
+                <th style="padding:5px 6px;text-align:left;">Distribution</th>
+                <th style="padding:5px 4px;">Support</th>
+                <th style="padding:5px 4px;">Arch</th>
+              </tr>
+            </thead>
+            <tbody id="eq-img-tbody">${imgRows}</tbody>
+          </table>
+        </div>
+        <div style="margin-top:5px;font-size:0.72rem;color:#888;">
+          ⭐ Basic OS &nbsp; ⭐🧮 Basic GPU &nbsp; 🧮 GPU-enabled &nbsp; ☸️ Kubernetes
+        </div>
+        <input type="hidden" id="eq-selected-image-idx" value="0">
+      </div>`,
+    showCancelButton: true,
+    confirmButtonText: isReplace ? '🔄 Replace NodeGroup (spec + image)' : '➕ Add NodeGroup',
+    confirmButtonColor: isReplace ? '#1565c0' : '#28a745',
+    didOpen: () => {
+      const tbody    = document.getElementById('eq-img-tbody');
+      const idxInput = document.getElementById('eq-selected-image-idx');
+
+      function selectImgRow(tr) {
+        tbody.querySelectorAll('tr.eq-img-row').forEach(r => {
+          r.classList.remove('eq-img-selected');
+          const ind = r.querySelector('.eq-img-sel-indicator');
+          if (ind) ind.textContent = '○';
+        });
+        tr.classList.add('eq-img-selected');
+        const ind = tr.querySelector('.eq-img-sel-indicator');
+        if (ind) ind.textContent = '◉';
+        idxInput.value = tr.dataset.index;
+      }
+
+      tbody.querySelectorAll('tr.eq-img-row').forEach(tr => {
+        tr.addEventListener('click', () => selectImgRow(tr));
+      });
+
+      const firstRow = tbody.querySelector('tr.eq-img-row');
+      if (firstRow) selectImgRow(firstRow);
+    },
+    preConfirm: () => parseInt(document.getElementById('eq-selected-image-idx').value),
+  });
+
+  if (!step3Result.isConfirmed) return;
+
+  const selectedImage = candImages[step3Result.value];
+
+  // ── Apply result ──────────────────────────────────────────────────────────
+  const newNodeConf = {
+    name:          isReplace
+      ? nodeConf.name
+      : 'g' + (nodeGroupRequestFromSpecList.length + 1),
+    specId:        candSpec.id,
+    imageId:       selectedImage.cspImageName || selectedImage.id,
+    rootDiskType:  candSpec.rootDiskType || 'default',
+    rootDiskSize:  0,
+    nodeGroupSize: nodeConf.nodeGroupSize,
+  };
+
+  if (isReplace) {
+    nodeGroupRequestFromSpecList[index] = newNodeConf;
+    recommendedSpecList[index]          = candSpec;
+    addRegionMarker(candSpec.id, index);
+    successAlert(`NodeGroup "${newNodeConf.name}" replaced with alternative config in ${provider.toUpperCase()}.`);
+  } else {
+    nodeGroupRequestFromSpecList.push(newNodeConf);
+    recommendedSpecList.push(candSpec);
+    addRegionMarker(candSpec.id);
+    successAlert(`Added alternative NodeGroup "${newNodeConf.name}" for ${provider.toUpperCase()}.`);
+  }
+
+  updateNodeGroupReview();
+}
+
+// buildMatchCriteriaRow generates a policy selector row for the advanced section
+function buildMatchCriteriaRow(field, label, defaultPolicy, modelOnlyWarning) {
+  const opts = ['required','preferred','open'].map(p =>
+    `<option value="${p}"${p === defaultPolicy ? ' selected' : ''}>${p}</option>`
+  ).join('');
+  return `
+    <div>
+      <label style="display:block;margin-bottom:2px;">${label}</label>
+      <select id="eq-criteria-${field}" style="width:100%;padding:4px;border:1px solid #ced4da;border-radius:3px;font-size:0.78rem;">
+        ${opts}
+      </select>
+    </div>`;
+}
+
+// readMatchCriteriaFromForm collects the per-field policy values from the Step 1 form
+function readMatchCriteriaFromForm() {
+  const fields = ['architecture','vCPU','memoryGiB','acceleratorType',
+                  'acceleratorModel','acceleratorCount','acceleratorMemoryGB','costPerHour'];
+  const result = {};
+  fields.forEach(f => {
+    const el = document.getElementById(`eq-criteria-${f}`);
+    if (el && el.value) result[f] = el.value;
+  });
+  return result;
+}
+
 function removeNodeGroup(index) {
   const nodeConf = nodeGroupRequestFromSpecList[index];
   
@@ -10195,6 +10708,7 @@ function removeNodeGroup(index) {
 window.updateNodeGroupReview = updateNodeGroupReview;
 window.editNodeGroup = editNodeGroup;
 window.removeNodeGroup = removeNodeGroup;
+window.findAlternativeNodeConfig = findAlternativeNodeConfig;
 
 function range_change(obj) {
   document.getElementById("myvalue").value = obj.value;
@@ -10244,7 +10758,7 @@ window.range_change = range_change;
   });
 })();
 
-function addRegionMarker(spec) {
+function addRegionMarker(spec, replaceIndex = -1) {
   var hostname = configHostname;
   var port = configPort;
   var username = configUsername;
@@ -10283,11 +10797,15 @@ function addRegionMarker(spec) {
         "]"
       ); // for debug
 
-      // push order [longitute, latitude]
-      cspPointsCircle.push([
+      const coord = [
         res2.data.regionDetail.location.longitude,
         res2.data.regionDetail.location.latitude,
-      ]);
+      ];
+      if (replaceIndex >= 0 && replaceIndex < cspPointsCircle.length) {
+        cspPointsCircle[replaceIndex] = coord;
+      } else {
+        cspPointsCircle.push(coord);
+      }
       geoCspPointsCircle[0] = new MultiPoint(cspPointsCircle);
     });
   });
@@ -10794,12 +11312,15 @@ async function showScheduleJobManagement() {
     const provider = conn.providerName;
     const region = conn.regionZoneInfo?.assignedRegion || '';
     const zone = conn.regionZoneInfo?.assignedZone || '';
+    const display = conn.regionDetail?.location?.display || '';
 
     if (!providerMap[provider]) {
       providerMap[provider] = { regions: {} };
     }
     if (region && !providerMap[provider].regions[region]) {
-      providerMap[provider].regions[region] = { zones: [] };
+      providerMap[provider].regions[region] = { zones: [], display };
+    } else if (region && display && !providerMap[provider].regions[region].display) {
+      providerMap[provider].regions[region].display = display;
     }
     if (zone && !providerMap[provider].regions[region].zones.includes(zone)) {
       providerMap[provider].regions[region].zones.push(zone);
@@ -11056,7 +11577,8 @@ async function showScheduleJobManagement() {
             regions.forEach(region => {
               const option = document.createElement('option');
               option.value = region;
-              option.textContent = region;
+              const display = providerMap[selectedProvider].regions[region].display;
+              option.textContent = display ? `${region} (${display})` : region;
               regionSelect.appendChild(option);
             });
           }
