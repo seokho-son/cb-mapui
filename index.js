@@ -10745,8 +10745,8 @@ window.range_change = range_change;
 
 function renderMapFromConfig() {
   cspPointsCircle = recommendedSpecList
-    .filter(s => s?.regionLongitude && s?.regionLatitude)
-    .map(s => [parseFloat(s.regionLongitude), parseFloat(s.regionLatitude)]);
+    .map(s => [parseFloat(s?.regionLongitude), parseFloat(s?.regionLatitude)])
+    .filter(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat));
   geoCspPointsCircle = cspPointsCircle.length
     ? [new MultiPoint(cspPointsCircle)]
     : [];
@@ -19439,8 +19439,8 @@ function copyInfraConfig(infraId) {
         acceleratorMemoryGB: repVm?.spec?.acceleratorMemoryGB || "",
         connectionName: sg.connectionName || "",
         rootDiskType: sg.rootDiskType || "default",
-        regionLatitude: repVm?.spec?.regionLatitude || "",
-        regionLongitude: repVm?.spec?.regionLongitude || ""
+        regionLatitude: repVm?.location?.latitude ?? repVm?.connectionConfig?.regionDetail?.location?.latitude ?? "",
+        regionLongitude: repVm?.location?.longitude ?? repVm?.connectionConfig?.regionDetail?.location?.longitude ?? ""
       };
       recommendedSpecList.push(specInfo);
     });
