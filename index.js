@@ -10597,16 +10597,28 @@ async function findAlternativeNodeConfig(index) {
   const selectedImage = candImages[step3Result.value];
 
   // ── Apply result ──────────────────────────────────────────────────────────
+  // Preserve rootDiskType only when the CSP is unchanged; cross-CSP disk type
+  // names are incompatible so fall back to the candidate spec's default.
+  const originalProvider = (spec.providerName || '').toLowerCase();
+  const candidateProvider = (candSpec.providerName || '').toLowerCase();
+  const resolvedDiskType = (originalProvider && originalProvider === candidateProvider)
+    ? (nodeConf.rootDiskType || 'default')
+    : (candSpec.rootDiskType || 'default');
+
   const newNodeConf = {
     name:          isReplace
       ? nodeConf.name
       : 'g' + (nodeGroupRequestFromSpecList.length + 1),
     specId:        candSpec.id,
     imageId:       selectedImage.cspImageName || selectedImage.id,
-    rootDiskType:  candSpec.rootDiskType || 'default',
-    rootDiskSize:  0,
+    rootDiskType:  resolvedDiskType,
+    rootDiskSize:  nodeConf.rootDiskSize || 0,
     nodeGroupSize: nodeConf.nodeGroupSize,
   };
+  // Labels are CSP-agnostic — carry them over unconditionally.
+  if (nodeConf.label && Object.keys(nodeConf.label).length > 0) {
+    newNodeConf.label = { ...nodeConf.label };
+  }
 
   if (isReplace) {
     nodeGroupRequestFromSpecList[index] = newNodeConf;
