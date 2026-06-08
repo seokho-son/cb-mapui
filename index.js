@@ -683,9 +683,8 @@ function clearCircle(option) {
   latLonInputPairIdx = 0;
   nodeGroupRequestFromSpecList = [];
   recommendedSpecList = [];
-  cspPointsCircle = [];
-  geoCspPointsCircle = [];
-  
+  renderMapFromConfig();
+
   // Update NodeGroup review panel
   if (typeof updateNodeGroupReview === 'function') {
     updateNodeGroupReview();
@@ -8802,8 +8801,6 @@ function getRecommendedSpec(idx, latitude, longitude) {
               }
 
               // Now proceed to the final spec confirmation step
-              addRegionMarker(selectedSpec.id);
-
               var createInfraReqVm = $.extend({}, createInfraReqVmTmplt);
               var recommendedSpec = selectedSpec;
 
@@ -9226,8 +9223,9 @@ function getRecommendedSpec(idx, latitude, longitude) {
               }
               
               // Update NodeGroup review panel
+              renderMapFromConfig();
               updateNodeGroupReview();
-              
+
               // Activate provision-tab after successful configuration
               try {
                 // Remove active class from all tabs
@@ -9257,12 +9255,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
             } else {
               console.log("Node configuration failed for this location");
               latLonInputPairIdx--;
-              cspPointsCircle.pop();
-              if (cspPointsCircle.length > 0) {
-                geoCspPointsCircle[0] = new MultiPoint(cspPointsCircle);
-              } else {
-                geoCspPointsCircle = [];
-              }
+              renderMapFromConfig();
             }
           });
           // Delay (ms) to ensure previous popup is fully closed before opening new one
@@ -9272,12 +9265,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
               console.log("Image selection canceled");
               window.editingNodeGroupIndex = -1; // Reset editing mode
               latLonInputPairIdx--;
-              cspPointsCircle.pop();
-              if (cspPointsCircle.length > 0) {
-                geoCspPointsCircle[0] = new MultiPoint(cspPointsCircle);
-              } else {
-                geoCspPointsCircle = [];
-              }
+              renderMapFromConfig();
             }
           });
         }).catch(error => {
@@ -9288,12 +9276,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
         console.log("Spec selection canceled");
         window.editingNodeGroupIndex = -1; // Reset editing mode
         latLonInputPairIdx--;
-        cspPointsCircle.pop();
-        if (cspPointsCircle.length > 0) {
-          geoCspPointsCircle[0] = new MultiPoint(cspPointsCircle);
-        } else {
-          geoCspPointsCircle = [];
-        }
+        renderMapFromConfig();
         return;
       }
     }).catch(function (error) {
@@ -10628,15 +10611,14 @@ async function findAlternativeNodeConfig(index) {
   if (isReplace) {
     nodeGroupRequestFromSpecList[index] = newNodeConf;
     recommendedSpecList[index]          = candSpec;
-    addRegionMarker(candSpec.id, index);
     successAlert(`NodeGroup "${newNodeConf.name}" replaced with alternative config in ${provider.toUpperCase()}.`);
   } else {
     nodeGroupRequestFromSpecList.push(newNodeConf);
     recommendedSpecList.push(candSpec);
-    addRegionMarker(candSpec.id);
     successAlert(`Added alternative NodeGroup "${newNodeConf.name}" for ${provider.toUpperCase()}.`);
   }
 
+  renderMapFromConfig();
   updateNodeGroupReview();
 }
 
@@ -10682,22 +10664,13 @@ function removeNodeGroup(index) {
       // Remove from arrays
       nodeGroupRequestFromSpecList.splice(index, 1);
       recommendedSpecList.splice(index, 1);
-      
-      // Remove corresponding coordinate point
-      if (cspPointsCircle.length > index) {
-        cspPointsCircle.splice(index, 1);
-        if (cspPointsCircle.length > 0) {
-          geoCspPointsCircle[0] = new MultiPoint(cspPointsCircle);
-        } else {
-          geoCspPointsCircle = [];
-        }
-      }
-      
+
       // Decrease the index counter
       if (latLonInputPairIdx > 0) {
         latLonInputPairIdx--;
       }
-      
+
+      renderMapFromConfig();
       updateNodeGroupReview();
       // successAlert('NodeGroup removed successfully!');
     }
@@ -10758,59 +10731,15 @@ window.range_change = range_change;
   });
 })();
 
-function addRegionMarker(spec, replaceIndex = -1) {
-  var hostname = configHostname;
-  var port = configPort;
-  var username = configUsername;
-  var password = configPassword;
-
-  var url = `http://${hostname}:${port}/tumblebug/ns/system/resources/spec/${spec}`;
-
-  axios({
-    method: "get",
-    url: url,
-    auth: {
-      username: `${username}`,
-      password: `${password}`,
-    },
-  }).then((res) => {
-    console.log(res);
-
-    var connConfig = res.data.connectionName;
-    console.log(connConfig);
-
-    url = `http://${hostname}:${port}/tumblebug/connConfig/${connConfig}`;
-
-    axios({
-      method: "get",
-      url: url,
-      auth: {
-        username: `${username}`,
-        password: `${password}`,
-      },
-    }).then((res2) => {
-      console.log(
-        "Best cloud location: [" +
-        res2.data.regionDetail.location.latitude +
-        "," +
-        res2.data.regionDetail.location.longitude +
-        "]"
-      ); // for debug
-
-      const coord = [
-        res2.data.regionDetail.location.longitude,
-        res2.data.regionDetail.location.latitude,
-      ];
-      if (replaceIndex >= 0 && replaceIndex < cspPointsCircle.length) {
-        cspPointsCircle[replaceIndex] = coord;
-      } else {
-        cspPointsCircle.push(coord);
-      }
-      geoCspPointsCircle[0] = new MultiPoint(cspPointsCircle);
-    });
-  });
+function renderMapFromConfig() {
+  cspPointsCircle = recommendedSpecList
+    .filter(s => s?.regionLongitude && s?.regionLatitude)
+    .map(s => [parseFloat(s.regionLongitude), parseFloat(s.regionLatitude)]);
+  geoCspPointsCircle = cspPointsCircle.length
+    ? [new MultiPoint(cspPointsCircle)]
+    : [];
+  map.render();
 }
-window.addRegionMarker = addRegionMarker;
 
 function controlInfra(action) {
   switch (action) {
@@ -19497,12 +19426,15 @@ function copyInfraConfig(infraId) {
         acceleratorCount: repVm?.spec?.acceleratorCount || 0,
         acceleratorMemoryGB: repVm?.spec?.acceleratorMemoryGB || "",
         connectionName: sg.connectionName || "",
-        rootDiskType: sg.rootDiskType || "default"
+        rootDiskType: sg.rootDiskType || "default",
+        regionLatitude: repVm?.spec?.regionLatitude || "",
+        regionLongitude: repVm?.spec?.regionLongitude || ""
       };
       recommendedSpecList.push(specInfo);
     });
 
     // Update the left panel NodeGroup review
+    renderMapFromConfig();
     updateNodeGroupReview();
 
     // Switch to Provision tab to show the configuration
