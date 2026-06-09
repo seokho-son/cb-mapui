@@ -14811,11 +14811,11 @@ window.updateLabelMatchPreview = function() {
   
   // Find matching VMs - ALL label pairs must match (AND condition)
   const matchingNodes = nodes.filter(nd => {
-    if (!nodeConf.label || requiredLabelPairs.length === 0) return false;
+    if (!nd.label || requiredLabelPairs.length === 0) return false;
     
     // Every required label pair must exist in Node's labels
     return requiredLabelPairs.every(({ key, value }) => {
-      return nodeConf.label[key] === value;
+      return nd.label[key] === value;
     });
   });
   
@@ -14965,12 +14965,14 @@ window.collectCommands = function () {
 
       if (useConsolidated) {
         Object.entries(consolidatedMap).forEach(([fullMatch, value]) => {
-          cmdText = cmdText.replaceAll(fullMatch, value);
+          // Use a function replacement so '$' in the value is preserved literally
+          // (a string replacement would interpret $$, $&, $`, $' specials).
+          cmdText = cmdText.replaceAll(fullMatch, () => value);
         });
       } else {
         div.querySelectorAll('.placeholder-input').forEach(phInput => {
           const fullMatch = phInput.dataset.fullMatch;
-          if (fullMatch) cmdText = cmdText.replaceAll(fullMatch, phInput.value);
+          if (fullMatch) cmdText = cmdText.replaceAll(fullMatch, () => phInput.value);
         });
       }
 
