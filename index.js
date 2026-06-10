@@ -3196,9 +3196,489 @@ function displayJsonData(jsonData, type) {
     quotesOnKeys: false,
     quotesOnValues: false
   };
-  
+
   // Show JSON data in SweetAlert popup
   outputAlert(jsonData, type);
+}
+window.displayJsonData = displayJsonData;
+
+// ========== RICH GUI DISPLAY FUNCTIONS FOR INFRA DATA ==========
+
+// Returns a colored status badge HTML span
+function getInfraStatusBadge(status) {
+  const s = (status || '').toLowerCase();
+  let color = '#6c757d', icon = '⚪';
+  if (s === 'running') { color = '#28a745'; icon = '🟢'; }
+  else if (s === 'failed' || s.includes('fail')) { color = '#dc3545'; icon = '🔴'; }
+  else if (s === 'preparing' || s === 'prepared' || s.includes('provision')) { color = '#ffc107'; icon = '🟡'; }
+  else if (s === 'terminated' || s === 'deleted') { color = '#6c757d'; icon = '⚫'; }
+  return `<span style="background:${color};color:white;padding:2px 8px;border-radius:12px;font-size:0.82em;font-weight:bold;">${icon} ${window.escapeHtml ? window.escapeHtml(status || 'Unknown') : (status || 'Unknown')}</span>`;
+}
+
+// Stores SSH commands indexed by position so onclick can reference them safely
+window._guiSshCommands = [];
+window.copyGuiSshCommand = function(idx) {
+  const cmd = window._guiSshCommands[idx] || '';
+  navigator.clipboard.writeText(cmd).then(() => {
+    const el = document.getElementById('gui-ssh-cmd-' + idx);
+    if (el) { const orig = el.style.background; el.style.background = '#155724'; setTimeout(() => el.style.background = orig, 1500); }
+  }).catch(err => console.error('copy failed:', err));
+};
+
+// Builds the node-by-nodeGroup summary HTML block (shared by status + dynamic result views)
+function buildInfraNodeSummaryHtml(data) {
+  const esc = window.escapeHtml || (s => String(s));
+  const nodes = data.node || [];
+
+  // Group nodes by nodeGroupId
+  const groups = {};
+  nodes.forEach(nd => {
+    const gid = nd.nodeGroupId || 'default';
+    if (!groups[gid]) groups[gid] = [];
+    groups[gid].push(nd);
+  });
+  const groupCount = Object.keys(groups).length;
+
+  // Unique providers
+  const providers = [...new Set(nodes.map(nd =>
+    nd.connectionConfig?.providerName || nd.connectionName?.split('-')[0] || null
+  ).filter(Boolean))];
+
+  // Node status counts
+  const sc = data.statusCount || {};
+  const runningCount = sc.countRunning ?? nodes.filter(nd => (nd.status || '').toLowerCase() === 'running').length;
+  const failedCount  = sc.countFailed  ?? nodes.filter(nd => (nd.status || '').toLowerCase().includes('fail')).length;
+  const totalCount   = sc.countTotal   ?? nodes.length;
+
+  // Estimated hourly cost
+  let totalCost = 0, hasCost = false;
+  nodes.forEach(nd => { if (nd.spec?.costPerHour > 0) { totalCost += nd.spec.costPerHour; hasCost = true; } });
+
+  // newNodeList set for quick lookup
+  const newNodeSet = new Set(data.newNodeList || []);
+
+  // ── Summary cards ──────────────────────────────────────────────
+  const nodeColor = failedCount > 0 ? '#dc3545' : (runningCount === totalCount && totalCount > 0 ? '#28a745' : '#ffc107');
+  const hasActiveAction = data.targetAction && data.targetAction !== 'None' && data.targetAction !== '';
+
+  let html = `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px;">`;
+  html += `
+    <div style="background:#1a2a3a;border-radius:8px;padding:10px;text-align:center;">
+      <div style="font-size:1.4em;font-weight:bold;color:${nodeColor};">${runningCount}<span style="font-size:0.6em;color:#888;">/${totalCount}</span></div>
+      <div style="font-size:0.70em;color:#888;margin-top:2px;">Running Nodes</div>
+    </div>
+    <div style="background:#1a2a3a;border-radius:8px;padding:10px;text-align:center;">
+      <div style="font-size:1.4em;font-weight:bold;color:#61dafb;">${groupCount}</div>
+      <div style="font-size:0.70em;color:#888;margin-top:2px;">NodeGroups</div>
+    </div>
+    <div style="background:#1a2a3a;border-radius:8px;padding:10px;text-align:center;">
+      <div style="font-size:0.88em;font-weight:bold;color:#61dafb;word-break:break-word;line-height:1.4;">${providers.length ? providers.map(p => esc(p)).join('<br>') : '-'}</div>
+      <div style="font-size:0.70em;color:#888;margin-top:2px;">Providers</div>
+    </div>
+    <div style="background:#1a2a3a;border-radius:8px;padding:10px;text-align:center;">
+      <div style="font-size:1.1em;font-weight:bold;color:${hasCost ? '#ff8c00' : '#888'};">${hasCost ? '$' + totalCost.toFixed(4) : '-'}</div>
+      <div style="font-size:0.70em;color:#888;margin-top:2px;">Est. Cost/hr</div>
+    </div>
+    <div style="background:#1a2a3a;border-radius:8px;padding:10px;text-align:center;">
+      ${getInfraStatusBadge(data.status)}
+      ${hasActiveAction ? `<div style="font-size:0.68em;color:#ffc107;margin-top:3px;">⏳ ${esc(data.targetAction)}${data.targetStatus ? ' → ' + esc(data.targetStatus) : ''}</div>` : ''}
+      <div style="font-size:0.70em;color:#888;margin-top:3px;">Status</div>
+    </div>`;
+  html += `</div>`;
+
+  // ── Status distribution pills ──────────────────────────────────
+  if (totalCount > 0 && (sc.countFailed > 0 || sc.countCreating > 0 || sc.countSuspended > 0 || sc.countTerminated > 0 || sc.countUndefined > 0)) {
+    const pills = [
+      { label: 'Running',    count: sc.countRunning    || 0, color: '#28a745' },
+      { label: 'Creating',   count: sc.countCreating   || 0, color: '#17a2b8' },
+      { label: 'Failed',     count: sc.countFailed     || 0, color: '#dc3545' },
+      { label: 'Suspended',  count: sc.countSuspended  || 0, color: '#6c757d' },
+      { label: 'Terminated', count: sc.countTerminated || 0, color: '#495057' },
+      { label: 'Undefined',  count: sc.countUndefined  || 0, color: '#856404' },
+    ].filter(p => p.count > 0);
+    html += `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">`;
+    pills.forEach(p => { html += `<span style="background:${p.color};color:white;padding:2px 10px;border-radius:12px;font-size:0.78em;font-weight:bold;">${p.label}: ${p.count}</span>`; });
+    html += `</div>`;
+  }
+
+  // ── creationErrors block ───────────────────────────────────────
+  const ce = data.creationErrors;
+  if (ce && (ce.failedNodeCount > 0 || (ce.nodeCreationErrors || []).length > 0 || (ce.nodeObjectCreationErrors || []).length > 0)) {
+    const allErrors = [...(ce.nodeObjectCreationErrors || []), ...(ce.nodeCreationErrors || [])];
+    html += `
+      <div style="background:#2a1010;border:1px solid #dc3545;border-radius:6px;padding:10px 14px;margin-bottom:12px;">
+        <div style="color:#f88;font-weight:bold;margin-bottom:6px;">
+          ❌ Creation Errors — ${ce.failedNodeCount || allErrors.length} failed / ${ce.totalNodeCount || totalCount} total
+          ${ce.failureHandlingStrategy ? `<span style="font-size:0.82em;font-weight:normal;color:#aaa;margin-left:8px;">(strategy: ${esc(ce.failureHandlingStrategy)})</span>` : ''}
+        </div>
+        ${allErrors.length > 0 ? `<table style="width:100%;border-collapse:collapse;font-size:0.78em;">
+          <thead><tr style="color:#888;">
+            <th style="padding:3px 8px;text-align:left;">Node</th>
+            <th style="padding:3px 8px;text-align:left;">Phase</th>
+            <th style="padding:3px 8px;text-align:left;">Error</th>
+            <th style="padding:3px 8px;text-align:left;">Time</th>
+          </tr></thead>
+          <tbody>${allErrors.map(e => `
+            <tr>
+              <td style="padding:3px 8px;color:#fcc;font-family:monospace;">${esc(e.nodeName || '-')}</td>
+              <td style="padding:3px 8px;color:#f88;">${esc(e.phase || '-')}</td>
+              <td style="padding:3px 8px;color:#faa;white-space:normal;">${esc(e.error || '-')}</td>
+              <td style="padding:3px 8px;color:#888;font-size:0.9em;">${esc((e.timestamp || '').split('T')[0] || e.timestamp || '-')}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>` : ''}
+      </div>`;
+  }
+
+  // ── Infra-level systemMessage ──────────────────────────────────
+  const sysMessages = Array.isArray(data.systemMessage) ? data.systemMessage.filter(Boolean) : (data.systemMessage ? [data.systemMessage] : []);
+  if (sysMessages.length > 0) {
+    html += `<div style="background:#2a1a00;border:1px solid #ffc107;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:0.82em;color:#ffc107;">
+      ⚠️ ${sysMessages.map(m => esc(m)).join('<br>')}
+    </div>`;
+  }
+
+  // ── Infra labels ───────────────────────────────────────────────
+  const labels = data.label && typeof data.label === 'object' ? Object.entries(data.label).filter(([k]) => k) : [];
+  if (labels.length > 0) {
+    html += `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">`;
+    labels.forEach(([k, v]) => {
+      html += v
+        ? `<span style="background:#1e3a5f;color:#9ab;padding:2px 8px;border-radius:10px;font-size:0.76em;">${esc(k)}: <b style="color:#cde;">${esc(v)}</b></span>`
+        : `<span style="background:#1e3a5f;color:#cde;padding:2px 8px;border-radius:10px;font-size:0.76em;">${esc(k)}</span>`;
+    });
+    html += `</div>`;
+  }
+
+  // ── Per-NodeGroup sections ─────────────────────────────────────
+  const COL_COUNT = 6; // node-varying columns: Node ID, Status, Public IP, Private IP, CSP Resource ID, Created
+  Object.entries(groups).forEach(([gid, gnodes]) => {
+    const first = gnodes[0] || {};
+
+    // ── Group-level common values (derived from first node) ──────
+    const provider = first.connectionConfig?.providerName || first.connectionName?.split('-')[0] || '';
+    const platform = (provider || '').toLowerCase();
+    const providerColor = cspGenericColors[platform] || cspGenericColors[platform.split('-')[0]] || '#6c757d';
+    const connName = first.connectionName || '';
+    const region = first.region?.region || first.connectionConfig?.regionZoneInfo?.assignedRegion || '';
+    const zone   = first.region?.zone   || first.connectionConfig?.regionZoneInfo?.assignedZone   || '';
+    const sshUser = first.nodeUserName || '';
+    const sshPort = first.sshPort || 22;
+
+    // Check if all nodes share same sshKeyId
+    const allSshKeys = [...new Set(gnodes.map(nd => nd.sshKeyId).filter(Boolean))];
+    const uniformSshKey = allSshKeys.length === 1 ? allSshKeys[0].split('+').pop() || allSshKeys[0] : '';
+
+    // Spec summary (group-level)
+    let specHtml = '';
+    if (first.spec?.vCPU || first.spec?.memoryGiB) {
+      const parts = [];
+      if (first.spec.vCPU)      parts.push(`<span style="color:#87ceeb;font-weight:bold;">${first.spec.vCPU} vCPU</span>`);
+      if (first.spec.memoryGiB) parts.push(`<span style="color:#98fb98;font-weight:bold;">${first.spec.memoryGiB} GiB</span>`);
+      if (first.spec.acceleratorType && first.spec.acceleratorType !== 'none')
+        parts.push(`<span style="color:#ff8c00;">+${esc(first.spec.acceleratorType.toUpperCase())}(${first.spec.acceleratorCount || 1})</span>`);
+      specHtml = parts.join('<span style="color:#555;"> / </span>');
+      if (first.cspSpecName) specHtml += `<span style="color:#666;font-size:0.85em;"> (${esc(first.cspSpecName)})</span>`;
+      if (first.spec.costPerHour > 0) specHtml += `<span style="color:#ff8c00;"> · $${first.spec.costPerHour}/h</span>`;
+    } else if (first.specId) {
+      const seg = first.specId.split('+').pop() || first.specId;
+      specHtml = `<span style="color:#87ceeb;">${esc(seg)}</span>`;
+      if (first.cspSpecName) specHtml += `<span style="color:#666;font-size:0.85em;"> (${esc(first.cspSpecName)})</span>`;
+    }
+
+    // OS summary (group-level)
+    let osText = '';
+    if (first.image?.osDistribution)  osText = first.image.osDistribution;
+    else if (first.image?.osType)     osText = first.image.osType;
+    else if (first.imageId)           osText = first.imageId.split('+').pop() || first.imageId;
+
+    // Disk summary (group-level)
+    const diskType = first.rootDiskType && first.rootDiskType !== 'default' ? first.rootDiskType : '';
+    const diskSize = first.rootDiskSize > 0 ? `${first.rootDiskSize}GB` : '';
+    const diskText = (diskType || diskSize) ? `${diskType}${diskType && diskSize ? ' ' : ''}${diskSize}` : '';
+
+    // Build CSP badge
+    const providerBadge = provider
+      ? `<span style="background:${providerColor};color:white;padding:1px 8px;border-radius:10px;font-size:0.82em;font-weight:bold;">${esc(provider.toUpperCase())}</span>`
+      : '';
+
+    // Build info chips for the group header details row
+    const chips = [];
+    if (provider)   chips.push(`☁️ ${providerBadge}`);
+    if (connName)   chips.push(`🔌 <span style="color:#9ab;">${esc(connName)}</span>`);
+    if (region)     chips.push(`📍 <span style="color:#b0c4de;">${esc(region)}${zone ? `<span style="color:#7a8fa6;"> / ${esc(zone)}</span>` : ''}</span>`);
+    if (sshUser)    chips.push(`👤 <span style="color:#ffd700;">${esc(sshUser)}</span><span style="color:#666;">:${sshPort !== 22 ? `<span style="color:#ffc107;">${sshPort}</span>` : sshPort}</span>${uniformSshKey ? ` <span style="color:#666;font-size:0.88em;">🔑${esc(uniformSshKey)}</span>` : ''}`);
+    if (specHtml)   chips.push(`⚙️ ${specHtml}`);
+    if (osText)     chips.push(`💿 <span style="color:#dda0dd;">${esc(osText)}</span>`);
+    if (diskText)   chips.push(`💾 <span style="color:#c0c0c0;">${esc(diskText)}</span>`);
+
+    html += `
+      <div style="background:#0d1420;border:1px solid #2a3a50;border-radius:6px;margin-bottom:12px;overflow:hidden;">
+        <div style="background:#1a3050;padding:8px 12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+            <span style="font-weight:bold;color:#61dafb;font-size:0.95em;">📦 NodeGroup: ${esc(gid)}</span>
+            <span style="font-size:0.78em;color:#aaa;">${gnodes.length} node(s)</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;font-size:0.78em;color:#aaa;align-items:center;">
+            ${chips.join('')}
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.78em;white-space:nowrap;">
+          <thead><tr style="background:#1a2535;color:#9ab;">
+            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">Node ID</th>
+            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">Status</th>
+            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">Public IP</th>
+            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">Private IP</th>
+            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">CSP Resource ID</th>
+            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">Created</th>
+          </tr></thead>
+          <tbody>`;
+
+    gnodes.forEach((nd, i) => {
+      const bg = i % 2 === 0 ? '#0d1b2a' : '#0a1520';
+      const isNew = newNodeSet.has(nd.id);
+
+      // Status cell — include monAgentStatus + networkAgentStatus + targetAction
+      const monIcon = nd.monAgentStatus === 'installed' ? '📡✓' : nd.monAgentStatus === 'failed' ? '📡✗' : '';
+      const netIcon = nd.networkAgentStatus === 'installed' ? '🔗✓' : nd.networkAgentStatus === 'failed' ? '🔗✗' : '';
+      const agentIcons = [monIcon, netIcon].filter(Boolean).join(' ');
+      const statusCell = getInfraStatusBadge(nd.status)
+        + (agentIcons ? `<span style="font-size:0.75em;color:#aaa;margin-left:4px;">${agentIcons}</span>` : '')
+        + (nd.targetAction && nd.targetAction !== 'None' ? `<div style="font-size:0.68em;color:#ffc107;">⏳${esc(nd.targetAction)}</div>` : '');
+
+      // CSP resource ID
+      const cspId = nd.cspResourceId || nd.cspResourceName || '-';
+      const cspIdShort = cspId.length > 28 ? cspId.slice(0, 26) + '…' : cspId;
+
+      // Created date
+      const created = nd.createdTime ? esc(nd.createdTime.split(' ')[0]) : '-';
+
+      // Row border highlight for new nodes
+      const rowStyle = isNew ? `background:${bg};outline:1px solid #28a745;` : `background:${bg};`;
+
+      // SSH key per-node (shown only if nodes have different keys)
+      const nodeKeyId = nd.sshKeyId ? nd.sshKeyId.split('+').pop() || nd.sshKeyId : '';
+      const nodeIdCell = isNew
+        ? `<span style="color:#28a745;font-size:0.8em;">NEW </span>${esc(nd.id || '-')}`
+        : esc(nd.id || '-');
+      const nodeIdSuffix = (!uniformSshKey && nodeKeyId)
+        ? `<div style="color:#666;font-size:0.82em;">🔑${esc(nodeKeyId)}</div>` : '';
+
+      html += `
+        <tr style="${rowStyle}">
+          <td style="padding:5px 10px;color:#dde;font-family:monospace;">${nodeIdCell}${nodeIdSuffix}</td>
+          <td style="padding:5px 10px;">${statusCell}</td>
+          <td style="padding:5px 10px;color:#90ee90;font-family:monospace;">${esc(nd.publicIP || '-')}</td>
+          <td style="padding:5px 10px;color:#87ceeb;font-family:monospace;">${esc(nd.privateIP || '-')}</td>
+          <td style="padding:5px 10px;color:#888;font-family:monospace;font-size:0.88em;" title="${esc(cspId)}">${esc(cspIdShort)}</td>
+          <td style="padding:5px 10px;color:#888;">${created}</td>
+        </tr>`;
+
+      // Sub-row: node labels (show all labels; keys with empty values shown as plain tags)
+      const ndLabels = nd.label && typeof nd.label === 'object' ? Object.entries(nd.label).filter(([k]) => k) : [];
+      if (ndLabels.length > 0) {
+        const pillsHtml = ndLabels.map(([k, v]) =>
+          v ? `<span style="background:#1e3a5f;color:#9ab;padding:1px 7px;border-radius:10px;font-size:0.78em;margin-right:4px;">${esc(k)}: <b style="color:#cde;">${esc(v)}</b></span>`
+            : `<span style="background:#1e3a5f;color:#cde;padding:1px 7px;border-radius:10px;font-size:0.78em;margin-right:4px;">${esc(k)}</span>`
+        ).join('');
+        html += `<tr style="background:${bg};"><td colspan="${COL_COUNT}" style="padding:2px 14px 5px 28px;border-bottom:1px solid #1e2e3e;">🏷️ ${pillsHtml}</td></tr>`;
+      }
+
+      // Sub-row: network / security details (vNetId, subnetId, securityGroupIds)
+      const netDetails = [];
+      if (nd.vNetId)   netDetails.push(`vNet: <span style="color:#cde;">${esc(nd.vNetId)}</span>`);
+      if (nd.subnetId) netDetails.push(`Subnet: <span style="color:#cde;">${esc(nd.subnetId)}</span>`);
+      if (nd.securityGroupIds?.length) netDetails.push(`SG: <span style="color:#cde;">${nd.securityGroupIds.map(esc).join(', ')}</span>`);
+      if (netDetails.length > 0) {
+        html += `<tr style="background:${bg};"><td colspan="${COL_COUNT}" style="padding:2px 14px 5px 28px;font-size:0.78em;color:#7a8fa6;border-bottom:1px solid #1e2e3e;">🌐 ${netDetails.join(' &nbsp;·&nbsp; ')}</td></tr>`;
+      }
+
+      // Sub-row: systemMessage (especially important for failed nodes)
+      if (nd.systemMessage) {
+        const isFail = (nd.status || '').toLowerCase().includes('fail');
+        const msgColor = isFail ? '#f88' : '#ffc107';
+        const msgBg    = isFail ? '#2a1010' : '#1a1500';
+        html += `<tr style="background:${msgBg};"><td colspan="${COL_COUNT}" style="padding:4px 14px 6px 28px;color:${msgColor};font-size:0.80em;white-space:normal;border-bottom:1px solid #2a3a50;">
+          ${isFail ? '❌' : 'ℹ️'} <em>${esc(nd.systemMessage)}</em>
+        </td></tr>`;
+      }
+    });
+    html += `</tbody></table></div></div>`;
+  });
+
+  return html;
+}
+
+// Rich GUI for Infra status view (replaces raw JSON in statusInfra)
+function displayInfraStatusGui(data) {
+  window._currentJsonOutput = data;
+  window._currentJsonString = JSON.stringify(data, null, 2);
+  const esc = window.escapeHtml || (s => String(s));
+  const infraId = data.id || data.name || 'Infra';
+
+  // Meta tags row (description, CLADNet, etc.)
+  const metaItems = [];
+  if (data.description) metaItems.push(`📝 ${esc(data.description)}`);
+  if (data.configureCloudAdaptiveNetwork === 'yes') metaItems.push(`🔗 CLADNet: <span style="color:#28a745;">enabled</span>`);
+  const metaHtml = metaItems.length
+    ? `<p style="color:#aaa;font-size:0.82em;margin:0 0 12px;">${metaItems.join(' &nbsp;·&nbsp; ')}</p>`
+    : '';
+
+  Swal.fire({
+    title: `📊 Infra Status: ${esc(infraId)}`,
+    html: `
+      <div style="text-align:left;color:#e0e0e0;font-family:sans-serif;">
+        ${metaHtml}
+        ${buildInfraNodeSummaryHtml(data)}
+        <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end;">
+          <button type="button" onclick="downloadAllSshKeys()"
+            style="padding:5px 14px;font-size:12px;background:#28a745;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:bold;">
+            📦 SSH Keys
+          </button>
+          <button type="button" onclick="displayJsonData(window._currentJsonOutput,'info')"
+            style="padding:5px 14px;font-size:12px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;">
+            🔍 View JSON
+          </button>
+        </div>
+      </div>`,
+    background: '#0e1746',
+    color: '#e0e0e0',
+    showConfirmButton: false,
+    showCancelButton: true,
+    cancelButtonText: '✕ Close',
+    width: '90%',
+  });
+}
+
+// Rich GUI for Access Info view (replaces raw JSON in getAccessInfo)
+function displayAccessInfoGui(data, infraId) {
+  window._currentJsonOutput = data;
+  window._currentJsonString = JSON.stringify(data, null, 2);
+  const esc = window.escapeHtml || (s => String(s));
+  window._guiSshCommands = [];
+  const groups = data.InfraNodeGroupAccessInfo || [];
+  let cmdIdx = 0;
+
+  let html = `<div style="text-align:left;color:#e0e0e0;font-family:sans-serif;">`;
+  html += `
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+      <button type="button" onclick="downloadAllSshKeys()"
+        style="padding:6px 16px;font-size:12px;background:#28a745;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:bold;">
+        📦 Download All SSH Keys (ZIP)
+      </button>
+      <button type="button" onclick="displayJsonData(window._currentJsonOutput,'info')"
+        style="padding:6px 14px;font-size:12px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;">
+        🔍 View JSON
+      </button>
+    </div>`;
+
+  if (groups.length === 0) {
+    html += `<p style="color:#aaa;">No access information available.</p>`;
+  }
+
+  groups.forEach(group => {
+    const gid = group.NodeGroupId || 'default';
+    const nodeList = group.NodeAccessInfo || [];
+    html += `
+      <div style="background:#0d1420;border:1px solid #2a3a50;border-radius:6px;margin-bottom:12px;overflow:hidden;">
+        <div style="background:#1a3050;padding:8px 12px;font-weight:bold;color:#61dafb;">
+          📦 NodeGroup: ${esc(gid)} <span style="font-size:0.78em;color:#aaa;font-weight:normal;">(${nodeList.length} node(s))</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:0.80em;">
+          <thead><tr style="background:#1a2535;color:#9ab;">
+            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">Node ID</th>
+            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">Public IP</th>
+            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">Private IP</th>
+            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">User</th>
+            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">Port</th>
+            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">SSH Command (click to copy)</th>
+          </tr></thead>
+          <tbody>`;
+    nodeList.forEach((nd, i) => {
+      const bg = i % 2 === 0 ? '#0d1b2a' : '#0a1520';
+      const user = nd.nodeUserName || 'ubuntu';
+      const port = nd.sshPort || 22;
+      let sshCmd = '-';
+      if (nd.publicIP) {
+        sshCmd = `ssh -i ${nd.nodeId || 'key'}.pem -p ${port} ${user}@${nd.publicIP}`;
+      } else if (nd.bastionPublicIp) {
+        sshCmd = `ssh -J ${user}@${nd.bastionPublicIp}:${nd.bastionSshPort || 22} -i key.pem -p ${port} ${user}@${nd.privateIP}`;
+      }
+      const thisIdx = cmdIdx++;
+      window._guiSshCommands.push(sshCmd);
+      html += `
+        <tr style="background:${bg};">
+          <td style="padding:5px 10px;color:#dde;font-family:monospace;">${esc(nd.nodeId || '-')}</td>
+          <td style="padding:5px 10px;color:#90ee90;font-family:monospace;">${esc(nd.publicIP || '-')}</td>
+          <td style="padding:5px 10px;color:#87ceeb;font-family:monospace;">${esc(nd.privateIP || '-')}</td>
+          <td style="padding:5px 10px;color:#ffd700;">${esc(user)}</td>
+          <td style="padding:5px 10px;color:#aaa;">${esc(String(port))}</td>
+          <td style="padding:5px 10px;">
+            <code id="gui-ssh-cmd-${thisIdx}" onclick="copyGuiSshCommand(${thisIdx})"
+              style="background:#1a1a2e;color:#98fb98;padding:2px 8px;border-radius:3px;font-size:0.88em;
+                     cursor:pointer;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+                     max-width:320px;user-select:none;" title="${esc(sshCmd)} — click to copy">
+              ${esc(sshCmd)}
+            </code>
+          </td>
+        </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  });
+  html += `</div>`;
+
+  Swal.fire({
+    title: `🔑 Access Info${infraId ? ': ' + esc(infraId) : ''}`,
+    html: html,
+    background: '#0e1746',
+    color: '#e0e0e0',
+    showConfirmButton: false,
+    showCancelButton: true,
+    cancelButtonText: '✕ Close',
+    width: '88%',
+  });
+}
+
+// Rich GUI for infraDynamic provisioning result (replaces raw JSON in proceedWithInfraCreation)
+function displayInfraDynamicResultGui(data) {
+  window._currentJsonOutput = data;
+  window._currentJsonString = JSON.stringify(data, null, 2);
+  const esc = window.escapeHtml || (s => String(s));
+  const infraId = data.id || data.name || 'Infra';
+  const nodes = data.node || [];
+  const runningCount = nodes.filter(nd => (nd.status || '').toLowerCase() === 'running').length;
+
+  Swal.fire({
+    title: `✅ Infra Created: ${esc(infraId)}`,
+    html: `
+      <div style="text-align:left;color:#e0e0e0;font-family:sans-serif;">
+        <div style="background:#0d3320;border:1px solid #28a745;border-radius:8px;padding:12px;margin-bottom:14px;">
+          <p style="color:#90ee90;margin:0;font-weight:bold;">🎉 Infrastructure provisioning completed!</p>
+          <p style="color:#aaa;margin:6px 0 0;font-size:0.83em;">
+            ${runningCount} / ${nodes.length} node(s) running
+            ${data.description ? ' · ' + esc(data.description) : ''}
+          </p>
+        </div>
+        ${buildInfraNodeSummaryHtml(data)}
+        <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;flex-wrap:wrap;">
+          <button type="button" onclick="if(infraidElement)infraidElement.value='${esc(infraId)}'; downloadAllSshKeys()"
+            style="padding:6px 18px;font-size:13px;background:#28a745;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:bold;">
+            📦 Download SSH Keys (ZIP)
+          </button>
+          <button type="button" onclick="displayJsonData(window._currentJsonOutput,'info')"
+            style="padding:6px 14px;font-size:12px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;">
+            🔍 View JSON
+          </button>
+        </div>
+      </div>`,
+    background: '#0e1746',
+    color: '#e0e0e0',
+    showConfirmButton: false,
+    showCancelButton: true,
+    cancelButtonText: '✕ Close',
+    width: '90%',
+  });
 }
 
 // Handle Infra without Nodes (preparing, prepared, empty states)
@@ -5035,7 +5515,7 @@ function proceedWithInfraCreation(createInfraReq, url, username, password) {
         console.log('Failed to activate control tab:', error);
       }
 
-      displayJsonData(res.data, typeInfo);
+      displayInfraDynamicResultGui(res.data);
       handleAxiosResponse(res);
 
       updateInfraList();
@@ -11008,7 +11488,7 @@ function statusInfra() {
   })
     .then((res) => {
       console.log("[Status Infra]");
-      displayJsonData(res.data, typeInfo);
+      displayInfraStatusGui(res.data);
     })
     .catch(function (error) {
       if (error.response) {
@@ -17769,7 +18249,7 @@ function getAccessInfo() {
       },
     }).then((res) => {
       console.log(res); // for debug
-      displayJsonData(res.data, typeInfo);
+      displayAccessInfoGui(res.data, infraid);
     });
 }
 window.getAccessInfo = getAccessInfo;
