@@ -7156,6 +7156,13 @@ function createK8sCluster() {
           };
           if (sg.rootDiskType) clusterReq.rootDiskType = sg.rootDiskType;
           if (sg.rootDiskSize) clusterReq.rootDiskSize = sg.rootDiskSize;
+          if (sg.nodeGroupName || sg.name) clusterReq.nodeGroupName = sg.nodeGroupName || sg.name;
+          if (sg.version) clusterReq.version = sg.version;
+          if (sg.nodeGroupSize || sg.desiredNodeSize) clusterReq.desiredNodeSize = sg.nodeGroupSize || sg.desiredNodeSize;
+          if (sg.minNodeSize) clusterReq.minNodeSize = sg.minNodeSize;
+          if (sg.maxNodeSize) clusterReq.maxNodeSize = sg.maxNodeSize;
+          if (sg.onAutoScaling) clusterReq.onAutoScaling = sg.onAutoScaling;
+          if (sg.connectionName) clusterReq.connectionName = sg.connectionName;
           return clusterReq;
         });
 
@@ -23125,6 +23132,31 @@ const TEMPLATE_TYPES = [
     }
   ]
 }`
+  },
+  {
+    key: 'k8sCluster',
+    label: 'K8s Cluster',
+    icon: '☸️',
+    badgeClass: 'badge-info',
+    bodyFieldName: 'k8sMultiClusterDynamicReq',
+    applyNameField: 'namePrefix',
+    applyUrlFn: (baseUrl, templateId) => `${baseUrl}/k8sCluster/template/${templateId}`,
+    directCreateUrlFn: (baseUrl) => `${baseUrl}/k8sMultiClusterDynamic`,
+    placeholder: `{
+  "namePrefix": "across",
+  "clusters": [
+    {
+      "connectionName": "aws-ap-northeast-2",
+      "specId": "aws+ap-northeast-2+t3a.xlarge",
+      "imageId": "default",
+      "nodeGroupName": "k8sng01",
+      "desiredNodeSize": 1,
+      "minNodeSize": 1,
+      "maxNodeSize": 2,
+      "onAutoScaling": "true"
+    }
+  ]
+}`
   }
 ];
 
@@ -23138,8 +23170,8 @@ async function showTemplateManagement(overrideNs) {
   const { hostname, port, username, password } = config;
   const authConfig = { username, password };
 
-  // Determine initial namespace
-  const currentNs = overrideNs || configNamespace || '';
+  // Determine initial namespace — default to "system" where init templates are stored
+  const currentNs = overrideNs || 'system';
 
   // Load namespace list
   let namespaces = [];
@@ -23321,6 +23353,7 @@ function renderTemplateCard(t, typeMeta, namespace) {
         <div class="tmpl-card-actions">
           <button onclick="viewTemplateDetail('${safeNs}', '${safeType}', '${safeId}')" class="btn btn-sm btn-outline-info" title="View">👁️</button>
           ${typeMeta.key === 'infra' ? `<button onclick="loadTemplateToInfraConfig('${safeNs}', '${safeId}')" class="btn btn-sm btn-outline-primary" title="Load to MC-Infra Configuration">📋 Load to Config</button>` : ''}
+          ${typeMeta.key === 'k8sCluster' ? `<button onclick="loadTemplateToK8sConfig('${safeNs}', '${safeId}')" class="btn btn-sm btn-outline-primary" title="Load to K8s Configuration">📋 Load to Config</button>` : ''}
           <button onclick="applyTemplate('${safeNs}', '${safeType}', '${safeId}')" class="btn btn-sm btn-outline-success" title="Apply">▶️</button>
           <button onclick="deleteTemplate('${safeNs}', '${safeType}', '${safeId}')" class="btn btn-sm btn-outline-danger" title="Delete">🗑️</button>
         </div>
@@ -23444,6 +23477,7 @@ async function viewTemplateDetail(namespace, type, templateId) {
           <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn btn-success btn-sm tmpl-detail-apply">▶️ Apply This Template</button>
             ${type === 'infra' ? `<button class="btn btn-outline-primary btn-sm tmpl-detail-load">📋 Load to Config</button>` : ''}
+            ${type === 'k8sCluster' ? `<button class="btn btn-outline-primary btn-sm tmpl-detail-load-k8s">📋 Load to Config</button>` : ''}
             <button class="btn btn-outline-secondary btn-sm tmpl-detail-copy">📋 Copy JSON</button>
             <button class="btn btn-outline-primary btn-sm tmpl-detail-back">⬅️ Back to List</button>
           </div>
@@ -23460,6 +23494,7 @@ async function viewTemplateDetail(namespace, type, templateId) {
         window._lastTemplateJson = jsonText;
         popup.querySelector('.tmpl-detail-apply')?.addEventListener('click', () => applyTemplate(namespace, type, templateId));
         popup.querySelector('.tmpl-detail-load')?.addEventListener('click', () => loadTemplateToInfraConfig(namespace, templateId));
+        popup.querySelector('.tmpl-detail-load-k8s')?.addEventListener('click', () => loadTemplateToK8sConfig(namespace, templateId));
         popup.querySelector('.tmpl-detail-copy')?.addEventListener('click', () => copyTemplateJson());
         popup.querySelector('.tmpl-detail-back')?.addEventListener('click', () => showTemplateManagement(namespace));
       }
@@ -23520,6 +23555,9 @@ async function applyTemplate(sourceNs, type, templateId) {
     : '';
 
   const safeTemplateIdHtml = window.escapeHtml(templateId);
+  const nameField = typeMeta.applyNameField || 'name';
+  const nameLabel = nameField === 'namePrefix' ? 'Name Prefix' : 'Name';
+  const namePlaceholder = nameField === 'namePrefix' ? 'my-k8s' : 'my-new-resource';
   const { value: formValues } = await Swal.fire({
     title: `▶️ Apply ${typeMeta.label} Template`,
     html: `
@@ -23533,8 +23571,8 @@ async function applyTemplate(sourceNs, type, templateId) {
           </select>
         </div>
         <div style="margin-bottom:10px;">
-          <label style="font-size:13px;font-weight:500;">Name <span style="color:red;">*</span></label>
-          <input id="tmplApplyName" class="swal2-input" placeholder="my-new-resource" value="mc-${generateInfraName()}" style="margin:4px 0;width:100%;font-size:14px;">
+          <label style="font-size:13px;font-weight:500;">${nameLabel} <span style="color:red;">*</span></label>
+          <input id="tmplApplyName" class="swal2-input" placeholder="${namePlaceholder}" value="mc-${generateInfraName()}" style="margin:4px 0;width:100%;font-size:14px;">
         </div>
         <div style="margin-bottom:10px;">
           <label style="font-size:13px;font-weight:500;">Description (optional)</label>
@@ -23555,7 +23593,7 @@ async function applyTemplate(sourceNs, type, templateId) {
         return false;
       }
       if (!name) {
-        Swal.showValidationMessage('Name is required');
+        Swal.showValidationMessage(`${nameLabel} is required`);
         return false;
       }
       return {
@@ -23583,7 +23621,9 @@ async function applyTemplate(sourceNs, type, templateId) {
       } else {
         url = `${targetBaseUrl}/resources/${type}/template/${templateId}`;
       }
-      res = await axios.post(url, { name: formValues.name, description: formValues.description }, { auth: authConfig });
+      const applyBody = { description: formValues.description };
+      applyBody[nameField] = formValues.name;
+      res = await axios.post(url, applyBody, { auth: authConfig });
     } else {
       // Cross-namespace: GET template from source ns, then directly create in target ns
       const templateUrl = `http://${hostname}:${port}/tumblebug/ns/${sourceNs}/template/${type}/${templateId}`;
@@ -23596,8 +23636,8 @@ async function applyTemplate(sourceNs, type, templateId) {
         throw new Error(`Template does not contain '${typeMeta.bodyFieldName}' field`);
       }
 
-      // Apply name and description overrides
-      reqBody.name = formValues.name;
+      // Apply name/namePrefix and description overrides
+      reqBody[nameField] = formValues.name;
       if (formValues.description) {
         reqBody.description = formValues.description;
       }
@@ -23931,6 +23971,145 @@ async function loadTemplateToInfraConfig(namespace, templateId) {
   }
 }
 window.loadTemplateToInfraConfig = loadTemplateToInfraConfig;
+
+async function loadTemplateToK8sConfig(namespace, templateId) {
+  const config = getConfig();
+  const { hostname, port, username, password } = config;
+  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/template/k8sCluster/${templateId}`;
+
+  const spinnerId = addSpinnerTask('Loading K8s template to Configuration');
+  let data;
+  try {
+    const res = await axios.get(url, { auth: { username, password } });
+    data = res.data;
+  } catch (err) {
+    removeSpinnerTask(spinnerId);
+    Swal.fire({ icon: 'error', title: '❌ Error', text: `Failed to load template: ${err.response?.data?.message || err.message}` });
+    return;
+  }
+
+  const multiReq = data.k8sMultiClusterDynamicReq;
+  if (!multiReq || !multiReq.clusters || multiReq.clusters.length === 0) {
+    removeSpinnerTask(spinnerId);
+    Swal.fire('⚠️ Warning', 'No cluster configuration found in this template.', 'warning');
+    return;
+  }
+
+  // Close Template Management modal
+  Swal.close();
+
+  // Switch to K8s mode if not already active
+  const k8sModeInput = document.getElementById('k8sMode');
+  if (k8sModeInput && !k8sModeInput.checked) {
+    // Bootstrap btn-group-toggle requires updating the active class on the label,
+    // setting .checked alone only changes the internal state without updating visuals.
+    document.getElementById('nodeMode')?.closest('label')?.classList.remove('active');
+    k8sModeInput.closest('label')?.classList.add('active');
+    k8sModeInput.checked = true;
+    await toggleWorkloadType();
+  }
+
+  // Clear existing configuration
+  clearCircle('');
+
+  // Populate nodeGroupRequestFromSpecList from k8s cluster configs
+  const specFetches = multiReq.clusters.map(function(cluster, idx) {
+    var nodeConfig = $.extend({}, createInfraReqVmTmplt);
+    nodeConfig.name          = cluster.nodeGroupName || ('ng-' + (idx + 1));
+    nodeConfig.specId        = cluster.specId        || '';
+    nodeConfig.imageId       = cluster.imageId       || 'default';
+    nodeConfig.rootDiskType  = cluster.rootDiskType  || 'default';
+    nodeConfig.rootDiskSize  = cluster.rootDiskSize  || 0;
+    nodeConfig.nodeGroupSize = cluster.desiredNodeSize || 1;
+    nodeConfig.connectionName = cluster.connectionName || '';
+    // K8s-specific fields stored for createK8sCluster() to pick up
+    nodeConfig.minNodeSize   = cluster.minNodeSize   || 1;
+    nodeConfig.maxNodeSize   = cluster.maxNodeSize   || 3;
+    nodeConfig.onAutoScaling = cluster.onAutoScaling || 'true';
+    nodeConfig.version       = cluster.version       || '';
+    nodeGroupRequestFromSpecList.push(nodeConfig);
+
+    if (cluster.specId) {
+      const specUrl = `http://${hostname}:${port}/tumblebug/ns/system/resources/spec/${cluster.specId}`;
+      return axios.get(specUrl, { auth: { username, password } })
+        .then(function(specRes) {
+          const s = specRes.data;
+          return {
+            id:                  cluster.specId,
+            providerName:        s.providerName         || extractProviderFromSpecId(cluster.specId),
+            regionName:          s.regionName           || extractRegionFromSpecId(cluster.specId),
+            cspSpecName:         s.cspSpecName          || cluster.specId,
+            vCPU:                s.vCPU                 ?? 'N/A',
+            memoryGiB:           s.memoryGiB            ?? 'N/A',
+            costPerHour:         s.costPerHour          || 0,
+            acceleratorType:     s.acceleratorType      || '',
+            acceleratorModel:    s.acceleratorModel     || '',
+            acceleratorCount:    s.acceleratorCount     || 0,
+            acceleratorMemoryGB: s.acceleratorMemoryGB  || '',
+            connectionName:      cluster.connectionName || '',
+            rootDiskType:        cluster.rootDiskType   || 'default'
+          };
+        })
+        .catch(function() {
+          return {
+            id:                  cluster.specId,
+            providerName:        extractProviderFromSpecId(cluster.specId),
+            regionName:          extractRegionFromSpecId(cluster.specId),
+            cspSpecName:         cluster.specId,
+            vCPU:                'N/A',
+            memoryGiB:           'N/A',
+            costPerHour:         0,
+            acceleratorType:     '',
+            acceleratorModel:    '',
+            acceleratorCount:    0,
+            acceleratorMemoryGB: '',
+            connectionName:      cluster.connectionName || '',
+            rootDiskType:        cluster.rootDiskType   || 'default'
+          };
+        });
+    } else {
+      return Promise.resolve({
+        id:                  '',
+        providerName:        '',
+        regionName:          '',
+        cspSpecName:         '',
+        vCPU:                'N/A',
+        memoryGiB:           'N/A',
+        costPerHour:         0,
+        acceleratorType:     '',
+        acceleratorModel:    '',
+        acceleratorCount:    0,
+        acceleratorMemoryGB: '',
+        connectionName:      cluster.connectionName || '',
+        rootDiskType:        cluster.rootDiskType   || 'default'
+      });
+    }
+  });
+
+  try {
+    const specInfoList = await Promise.all(specFetches);
+    specInfoList.forEach(function(specInfo) {
+      recommendedSpecList.push(specInfo);
+    });
+    updateNodeGroupReview();
+
+    var provisionTab = document.getElementById('provision-tab');
+    if (provisionTab) provisionTab.click();
+
+    Swal.fire({
+      toast: true,
+      position: 'bottom-end',
+      icon: 'success',
+      title: `K8s template "${window.escapeHtml(templateId)}" loaded to Provision panel`,
+      showConfirmButton: false,
+      timer: 3000,
+      timerProgressBar: true
+    });
+  } finally {
+    removeSpinnerTask(spinnerId);
+  }
+}
+window.loadTemplateToK8sConfig = loadTemplateToK8sConfig;
 
 // =====================================================================
 // Global DNS Management (Route53)
