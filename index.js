@@ -5920,10 +5920,12 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
       
       // Build regionBreakdown using provider+region keys to correctly distinguish
       // same-named regions across different CSPs (e.g., alibaba ap-northeast-2 vs aws ap-northeast-2)
-      Object.values(nodeGroupRegions).forEach(function(info) {
-        var key = info.provider ? (info.provider + ' (' + info.region + ')') : info.region;
-        resourceSummary.regionBreakdown[key] = (resourceSummary.regionBreakdown[key] || 0) + 1;
-      });
+      if (nodeGroupRegions) {
+        Object.values(nodeGroupRegions).forEach(function(info) {
+          var key = info.provider ? (info.provider + ' (' + info.region + ')') : info.region;
+          resourceSummary.regionBreakdown[key] = (resourceSummary.regionBreakdown[key] || 0) + 1;
+        });
+      }
 
       // Extract recommendations
       if (reviewData.recommendations && Array.isArray(reviewData.recommendations)) {
@@ -6253,8 +6255,8 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
           <tr>
             <td style="border: 1px solid #ddd; padding: 8px; color: #666;">Cloud Providers</td>
             <td style="border: 1px solid #ddd; padding: 8px; color: #333;">
-              ${Object.entries(resourceSummary.providerBreakdown).map(([provider, count]) => 
-                `<span style="margin-right: 10px;"><strong>${provider}:</strong> ${count}</span>`
+              ${Object.entries(resourceSummary.providerBreakdown).map(([provider, count]) =>
+                `<span style="margin-right: 10px;"><strong>${window.escapeHtml(provider)}:</strong> ${count}</span>`
               ).join('')}
             </td>
           </tr>` : ''}
@@ -6262,8 +6264,8 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
           <tr>
             <td style="border: 1px solid #ddd; padding: 8px; color: #666;">Regions</td>
             <td style="border: 1px solid #ddd; padding: 8px; color: #333;">
-              ${Object.entries(resourceSummary.regionBreakdown).map(([region, count]) => 
-                `<span style="margin-right: 10px;"><strong>${region}:</strong> ${count}</span>`
+              ${Object.entries(resourceSummary.regionBreakdown).map(([region, count]) =>
+                `<span style="margin-right: 10px;"><strong>${window.escapeHtml(region)}:</strong> ${count}</span>`
               ).join('')}
             </td>
           </tr>` : ''}
@@ -6488,19 +6490,19 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
             <div style="margin: 8px 0;">
               <strong style="font-size: 0.9em; color: #333;">Cloud Provider Distribution:</strong>
               <div style="margin-top: 4px;">
-                ${Object.entries(resourceSummary.providerBreakdown).map(([provider, count]) => 
-                  `<span style="display: inline-block; margin: 2px 4px; padding: 3px 8px; background: #f0f8ff; border: 1px solid #007bff; border-radius: 12px; font-size: 0.8em; color: #007bff;">${provider}: ${count}</span>`
+                ${Object.entries(resourceSummary.providerBreakdown).map(([provider, count]) =>
+                  `<span style="display: inline-block; margin: 2px 4px; padding: 3px 8px; background: #f0f8ff; border: 1px solid #007bff; border-radius: 12px; font-size: 0.8em; color: #007bff;">${window.escapeHtml(provider)}: ${count}</span>`
                 ).join('')}
               </div>
             </div>
           ` : ''}
-          
+
           ${Object.keys(resourceSummary.regionBreakdown).length > 0 ? `
             <div style="margin: 8px 0;">
               <strong style="font-size: 0.9em; color: #333;">Region Distribution:</strong>
               <div style="margin-top: 4px;">
-                ${Object.entries(resourceSummary.regionBreakdown).map(([region, count]) => 
-                  `<span style="display: inline-block; margin: 2px 4px; padding: 3px 8px; background: #f0f8f0; border: 1px solid #28a745; border-radius: 12px; font-size: 0.8em; color: #28a745;">${region}: ${count}</span>`
+                ${Object.entries(resourceSummary.regionBreakdown).map(([region, count]) =>
+                  `<span style="display: inline-block; margin: 2px 4px; padding: 3px 8px; background: #f0f8f0; border: 1px solid #28a745; border-radius: 12px; font-size: 0.8em; color: #28a745;">${window.escapeHtml(region)}: ${count}</span>`
                 ).join('')}
               </div>
             </div>
