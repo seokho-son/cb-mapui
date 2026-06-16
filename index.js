@@ -3662,7 +3662,7 @@ function displayInfraDynamicResultGui(data) {
         </div>
         ${buildInfraNodeSummaryHtml(data)}
         <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;flex-wrap:wrap;">
-          <button type="button" onclick="if(infraidElement)infraidElement.value='${esc(infraId)}'; downloadAllSshKeys()"
+          <button type="button" onclick="downloadAllSshKeys(${JSON.stringify(infraId).replace(/"/g, '&quot;')})"
             style="padding:6px 18px;font-size:13px;background:#28a745;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:bold;">
             📦 Download SSH Keys (ZIP)
           </button>
@@ -18327,7 +18327,9 @@ saveBtn.addEventListener("click", function () {
 });
 
 // Download ALL Node SSH keys in an Infra as a single zip file
-function downloadAllSshKeys() {
+// infraIdOverride: optional Infra id (e.g., passed from the provisioning result
+// popup). When omitted, falls back to the currently selected #infraid input.
+function downloadAllSshKeys(infraIdOverride) {
   console.log(" [Download All SSH Keys as ZIP ...]\n");
 
   var config = getConfig();
@@ -18336,7 +18338,7 @@ function downloadAllSshKeys() {
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var infraid = infraidElement.value;
+  var infraid = infraIdOverride || (infraidElement ? infraidElement.value : "");
 
   if (!namespace || !infraid) {
     Swal.fire("Error", "Please select a namespace and Infra first.", "warning");
