@@ -13629,18 +13629,18 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:8000/v1))'";
       break;
     case "Nvidia":
-      // Install NVIDIA CUDA driver with Container Toolkit
+      // Install GPU driver — auto-detects NVIDIA or AMD at runtime
       // Note: System will automatically reboot after installation
       // Use download-then-execute pattern (not curl|bash) to prevent truncated script execution
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/installGpuDriver.sh -o /tmp/installGpuDriver.sh && bash /tmp/installGpuDriver.sh";
-      defaultRemoteCommand[1] = "echo '[INFO] GPU driver installation started. System will reboot automatically in ~5 seconds after completion.'";
-      defaultRemoteCommand[2] = "echo '[INFO] After reboot, verify with: nvidia-smi'";
+      defaultRemoteCommand[1] = "echo '[INFO] GPU driver installation started (NVIDIA or AMD auto-detected). System will reboot automatically in ~5 seconds after completion.'";
+      defaultRemoteCommand[2] = "echo '[INFO] After reboot, verify with: nvidia-smi (NVIDIA) or rocm-smi (AMD)'";
       break;
     case "NvidiaVgpu":
       // Install NVIDIA driver for fractional/vGPU instances (e.g., AWS g6f, Azure NCas fractional)
       // --vgpu flag forces proprietary driver (open kernel modules do NOT support vGPU)
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/installGpuDriver.sh -o /tmp/installGpuDriver.sh && bash /tmp/installGpuDriver.sh --vgpu";
-      defaultRemoteCommand[1] = "echo '[INFO] GPU driver (vGPU/proprietary) installation started. System will reboot automatically.'";
+      defaultRemoteCommand[1] = "echo '[INFO] NVIDIA GPU driver (vGPU/proprietary) installation started. System will reboot automatically.'";
       defaultRemoteCommand[2] = "echo '[INFO] After reboot, verify with: nvidia-smi'";
       break;
     case "RebootVM":
@@ -13650,9 +13650,12 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "";
       break;
     case "Nvidia-Status":
-      defaultRemoteCommand[0] = "nvidia-smi";
-      // Show Fabric Manager status on multi-GPU NVSwitch systems (A100/H100/H200 SXM)
-      defaultRemoteCommand[1] = "GPU_COUNT=$(nvidia-smi -L 2>/dev/null | grep -c '^GPU') || GPU_COUNT=0; if [ \"$GPU_COUNT\" -ge 4 ]; then echo '=== Fabric Manager (required for NVSwitch multi-GPU) ==='; systemctl is-active nvidia-fabricmanager 2>/dev/null && echo 'Status: RUNNING' || echo 'Status: NOT RUNNING (multi-GPU may not work!)'; echo '=== nvidia-persistenced ==='; systemctl is-active nvidia-persistenced 2>/dev/null && echo 'Status: RUNNING' || echo 'Status: not running'; fi";
+      // Check GPU driver status — tries NVIDIA first, then AMD ROCm
+      // rocm-smi exits with code 1 on some ROCm versions due to a Python 'violation' attribute bug
+      // even when GPU info is shown correctly — suppress with || true
+      defaultRemoteCommand[0] = "if command -v nvidia-smi &>/dev/null; then nvidia-smi; elif command -v rocm-smi &>/dev/null; then rocm-smi || true; else echo '[WARN] No GPU CLI tool found (nvidia-smi / rocm-smi). Is the driver installed and system rebooted?'; sudo lspci | grep -i -E 'vga|3d|display' || true; fi";
+      // NVIDIA: show Fabric Manager on multi-GPU NVSwitch systems; AMD: show amd-smi monitor
+      defaultRemoteCommand[1] = "if command -v nvidia-smi &>/dev/null; then GPU_COUNT=$(nvidia-smi -L 2>/dev/null | grep -c '^GPU') || GPU_COUNT=0; if [ \"$GPU_COUNT\" -ge 4 ]; then echo '=== Fabric Manager (required for NVSwitch multi-GPU) ==='; systemctl is-active nvidia-fabricmanager 2>/dev/null && echo 'Status: RUNNING' || echo 'Status: NOT RUNNING (multi-GPU may not work!)'; echo '=== nvidia-persistenced ==='; systemctl is-active nvidia-persistenced 2>/dev/null && echo 'Status: RUNNING' || echo 'Status: not running'; fi; elif command -v amd-smi &>/dev/null; then amd-smi monitor || true; fi";
       defaultRemoteCommand[2] = "";
       break;
     case "Netdata":
@@ -14604,9 +14607,9 @@ window.predefinedScriptCategories = {
     label: '🤖 LLM (Ollama)',
     description: 'Ollama-based LLM service deployment',
     scripts: [
-      { value: 'Nvidia', label: '1. Install GPU Driver', step: 1 },
+      { value: 'Nvidia', label: '1. Install GPU Driver (NVIDIA/AMD auto-detect)', step: 1 },
       { value: 'RebootVM', label: '2. Reboot Node', step: 2 },
-      { value: 'Nvidia-Status', label: '3. Check GPU Driver', step: 3 },
+      { value: 'Nvidia-Status', label: '3. Check GPU Driver (NVIDIA/AMD)', step: 3 },
       { value: 'Ollama', label: '4. Install Ollama', step: 4 },
       { value: 'OllamaPull', label: '5. Pull LLM Model', step: 5 },
       { value: 'Netdata', label: '6. Install Monitoring', step: 6, optional: true },
@@ -14617,9 +14620,9 @@ window.predefinedScriptCategories = {
     label: '🤖 LLM (vLLM)',
     description: 'vLLM-based high-performance LLM service',
     scripts: [
-      { value: 'Nvidia', label: '1. Install GPU Driver', step: 1, targetLabel: 'accelerator=gpu' },
+      { value: 'Nvidia', label: '1. Install GPU Driver (NVIDIA/AMD auto-detect)', step: 1, targetLabel: 'accelerator=gpu' },
       { value: 'RebootVM', label: '2. Reboot Node', step: 2, targetLabel: 'accelerator=gpu' },
-      { value: 'Nvidia-Status', label: '3. Check GPU Driver', step: 3, targetLabel: 'accelerator=gpu' },
+      { value: 'Nvidia-Status', label: '3. Check GPU Driver (NVIDIA/AMD)', step: 3, targetLabel: 'accelerator=gpu' },
       { value: 'vLLM', label: '4. Install vLLM', step: 4, targetLabel: 'accelerator=gpu' },
       { value: 'vLLMServe', label: '5. Serve LLM Model', step: 5, targetLabel: 'accelerator=gpu' },
       { value: 'Netdata', label: '6. Install Monitoring', step: 6, optional: true },
@@ -14634,9 +14637,9 @@ window.predefinedScriptCategories = {
     label: '📊 LLM Benchmark',
     description: 'LLM benchmark environment (vLLM + GuideLLM + Monitoring)',
     scripts: [
-      { value: 'Nvidia', label: '1. Install GPU Driver', step: 1, targetLabel: 'accelerator=gpu' },
+      { value: 'Nvidia', label: '1. Install GPU Driver (NVIDIA/AMD auto-detect)', step: 1, targetLabel: 'accelerator=gpu' },
       { value: 'RebootVM', label: '2. Reboot Node', step: 2, targetLabel: 'accelerator=gpu' },
-      { value: 'Nvidia-Status', label: '3. Check GPU Driver', step: 3, targetLabel: 'accelerator=gpu' },
+      { value: 'Nvidia-Status', label: '3. Check GPU Driver (NVIDIA/AMD)', step: 3, targetLabel: 'accelerator=gpu' },
       { value: 'BenchmarkTarget', label: '4. Setup Benchmark Target (vLLM+Model+Telemetry)', step: 4, targetLabel: 'accelerator=gpu' },
       { value: 'BenchmarkManager', label: '5. Setup Benchmark Manager (Monitoring+Tools)', step: 5, targetLabel: 'role=benchmark', targetLabels: ['role=benchmark', 'role=observability'] },
       { value: 'RunBenchmark', label: '6. Run Benchmark', step: 6, targetLabel: 'role=benchmark', targetLabels: ['role=benchmark', 'role=observability'] },
@@ -14652,9 +14655,9 @@ window.predefinedScriptCategories = {
       { value: 'K8sLlmdControlPlane',    label: '1-alt. Deploy Control Plane (llm-d)',             step: 1,  targetLabel: 'role=control', optional: true },
       { value: 'K8sGetJoinCommand',      label: '2. Get Join Command',                             step: 2,  targetLabel: 'role=control', syncMode: true },
       { value: 'K8sGetKubeconfig',       label: '3. Get Kubeconfig (Base64)',                      step: 3,  targetLabel: 'role=control', syncMode: true },
-      { value: 'Nvidia',                 label: '4. Install GPU Driver (GPU worker only)',         step: 4,  targetLabel: 'accelerator=gpu', optional: true },
+      { value: 'Nvidia',                 label: '4. Install GPU Driver — NVIDIA/AMD auto-detect (GPU worker only)', step: 4,  targetLabel: 'accelerator=gpu', optional: true },
       { value: 'RebootVM',               label: '5. Reboot Node (GPU worker only)',                step: 5,  targetLabel: 'role=node', optional: true },
-      { value: 'Nvidia-Status',          label: '6. Check GPU Driver (GPU worker only)',           step: 6,  targetLabel: 'accelerator=gpu', optional: true, syncMode: true },
+      { value: 'Nvidia-Status',          label: '6. Check GPU Driver — NVIDIA/AMD (GPU worker only)', step: 6,  targetLabel: 'accelerator=gpu', optional: true, syncMode: true },
       { value: 'K8sWorker-Deploy',       label: '7. Deploy Worker & Join Cluster',                step: 7,  targetLabel: 'role=node' },
       { value: 'K8sClusterStatus',       label: '8. Check Cluster Status',                        step: 8,  targetLabel: 'role=control', syncMode: true },
       { value: 'K8sGpuStatus',           label: '9. Check GPU Operator Status (GPU/llm-d)',       step: 9,  targetLabel: 'role=control', optional: true, syncMode: true },
