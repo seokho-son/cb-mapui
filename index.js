@@ -7529,20 +7529,22 @@ function showSingleNodeGroupDialog(clusters, hostname, port, username, password,
   const nodeGroup = nodeGroupRequestFromSpecList[0];
   const spec = recommendedSpecList[0];
   const k8sNodeGroupRandomName = "ng-" + generateRandomString();
-  const nodeGroupProvider = spec.providerName;
-  const nodeGroupRegion = spec.regionName;
-    
+  const nodeGroupProvider = spec.providerName || '';
+  const nodeGroupRegion = spec.regionName || '';
+  const nodeGroupProviderLower = nodeGroupProvider.toLowerCase();
+  const nodeGroupRegionLower = nodeGroupRegion.toLowerCase();
+
     const clusterOptions = clusters.map(cluster => {
       // Use cluster-level status for determining availability
       const clusterStatus = cluster?.status || 'Unknown';
       const isActive = clusterStatus === 'Active';
-      
+
       // Check if provider and region match
-      const clusterProvider = cluster?.connectionConfig?.providerName || '';
-      const clusterRegion = cluster?.connectionConfig?.regionDetail?.regionId || '';
-      
-      const providerRegionMatch = (clusterProvider === nodeGroupProvider && clusterRegion === nodeGroupRegion);
-      
+      const clusterProvider = (cluster?.connectionConfig?.providerName || '').toLowerCase();
+      const clusterRegion = (cluster?.connectionConfig?.regionDetail?.regionName || '').toLowerCase();
+
+      const providerRegionMatch = (clusterProvider === nodeGroupProviderLower && clusterRegion === nodeGroupRegionLower);
+
       // Enable only if cluster is Active AND provider/region matches
       const isSelectable = isActive && providerRegionMatch;
       const disabled = !isSelectable ? 'disabled' : '';
@@ -7572,9 +7574,9 @@ function showSingleNodeGroupDialog(clusters, hostname, port, username, password,
     const selectableClusters = clusters.filter(cluster => {
       const clusterStatus = cluster?.status || 'Unknown';
       const isActive = clusterStatus === 'Active';
-      const clusterProvider = cluster?.connectionConfig?.providerName || '';
-      const clusterRegion = cluster?.connectionConfig?.regionDetail?.regionId || '';
-      const providerRegionMatch = (clusterProvider === nodeGroupProvider && clusterRegion === nodeGroupRegion);
+      const clusterProvider = (cluster?.connectionConfig?.providerName || '').toLowerCase();
+      const clusterRegion = (cluster?.connectionConfig?.regionDetail?.regionName || '').toLowerCase();
+      const providerRegionMatch = (clusterProvider === nodeGroupProviderLower && clusterRegion === nodeGroupRegionLower);
       return isActive && providerRegionMatch;
     });
     
@@ -7746,12 +7748,14 @@ function showMultiNodeGroupDialog(clusters, hostname, port, username, password, 
     const spec = recommendedSpecList[idx];
     const provider = spec?.providerName || '';
     const region = spec?.regionName || '';
-    
+    const providerLower = provider.toLowerCase();
+    const regionLower = region.toLowerCase();
+
     // Find compatible clusters (Active + matching provider/region)
     const compatibleClusters = clusters.filter(c => {
-      const cProvider = c?.connectionConfig?.providerName || '';
-      const cRegion = c?.connectionConfig?.regionDetail?.regionId || '';
-      return c?.status === 'Active' && cProvider === provider && cRegion === region;
+      const cProvider = (c?.connectionConfig?.providerName || '').toLowerCase();
+      const cRegion = (c?.connectionConfig?.regionDetail?.regionName || '').toLowerCase();
+      return c?.status === 'Active' && cProvider === providerLower && cRegion === regionLower;
     });
     
     return { idx, sg, spec, provider, region, compatibleClusters };
