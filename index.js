@@ -13620,13 +13620,18 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "sudo ~/startServer.sh ";
       break;
     case "vLLM":
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployvLLM.sh | bash";
-      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:8000/v1))'";
+      // Install vLLM on the GPU node
+      // --hf-token: required for gated models (meta-llama/*, mistralai/*); leave blank for public models
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployvLLM.sh -o /tmp/deployvLLM.sh && HF_TOKEN=\"<VLLM_HF_TOKEN>\"; if [ -n \"$HF_TOKEN\" ]; then bash /tmp/deployvLLM.sh --hf-token \"$HF_TOKEN\"; else bash /tmp/deployvLLM.sh; fi";
+      defaultRemoteCommand[1] = "echo 'vLLM installed. Next step: Serve LLM Model.'";
       defaultRemoteCommand[2] = "";
       break;
     case "vLLMServe":
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/servevLLM.sh | bash -s -- $$Func(AssignTask(task='Qwen/Qwen2.5-1.5B-Instruct, meta-llama/Llama-3.2-3B-Instruct, mistralai/Mistral-7B-Instruct-v0.3, deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'))";
-      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:8000/v1))'";
+      // Serve an LLM model with vLLM (must install vLLM first via Deploy vLLM step)
+      // Optional flags (hf-token, gpu-util, ctx-len) are only passed when non-empty
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/servevLLM.sh -o /tmp/servevLLM.sh && MODEL=\"<VLLM_MODEL>\"; HF_TOKEN=\"<VLLM_HF_TOKEN>\"; GPU_UTIL=\"<VLLM_GPU_UTIL>\"; CTX_LEN=\"<VLLM_CTX_LEN>\"; ARGS=(--model \"$MODEL\"); [ -n \"$HF_TOKEN\" ] && ARGS+=(--hf-token \"$HF_TOKEN\"); [ -n \"$GPU_UTIL\" ] && ARGS+=(--gpu-util \"$GPU_UTIL\"); [ -n \"$CTX_LEN\" ] && ARGS+=(--ctx-len \"$CTX_LEN\"); bash /tmp/servevLLM.sh \"${ARGS[@]}\"";
+      defaultRemoteCommand[1] = "echo 'API: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:8000/v1))'";
+      defaultRemoteCommand[2] = "";
       break;
     case "Nvidia":
       // Install GPU driver — auto-detects NVIDIA or AMD at runtime
@@ -13749,9 +13754,9 @@ function setDefaultRemoteCommandsByApp(appName) {
       break;
     case "BenchmarkTarget":
       // All-in-one setup for benchmark target GPU VMs: vLLM + Model Serving + Telemetry Sensor
-      // Uses per-Node model assignment via $$Func(AssignTask(...)) from a predefined model list
       // Assumes GPU driver is already installed (use 'Install GPU Driver' step first)
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/setupBenchmarkTarget.sh | bash -s -- $$Func(AssignTask(task='Qwen/Qwen2.5-1.5B-Instruct, meta-llama/Llama-3.2-3B-Instruct, mistralai/Mistral-7B-Instruct-v0.3, deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'))";
+      // --hf-token: only passed when non-empty (required for gated models; omit for public models)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/setupBenchmarkTarget.sh -o /tmp/setupBenchmarkTarget.sh && MODEL=\"<VLLM_MODEL>\"; HF_TOKEN=\"<VLLM_HF_TOKEN>\"; ARGS=(--model \"$MODEL\"); [ -n \"$HF_TOKEN\" ] && ARGS+=(--hf-token \"$HF_TOKEN\"); bash /tmp/setupBenchmarkTarget.sh \"${ARGS[@]}\"";
       defaultRemoteCommand[1] = "echo 'API: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:8000/v1))'";
       defaultRemoteCommand[2] = "echo 'Metrics: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:9101/metrics))'";
       break;
@@ -13766,7 +13771,9 @@ function setDefaultRemoteCommandsByApp(appName) {
       // Run GuideLLM benchmark against target GPU Nodes (runs on benchmark manager Node)
       // run_guidellm.sh supports multiple IPs natively: --ip <IP1> <IP2> ...
       // Uses $$Func(GetPublicIPs(label='accelerator=gpu')) to auto-resolve GPU Node IPs
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/run_guidellm.sh | bash -s -- --ip $$Func(GetPublicIPs(separator=' ', label='accelerator=gpu')) --seconds 60";
+      // Optional flags (rate, data, data-column-mapper) are only passed when non-empty
+      // COLMAP uses single-quote assignment to safely embed JSON double quotes
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/telemetry/run_guidellm.sh -o /tmp/run_guidellm.sh && PROFILE=\"<GUIDELLM_PROFILE>\"; MAX_SECONDS=\"<GUIDELLM_MAX_SECONDS>\"; RATE=\"<GUIDELLM_RATE>\"; DATA=\"<GUIDELLM_DATA>\"; COLMAP='<GUIDELLM_DATA_COLUMN_MAPPER>'; ARGS=(--ip $$Func(GetPublicIPs(separator=' ', label='accelerator=gpu')) --profile \"$PROFILE\" --max-seconds \"$MAX_SECONDS\"); [ -n \"$RATE\" ] && ARGS+=(--rate \"$RATE\"); [ -n \"$DATA\" ] && ARGS+=(--data \"$DATA\"); [ -n \"$COLMAP\" ] && ARGS+=(--data-column-mapper \"$COLMAP\"); bash /tmp/run_guidellm.sh \"${ARGS[@]}\"";
       defaultRemoteCommand[1] = "ls -la ~/guidellm_bench/bench_*";
       defaultRemoteCommand[2] = "";
       break;
@@ -14357,6 +14364,62 @@ window.PLACEHOLDER_METADATA = {
     hint: 'tvly-xxxxxxxxxxxxxxxx',
     secret: true,
   },
+  // vLLM
+  'VLLM_MODEL': {
+    description: 'HuggingFace model name to serve',
+    hint: 'Qwen/Qwen2.5-1.5B-Instruct',
+    default: 'Qwen/Qwen2.5-1.5B-Instruct',
+    secret: false,
+  },
+  'VLLM_HF_TOKEN': {
+    description: 'HuggingFace token for gated models (leave blank for public models)',
+    hint: 'hf_xxxxxxxxxxxxxxxx',
+    default: '',
+    secret: true,
+  },
+  'VLLM_GPU_UTIL': {
+    description: 'GPU memory utilization fraction 0.0–1.0 (leave blank for vLLM default)',
+    hint: '0.9',
+    default: '',
+    secret: false,
+  },
+  'VLLM_CTX_LEN': {
+    description: 'Max context length in tokens — max-model-len (leave blank for model default)',
+    hint: '8192',
+    default: '',
+    secret: false,
+  },
+  // GuideLLM Benchmark
+  'GUIDELLM_PROFILE': {
+    description: 'Benchmark profile (synchronous, constant, sweep, poisson, throughput)',
+    hint: 'throughput',
+    default: 'throughput',
+    secret: false,
+  },
+  'GUIDELLM_MAX_SECONDS': {
+    description: 'Maximum duration per target in seconds',
+    hint: '180',
+    default: '180',
+    secret: false,
+  },
+  'GUIDELLM_RATE': {
+    description: 'Request rate or sweep count (leave blank to use profile default)',
+    hint: '',
+    default: '',
+    secret: false,
+  },
+  'GUIDELLM_DATA': {
+    description: 'Dataset source — HuggingFace dataset ID, or leave blank for synthetic data',
+    hint: 'HuggingFaceH4/ultrachat_200k',
+    default: 'HuggingFaceH4/ultrachat_200k',
+    secret: false,
+  },
+  'GUIDELLM_DATA_COLUMN_MAPPER': {
+    description: 'Dataset column mapping in JSON (e.g. {"text_column":"prompt"})',
+    hint: '{"text_column":"prompt"}',
+    default: '{"text_column":"prompt"}',
+    secret: false,
+  },
 };
 
 /**
@@ -14642,8 +14705,9 @@ window.predefinedScriptCategories = {
       { value: 'Nvidia-Status', label: '3. Check GPU Driver (NVIDIA/AMD)', step: 3, targetLabel: 'accelerator=gpu' },
       { value: 'BenchmarkTarget', label: '4. Setup Benchmark Target (vLLM+Model+Telemetry)', step: 4, targetLabel: 'accelerator=gpu' },
       { value: 'BenchmarkManager', label: '5. Setup Benchmark Manager (Monitoring+Tools)', step: 5, targetLabel: 'role=benchmark', targetLabels: ['role=benchmark', 'role=observability'] },
-      { value: 'RunBenchmark', label: '6. Run Benchmark', step: 6, targetLabel: 'role=benchmark', targetLabels: ['role=benchmark', 'role=observability'] },
-      { value: 'BenchmarkTelemetryExport', label: '7. Export Metrics to CSV', step: 7, optional: true, targetLabel: 'role=benchmark', targetLabels: ['role=benchmark', 'role=observability'] }
+      { value: 'vLLMServe', label: '6. Serve LLM Model (change model on GPU nodes)', step: 6, targetLabel: 'accelerator=gpu' },
+      { value: 'RunBenchmark', label: '7. Run Benchmark', step: 7, targetLabel: 'role=benchmark', targetLabels: ['role=benchmark', 'role=observability'] },
+      { value: 'BenchmarkTelemetryExport', label: '8. Export Metrics to CSV', step: 8, optional: true, targetLabel: 'role=benchmark', targetLabels: ['role=benchmark', 'role=observability'] }
     ]
   },
   'k8s': {
