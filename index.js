@@ -15790,26 +15790,189 @@ function _tailLines(text, n) {
 /**
  * Escapes HTML then converts URLs and bare IP:port patterns into clickable links.
  * Handles: http(s)://..., and standalone IP:port like 52.14.140.219:8081
+ *
+ * Strategy: Extract $$MARKER patterns FIRST and stash their chip HTML in a side table,
+ * leaving opaque placeholder tokens (\u0001RC_CHIP_<n>\u0002) in the text. Then escape
+ * the text, linkify URLs/IPs (which can safely process the now-clean text), and finally
+ * substitute the chip HTML back in. This prevents the linkifier from mangling chip
+ * attributes like data-copy="http://...", which used to break the buttons.
  */
-function _escAndLinkify(text) {
-  let safe = window.escapeHtml(text);
+function _escAndLinkify(text, ctx = {}) {
+  // Inject chip CSS once on first call
+  if (!document.getElementById('rc-chip-styles')) {
+    const s = document.createElement('style');
+    s.id = 'rc-chip-styles';
+    s.textContent = '.rc-result-item{display:inline-flex;align-items:center;gap:2px;vertical-align:middle}.rc-btn{display:inline-flex;align-items:center;border:none;background:none;cursor:pointer;padding:0 2px;font-size:12px;line-height:1;opacity:0.6;transition:opacity .12s,transform .12s;text-decoration:none;vertical-align:middle}.rc-btn:hover{opacity:1;transform:scale(1.2)}.rc-btn:active{transform:scale(0.9)}@keyframes rc-flash{0%,100%{opacity:1}50%{opacity:0.25}}.rc-flash{animation:rc-flash .4s ease}';
+    document.head.appendChild(s);
+  }
+  if (!text) return '';
   const linkStyle = 'color:#64b5f6; text-decoration:underline;';
-  // 1) http(s):// URLs  (greedy up to whitespace/angle-bracket)
+
+  // Attribute-safe escape (for use inside HTML attribute values that we emit directly)
+  const attrEsc = (s) => String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  // Text-safe escape (for label rendering)
+  const textEsc = (s) => window.escapeHtml(String(s));
+  // ENDPOINT: replace 0.0.0.0/localhost bind address with the actual node public IP
+  const resolveUrl = (url) =>
+    ctx.nodeIp ? url.replace(/\/\/(0\.0\.0\.0|localhost)(?=[:\/]|$)/, `//${ctx.nodeIp}`) : url;
+
+  // Phase 1: Extract $$MARKER chips into a side table, leaving placeholders behind.
+  const chips = [];
+  const PLACEHOLDER_RE = /\u0001RC_CHIP_(\d+)\u0002/g;
+  const RESULT_MARKER = /\$\$([A-Z]+)\[([^\]]{0,80})\]\(([^)]{0,400})\)/g;
+  const withPlaceholders = String(text).replace(RESULT_MARKER, (_, type, label, value) => {
+    let chipHtml;
+    switch (type) {
+      case 'ENDPOINT': {
+        const resolved = resolveUrl(value);
+        if (!/^https?:\/\//i.test(resolved)) return label; // plain label, will be escaped later
+        chipHtml = `<span class="rc-result-item">${textEsc(label)}`
+          + ` <a class="rc-btn" href="${attrEsc(resolved)}" target="_blank" rel="noopener" title="Open">🔗</a>`
+          + ` <button type="button" class="rc-btn" data-copy="${attrEsc(resolved)}" title="Copy URL">📋</button>`
+          + `</span>`;
+        break;
+      }
+      case 'FILEPATH': {
+        const di = attrEsc(ctx.infraId || '');
+        const dn = attrEsc(ctx.nodeId  || '');
+        chipHtml = `<span class="rc-result-item">${textEsc(label)}`
+          + ` <button type="button" class="rc-btn" data-infra="${di}" data-node="${dn}" data-path="${attrEsc(value)}" title="Download (open File Transfer)">⬇️</button>`
+          + ` <button type="button" class="rc-btn" data-copy="${attrEsc(value)}" title="Copy path">📋</button>`
+          + `</span>`;
+        break;
+      }
+      case 'CREDENTIAL':
+        chipHtml = `<span class="rc-result-item">${textEsc(label)}: <span class="rc-mask">••••</span>`
+          + ` <button type="button" class="rc-btn" data-cred="${attrEsc(value)}" data-shown="0" title="Show/hide">👁</button>`
+          + ` <button type="button" class="rc-btn" data-copy="${attrEsc(value)}" title="Copy">📋</button>`
+          + `</span>`;
+        break;
+      case 'CMD':
+        chipHtml = `<span class="rc-result-item">${textEsc(label)}`
+          + ` <button type="button" class="rc-btn" data-copy="${attrEsc(value)}" title="Copy command">📋</button>`
+          + `</span>`;
+        break;
+      default:
+        return ''; // suppress unknown marker tokens
+    }
+    const idx = chips.length;
+    chips.push(chipHtml);
+    return `\u0001RC_CHIP_${idx}\u0002`;
+  });
+
+  // Phase 2: HTML-escape entire text (placeholder bytes are not HTML-special, they survive).
+  let safe = window.escapeHtml(withPlaceholders);
+
+  // Phase 3: linkify http(s) URLs (chips are absent from `safe` at this point).
   safe = safe.replace(/(https?:\/\/[^\s<&'")\]]+)/g, (url) =>
     `<a href="${url}" target="_blank" rel="noopener" style="${linkStyle}">${url}</a>`
   );
-  // 2) Bare IP(:port)(/path) not already linked — e.g. 52.14.140.219:8081
-  //    Use a two-pass approach: split by existing <a...>...</a>, linkify only outside.
+
+  // Phase 4: linkify bare IP(:port)(/path) outside existing <a> tags.
   const parts = safe.split(/(<a\s[^>]*>.*?<\/a>)/g);
   for (let i = 0; i < parts.length; i++) {
-    // Even indices are plain text; odd indices are <a> tags (leave untouched)
     if (i % 2 === 0) {
-      parts[i] = parts[i].replace(/\b((?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?::\d{1,5})?(?:\/[^\s<&'"]*)?)\b/g, (m) =>
-        `<a href="http://${m}" target="_blank" rel="noopener" style="${linkStyle}">${m}</a>`
+      parts[i] = parts[i].replace(
+        /\b((?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?::\d{1,5})?(?:\/[^\s<&'"]*)?)\b/g,
+        (m) => `<a href="http://${m}" target="_blank" rel="noopener" style="${linkStyle}">${m}</a>`
       );
     }
   }
-  return parts.join('');
+  safe = parts.join('');
+
+  // Phase 5: substitute chip HTML back in. This must run AFTER linkification so the
+  // chip HTML (with attributes like data-copy="http://...") is never re-processed.
+  safe = safe.replace(PLACEHOLDER_RE, (_, idx) => chips[Number(idx)] || '');
+
+  return safe;
+}
+
+/**
+ * Shared click handler for $$RESULT chip buttons (.rc-btn). Returns an async listener
+ * suitable for a document-level capturing 'click' handler. Used by both the
+ * non-streaming result viewer and the live streaming session modal so the chip
+ * buttons behave identically in both views.
+ *
+ * Behavior:
+ *  - data-path  → open File Transfer modal preset to Download mode, with the
+ *                 Infra / Node / Source Path on Node fields pre-filled.
+ *  - data-cred  → toggle credential visibility (eye icon).
+ *  - data-copy  → write value to clipboard with a brief visual ack.
+ *
+ * @param {HTMLElement} popup   The SweetAlert popup element to scope clicks to.
+ * @returns {(e: Event) => void}
+ */
+function _createRcBtnClickHandler(popup) {
+  return async (e) => {
+    const btn = e.target.closest('.rc-btn');
+    if (!btn || !popup.contains(btn)) return;
+    // <a> chips already navigate via href; nothing else to do here.
+    if (btn.tagName === 'A') return;
+    e.stopPropagation();
+
+    if (btn.dataset.path !== undefined) {
+      // FILEPATH: open File Transfer modal in Download mode, preset target & source path.
+      const infra = btn.dataset.infra || '';
+      const node = btn.dataset.node || '';
+      const path = btn.dataset.path || '';
+      if (!path) {
+        if (typeof errorAlert === 'function') errorAlert('Cannot download: source path is missing.');
+        return;
+      }
+      const orig = btn.textContent;
+      btn.textContent = '📂';
+      try {
+        if (typeof window.transferFileToInfra === 'function') {
+          await window.transferFileToInfra({
+            mode: 'download',
+            infraId: infra,
+            nodeId: node,
+            sourcePath: path,
+          });
+        } else {
+          if (typeof errorAlert === 'function') errorAlert('File Transfer is unavailable.');
+        }
+      } finally {
+        btn.textContent = orig;
+      }
+      return;
+    }
+
+    if (btn.dataset.cred !== undefined) {
+      const shown = btn.dataset.shown === '1';
+      btn.dataset.shown = shown ? '0' : '1';
+      const item = btn.closest('.rc-result-item');
+      const mask = item ? item.querySelector('.rc-mask') : null;
+      if (mask) mask.textContent = shown ? '••••' : btn.dataset.cred;
+      return;
+    }
+
+    if (btn.dataset.copy !== undefined) {
+      const text = btn.dataset.copy;
+      try {
+        if (navigator.clipboard && window.isSecureContext !== false) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+      } catch (_) { /* swallow — visual ack covers UX */ }
+      const orig = btn.textContent;
+      btn.textContent = '✓';
+      btn.classList.add('rc-flash');
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove('rc-flash'); }, 1000);
+    }
+  };
 }
 
 /**
@@ -15817,7 +15980,7 @@ function _escAndLinkify(text) {
  * Groups output by Node → Command for readability.
  * @param {Object} data - The API response with data.results[]
  */
-function showRemoteCmdResult(data, appliedDnsUrl) {
+function showRemoteCmdResult(data, appliedDnsUrl, infraId = '') {
   if (!data || !Array.isArray(data.results) || data.results.length === 0) {
     displayJsonData(data, typeInfo);
     return;
@@ -15832,6 +15995,7 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
   const ndTabs = results.map((nd, ndIdx) => {
     const ndLabel = nd.nodeId || `node-${ndIdx}`;
     const ndIp = nd.nodeIp || '';
+    const ndCtx = { infraId, nodeId: nd.nodeId || '', nodeIp: ndIp };
     const hasError = nd.error && nd.error.trim();
     const cmdKeys = Object.keys(nd.command || {}).sort((a, b) => Number(a) - Number(b));
 
@@ -15864,17 +16028,17 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
             <div id="${blockId}-wrapper" style="position: relative;">
               ${stdoutInfo.truncated ? `
                 <div id="${blockId}-full" style="display: none;">
-                  <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;">${_escAndLinkify(stdoutInfo.fullText)}</pre>
+                  <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;">${_escAndLinkify(stdoutInfo.fullText, ndCtx)}</pre>
                 </div>
                 <div id="${blockId}-tail">
-                  <button type="button" style="display: block; width: 100%; text-align: center; padding: 3px; background: #f5f5f5; cursor: pointer; font-size: 10px; color: #1976d2; border: none;" 
+                  <button type="button" style="display: block; width: 100%; text-align: center; padding: 3px; background: #f5f5f5; cursor: pointer; font-size: 10px; color: #1976d2; border: none;"
                        onclick="document.getElementById('${blockId}-full').style.display='block'; document.getElementById('${blockId}-tail').style.display='none';">
                     ▲ Show all ${stdoutInfo.totalLines} lines (${stdoutInfo.totalLines - TAIL_LINES} more above)
                   </button>
-                  <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${_escAndLinkify(stdoutInfo.visible.join('\n'))}</pre>
+                  <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${_escAndLinkify(stdoutInfo.visible.join('\n'), ndCtx)}</pre>
                 </div>
               ` : `
-                <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${_escAndLinkify(stdoutInfo.fullText)}</pre>
+                <pre style="margin: 0; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${_escAndLinkify(stdoutInfo.fullText, ndCtx)}</pre>
               `}
             </div>
           </div>`;
@@ -15892,17 +16056,17 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
             <div id="${blockId}-wrapper" style="position: relative;">
               ${stderrInfo.truncated ? `
                 <div id="${blockId}-full" style="display: none;">
-                  <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;">${_escAndLinkify(stderrInfo.fullText)}</pre>
+                  <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;">${_escAndLinkify(stderrInfo.fullText, ndCtx)}</pre>
                 </div>
                 <div id="${blockId}-tail">
                   <button type="button" style="display: block; width: 100%; text-align: center; padding: 3px; background: #fff8f0; cursor: pointer; font-size: 10px; color: #e65100; border: none;"
                        onclick="document.getElementById('${blockId}-full').style.display='block'; document.getElementById('${blockId}-tail').style.display='none';">
                     ▲ Show all ${stderrInfo.totalLines} lines (${stderrInfo.totalLines - TAIL_LINES} more above)
                   </button>
-                  <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${_escAndLinkify(stderrInfo.visible.join('\n'))}</pre>
+                  <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${_escAndLinkify(stderrInfo.visible.join('\n'), ndCtx)}</pre>
                 </div>
               ` : `
-                <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${_escAndLinkify(stderrInfo.fullText)}</pre>
+                <pre style="margin: 0; padding: 8px 10px; background: #2e1e1e; color: #ffab91; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all;">${_escAndLinkify(stderrInfo.fullText, ndCtx)}</pre>
               `}
             </div>
           </div>`;
@@ -15989,6 +16153,7 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
     </div>`;
 
   // --- Show SweetAlert ---
+  let rcBtnClick; // shared between didOpen and willClose for cleanup
   Swal.fire({
     title: '🖥️ Remote Command Result',
     width: 750,
@@ -16033,7 +16198,15 @@ function showRemoteCmdResult(data, appliedDnsUrl) {
       popup.querySelectorAll('pre').forEach(pre => {
         pre.scrollTop = pre.scrollHeight;
       });
-    }
+
+      // $$RESULT action buttons: document-level capture fires at the very top of the
+      // event chain — before SweetAlert2's popup handler or any other listener.
+      rcBtnClick = _createRcBtnClickHandler(popup);
+      document.addEventListener('click', rcBtnClick, true);
+    },
+    willClose: () => {
+      if (rcBtnClick) document.removeEventListener('click', rcBtnClick, true);
+    },
   });
 }
 window.showRemoteCmdResult = showRemoteCmdResult;
@@ -16065,6 +16238,7 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
     appliedDnsUrl: appliedDnsUrl || null,
     startTime: Date.now(),
     nodeState: {},        // { nodeId: { status, stdoutLines: [], stderrLines: [], statusInfo: null } }
+    nodeIpMap: {},        // { nodeId: publicIP } populated asynchronously from Tumblebug infra API
     doneSummary: null,
     abortController: new AbortController(),
     rebuildCallback: null,   // set when modal is open, null when closed
@@ -16076,6 +16250,28 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
   window._cmdStreamSessions[xRequestId] = session;
   updateStreamingBadge();
 
+  // Best-effort lookup of each Node's public IP so $$ENDPOINT[…](http://0.0.0.0:…)
+  // can be rewritten to the actual reachable URL in the live streaming view.
+  // Failures are non-fatal: the URL simply stays at its original 0.0.0.0/localhost.
+  (async () => {
+    try {
+      const cfg = (typeof getConfig === 'function') ? getConfig() : {};
+      const ns = cfg.namespace || window.configNamespace;
+      if (!cfg.hostname || !cfg.port || !ns || !infraId) return;
+      const res = await axios.get(
+        `http://${cfg.hostname}:${cfg.port}/tumblebug/ns/${ns}/infra/${infraId}`,
+        { auth: { username: cfg.username, password: cfg.password } }
+      );
+      const nodes = (res.data && res.data.node) || [];
+      nodes.forEach((nd) => {
+        if (nd && nd.id) session.nodeIpMap[nd.id] = nd.publicIP || '';
+      });
+      if (session.rebuildCallback) session.rebuildCallback();
+    } catch (err) {
+      console.warn('[Streaming] Failed to fetch Node IPs for endpoint rewrite:', err && err.message);
+    }
+  })();
+
   const getOrCreateNode = (nodeId) => {
     if (!session.nodeState[nodeId]) {
       session.nodeState[nodeId] = { status: 'Queued', stdoutLines: [], stderrLines: [], statusInfo: null };
@@ -16085,7 +16281,7 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
 
   // Start background SSE consumption
   consumeSSEStream(streamUrl, username, password, session.abortController, (event) => {
-    console.log('[SSE] Event received:', event.type, event.nodeId || '', event);
+    // console.log('[SSE] Event received:', event.type, event.nodeId || '', event);
     if (event.type === 'CommandStatus' && event.nodeId) {
       const nd = getOrCreateNode(event.nodeId);
       nd.status = event.status?.status || nd.status;
@@ -16170,6 +16366,13 @@ function openStreamingSessionModal(xRequestId) {
     if (!nd) return '';
     const stdoutText = nd.stdoutLines.join('\n');
     const stderrText = nd.stderrLines.join('\n');
+    // ctx is consumed by _escAndLinkify: nodeIp rewrites 0.0.0.0/localhost URLs,
+    // infraId+nodeId carry context for $$FILEPATH download chips.
+    const ndCtx = {
+      infraId: session.infraId,
+      nodeId,
+      nodeIp: (session.nodeIpMap && session.nodeIpMap[nodeId]) || '',
+    };
 
     let html = `
       <div style="margin-bottom:4px;display:flex;align-items:center;gap:8px;">
@@ -16204,7 +16407,7 @@ function openStreamingSessionModal(xRequestId) {
             title="Copy stdout to clipboard"
             style="padding:0 5px;font-size:10px;line-height:1.6;border:1px solid #a5d6a7;border-radius:3px;cursor:pointer;background:#fff;color:#2e7d32;">📋 Copy</button>
         </div>
-        <pre data-scrollkey="${window.escapeHtml(nodeId)}-stdout" style="margin:0;padding:6px 8px;background:#1e1e1e;color:#d4d4d4;font-size:11px;line-height:1.4;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;">${_escAndLinkify(stdoutText)}</pre>
+        <pre data-scrollkey="${window.escapeHtml(nodeId)}-stdout" style="margin:0;padding:6px 8px;background:#1e1e1e;color:#d4d4d4;font-size:11px;line-height:1.4;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;">${_escAndLinkify(stdoutText, ndCtx)}</pre>
       </div>`;
     }
 
@@ -16217,7 +16420,7 @@ function openStreamingSessionModal(xRequestId) {
             title="Copy stderr to clipboard"
             style="padding:0 5px;font-size:10px;line-height:1.6;border:1px solid #ffcc80;border-radius:3px;cursor:pointer;background:#fff;color:#e65100;">📋 Copy</button>
         </div>
-        <pre data-scrollkey="${window.escapeHtml(nodeId)}-stderr" style="margin:0;padding:6px 8px;background:#2e1e1e;color:#ffab91;font-size:11px;line-height:1.4;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;">${_escAndLinkify(stderrText)}</pre>
+        <pre data-scrollkey="${window.escapeHtml(nodeId)}-stderr" style="margin:0;padding:6px 8px;background:#2e1e1e;color:#ffab91;font-size:11px;line-height:1.4;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;">${_escAndLinkify(stderrText, ndCtx)}</pre>
       </div>`;
     }
 
@@ -16226,6 +16429,10 @@ function openStreamingSessionModal(xRequestId) {
 
   // Auto-scroll toggle state (default: on)
   let autoScroll = true;
+
+  // Document-level capture listener for $$RESULT chip buttons (copy / open / download).
+  // Lives across rebuildModal() innerHTML swaps because it's bound at document scope.
+  let streamRcBtnClick = null;
 
   // Throttled rebuild
   let rebuildTimer = null;
@@ -16454,11 +16661,18 @@ function openStreamingSessionModal(xRequestId) {
           }
         });
       }
+      // Shared $$RESULT chip handler (copy / open / download) — same behavior as
+      // the non-streaming result viewer. Uses document-level capture so the
+      // listener works across rebuildModal() innerHTML replacements without
+      // needing per-button re-binding.
+      streamRcBtnClick = _createRcBtnClickHandler(Swal.getPopup());
+      document.addEventListener('click', streamRcBtnClick, true);
     },
     willClose: () => {
       // Detach view callback — stream continues in background
       session.rebuildCallback = null;
       if (rebuildTimer) clearTimeout(rebuildTimer);
+      if (streamRcBtnClick) document.removeEventListener('click', streamRcBtnClick, true);
     },
     preDeny: () => false,
   }).then(result => {
@@ -17626,7 +17840,7 @@ async function executeRemoteCmd() {
             },
           }).then((res) => {
             console.log('[RemoteCmd] Sync response:', 'status=' + res.status, res);
-            showRemoteCmdResult(res.data, appliedDnsUrl);
+            showRemoteCmdResult(res.data, appliedDnsUrl, selectedInfraId);
             removeSpinnerTask(spinnerId);
           }).catch(function (error) {
             if (error.response) {
@@ -17668,7 +17882,7 @@ async function executeRemoteCmd() {
             } else {
               // Fallback: sync response (async=true not in URL or server returned non-202)
               console.warn('[RemoteCmd] Sync fallback - status:', res.status, 'data:', res.data);
-              showRemoteCmdResult(res.data, appliedDnsUrl);
+              showRemoteCmdResult(res.data, appliedDnsUrl, selectedInfraId);
               removeSpinnerTask(spinnerId);
             }
           })
@@ -17700,16 +17914,26 @@ async function executeRemoteCmd() {
 window.setBastionNode = setBastionNode;
 window.executeRemoteCmd = executeRemoteCmd;
 
-// Function for transferFileToInfra by remoteCmd button item
-async function transferFileToInfra() {
+// Function for transferFileToInfra by remoteCmd button item.
+//
+// Optional `opts` lets callers preset the dialog state (used by the $$FILEPATH
+// chip in the Remote Command result viewer to launch the dialog with the right
+// download target already filled in):
+//   - mode:       'upload' | 'download' (default 'upload')
+//   - infraId:    initially selected Infra (defaults to current selection)
+//   - nodeId:     initially selected Node (defaults to current selection)
+//   - sourcePath: pre-filled "Source Path on Node" when mode === 'download'
+async function transferFileToInfra(opts = {}) {
   var config = getConfig(); var hostname = config.hostname;
   var port = config.port;
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var infraid = infraidElement.value;
+  var infraid = opts.infraId || (infraidElement ? infraidElement.value : '');
   var nodegroupid = getNodeGroupIdFromNodeSelection();
-  var nodeid = document.getElementById("nodeid").value;
+  var nodeid = opts.nodeId || document.getElementById("nodeid").value;
+  var presetMode = opts.mode === 'download' ? 'download' : 'upload';
+  var presetSourcePath = opts.sourcePath || '';
 
   if (!namespace) {
     errorAlert("Please select a namespace first");
@@ -18069,6 +18293,25 @@ async function transferFileToInfra() {
           renderFavList();
         }
       });
+
+      // Apply preset options (e.g., when invoked from a $$FILEPATH chip in the
+      // Remote Command result viewer). Switch to download mode and pre-fill the
+      // Source Path on Node so the user only has to confirm.
+      if (presetMode === 'download') {
+        try { window.switchFileTransferMode('download'); } catch (_) { /* noop */ }
+        if (presetSourcePath) {
+          const sp = document.getElementById('sourcePathInput');
+          if (sp) sp.value = presetSourcePath;
+        }
+        // Ensure the requested Node is selected in the download Node selector.
+        if (nodeid) {
+          const sel = document.getElementById('downloadNodeSelector');
+          if (sel) {
+            const hasOpt = Array.from(sel.options).some(o => o.value === nodeid);
+            if (hasOpt) sel.value = nodeid;
+          }
+        }
+      }
     },
     preConfirm: () => {
       const mode = document.getElementById('fileTransferMode').value;
@@ -24988,7 +25231,7 @@ async function showGatewayModal(preselectedInfraId) {
       ],
       timeoutMinutes: 10
     }, { auth });
-    showRemoteCmdResult(r.data, null);
+    showRemoteCmdResult(r.data, null, gwInfraId);
   } catch(e) {
     errorAlert(e.response?.data?.message || e.message || 'Deploy failed');
   }
