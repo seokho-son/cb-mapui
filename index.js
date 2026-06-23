@@ -13226,9 +13226,9 @@ function AddMcNLB() {
           Port: `${nlbport}`,
         },
         HealthChecker: {
-          Interval: "default",
-          Timeout: "default",
-          Threshold: "default",
+          Interval: 10, // default: check every 10 seconds
+          Timeout: 10, // default: 10 second timeout per check
+          Threshold: 3, // default: 3 consecutive failures to mark unhealthy
         },
       };
 
@@ -13384,9 +13384,9 @@ function createRegionalNLB(infraid, nodegroupid, nlbport, namespace, hostname, p
       nodeGroupId: `${nodegroupid}`,
     },
     HealthChecker: {
-      Interval: "default",
-      Timeout: "default",
-      Threshold: "default",
+      Interval: 10, // default: check every 10 seconds
+      Timeout: 10, // default: 10 second timeout per check
+      Threshold: 3, // default: 3 consecutive failures to mark unhealthy
     },
   };
 
