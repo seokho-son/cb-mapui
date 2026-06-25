@@ -16233,13 +16233,24 @@ window._cmdStreamSessions = {};
  * Create a new streaming session, start SSE consumption in background,
  * and open the streaming modal.
  */
-function startStreamingSession(streamUrl, username, password, xRequestId, infraId, spinnerId, appliedDnsUrl) {
+// Toggle blur/reveal for the command banner in a streaming modal.
+// Called via data-xreqid attribute so xRequestId never needs to be embedded in JS inside an HTML attribute.
+window._cmdRevealToggle = function (xReqId, revealed) {
+  const s = window._cmdStreamSessions && window._cmdStreamSessions[xReqId];
+  if (!s) return;
+  s.commandRevealed = !!revealed;
+  if (s.rebuildCallback) s.rebuildCallback();
+};
+
+function startStreamingSession(streamUrl, username, password, xRequestId, infraId, spinnerId, appliedDnsUrl, templateCommands) {
   const session = {
     xRequestId,
     infraId,
     spinnerId,
     streamUrl,
     appliedDnsUrl: appliedDnsUrl || null,
+    templateCommands: templateCommands || [],  // pre-substitution command text (no real secrets)
+    commandRevealed: false,                    // blur/reveal toggle state — survives rebuildModal() calls
     startTime: Date.now(),
     nodeState: {},        // { nodeId: { status, stdoutLines: [], stderrLines: [], statusInfo: null } }
     nodeIpMap: {},        // { nodeId: publicIP } populated asynchronously from Tumblebug infra API
@@ -16474,8 +16485,33 @@ function openStreamingSessionModal(xRequestId) {
         <span style="color:#888;">(open in new tab)</span>
       </div>` : '';
 
+    // Command banner: show pre-substitution template so <PLACEHOLDER> tokens are visible,
+    // not actual secret values. Blurred by default; reveal toggle persists across rebuilds
+    // via session.commandRevealed (survives the 100 ms rebuildModal() cycle).
+    let cmdBannerHtml = '';
+    if (session.templateCommands && session.templateCommands.length > 0) {
+      const cmdLines = session.templateCommands.map(c => window.escapeHtml(c));
+      const blurStyle = session.commandRevealed ? '' : 'filter:blur(5px);user-select:none;';
+      const safeXReqId = window.escapeHtml(xRequestId);
+      const toggleEmoji = session.commandRevealed ? '🙈' : '👁️';
+      const toggleRevealed = session.commandRevealed ? 'false' : 'true';
+      cmdBannerHtml = `
+        <div style="display:flex;align-items:flex-start;gap:6px;padding:5px 8px;
+                    background:#1e1e1e;border:1px solid #333;border-radius:5px;margin-bottom:6px;">
+          <button type="button" data-xreqid="${safeXReqId}"
+            onclick="window._cmdRevealToggle(this.dataset.xreqid, ${toggleRevealed})"
+            title="${session.commandRevealed ? 'Hide command' : 'Reveal command'}"
+            style="flex-shrink:0;padding:0;font-size:14px;line-height:1;border:none;
+                   background:transparent;cursor:pointer;margin-top:1px;">${toggleEmoji}</button>
+          <pre style="margin:0;flex:1;font-size:11px;color:#d4d4d4;
+                      white-space:pre-wrap;word-break:break-all;line-height:1.5;
+                      max-height:80px;overflow-y:auto;${blurStyle}">${cmdLines.join('\n<span style="color:#569cd6;">&&</span>\n')}</pre>
+        </div>`;
+    }
+
     let summaryHtml = `
       ${streamDnsLinkHtml}
+      ${cmdBannerHtml}
       <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:#f8f9fa;border:1px solid #e0e0e0;border-radius:5px;margin-bottom:8px;">
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:16px;">${isFinished ? (session.commandError || session.doneSummary.failedNodes > 0 ? '⚠️' : '✅') : '⏳'}</span>
@@ -17770,13 +17806,24 @@ async function executeRemoteCmd() {
       });
     },
     preConfirm: () => {
+      // Capture raw (pre-substitution) command text for safe display in the streaming modal.
+      // collectCommands() replaces <PLACEHOLDER> tokens with real values (which may include
+      // secrets like API keys); we keep the template so the modal can show intent without
+      // exposing the actual secret values.
+      const cmdContainer = document.getElementById('cmdContainer');
+      const templateCommands = cmdContainer
+        ? Array.from(cmdContainer.querySelectorAll('[id^="cmdDiv"]'))
+            .map((_, i) => document.getElementById(`cmd${i + 1}`)?.value?.trim() || '')
+            .filter(Boolean)
+        : [];
+
       const commands = collectCommands();
       const selectedInfra = document.getElementById("infraSelector").value;
       const timeout = parseInt(document.getElementById("timeoutMinutes").value) || 30;
       const syncMode = document.getElementById("syncModeToggle")?.checked || false;
       const labelSelector = document.getElementById('labelSelector')?.value || '';
       const sshUserName = document.getElementById('sshUserName')?.value?.trim() || '';
-      return { commands, selectedInfra, timeout, syncMode, labelSelector, sshUserName, appliedDnsUrl: _appliedDnsUrl };
+      return { commands, templateCommands, selectedInfra, timeout, syncMode, labelSelector, sshUserName, appliedDnsUrl: _appliedDnsUrl };
     },
   }).then((result) => {
       // result.value is false if result.isDenied or another key such as result.isDismissed
@@ -17788,6 +17835,7 @@ async function executeRemoteCmd() {
         const timeoutMinutes = Math.max(1, Math.min(120, parseInt(result.value.timeout, 10) || 30));
         const useSyncMode = result.value.syncMode;
         const appliedDnsUrl = result.value.appliedDnsUrl || null;
+        const templateCommands = result.value.templateCommands || [];
         
         // Handle radio button value
         const radioValue = Swal.getPopup().querySelector(
@@ -17882,7 +17930,7 @@ async function executeRemoteCmd() {
               var xReqId = res.data.xRequestId;
               var streamUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/stream/cmd/infra/${selectedInfraId}?xRequestId=${encodeURIComponent(xReqId)}`;
               console.log('[RemoteCmd] Starting streaming session:', xReqId);
-              startStreamingSession(streamUrl, username, password, xReqId, selectedInfraId, spinnerId, appliedDnsUrl);
+              startStreamingSession(streamUrl, username, password, xReqId, selectedInfraId, spinnerId, appliedDnsUrl, templateCommands);
             } else {
               // Fallback: sync response (async=true not in URL or server returned non-202)
               console.warn('[RemoteCmd] Sync fallback - status:', res.status, 'data:', res.data);
