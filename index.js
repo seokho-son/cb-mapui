@@ -3257,249 +3257,253 @@ function buildInfraNodeSummaryHtml(data) {
   // newNodeList set for quick lookup
   const newNodeSet = new Set(data.newNodeList || []);
 
-  // ── Summary cards ──────────────────────────────────────────────
-  const nodeColor = failedCount > 0 ? '#dc3545' : (runningCount === totalCount && totalCount > 0 ? '#28a745' : '#ffc107');
+  // Semantic color: only node count and status badges use color
+  const allRunning = runningCount === totalCount && totalCount > 0;
+  const nodeNumColor = failedCount > 0 ? '#dc2626' : (allRunning ? '#16a34a' : '#d97706');
   const hasActiveAction = data.targetAction && data.targetAction !== 'None' && data.targetAction !== '';
 
-  let html = `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px;">`;
+  // Shared font stacks — defined once, used throughout
+  const MONO = "ui-monospace,'Cascadia Code','Menlo','Consolas',monospace";
+  const SANS = "system-ui,-apple-system,'Segoe UI',sans-serif";
+
+  // ── Summary cards — uniform neutral, number size does the talking ──
+  const cardStyle = `background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 8px;text-align:center;`;
+  const statLabelStyle = `font-size:11px;color:#94a3b8;margin-top:5px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;font-family:${SANS};`;
+  let html = `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px;">`;
   html += `
-    <div style="background:#1a2a3a;border-radius:8px;padding:10px;text-align:center;">
-      <div style="font-size:1.4em;font-weight:bold;color:${nodeColor};">${runningCount}<span style="font-size:0.6em;color:#888;">/${totalCount}</span></div>
-      <div style="font-size:0.70em;color:#888;margin-top:2px;">Running Nodes</div>
+    <div style="${cardStyle}">
+      <div style="font-size:26px;font-weight:700;color:${nodeNumColor};line-height:1;font-variant-numeric:tabular-nums;font-family:${SANS};">${runningCount}<span style="font-size:14px;font-weight:400;color:#94a3b8;">/${totalCount}</span></div>
+      <div style="${statLabelStyle}">Running Nodes</div>
     </div>
-    <div style="background:#1a2a3a;border-radius:8px;padding:10px;text-align:center;">
-      <div style="font-size:1.4em;font-weight:bold;color:#61dafb;">${groupCount}</div>
-      <div style="font-size:0.70em;color:#888;margin-top:2px;">NodeGroups</div>
+    <div style="${cardStyle}">
+      <div style="font-size:26px;font-weight:700;color:#334155;line-height:1;font-variant-numeric:tabular-nums;font-family:${SANS};">${groupCount}</div>
+      <div style="${statLabelStyle}">NodeGroups</div>
     </div>
-    <div style="background:#1a2a3a;border-radius:8px;padding:10px;text-align:center;">
-      <div style="font-size:0.88em;font-weight:bold;color:#61dafb;word-break:break-word;line-height:1.4;">${providers.length ? providers.map(p => esc(p)).join('<br>') : '-'}</div>
-      <div style="font-size:0.70em;color:#888;margin-top:2px;">Providers</div>
+    <div style="${cardStyle}">
+      <div style="font-size:13px;font-weight:600;color:#334155;line-height:1.6;font-family:${SANS};">${providers.length ? providers.map(p => esc(p)).join('<br>') : '—'}</div>
+      <div style="${statLabelStyle}">Providers</div>
     </div>
-    <div style="background:#1a2a3a;border-radius:8px;padding:10px;text-align:center;">
-      <div style="font-size:1.1em;font-weight:bold;color:${hasCost ? '#ff8c00' : '#888'};">${hasCost ? '$' + totalCost.toFixed(4) : '-'}</div>
-      <div style="font-size:0.70em;color:#888;margin-top:2px;">Est. Cost/hr</div>
+    <div style="${cardStyle}">
+      <div style="font-size:16px;font-weight:700;color:${hasCost ? '#334155' : '#94a3b8'};font-variant-numeric:tabular-nums;font-family:${SANS};">${hasCost ? '$' + totalCost.toFixed(4) : '—'}</div>
+      <div style="${statLabelStyle}">Est. Cost/hr</div>
     </div>
-    <div style="background:#1a2a3a;border-radius:8px;padding:10px;text-align:center;">
+    <div style="${cardStyle}">
       ${getInfraStatusBadge(data.status)}
-      ${hasActiveAction ? `<div style="font-size:0.68em;color:#ffc107;margin-top:3px;">⏳ ${esc(data.targetAction)}${data.targetStatus ? ' → ' + esc(data.targetStatus) : ''}</div>` : ''}
-      <div style="font-size:0.70em;color:#888;margin-top:3px;">Status</div>
+      ${hasActiveAction ? `<div style="font-size:11px;color:#d97706;margin-top:5px;font-family:${SANS};">⏳ ${esc(data.targetAction)}${data.targetStatus ? ' → ' + esc(data.targetStatus) : ''}</div>` : ''}
+      <div style="${statLabelStyle}">Status</div>
     </div>`;
   html += `</div>`;
 
-  // ── Status distribution pills ──────────────────────────────────
+  // ── Status distribution pills ──
   if (totalCount > 0 && (sc.countFailed > 0 || sc.countCreating > 0 || sc.countSuspended > 0 || sc.countTerminated > 0 || sc.countUndefined > 0)) {
     const pills = [
-      { label: 'Running',    count: sc.countRunning    || 0, color: '#28a745' },
-      { label: 'Creating',   count: sc.countCreating   || 0, color: '#17a2b8' },
-      { label: 'Failed',     count: sc.countFailed     || 0, color: '#dc3545' },
-      { label: 'Suspended',  count: sc.countSuspended  || 0, color: '#6c757d' },
-      { label: 'Terminated', count: sc.countTerminated || 0, color: '#495057' },
-      { label: 'Undefined',  count: sc.countUndefined  || 0, color: '#856404' },
+      { label: 'Running',    count: sc.countRunning    || 0, color: '#16a34a' },
+      { label: 'Creating',   count: sc.countCreating   || 0, color: '#0891b2' },
+      { label: 'Failed',     count: sc.countFailed     || 0, color: '#dc2626' },
+      { label: 'Suspended',  count: sc.countSuspended  || 0, color: '#6b7280' },
+      { label: 'Terminated', count: sc.countTerminated || 0, color: '#475569' },
+      { label: 'Undefined',  count: sc.countUndefined  || 0, color: '#92400e' },
     ].filter(p => p.count > 0);
     html += `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">`;
-    pills.forEach(p => { html += `<span style="background:${p.color};color:white;padding:2px 10px;border-radius:12px;font-size:0.78em;font-weight:bold;">${p.label}: ${p.count}</span>`; });
+    pills.forEach(p => { html += `<span style="background:${p.color};color:white;padding:3px 12px;border-radius:12px;font-size:12px;font-weight:600;font-family:${SANS};">${p.label}: ${p.count}</span>`; });
     html += `</div>`;
   }
 
-  // ── creationErrors block ───────────────────────────────────────
+  // ── Creation errors ──
   const ce = data.creationErrors;
   if (ce && (ce.failedNodeCount > 0 || (ce.nodeCreationErrors || []).length > 0 || (ce.nodeObjectCreationErrors || []).length > 0)) {
     const allErrors = [...(ce.nodeObjectCreationErrors || []), ...(ce.nodeCreationErrors || [])];
     html += `
-      <div style="background:#2a1010;border:1px solid #dc3545;border-radius:6px;padding:10px 14px;margin-bottom:12px;">
-        <div style="color:#f88;font-weight:bold;margin-bottom:6px;">
+      <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-family:${SANS};">
+        <div style="color:#dc2626;font-weight:700;margin-bottom:8px;font-size:13px;line-height:1.4;">
           ❌ Creation Errors — ${ce.failedNodeCount || allErrors.length} failed / ${ce.totalNodeCount || totalCount} total
-          ${ce.failureHandlingStrategy ? `<span style="font-size:0.82em;font-weight:normal;color:#aaa;margin-left:8px;">(strategy: ${esc(ce.failureHandlingStrategy)})</span>` : ''}
+          ${ce.failureHandlingStrategy ? `<span style="font-size:12px;font-weight:400;color:#6b7280;margin-left:8px;">(strategy: ${esc(ce.failureHandlingStrategy)})</span>` : ''}
         </div>
-        ${allErrors.length > 0 ? `<table style="width:100%;border-collapse:collapse;font-size:0.78em;">
-          <thead><tr style="color:#888;">
-            <th style="padding:3px 8px;text-align:left;">Node</th>
-            <th style="padding:3px 8px;text-align:left;">Phase</th>
-            <th style="padding:3px 8px;text-align:left;">Error</th>
-            <th style="padding:3px 8px;text-align:left;">Time</th>
+        ${allErrors.length > 0 ? `<table style="width:100%;border-collapse:collapse;font-size:12px;font-family:${SANS};">
+          <thead><tr style="color:#6b7280;border-bottom:1px solid #fca5a5;">
+            <th style="padding:4px 8px;text-align:left;font-weight:600;">Node</th>
+            <th style="padding:4px 8px;text-align:left;font-weight:600;">Phase</th>
+            <th style="padding:4px 8px;text-align:left;font-weight:600;">Error</th>
+            <th style="padding:4px 8px;text-align:left;font-weight:600;">Time</th>
           </tr></thead>
           <tbody>${allErrors.map(e => `
-            <tr>
-              <td style="padding:3px 8px;color:#fcc;font-family:monospace;">${esc(e.nodeName || '-')}</td>
-              <td style="padding:3px 8px;color:#f88;">${esc(e.phase || '-')}</td>
-              <td style="padding:3px 8px;color:#faa;white-space:normal;">${esc(e.error || '-')}</td>
-              <td style="padding:3px 8px;color:#888;font-size:0.9em;">${esc((e.timestamp || '').split('T')[0] || e.timestamp || '-')}</td>
+            <tr style="border-bottom:1px solid #fee2e2;">
+              <td style="padding:4px 8px;color:#991b1b;font-family:${MONO};font-size:11px;">${esc(e.nodeName || '-')}</td>
+              <td style="padding:4px 8px;color:#dc2626;font-weight:600;">${esc(e.phase || '-')}</td>
+              <td style="padding:4px 8px;color:#7f1d1d;white-space:normal;line-height:1.5;">${esc(e.error || '-')}</td>
+              <td style="padding:4px 8px;color:#6b7280;">${esc((e.timestamp || '').split('T')[0] || e.timestamp || '-')}</td>
             </tr>`).join('')}
           </tbody>
         </table>` : ''}
       </div>`;
   }
 
-  // ── Infra-level systemMessage ──────────────────────────────────
+  // ── System message ──
   const sysMessages = Array.isArray(data.systemMessage) ? data.systemMessage.filter(Boolean) : (data.systemMessage ? [data.systemMessage] : []);
   if (sysMessages.length > 0) {
-    html += `<div style="background:#2a1a00;border:1px solid #ffc107;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:0.82em;color:#ffc107;">
+    html += `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 14px;margin-bottom:10px;font-size:12px;color:#92400e;line-height:1.6;font-family:${SANS};">
       ⚠️ ${sysMessages.map(m => esc(m)).join('<br>')}
     </div>`;
   }
 
-  // ── Infra labels ───────────────────────────────────────────────
+  // ── Infra labels ──
   const labels = data.label && typeof data.label === 'object' ? Object.entries(data.label).filter(([k]) => k) : [];
   if (labels.length > 0) {
-    html += `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">`;
+    html += `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;">`;
     labels.forEach(([k, v]) => {
       html += v
-        ? `<span style="background:#1e3a5f;color:#9ab;padding:2px 8px;border-radius:10px;font-size:0.76em;">${esc(k)}: <b style="color:#cde;">${esc(v)}</b></span>`
-        : `<span style="background:#1e3a5f;color:#cde;padding:2px 8px;border-radius:10px;font-size:0.76em;">${esc(k)}</span>`;
+        ? `<span style="background:#f1f5f9;color:#475569;padding:2px 9px;border-radius:6px;font-size:11px;white-space:nowrap;border:1px solid #e2e8f0;font-family:${SANS};"><b style="color:#334155;">${esc(k)}</b>: ${esc(v)}</span>`
+        : `<span style="background:#f1f5f9;color:#475569;padding:2px 9px;border-radius:6px;font-size:11px;white-space:nowrap;border:1px solid #e2e8f0;font-family:${SANS};">${esc(k)}</span>`;
     });
     html += `</div>`;
   }
 
   // ── Per-NodeGroup sections ─────────────────────────────────────
-  const COL_COUNT = 6; // node-varying columns: Node ID, Status, Public IP, Private IP, CSP Resource ID, Created
+  const COL_COUNT = 6;
   Object.entries(groups).forEach(([gid, gnodes]) => {
     const first = gnodes[0] || {};
 
-    // ── Group-level common values (derived from first node) ──────
     const provider = first.connectionConfig?.providerName || first.connectionName?.split('-')[0] || '';
     const platform = (provider || '').toLowerCase();
-    const providerColor = cspGenericColors[platform] || cspGenericColors[platform.split('-')[0]] || '#6c757d';
+    const providerColor = cspGenericColors[platform] || cspGenericColors[platform.split('-')[0]] || '#6b7280';
     const connName = first.connectionName || '';
     const region = first.region?.region || first.connectionConfig?.regionZoneInfo?.assignedRegion || '';
     const zone   = first.region?.zone   || first.connectionConfig?.regionZoneInfo?.assignedZone   || '';
     const sshUser = first.nodeUserName || '';
     const sshPort = first.sshPort || 22;
 
-    // Check if all nodes share same sshKeyId
     const allSshKeys = [...new Set(gnodes.map(nd => nd.sshKeyId).filter(Boolean))];
     const uniformSshKey = allSshKeys.length === 1 ? allSshKeys[0].split('+').pop() || allSshKeys[0] : '';
 
-    // Spec summary (group-level)
+    // Spec: weight carries hierarchy; accelerator keeps amber
     let specHtml = '';
     if (first.spec?.vCPU || first.spec?.memoryGiB) {
       const parts = [];
-      if (first.spec.vCPU)      parts.push(`<span style="color:#87ceeb;font-weight:bold;">${first.spec.vCPU} vCPU</span>`);
-      if (first.spec.memoryGiB) parts.push(`<span style="color:#98fb98;font-weight:bold;">${first.spec.memoryGiB} GiB</span>`);
+      if (first.spec.vCPU)      parts.push(`<b style="color:#1e293b;">${first.spec.vCPU} vCPU</b>`);
+      if (first.spec.memoryGiB) parts.push(`<b style="color:#1e293b;">${first.spec.memoryGiB} GiB</b>`);
       if (first.spec.acceleratorType && first.spec.acceleratorType !== 'none')
-        parts.push(`<span style="color:#ff8c00;">+${esc(first.spec.acceleratorType.toUpperCase())}(${first.spec.acceleratorCount || 1})</span>`);
-      specHtml = parts.join('<span style="color:#555;"> / </span>');
-      if (first.cspSpecName) specHtml += `<span style="color:#666;font-size:0.85em;"> (${esc(first.cspSpecName)})</span>`;
-      if (first.spec.costPerHour > 0) specHtml += `<span style="color:#ff8c00;"> · $${first.spec.costPerHour}/h</span>`;
+        parts.push(`<span style="color:#d97706;font-weight:700;">+${esc(first.spec.acceleratorType.toUpperCase())}(${first.spec.acceleratorCount || 1})</span>`);
+      specHtml = parts.join('<span style="color:#e2e8f0;"> / </span>');
+      if (first.cspSpecName) specHtml += `<span style="color:#94a3b8;font-size:11px;"> (${esc(first.cspSpecName)})</span>`;
+      if (first.spec.costPerHour > 0) specHtml += `<span style="color:#d97706;font-size:11px;"> · $${first.spec.costPerHour}/h</span>`;
     } else if (first.specId) {
       const seg = first.specId.split('+').pop() || first.specId;
-      specHtml = `<span style="color:#87ceeb;">${esc(seg)}</span>`;
-      if (first.cspSpecName) specHtml += `<span style="color:#666;font-size:0.85em;"> (${esc(first.cspSpecName)})</span>`;
+      specHtml = `<b style="color:#1e293b;">${esc(seg)}</b>`;
+      if (first.cspSpecName) specHtml += `<span style="color:#94a3b8;font-size:11px;"> (${esc(first.cspSpecName)})</span>`;
     }
 
-    // OS summary (group-level)
     let osText = '';
     if (first.image?.osDistribution)  osText = first.image.osDistribution;
     else if (first.image?.osType)     osText = first.image.osType;
     else if (first.imageId)           osText = first.imageId.split('+').pop() || first.imageId;
 
-    // Disk summary (group-level)
     const diskType = first.rootDiskType && first.rootDiskType !== 'default' ? first.rootDiskType : '';
     const diskSize = first.rootDiskSize > 0 ? `${first.rootDiskSize}GB` : '';
     const diskText = (diskType || diskSize) ? `${diskType}${diskType && diskSize ? ' ' : ''}${diskSize}` : '';
 
-    // Build CSP badge
+    // Provider badge: CSP brand color for instant cloud recognition
     const providerBadge = provider
-      ? `<span style="background:${providerColor};color:white;padding:1px 8px;border-radius:10px;font-size:0.82em;font-weight:bold;">${esc(provider.toUpperCase())}</span>`
+      ? `<span style="background:${providerColor};color:white;padding:2px 9px;border-radius:5px;font-size:11px;font-weight:700;font-family:${SANS};letter-spacing:0.04em;">${esc(provider.toUpperCase())}</span>`
       : '';
 
-    // Build info chips for the group header details row
+    const chipStyle = `color:#475569;font-family:${SANS};font-size:12px;`;
     const chips = [];
-    if (provider)   chips.push(`☁️ ${providerBadge}`);
-    if (connName)   chips.push(`🔌 <span style="color:#9ab;">${esc(connName)}</span>`);
-    if (region)     chips.push(`📍 <span style="color:#b0c4de;">${esc(region)}${zone ? `<span style="color:#7a8fa6;"> / ${esc(zone)}</span>` : ''}</span>`);
-    if (sshUser)    chips.push(`👤 <span style="color:#ffd700;">${esc(sshUser)}</span><span style="color:#666;">:${sshPort !== 22 ? `<span style="color:#ffc107;">${sshPort}</span>` : sshPort}</span>${uniformSshKey ? ` <span style="color:#666;font-size:0.88em;">🔑${esc(uniformSshKey)}</span>` : ''}`);
-    if (specHtml)   chips.push(`⚙️ ${specHtml}`);
-    if (osText)     chips.push(`💿 <span style="color:#dda0dd;">${esc(osText)}</span>`);
-    if (diskText)   chips.push(`💾 <span style="color:#c0c0c0;">${esc(diskText)}</span>`);
+    if (provider)    chips.push(providerBadge);
+    if (connName)    chips.push(`🔌 <span style="${chipStyle}">${esc(connName)}</span>`);
+    if (region)      chips.push(`📍 <span style="${chipStyle}">${esc(region)}${zone ? `<span style="color:#94a3b8;"> / ${esc(zone)}</span>` : ''}</span>`);
+    if (sshUser)     chips.push(`👤 <span style="${chipStyle}font-weight:600;">${esc(sshUser)}</span><span style="color:#94a3b8;font-size:12px;">:${sshPort !== 22 ? sshPort : '22'}</span>${uniformSshKey ? ` <span style="color:#94a3b8;font-size:11px;">🔑${esc(uniformSshKey)}</span>` : ''}`);
+    if (specHtml)    chips.push(`⚙️ <span style="${chipStyle}font-size:12px;">${specHtml}</span>`);
+    if (osText)      chips.push(`💿 <span style="${chipStyle}">${esc(osText)}</span>`);
+    if (diskText)    chips.push(`💾 <span style="${chipStyle}">${esc(diskText)}</span>`);
 
     html += `
-      <div style="background:#0d1420;border:1px solid #2a3a50;border-radius:6px;margin-bottom:12px;overflow:hidden;">
-        <div style="background:#1a3050;padding:8px 12px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
-            <span style="font-weight:bold;color:#61dafb;font-size:0.95em;">📦 NodeGroup: ${esc(gid)}</span>
-            <span style="font-size:0.78em;color:#aaa;">${gnodes.length} node(s)</span>
+      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:12px;overflow:hidden;">
+        <div style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:10px 14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
+            <span style="font-weight:700;color:#0f172a;font-size:13px;font-family:${SANS};">📦 ${esc(gid)}</span>
+            <span style="font-size:11px;color:#94a3b8;font-family:${SANS};">${gnodes.length} node${gnodes.length > 1 ? 's' : ''}</span>
           </div>
-          <div style="display:flex;flex-wrap:wrap;gap:12px;font-size:0.78em;color:#aaa;align-items:center;">
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
             ${chips.join('')}
           </div>
         </div>
         <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:0.78em;white-space:nowrap;">
-          <thead><tr style="background:#1a2535;color:#9ab;">
-            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">Node ID</th>
-            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">Status</th>
-            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">Public IP</th>
-            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">Private IP</th>
-            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">CSP Resource ID</th>
-            <th style="padding:5px 10px;text-align:left;border-bottom:1px solid #2a3a50;">Created</th>
-          </tr></thead>
+        <table style="width:100%;border-collapse:collapse;white-space:nowrap;font-family:${SANS};">
+          <thead>
+            <tr style="background:#f8fafc;">
+              <th style="padding:6px 10px;text-align:left;border-bottom:1px solid #e2e8f0;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#64748b;">Node ID</th>
+              <th style="padding:6px 10px;text-align:left;border-bottom:1px solid #e2e8f0;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#64748b;">Status</th>
+              <th style="padding:6px 10px;text-align:left;border-bottom:1px solid #e2e8f0;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#64748b;">Public IP</th>
+              <th style="padding:6px 10px;text-align:left;border-bottom:1px solid #e2e8f0;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#64748b;">Private IP</th>
+              <th style="padding:6px 10px;text-align:left;border-bottom:1px solid #e2e8f0;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#64748b;">CSP Resource ID</th>
+              <th style="padding:6px 10px;text-align:left;border-bottom:1px solid #e2e8f0;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#64748b;">Created</th>
+            </tr>
+          </thead>
           <tbody>`;
 
     gnodes.forEach((nd, i) => {
-      const bg = i % 2 === 0 ? '#0d1b2a' : '#0a1520';
+      const bg = i % 2 === 0 ? '#ffffff' : '#f8fafc';
       const isNew = newNodeSet.has(nd.id);
 
-      // Status cell — include monAgentStatus + networkAgentStatus + targetAction
       const monIcon = nd.monAgentStatus === 'installed' ? '📡✓' : nd.monAgentStatus === 'failed' ? '📡✗' : '';
       const netIcon = nd.networkAgentStatus === 'installed' ? '🔗✓' : nd.networkAgentStatus === 'failed' ? '🔗✗' : '';
       const agentIcons = [monIcon, netIcon].filter(Boolean).join(' ');
       const statusCell = getInfraStatusBadge(nd.status)
-        + (agentIcons ? `<span style="font-size:0.75em;color:#aaa;margin-left:4px;">${agentIcons}</span>` : '')
-        + (nd.targetAction && nd.targetAction !== 'None' ? `<div style="font-size:0.68em;color:#ffc107;">⏳${esc(nd.targetAction)}</div>` : '');
+        + (agentIcons ? `<span style="font-size:11px;color:#94a3b8;margin-left:4px;">${agentIcons}</span>` : '')
+        + (nd.targetAction && nd.targetAction !== 'None' ? `<div style="font-size:11px;color:#d97706;margin-top:2px;">⏳${esc(nd.targetAction)}</div>` : '');
 
-      // CSP resource ID
       const cspId = nd.cspResourceId || nd.cspResourceName || '-';
       const cspIdShort = cspId.length > 28 ? cspId.slice(0, 26) + '…' : cspId;
-
-      // Created date
       const created = nd.createdTime ? esc(nd.createdTime.split(' ')[0]) : '-';
+      const rowBorder = isNew ? `outline:2px solid #16a34a;outline-offset:-1px;` : `border-bottom:1px solid #f1f5f9;`;
 
-      // Row border highlight for new nodes
-      const rowStyle = isNew ? `background:${bg};outline:1px solid #28a745;` : `background:${bg};`;
-
-      // SSH key per-node (shown only if nodes have different keys)
       const nodeKeyId = nd.sshKeyId ? nd.sshKeyId.split('+').pop() || nd.sshKeyId : '';
       const nodeIdCell = isNew
-        ? `<span style="color:#28a745;font-size:0.8em;">NEW </span>${esc(nd.id || '-')}`
+        ? `<span style="background:#dcfce7;color:#16a34a;font-size:10px;padding:1px 5px;border-radius:3px;font-weight:700;margin-right:5px;font-family:${SANS};">NEW</span>${esc(nd.id || '-')}`
         : esc(nd.id || '-');
       const nodeIdSuffix = (!uniformSshKey && nodeKeyId)
-        ? `<div style="color:#666;font-size:0.82em;">🔑${esc(nodeKeyId)}</div>` : '';
+        ? `<div style="color:#94a3b8;font-size:11px;margin-top:1px;font-family:${SANS};">🔑 ${esc(nodeKeyId)}</div>` : '';
 
       html += `
-        <tr style="${rowStyle}">
-          <td style="padding:5px 10px;color:#dde;font-family:monospace;">${nodeIdCell}${nodeIdSuffix}</td>
-          <td style="padding:5px 10px;">${statusCell}</td>
-          <td style="padding:5px 10px;color:#90ee90;font-family:monospace;">${esc(nd.publicIP || '-')}</td>
-          <td style="padding:5px 10px;color:#87ceeb;font-family:monospace;">${esc(nd.privateIP || '-')}</td>
-          <td style="padding:5px 10px;color:#888;font-family:monospace;font-size:0.88em;" title="${esc(cspId)}">${esc(cspIdShort)}</td>
-          <td style="padding:5px 10px;color:#888;">${created}</td>
+        <tr style="background:${bg};${rowBorder}">
+          <td style="padding:7px 10px;font-family:${MONO};font-size:12px;font-weight:600;color:#1e293b;">${nodeIdCell}${nodeIdSuffix}</td>
+          <td style="padding:7px 10px;">${statusCell}</td>
+          <td style="padding:7px 10px;font-family:${MONO};font-size:13px;font-weight:700;color:#0f172a;letter-spacing:0.01em;">${esc(nd.publicIP || '—')}</td>
+          <td style="padding:7px 10px;font-family:${MONO};font-size:12px;color:#475569;">${esc(nd.privateIP || '—')}</td>
+          <td style="padding:7px 10px;font-family:${MONO};font-size:11px;color:#94a3b8;" title="${esc(cspId)}">${esc(cspIdShort)}</td>
+          <td style="padding:7px 10px;font-size:12px;color:#94a3b8;font-family:${SANS};">${created}</td>
         </tr>`;
 
-      // Sub-row: node labels (show all labels; keys with empty values shown as plain tags)
+      // Labels row: flex-wrap with consistent pill style
       const ndLabels = nd.label && typeof nd.label === 'object' ? Object.entries(nd.label).filter(([k]) => k) : [];
       if (ndLabels.length > 0) {
         const pillsHtml = ndLabels.map(([k, v]) =>
-          v ? `<span style="background:#1e3a5f;color:#9ab;padding:1px 7px;border-radius:10px;font-size:0.78em;margin-right:4px;">${esc(k)}: <b style="color:#cde;">${esc(v)}</b></span>`
-            : `<span style="background:#1e3a5f;color:#cde;padding:1px 7px;border-radius:10px;font-size:0.78em;margin-right:4px;">${esc(k)}</span>`
+          v ? `<span style="background:#f1f5f9;border:1px solid #e2e8f0;color:#475569;padding:2px 7px;border-radius:5px;font-size:11px;white-space:nowrap;font-family:${SANS};"><b style="color:#334155;">${esc(k)}</b>: ${esc(v)}</span>`
+            : `<span style="background:#f1f5f9;border:1px solid #e2e8f0;color:#475569;padding:2px 7px;border-radius:5px;font-size:11px;white-space:nowrap;font-family:${SANS};">${esc(k)}</span>`
         ).join('');
-        html += `<tr style="background:${bg};"><td colspan="${COL_COUNT}" style="padding:2px 14px 5px 28px;border-bottom:1px solid #1e2e3e;">🏷️ ${pillsHtml}</td></tr>`;
+        html += `<tr style="background:${bg};"><td colspan="${COL_COUNT}" style="padding:4px 10px 5px 26px;border-bottom:1px solid #f1f5f9;white-space:normal;">
+          <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;line-height:1;">
+            <span style="color:#94a3b8;font-size:11px;margin-right:1px;font-family:${SANS};">🏷️</span>${pillsHtml}
+          </div>
+        </td></tr>`;
       }
 
-      // Sub-row: network / security details (vNetId, subnetId, securityGroupIds)
+      // Network details
       const netDetails = [];
-      if (nd.vNetId)   netDetails.push(`vNet: <span style="color:#cde;">${esc(nd.vNetId)}</span>`);
-      if (nd.subnetId) netDetails.push(`Subnet: <span style="color:#cde;">${esc(nd.subnetId)}</span>`);
-      if (nd.securityGroupIds?.length) netDetails.push(`SG: <span style="color:#cde;">${nd.securityGroupIds.map(esc).join(', ')}</span>`);
+      if (nd.vNetId)   netDetails.push(`vNet: <b style="color:#334155;">${esc(nd.vNetId)}</b>`);
+      if (nd.subnetId) netDetails.push(`Subnet: <b style="color:#334155;">${esc(nd.subnetId)}</b>`);
+      if (nd.securityGroupIds?.length) netDetails.push(`SG: <b style="color:#334155;">${nd.securityGroupIds.map(esc).join(', ')}</b>`);
       if (netDetails.length > 0) {
-        html += `<tr style="background:${bg};"><td colspan="${COL_COUNT}" style="padding:2px 14px 5px 28px;font-size:0.78em;color:#7a8fa6;border-bottom:1px solid #1e2e3e;">🌐 ${netDetails.join(' &nbsp;·&nbsp; ')}</td></tr>`;
+        html += `<tr style="background:${bg};"><td colspan="${COL_COUNT}" style="padding:3px 10px 5px 26px;font-size:12px;color:#64748b;border-bottom:1px solid #f1f5f9;font-family:${SANS};">🌐 ${netDetails.join(' &nbsp;·&nbsp; ')}</td></tr>`;
       }
 
-      // Sub-row: systemMessage (especially important for failed nodes)
+      // System message per node
       if (nd.systemMessage) {
         const isFail = (nd.status || '').toLowerCase().includes('fail');
-        const msgColor = isFail ? '#f88' : '#ffc107';
-        const msgBg    = isFail ? '#2a1010' : '#1a1500';
-        html += `<tr style="background:${msgBg};"><td colspan="${COL_COUNT}" style="padding:4px 14px 6px 28px;color:${msgColor};font-size:0.80em;white-space:normal;border-bottom:1px solid #2a3a50;">
+        const msgColor = isFail ? '#dc2626' : '#92400e';
+        const msgBg    = isFail ? '#fef2f2' : '#fffbeb';
+        const borderC  = isFail ? '#fca5a5' : '#fde68a';
+        html += `<tr style="background:${msgBg};"><td colspan="${COL_COUNT}" style="padding:5px 10px 6px 26px;color:${msgColor};font-size:12px;white-space:normal;border-bottom:1px solid ${borderC};line-height:1.5;font-family:${SANS};">
           ${isFail ? '❌' : 'ℹ️'} <em>${esc(nd.systemMessage)}</em>
         </td></tr>`;
       }
@@ -3522,28 +3526,28 @@ function displayInfraStatusGui(data) {
   if (data.description) metaItems.push(`📝 ${esc(data.description)}`);
   if (data.configureCloudAdaptiveNetwork === 'yes') metaItems.push(`🔗 CLADNet: <span style="color:#28a745;">enabled</span>`);
   const metaHtml = metaItems.length
-    ? `<p style="color:#aaa;font-size:0.82em;margin:0 0 12px;">${metaItems.join(' &nbsp;·&nbsp; ')}</p>`
+    ? `<p style="color:#64748b;font-size:12px;margin:0 0 12px;line-height:1.6;">${metaItems.join(' &nbsp;·&nbsp; ')}</p>`
     : '';
 
   Swal.fire({
     title: `📊 Infra Status: ${esc(infraId)}`,
     html: `
-      <div style="text-align:left;color:#e0e0e0;font-family:sans-serif;">
+      <div style="text-align:left;color:#0f172a;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;">
         ${metaHtml}
         ${buildInfraNodeSummaryHtml(data)}
-        <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end;">
+        <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">
           <button type="button" onclick="downloadAllSshKeys()"
-            style="padding:5px 14px;font-size:12px;background:#28a745;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:bold;">
+            style="padding:7px 14px;font-size:13px;font-family:inherit;background:#16a34a;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
             📦 SSH Keys
           </button>
           <button type="button" onclick="displayJsonData(window._currentJsonOutput,'info')"
-            style="padding:5px 14px;font-size:12px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;">
+            style="padding:7px 14px;font-size:13px;font-family:inherit;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
             🔍 View JSON
           </button>
         </div>
       </div>`,
-    background: '#0e1746',
-    color: '#e0e0e0',
+    background: '#ffffff',
+    color: '#0f172a',
     showConfirmButton: false,
     showCancelButton: true,
     cancelButtonText: '✕ Close',
@@ -3646,34 +3650,34 @@ function displayInfraDynamicResultGui(data) {
   window._currentJsonString = JSON.stringify(data, null, 2);
   const esc = window.escapeHtml || (s => String(s));
   const infraId = data.id || data.name || 'Infra';
+  window._currentInfraId = infraId;
   const nodes = data.node || [];
   const runningCount = nodes.filter(nd => (nd.status || '').toLowerCase() === 'running').length;
 
   Swal.fire({
     title: `✅ Infra Created: ${esc(infraId)}`,
     html: `
-      <div style="text-align:left;color:#e0e0e0;font-family:sans-serif;">
-        <div style="background:#0d3320;border:1px solid #28a745;border-radius:8px;padding:12px;margin-bottom:14px;">
-          <p style="color:#90ee90;margin:0;font-weight:bold;">🎉 Infrastructure provisioning completed!</p>
-          <p style="color:#aaa;margin:6px 0 0;font-size:0.83em;">
-            ${runningCount} / ${nodes.length} node(s) running
-            ${data.description ? ' · ' + esc(data.description) : ''}
+      <div style="text-align:left;color:#0f172a;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;">
+        <div style="background:#f0fdf4;border:1px solid #86efac;border-left:4px solid #16a34a;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+          <p style="color:#15803d;margin:0;font-weight:700;font-size:14px;">🎉 Infrastructure provisioning completed!</p>
+          <p style="color:#64748b;margin:5px 0 0;font-size:12px;">
+            ${runningCount} / ${nodes.length} node(s) running${data.description ? '  ·  ' + esc(data.description) : ''}
           </p>
         </div>
         ${buildInfraNodeSummaryHtml(data)}
-        <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;flex-wrap:wrap;">
-          <button type="button" onclick="downloadAllSshKeys(${JSON.stringify(infraId).replace(/"/g, '&quot;')})"
-            style="padding:6px 18px;font-size:13px;background:#28a745;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:bold;">
+        <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;flex-wrap:wrap;">
+          <button type="button" onclick="downloadAllSshKeys(window._currentInfraId)"
+            style="padding:7px 18px;font-size:13px;font-family:inherit;background:#16a34a;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;letter-spacing:0.01em;">
             📦 Download SSH Keys (ZIP)
           </button>
           <button type="button" onclick="displayJsonData(window._currentJsonOutput,'info')"
-            style="padding:6px 14px;font-size:12px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;">
+            style="padding:7px 14px;font-size:13px;font-family:inherit;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
             🔍 View JSON
           </button>
         </div>
       </div>`,
-    background: '#0e1746',
-    color: '#e0e0e0',
+    background: '#ffffff',
+    color: '#0f172a',
     showConfirmButton: false,
     showCancelButton: true,
     cancelButtonText: '✕ Close',
