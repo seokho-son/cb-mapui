@@ -11616,22 +11616,38 @@ function releaseResources() {
       console.log(res); // for debug
 
       var data = res.data;
-      // Show summary using structured response (total, successCount, failedCount, results[])
-      if (data && typeof data.total === "number") {
-        var summary = `Total: ${data.total}, Success: ${data.successCount}, Failed: ${data.failedCount}`;
-        if (data.failedCount > 0) {
-          var failedItems = (data.results || []).filter(function (r) { return !r.success; });
-          var failedDetail = failedItems
-            .map(function (r) { return r.resourceType + ": " + r.resourceId + " (" + r.message + ")"; })
-            .join("\n");
-          console.warn("Failed resource deletions:\n" + failedDetail);
-          errorAlert("Release resources completed with failures\n" + summary);
-        } else {
-          successAlert("All resources released successfully (" + data.total + ")");
-        }
-      }
+      var total = (data && data.total) || 0;
+      var successCount = (data && data.successCount) || 0;
+      var failedCount = (data && data.failedCount) || 0;
+      var icon = failedCount > 0 ? "warning" : "success";
+      var title = failedCount > 0
+        ? "Release Resources Completed with Failures"
+        : "Release Resources Completed";
+      var summary = "Total: " + total + ", Success: " + successCount + ", Failed: " + failedCount;
 
-      displayJsonData(data, typeInfo);
+      Swal.fire({
+        icon: icon,
+        title: title,
+        html:
+          "<b>" + summary + "</b><br><br>" +
+          "To retry releasing resources, click <b>🔄 Retry</b>.<br>" +
+          "If orphaned dependencies are blocking deletion, click <b>🔧 Recover Dependencies</b>.",
+        showDenyButton: true,
+        showCancelButton: true,
+        confirmButtonText: "🔄 Retry Release Resources",
+        denyButtonText: "🔧 Recover Dependencies",
+        cancelButtonText: "OK",
+        confirmButtonColor: "#e67e22",
+        denyButtonColor: "#1565c0",
+        cancelButtonColor: "#6c757d",
+      }).then(function (result) {
+        displayJsonData(data, typeInfo);
+        if (result.isConfirmed) {
+          releaseResources();
+        } else if (result.isDenied) {
+          recoverSharedResourceDependencies();
+        }
+      });
     })
     .finally(function () {
       removeSpinnerTask(spinnerId);
@@ -11670,6 +11686,74 @@ function resourceOverview() {
 window.resourceOverview = resourceOverview;
 
 // function for registerCspResource by registerCspResource button item
+function recoverSharedResourceDependencies() {
+  var spinnerId = addSpinnerTask("Recovering orphaned dependency resources");
+  infoAlert("Scanning and registering orphaned CSP resources...");
+
+  var config = getConfig();
+  var hostname = config.hostname;
+  var port = config.port;
+  var username = config.username;
+  var password = config.password;
+  var namespace = configNamespace;
+
+  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/sharedResources/recoverDependencies`;
+
+  axios({
+    method: "post",
+    url: url,
+    headers: { "Content-Type": "application/json" },
+    data: JSON.stringify({}),
+    auth: {
+      username: `${username}`,
+      password: `${password}`,
+    },
+  })
+    .then(function (res) {
+      console.log(res); // for debug
+
+      var data = res.data;
+      var ov = (data && data.registerationOverview) || {};
+      var totalRegistered =
+        (ov.vNet || 0) + (ov.securityGroup || 0) + (ov.sshKey || 0) + (ov.node || 0);
+
+      if (totalRegistered > 0) {
+        Swal.fire({
+          icon: "success",
+          title: "Dependency Recovery Complete",
+          html:
+            "<b>" + totalRegistered + " orphaned resource(s) registered</b><br>" +
+            "Node: " + (ov.node || 0) +
+            ", SSHKey: " + (ov.sshKey || 0) +
+            ", SecurityGroup: " + (ov.securityGroup || 0) +
+            ", vNet: " + (ov.vNet || 0) +
+            "<br><br>" +
+            "The recovered resources appear as <b>dep-*</b> Infra(s) in the Infra list.<br>" +
+            "Please <b>terminate and delete</b> them, then retry <b>Release Resources</b>.",
+          confirmButtonText: "OK",
+        });
+      } else {
+        Swal.fire({
+          icon: "info",
+          title: "No Orphaned Resources Found",
+          text: "No CSP resources outside CB-Tumblebug were detected. The dependency may be caused by a non-VM resource (e.g., ENI, Lambda, RDS) that requires manual cleanup on the CSP console.",
+          confirmButtonText: "OK",
+        });
+      }
+
+      displayJsonData(data, typeInfo);
+    })
+    .catch(function (err) {
+      console.error(err);
+      var msg = err.response ? JSON.stringify(err.response.data) : err.message;
+      errorAlert("Dependency recovery failed: " + msg);
+    })
+    .finally(function () {
+      removeSpinnerTask(spinnerId);
+    });
+}
+window.recoverSharedResourceDependencies = recoverSharedResourceDependencies;
+
 function registerCspResource() {
   var spinnerId = addSpinnerTask("Registering all CSP's resources");
   infoAlert("Registering all CSP's resources");
