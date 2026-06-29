@@ -13948,7 +13948,7 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "";
       break;
     case "OllamaPull":
-      defaultRemoteCommand[0] = "OLLAMA_HOST=0.0.0.0:3000 ollama pull $$Func(AssignTask(task='deepseek-r1, gemma3n, gemma3, qwen3, llama3.3, mistral, phi4-reasoning'))";
+      defaultRemoteCommand[0] = "OLLAMA_HOST=0.0.0.0:3000 ollama pull $$Func(AssignTask(task='<OLLAMA_MODELS>'))";
       defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3000))'";
       defaultRemoteCommand[2] = "OLLAMA_HOST=0.0.0.0:3000 ollama list";
       break;
@@ -14556,17 +14556,44 @@ window.PLACEHOLDER_METADATA = {
     default: '0.22.0',
     secret: false,
   },
+  // Hermes Agent uses vLLM — same VRAM rules as VLLM_MODEL.
+  // CTX_LEN default 65536 adds significant KV cache; prefer smaller models on 24 GB.
+  // Best for agents: Qwen2.5/3 (tool calling), Llama3.1/3.3 (built-in tool use), Phi-4-mini (compact agent).
   'HERMES_MODEL': {
-    description: 'LLM model for Hermes Agent',
+    description: 'LLM model for Hermes Agent (served via vLLM — pick a model that fits your GPU VRAM)',
     hint: 'Qwen/Qwen3-30B-A3B-Instruct-2507-FP8',
     default: 'Qwen/Qwen3-30B-A3B-Instruct-2507-FP8',
     secret: false,
+    refs: [
+      { label: 'HuggingFace Models', url: 'https://huggingface.co/models?pipeline_tag=text-generation&sort=downloads' }
+    ],
+    presets: [
+      // ── 24 GB · L4 (Ampere, BF16 only) ───────────────────────────────
+      { label: '24GB · Phi-4-mini      (BF16≈8GB)',        value: 'microsoft/Phi-4-mini-instruct' },
+      { label: '24GB · Qwen3-8B        (BF16≈16GB)',       value: 'Qwen/Qwen3-8B' },
+      { label: '24GB · Qwen2.5-7B      (BF16≈14GB)',       value: 'Qwen/Qwen2.5-7B-Instruct' },
+      // ── 24 GB · L40S (Ada Lovelace, FP8 supported) ───────────────────
+      { label: '24GB · Qwen2.5-14B     (FP8≈14GB, L40S)',  value: 'Qwen/Qwen2.5-14B-Instruct' },
+      { label: '24GB · Qwen3-14B       (FP8≈14GB, L40S)',  value: 'Qwen/Qwen3-14B' },
+      // ── 80 GB · A100 / H100 ──────────────────────────────────────────
+      { label: '80GB · Qwen3-30B-A3B   (FP8≈30GB)',        value: 'Qwen/Qwen3-30B-A3B-Instruct-2507-FP8' },
+      { label: '80GB · Qwen2.5-32B     (FP8≈32GB)',        value: 'Qwen/Qwen2.5-32B-Instruct' },
+      { label: '80GB · Llama3.3-70B    (FP8≈70GB, H100)',  value: 'meta-llama/Llama-3.3-70B-Instruct' },
+      { label: '80GB · Qwen2.5-72B     (FP8≈72GB, H100)',  value: 'Qwen/Qwen2.5-72B-Instruct' }
+    ]
   },
   'CTX_LEN': {
-    description: 'Maximum context length',
+    description: 'Max context length (tokens). Larger = more KV cache VRAM. GQA models (Qwen2.5/3, Llama3) are efficient; non-GQA models cost more.',
     hint: '65536',
     default: '65536',
     secret: false,
+    presets: [
+      { label: '8K  · test / very tight 24GB',  value: '8192' },
+      { label: '16K · 24GB conservative',        value: '16384' },
+      { label: '32K · 24GB recommended',         value: '32768' },
+      { label: '64K · 80GB recommended',         value: '65536' },
+      { label: '128K · H100 large context',      value: '131072' }
+    ]
   },
   'DISCORD_TOKEN': {
     description: 'Discord bot token',
@@ -14596,12 +14623,30 @@ window.PLACEHOLDER_METADATA = {
     hint: 'tvly-xxxxxxxxxxxxxxxx',
     secret: true,
   },
-  // vLLM
+  // vLLM — VRAM guide: BF16 ≈ 2 GB/B · FP8 ≈ 1 GB/B
+  // L4 (Ampere 24GB): BF16 only → ≤12B safe  |  L40S (Ada 24GB): FP8 → ≤24B
+  // A100 80GB: BF16 ≤40B  |  H100 80GB: FP8 W8A8 → ≤72B single card
   'VLLM_MODEL': {
     description: 'HuggingFace model name to serve',
-    hint: 'Qwen/Qwen2.5-1.5B-Instruct',
-    default: 'Qwen/Qwen2.5-1.5B-Instruct',
+    hint: 'meta-llama/Llama-3.1-8B-Instruct',
+    default: 'meta-llama/Llama-3.1-8B-Instruct',
     secret: false,
+    refs: [
+      { label: 'HuggingFace Models', url: 'https://huggingface.co/models?pipeline_tag=text-generation&sort=downloads' }
+    ],
+    presets: [
+      // ── 24 GB (L4 / L40S) ─────────────────────────────────────────────
+      { label: '24GB · Llama3.1-8B  (BF16≈16GB)',      value: 'meta-llama/Llama-3.1-8B-Instruct' },
+      { label: '24GB · Qwen2.5-7B   (BF16≈14GB)',      value: 'Qwen/Qwen2.5-7B-Instruct' },
+      { label: '24GB · Mistral-7B   (BF16≈14GB)',      value: 'mistralai/Mistral-7B-Instruct-v0.3' },
+      { label: '24GB · Phi-4-mini   (BF16≈8GB)',       value: 'microsoft/Phi-4-mini-instruct' },
+      { label: '24GB · Qwen2.5-14B  (FP8≈14GB, L40S)', value: 'Qwen/Qwen2.5-14B-Instruct' },
+      // ── 80 GB (A100 / H100) ───────────────────────────────────────────
+      { label: '80GB · Llama3.3-70B    (FP8≈70GB)',    value: 'meta-llama/Llama-3.3-70B-Instruct' },
+      { label: '80GB · Qwen2.5-72B     (FP8≈72GB)',    value: 'Qwen/Qwen2.5-72B-Instruct' },
+      { label: '80GB · DeepSeek-R1-70B (FP8≈70GB)',    value: 'deepseek-ai/DeepSeek-R1-Distill-Llama-70B' },
+      { label: '80GB · Qwen3-30B-A3B   (FP8≈30GB)',    value: 'Qwen/Qwen3-30B-A3B-Instruct-2507-FP8' }
+    ]
   },
   'VLLM_HF_TOKEN': {
     description: 'HuggingFace token for gated models (leave blank for public models)',
@@ -14616,10 +14661,17 @@ window.PLACEHOLDER_METADATA = {
     secret: false,
   },
   'VLLM_CTX_LEN': {
-    description: 'Max context length in tokens — max-model-len (leave blank for model default)',
+    description: 'Max context length (--max-model-len). Leave blank for model default. Larger = more KV cache VRAM.',
     hint: '8192',
     default: '',
     secret: false,
+    presets: [
+      { label: '8K  · 24GB safe',         value: '8192' },
+      { label: '16K · 24GB balanced',     value: '16384' },
+      { label: '32K · 24GB / 80GB',       value: '32768' },
+      { label: '64K · 80GB recommended',  value: '65536' },
+      { label: '128K · H100 large',       value: '131072' }
+    ]
   },
   // GuideLLM Benchmark
   'GUIDELLM_PROFILE': {
@@ -14652,7 +14704,32 @@ window.PLACEHOLDER_METADATA = {
     default: '{"text_column":"prompt"}',
     secret: false,
   },
+  // Ollama — VRAM guide: Q4 ≈ 0.5 GB/B  (8B≈5GB · 14B≈9GB · 32B≈20GB · 70B≈43GB)
+  'OLLAMA_MODELS': {
+    description: 'Comma-separated list of Ollama models to pull (one per VM via AssignTask)',
+    hint: 'llama3.1:8b, qwen2.5:7b, mistral:7b, phi4-mini',
+    default: 'llama3.1:8b, qwen2.5:7b, mistral:7b, phi4-mini',
+    secret: false,
+    refs: [
+      { label: 'Ollama Model Library', url: 'https://ollama.com/library' }
+    ],
+    presets: [
+      // 24 GB GPU (L4 / L40S / RTX 3090/4090)
+      { label: '24GB · 7-8B  (~5GB Q4)',   value: 'llama3.1:8b, qwen2.5:7b, mistral:7b, phi4-mini' },
+      { label: '24GB · 14B   (~9GB Q4)',   value: 'qwen2.5:14b, deepseek-r1:14b, phi4:14b, gemma3:27b' },
+      { label: '24GB · 32B   (~20GB Q4)',  value: 'deepseek-r1:32b, qwen2.5:32b, qwen3:32b' },
+      // 80 GB GPU (A100 / H100)
+      { label: '80GB · 70B   (~43GB Q4)',  value: 'llama3.3:70b, qwen2.5:72b, deepseek-r1:70b, qwen3:72b' },
+      // Reasoning / Coding
+      { label: 'Reasoning/Coding (24GB)',  value: 'deepseek-r1:32b, qwen3:32b, phi4-reasoning, qwen3-coder:30b' }
+    ]
+  },
 };
+
+/**
+ * Script-level quick reference metadata for scripts that don't use <PLACEHOLDER> parameters.
+ */
+window.SCRIPT_QUICK_REF = {};
 
 /**
  * Extract user-input placeholders from command text.
@@ -14678,6 +14755,8 @@ window.extractPlaceholders = function(text) {
       description: meta.description || '',
       hint: meta.hint || '',
       default: meta.default || '',
+      refs: meta.refs || [],
+      presets: meta.presets || [],
     });
   }
   return placeholders;
@@ -14782,7 +14861,66 @@ window.renderPlaceholderInputs = function() {
       meta.textContent = descText ? `${descText}  •  ${cmdText}` : cmdText;
       row.appendChild(meta);
 
+      // Refs: clickable link badges after description
+      if (ph.refs && ph.refs.length > 0) {
+        ph.refs.forEach(ref => {
+          const a = document.createElement('a');
+          a.href = ref.url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.title = ref.label;
+          a.style.cssText = 'font-size:0.68rem; color:#0d6efd; text-decoration:none; white-space:nowrap; padding:1px 6px; border:1px solid #b3d7ff; border-radius:8px; background:#f0f7ff;';
+          a.textContent = `🔗 ${ref.label}`;
+          a.onmouseover = () => { a.style.background = '#cce5ff'; };
+          a.onmouseout  = () => { a.style.background = '#f0f7ff'; };
+          row.appendChild(a);
+        });
+      }
+
       paramsPanel.appendChild(row);
+
+      // Presets: grid of chips that click to fill the input
+      if (ph.presets && ph.presets.length > 0) {
+        const presetsWrapper = document.createElement('div');
+        presetsWrapper.style.cssText = 'margin-bottom:8px; margin-left:138px;';
+
+        const presetsLabel = document.createElement('span');
+        presetsLabel.style.cssText = 'font-size:0.65rem; color:#666; display:block; margin-bottom:3px;';
+        presetsLabel.textContent = 'Presets:';
+        presetsWrapper.appendChild(presetsLabel);
+
+        const presetsGrid = document.createElement('div');
+        presetsGrid.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:4px;';
+
+        ph.presets.forEach(preset => {
+          const val   = typeof preset === 'string' ? preset : preset.value;
+          const lbl   = typeof preset === 'string' ? null   : preset.label;
+          const chip  = document.createElement('button');
+          chip.type = 'button';
+          chip.title = 'Click to fill';
+          chip.style.cssText = 'padding:4px 8px; border:1px solid #b3d7ff; border-radius:6px; background:#e8f3ff; color:#0056b3; cursor:pointer; font-size:0.68rem; text-align:left; display:flex; flex-direction:column; gap:1px; width:100%;';
+          chip.onmouseover = () => { chip.style.background = '#cce5ff'; };
+          chip.onmouseout  = () => { chip.style.background = '#e8f3ff'; };
+          if (lbl) {
+            const ls = document.createElement('span');
+            ls.style.cssText = 'font-size:0.62rem; color:#444; font-weight:600;';
+            ls.textContent = lbl;
+            chip.appendChild(ls);
+          }
+          const vs = document.createElement('span');
+          vs.style.cssText = 'font-family:monospace; font-size:0.68rem; color:#003d80; word-break:break-all; white-space:normal;';
+          vs.textContent = val;
+          chip.appendChild(vs);
+          chip.onclick = () => {
+            const inp = document.getElementById(inputId);
+            if (inp) { inp.value = val; inp.dispatchEvent(new Event('input')); }
+          };
+          presetsGrid.appendChild(chip);
+        });
+
+        presetsWrapper.appendChild(presetsGrid);
+        paramsPanel.appendChild(presetsWrapper);
+      }
     });
     return;
   }
@@ -15789,6 +15927,63 @@ window.collectCommands = function () {
 
 // ============================================================
 
+/**
+ * Update the script-level quick reference panel (#scriptQuickRef).
+ * Used for scripts that have no <PLACEHOLDER> parameters but still need refs/presets.
+ */
+window.updateScriptQuickRef = function(scriptValue) {
+  const panel = document.getElementById('scriptQuickRef');
+  if (!panel) return;
+  const meta = window.SCRIPT_QUICK_REF && window.SCRIPT_QUICK_REF[scriptValue];
+  const refsDiv    = document.getElementById('scriptQuickRefRefs');
+  const presetsDiv = document.getElementById('scriptQuickRefPresets');
+  if (!meta || (!meta.refs?.length && !meta.presets?.length)) {
+    panel.style.display = 'none';
+    return;
+  }
+  if (refsDiv)    refsDiv.innerHTML    = '';
+  if (presetsDiv) presetsDiv.innerHTML = '';
+  if (meta.refs && meta.refs.length > 0 && refsDiv) {
+    const h = document.createElement('span');
+    h.style.cssText = 'font-size:0.72rem; color:#555; font-weight:600; margin-right:6px;';
+    h.textContent = '🔗 References:';
+    refsDiv.appendChild(h);
+    meta.refs.forEach(ref => {
+      const a = document.createElement('a');
+      a.href = ref.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.textContent = ref.label;
+      a.style.cssText = 'font-size:0.72rem; color:#0d6efd; text-decoration:none; padding:1px 8px; border:1px solid #b3d7ff; border-radius:8px; background:#f0f7ff; margin-right:6px;';
+      a.onmouseover = () => { a.style.background = '#cce5ff'; };
+      a.onmouseout  = () => { a.style.background = '#f0f7ff'; };
+      refsDiv.appendChild(a);
+    });
+  }
+  if (meta.presets && meta.presets.length > 0 && presetsDiv) {
+    presetsDiv.style.cssText = 'display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top:6px;';
+    const h = document.createElement('span');
+    h.style.cssText = 'font-size:0.72rem; color:#555; font-weight:600; white-space:nowrap;';
+    h.textContent = '📋 Quick Copy:';
+    presetsDiv.appendChild(h);
+    meta.presets.forEach(preset => {
+      const val  = preset.value || preset;
+      const lbl  = preset.label || val;
+      const chip = document.createElement('button');
+      chip.type = 'button'; chip.textContent = lbl; chip.title = val;
+      chip.style.cssText = 'padding:3px 10px; border:1px solid #ffc107; border-radius:10px; background:#fff8e1; color:#664d03; cursor:pointer; font-size:0.7rem; white-space:nowrap;';
+      chip.onmouseover = () => { chip.style.background = '#ffe69c'; };
+      chip.onmouseout  = () => { chip.style.background = '#fff8e1'; };
+      chip.onclick = () => {
+        const orig = chip.textContent;
+        const done = () => { chip.textContent = '✅ Copied!'; setTimeout(() => { chip.textContent = orig; }, 1500); };
+        if (navigator.clipboard) { navigator.clipboard.writeText(val).then(done).catch(() => { document.execCommand('copy'); done(); }); }
+        else { const el = document.createElement('textarea'); el.value = val; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); done(); }
+      };
+      presetsDiv.appendChild(chip);
+    });
+  }
+  panel.style.display = '';
+};
+
 // loadPredefinedScript function for loading predefined script
 // Supports two modes: Replace (default) and Append
 window.loadPredefinedScript = function () {
@@ -15895,6 +16090,9 @@ window.loadPredefinedScript = function () {
 
   // Auto-toggle sync mode based on script's syncMode property
   window.applyScriptSyncMode(scriptType);
+
+  // Update script-level quick reference panel (refs + copy presets)
+  window.updateScriptQuickRef(scriptType);
 
   // Render placeholder input fields for any detected placeholders in commands
   window.renderPlaceholderInputs();
@@ -17783,6 +17981,12 @@ async function executeRemoteCmd() {
               </label>
             </div>
           </div>
+        </div>
+
+        <!-- Quick Reference: shown when a script has refs/presets but no <PLACEHOLDER> params -->
+        <div id="scriptQuickRef" style="display:none; margin-top:8px; padding:8px 12px; background:#f8fbff; border:1px dashed #b3d7ff; border-radius:6px;">
+          <div id="scriptQuickRefRefs" style="display:flex; flex-wrap:wrap; align-items:center; gap:6px;"></div>
+          <div id="scriptQuickRefPresets"></div>
         </div>
       </div>
 
@@ -26008,6 +26212,8 @@ function proceedWithAutopilotProvision() {
   var req = _apCurrentReq;
   if (!req) return;
 
+  // Blur focused element before hiding modal to avoid aria-hidden warning
+  if (document.activeElement) document.activeElement.blur();
   $('#autopilotModal').modal('hide');
 
   // Init and show progress panel after form modal hides
@@ -26167,12 +26373,19 @@ function _apRenderProgressUpdate(status) {
           var cnt = a.succeededCount > 0 ? a.succeededCount + ' nodes'
             : (a.status === 'csp-failed' ? '0' : '...');
           var costStr = a.costPerHour > 0 ? ' $' + a.costPerHour.toFixed(3) + '/hr' : '';
+          var gpuStr = a.acceleratorModel
+            ? ' &nbsp;<span style="color:#f0a500">' + a.acceleratorModel +
+              ' ×' + (a.acceleratorCount || 1) +
+              (a.acceleratorMemoryGb ? ' (' + a.acceleratorMemoryGb + 'GB)' : '') +
+              '</span>'
+            : '';
           return '<div style="padding:2px 0;border-bottom:1px solid #21262d">' +
             icon + '&nbsp;' +
             '<span style="color:#e6edf3">' + (a.specId || '') + '</span>&nbsp;&nbsp;' +
             '<span style="color:#7d8590">' + (a.connectionName || '') + '</span>&nbsp;&nbsp;' +
             '<span style="color:#7d8590">' + (a.zone || '') + '</span>&nbsp;&nbsp;' +
-            '<span style="color:#7d8590">' + cnt + costStr + '</span></div>';
+            '<span style="color:#7d8590">' + cnt + costStr + '</span>' +
+            gpuStr + '</div>';
         }).join('');
         logEl.innerHTML = logHtml;
         logEl.scrollTop = logEl.scrollHeight;
@@ -26222,7 +26435,7 @@ function showAutopilotResult(result, req) {
       '</span></div>';
   }).join('');
 
-  var hasGpu = attempts.some(function(a) { return a.acceleratorCount > 0; });
+  var hasGpuAttempt = attempts.some(function(a) { return a.acceleratorModel; });
   var attemptRows = attempts.map(function(a) {
     var icon = a.status === 'succeeded'
       ? '<span style="color:#3fb950">✓</span>'
@@ -26230,22 +26443,22 @@ function showAutopilotResult(result, req) {
       ? '<span style="color:#f85149">✕</span>'
       : '<span style="color:#7d8590">—</span>';
     var gpuCell = '';
-    if (hasGpu) {
-      if (a.acceleratorCount > 0) {
-        var model = (a.acceleratorModel || '').replace(/nvidia-tesla-/i, '').replace(/nvidia-/i, '').toUpperCase();
-        gpuCell = '<td style="font-size:11px;color:#a371f7;white-space:nowrap">' + a.acceleratorCount + '×' + model + '</td>';
-      } else {
-        gpuCell = '<td></td>';
-      }
+    if (hasGpuAttempt) {
+      gpuCell = a.acceleratorModel
+        ? '<td style="font-size:11px;color:#f0a500;white-space:nowrap">' +
+            a.acceleratorModel + ' ×' + (a.acceleratorCount || 1) +
+            (a.acceleratorMemoryGb ? ' (' + a.acceleratorMemoryGb + 'GB)' : '') +
+          '</td>'
+        : '<td style="font-size:11px;color:#7d8590">—</td>';
     }
     return '<tr style="border-bottom:1px solid rgba(48,54,61,.4)">' +
       '<td>' + icon + '</td>' +
       '<td style="font-family:monospace;font-size:11px;color:#e6edf3">' + (a.specId || '') + '</td>' +
       '<td style="font-size:11px;color:#7d8590">' + (a.connectionName || '') + '</td>' +
       '<td style="font-size:11px;color:#7d8590">' + (a.zone || '') + '</td>' +
-      gpuCell +
       '<td style="font-size:11px">' + (a.succeededCount || 0) + '/' + a.requestedCount + '</td>' +
       '<td style="font-size:11px;color:#7d8590">' + (a.costPerHour > 0 ? '$' + a.costPerHour.toFixed(3) : '') + '</td>' +
+      gpuCell +
       '</tr>';
   }).join('');
 
@@ -26266,8 +26479,9 @@ function showAutopilotResult(result, req) {
       '<thead><tr style="color:#7d8590;font-size:10px;text-transform:uppercase;letter-spacing:.5px">' +
       '<th style="padding:4px 6px"></th><th style="padding:4px 6px">Spec</th>' +
       '<th style="padding:4px 6px">Connection</th><th style="padding:4px 6px">Zone</th>' +
-      (hasGpu ? '<th style="padding:4px 6px;color:#a371f7">GPU</th>' : '') +
-      '<th style="padding:4px 6px">Nodes</th><th style="padding:4px 6px">$/hr</th></tr></thead>' +
+      '<th style="padding:4px 6px">Nodes</th><th style="padding:4px 6px">$/hr</th>' +
+      (hasGpuAttempt ? '<th style="padding:4px 6px">GPU</th>' : '') +
+      '</tr></thead>' +
       '<tbody>' + attemptRows + '</tbody></table></div>' +
       (stats.wastedCostPerHour > 0 ? '<div style="margin-top:6px;font-size:11px;color:#7d8590">Wasted: $' +
         stats.wastedCostPerHour.toFixed(3) + '/hr from failed nodes (refine cleaned up)</div>' : '') +
