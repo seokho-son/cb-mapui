@@ -26222,17 +26222,28 @@ function showAutopilotResult(result, req) {
       '</span></div>';
   }).join('');
 
+  var hasGpu = attempts.some(function(a) { return a.acceleratorCount > 0; });
   var attemptRows = attempts.map(function(a) {
     var icon = a.status === 'succeeded'
       ? '<span style="color:#3fb950">✓</span>'
       : (a.status === 'csp-failed' || a.status === 'failed')
       ? '<span style="color:#f85149">✕</span>'
       : '<span style="color:#7d8590">—</span>';
+    var gpuCell = '';
+    if (hasGpu) {
+      if (a.acceleratorCount > 0) {
+        var model = (a.acceleratorModel || '').replace(/nvidia-tesla-/i, '').replace(/nvidia-/i, '').toUpperCase();
+        gpuCell = '<td style="font-size:11px;color:#a371f7;white-space:nowrap">' + a.acceleratorCount + '×' + model + '</td>';
+      } else {
+        gpuCell = '<td></td>';
+      }
+    }
     return '<tr style="border-bottom:1px solid rgba(48,54,61,.4)">' +
       '<td>' + icon + '</td>' +
       '<td style="font-family:monospace;font-size:11px;color:#e6edf3">' + (a.specId || '') + '</td>' +
       '<td style="font-size:11px;color:#7d8590">' + (a.connectionName || '') + '</td>' +
       '<td style="font-size:11px;color:#7d8590">' + (a.zone || '') + '</td>' +
+      gpuCell +
       '<td style="font-size:11px">' + (a.succeededCount || 0) + '/' + a.requestedCount + '</td>' +
       '<td style="font-size:11px;color:#7d8590">' + (a.costPerHour > 0 ? '$' + a.costPerHour.toFixed(3) : '') + '</td>' +
       '</tr>';
@@ -26255,6 +26266,7 @@ function showAutopilotResult(result, req) {
       '<thead><tr style="color:#7d8590;font-size:10px;text-transform:uppercase;letter-spacing:.5px">' +
       '<th style="padding:4px 6px"></th><th style="padding:4px 6px">Spec</th>' +
       '<th style="padding:4px 6px">Connection</th><th style="padding:4px 6px">Zone</th>' +
+      (hasGpu ? '<th style="padding:4px 6px;color:#a371f7">GPU</th>' : '') +
       '<th style="padding:4px 6px">Nodes</th><th style="padding:4px 6px">$/hr</th></tr></thead>' +
       '<tbody>' + attemptRows + '</tbody></table></div>' +
       (stats.wastedCostPerHour > 0 ? '<div style="margin-top:6px;font-size:11px;color:#7d8590">Wasted: $' +
