@@ -14635,17 +14635,42 @@ window.PLACEHOLDER_METADATA = {
       { label: 'HuggingFace Models', url: 'https://huggingface.co/models?pipeline_tag=text-generation&sort=downloads' }
     ],
     presets: [
-      // ── 24 GB (L4 / L40S) ─────────────────────────────────────────────
-      { label: '24GB · Llama3.1-8B  (BF16≈16GB)',      value: 'meta-llama/Llama-3.1-8B-Instruct' },
-      { label: '24GB · Qwen2.5-7B   (BF16≈14GB)',      value: 'Qwen/Qwen2.5-7B-Instruct' },
-      { label: '24GB · Mistral-7B   (BF16≈14GB)',      value: 'mistralai/Mistral-7B-Instruct-v0.3' },
-      { label: '24GB · Phi-4-mini   (BF16≈8GB)',       value: 'microsoft/Phi-4-mini-instruct' },
-      { label: '24GB · Qwen2.5-14B  (FP8≈14GB, L40S)', value: 'Qwen/Qwen2.5-14B-Instruct' },
-      // ── 80 GB (A100 / H100) ───────────────────────────────────────────
-      { label: '80GB · Llama3.3-70B    (FP8≈70GB)',    value: 'meta-llama/Llama-3.3-70B-Instruct' },
-      { label: '80GB · Qwen2.5-72B     (FP8≈72GB)',    value: 'Qwen/Qwen2.5-72B-Instruct' },
-      { label: '80GB · DeepSeek-R1-70B (FP8≈70GB)',    value: 'deepseek-ai/DeepSeek-R1-Distill-Llama-70B' },
-      { label: '80GB · Qwen3-30B-A3B   (FP8≈30GB)',    value: 'Qwen/Qwen3-30B-A3B-Instruct-2507-FP8' }
+      // ── 24 GB L4 · BF16 only (Ampere, ≤12B safe) — 8 presets ─────────
+      { label: '24GB · Phi-4-mini           (BF16≈8GB,  L4)',    value: 'microsoft/Phi-4-mini-instruct' },
+      { label: '24GB · Llama3.2-3B          (BF16≈6GB,  L4)',    value: 'meta-llama/Llama-3.2-3B-Instruct' },
+      { label: '24GB · Qwen2.5-7B           (BF16≈14GB, L4)',    value: 'Qwen/Qwen2.5-7B-Instruct' },
+      { label: '24GB · Mistral-7B           (BF16≈14GB, L4)',    value: 'mistralai/Mistral-7B-Instruct-v0.3' },
+      { label: '24GB · Qwen2.5-Coder-7B     (BF16≈14GB, L4)',    value: 'Qwen/Qwen2.5-Coder-7B-Instruct' },
+      { label: '24GB · Llama3.1-8B          (BF16≈16GB, L4)',    value: 'meta-llama/Llama-3.1-8B-Instruct' },
+      { label: '24GB · Qwen3-8B             (BF16≈16GB, L4)',    value: 'Qwen/Qwen3-8B' },
+      { label: '24GB · DeepSeek-R1-8B       (BF16≈16GB, L4)',    value: 'deepseek-ai/DeepSeek-R1-Distill-Llama-8B' },
+      // ── 24 GB L40S · FP8 (Ada Lovelace, up to 24B) — 8 presets ───────
+      { label: '24GB · Gemma3-12B           (FP8≈12GB,  L40S)',  value: 'google/gemma-3-12b-it' },
+      { label: '24GB · Mistral-Nemo-12B     (FP8≈12GB,  L40S)',  value: 'mistralai/Mistral-Nemo-Instruct-2407' },
+      { label: '24GB · Phi-4                (FP8≈14GB,  L40S)',  value: 'microsoft/Phi-4' },
+      { label: '24GB · Qwen2.5-14B          (FP8≈14GB,  L40S)',  value: 'Qwen/Qwen2.5-14B-Instruct' },
+      { label: '24GB · Qwen3-14B            (FP8≈14GB,  L40S)',  value: 'Qwen/Qwen3-14B' },
+      { label: '24GB · DeepSeek-R1-14B      (FP8≈14GB,  L40S)',  value: 'deepseek-ai/DeepSeek-R1-Distill-Qwen-14B' },
+      { label: '24GB · Qwen2.5-Coder-14B    (FP8≈14GB,  L40S)',  value: 'Qwen/Qwen2.5-Coder-14B-Instruct' },
+      { label: '24GB · Mistral-Small3.1-24B (FP8≈24GB,  L40S)',  value: 'mistralai/Mistral-Small-3.1-24B-Instruct-2503' },
+      // ── 80 GB A100 · FP8 mid (24-40B, good headroom) — 8 presets ─────
+      { label: '80GB · Mistral-Small3.1-24B (FP8≈24GB,  A100)',  value: 'mistralai/Mistral-Small-3.1-24B-Instruct-2503' },
+      { label: '80GB · Gemma3-27B           (FP8≈27GB,  A100)',  value: 'google/gemma-3-27b-it' },
+      { label: '80GB · Qwen3-30B-A3B        (FP8≈30GB,  A100)',  value: 'Qwen/Qwen3-30B-A3B-Instruct-2507-FP8' },
+      { label: '80GB · Qwen3-32B            (FP8≈32GB,  A100)',  value: 'Qwen/Qwen3-32B' },
+      { label: '80GB · Qwen2.5-32B          (FP8≈32GB,  A100)',  value: 'Qwen/Qwen2.5-32B-Instruct' },
+      { label: '80GB · DeepSeek-R1-32B      (FP8≈32GB,  A100)',  value: 'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B' },
+      { label: '80GB · Qwen2.5-Coder-32B    (FP8≈32GB,  A100)',  value: 'Qwen/Qwen2.5-Coder-32B-Instruct' },
+      { label: '80GB · Qwen2.5-Math-32B     (FP8≈32GB,  A100)',  value: 'Qwen/Qwen2.5-Math-32B-Instruct' },
+      // ── 80 GB H100 · FP8 W8A8 large (70B+) — 8 presets ──────────────
+      { label: '80GB · Llama3.3-70B         (FP8≈70GB,  H100)',  value: 'meta-llama/Llama-3.3-70B-Instruct' },
+      { label: '80GB · Llama3.1-70B         (FP8≈70GB,  H100)',  value: 'meta-llama/Llama-3.1-70B-Instruct' },
+      { label: '80GB · Qwen3-72B            (FP8≈72GB,  H100)',  value: 'Qwen/Qwen3-72B' },
+      { label: '80GB · Qwen2.5-72B          (FP8≈72GB,  H100)',  value: 'Qwen/Qwen2.5-72B-Instruct' },
+      { label: '80GB · DeepSeek-R1-70B      (FP8≈70GB,  H100)',  value: 'deepseek-ai/DeepSeek-R1-Distill-Llama-70B' },
+      { label: '80GB · Qwen2.5-Coder-72B    (FP8≈72GB,  H100)',  value: 'Qwen/Qwen2.5-Coder-72B-Instruct' },
+      { label: '80GB · Qwen2.5-Math-72B     (FP8≈72GB,  H100)',  value: 'Qwen/Qwen2.5-Math-72B-Instruct' },
+      { label: '80GB · Mixtral-8x7B         (FP8≈47GB,  H100)',  value: 'mistralai/Mixtral-8x7B-Instruct-v0.1' }
     ]
   },
   'VLLM_HF_TOKEN': {
@@ -14714,14 +14739,18 @@ window.PLACEHOLDER_METADATA = {
       { label: 'Ollama Model Library', url: 'https://ollama.com/library' }
     ],
     presets: [
-      // 24 GB GPU (L4 / L40S / RTX 3090/4090)
-      { label: '24GB · 7-8B  (~5GB Q4)',   value: 'llama3.1:8b, qwen2.5:7b, mistral:7b, phi4-mini' },
-      { label: '24GB · 14B   (~9GB Q4)',   value: 'qwen2.5:14b, deepseek-r1:14b, phi4:14b, gemma3:27b' },
-      { label: '24GB · 32B   (~20GB Q4)',  value: 'deepseek-r1:32b, qwen2.5:32b, qwen3:32b' },
-      // 80 GB GPU (A100 / H100)
-      { label: '80GB · 70B   (~43GB Q4)',  value: 'llama3.3:70b, qwen2.5:72b, deepseek-r1:70b, qwen3:72b' },
-      // Reasoning / Coding
-      { label: 'Reasoning/Coding (24GB)',  value: 'deepseek-r1:32b, qwen3:32b, phi4-reasoning, qwen3-coder:30b' }
+      // ── 24 GB GPU · Tiny 3-4B (~2GB Q4) — 8 models ───────────────────
+      { label: '24GB · 3-4B   (~2GB Q4)',
+        value: 'llama3.2:3b, qwen2.5:3b, qwen3:4b, gemma3:4b, phi4-mini, qwen3:1.7b, qwen2.5:1.5b, smollm2:1.7b' },
+      // ── 24 GB GPU · General 7-14B (~5-9GB Q4) — 8 models ─────────────
+      { label: '24GB · 7-14B  (~5-9GB Q4)',
+        value: 'llama3.1:8b, qwen3:8b, qwen2.5:7b, mistral:7b, gemma3:9b, deepseek-r1:8b, qwen2.5:14b, gemma3:12b' },
+      // ── 24 GB GPU · Large 22-32B (~14-20GB Q4) — 8 models ────────────
+      { label: '24GB · 22-32B (~14-20GB Q4)',
+        value: 'deepseek-r1:32b, qwen2.5:32b, qwen3:32b, qwen3-coder:30b, devstral:24b, codestral:22b, gemma3:27b, qwen2.5-coder:32b' },
+      // ── 80 GB GPU (A100 / H100) · 70B+ (~43GB Q4) — 8 models ─────────
+      { label: '80GB · 70B+   (~43GB Q4)',
+        value: 'llama3.3:70b, llama3.1:70b, qwen2.5:72b, qwen3:72b, deepseek-r1:70b, qwen2.5-coder:72b, mixtral:8x7b, command-r-plus' }
     ]
   },
 };
