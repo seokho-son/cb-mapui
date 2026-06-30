@@ -169,10 +169,16 @@ var infraClusterPolygons = new globalThis.Map(); // Map<infraId, Array<Polygon>>
 var infraClusterNames = new globalThis.Map();    // Map<infraId, Array<clusterId>>
 var infraClusterColors = new globalThis.Map();   // Map<infraId, Map<clusterId, color>>
 
+// Infra NodeGroup visualization storage
+var infraNodeGroupPolygons = new globalThis.Map(); // Map<infraId, Array<Polygon>>
+var infraNodeGroupNames = new globalThis.Map();    // Map<infraId, Array<nodeGroupId>>
+var infraNodeGroupColors = new globalThis.Map();   // Map<infraId, Map<nodeGroupId, color>>
+
 var cspListDisplayEnabled = document.getElementById("displayOn");
 var recommendPolicy = document.getElementById("recommendPolicy");
 var selectApp = document.getElementById("selectApp");
 var showInfraClusterLabels = false;
+var showInfraNodeGroupLabels = false;
 
 // Configuration variables (previously from removed form elements)
 var configHostname = "localhost";
@@ -356,6 +362,7 @@ function showMapSettings() {
   // CSP icon mode
   const curIconMode = cspIconMode || 'logo';
   const infraClusterLabelChecked = showInfraClusterLabels ? 'checked' : '';
+  const infraNodeGroupLabelChecked = showInfraNodeGroupLabels ? 'checked' : '';
 
   // Build namespace options
   const nsOptions = cachedNamespaceList.map(ns => {
@@ -453,6 +460,15 @@ function showMapSettings() {
       </label>
       <div class="settings-hint">Display cluster IDs above cluster boundaries</div>
     </div>
+
+    <div class="settings-section">
+      <div class="settings-label"><i class="fas fa-layer-group"></i> NodeGroup Labels</div>
+      <label class="settings-toggle">
+        <input type="checkbox" id="infraNodeGroupLabelToggle" ${infraNodeGroupLabelChecked}>
+        <span>Show nodegroup IDs on map</span>
+      </label>
+      <div class="settings-hint">Display nodegroup IDs above nodegroup boundaries</div>
+    </div>
   `,
     showCancelButton: true,
     confirmButtonText: 'Apply',
@@ -471,12 +487,14 @@ function showMapSettings() {
       }
       const selectedIconMode = document.getElementById('cspIconModeSelect')?.value || 'logo';
       const infraClusterLabelEnabled = document.getElementById('infraClusterLabelToggle')?.checked || false;
+      const infraNodeGroupLabelEnabled = document.getElementById('infraNodeGroupLabelToggle')?.checked || false;
       const selectedHolder = document.getElementById('settings-credentialHolder')?.value || configCredentialHolder;
       const selectedNs = document.getElementById('settings-namespace')?.value || configNamespace;
       return {
         refreshInterval: selectedInterval.value,
         iconMode: selectedIconMode,
         infraClusterLabels: infraClusterLabelEnabled,
+        infraNodeGroupLabels: infraNodeGroupLabelEnabled,
         credentialHolder: selectedHolder,
         namespace: selectedNs
       };
@@ -492,6 +510,7 @@ function showMapSettings() {
       // Update CSP icon mode
       cspIconMode = result.value.iconMode || 'logo';
       showInfraClusterLabels = result.value.infraClusterLabels;
+      showInfraNodeGroupLabels = result.value.infraNodeGroupLabels;
       // Clear all cached generic styles so they are regenerated with the new mode
       Object.keys(cspGenericStyles).forEach(k => delete cspGenericStyles[k]);
       Object.keys(nodeGenericCloudStyleCache).forEach(k => delete nodeGenericCloudStyleCache[k]);
@@ -520,6 +539,7 @@ function showMapSettings() {
       statusParts.push(`Refresh: ${newRefreshInterval}s`);
       if (cspIconMode !== 'logo') statusParts.push('Icons: ' + cspIconMode);
       if (showInfraClusterLabels) statusParts.push('Cluster labels: ON');
+      if (showInfraNodeGroupLabels) statusParts.push('NodeGroup labels: ON');
       
       Swal.fire({
         icon: 'success',
@@ -3966,6 +3986,9 @@ function getInfra() {
         infraClusterPolygons.clear();
         infraClusterNames.clear();
         infraClusterColors.clear();
+        infraNodeGroupPolygons.clear();
+        infraNodeGroupNames.clear();
+        infraNodeGroupColors.clear();
         
         // Track how many Infras share each base location, so overlapping Infras get offset
         // Key: "roundedLon,roundedLat" → counter (incremented per Infra at that location)
@@ -4253,6 +4276,43 @@ function getInfra() {
                   infraClusterNames.set(item.id, clusterNames);
                   infraClusterColors.set(item.id, clusterColorMap);
                   debugLog.mapOp(`[ClusterPolygon] Stored ${clusterPolygons.length} cluster polygons for infra: ${item.id}`);
+                }
+              }
+
+              // Process NodeGroup polygons — group nodes by nodeGroupId
+              {
+                const ngBaseColors = ['#2196F3','#FF9800','#9C27B0','#4CAF50','#F44336','#00BCD4','#FF5722','#607D8B'];
+                const ngGroupMap = new globalThis.Map(); // nodeGroupId → [[x,y], ...]
+                item.node.forEach(nd => {
+                  const gid = nd.nodeGroupId;
+                  if (!gid || !nd.id) return;
+                  const pt = nodeRenderPointById.get(nd.id);
+                  if (!pt) return;
+                  if (!ngGroupMap.has(gid)) ngGroupMap.set(gid, []);
+                  ngGroupMap.get(gid).push(pt);
+                });
+
+                if (ngGroupMap.size > 0) {
+                  const ngPolygons = [], ngNames = [];
+                  const ngColorMap = new globalThis.Map();
+                  let ngIdx = 0;
+                  for (const [gid, pts] of ngGroupMap) {
+                    const color = ngBaseColors[ngIdx % ngBaseColors.length];
+                    ngColorMap.set(gid, color);
+                    ngNames.push(gid);
+                    const ring = buildClusterPolygonRing(pts, zoomLevel, radius);
+                    if (ring && ring.length >= 4) {
+                      const poly = new Polygon([ring]);
+                      poly.set('clusterNodeCount', pts.length);
+                      ngPolygons.push(poly);
+                    }
+                    ngIdx++;
+                  }
+                  if (ngPolygons.length > 0) {
+                    infraNodeGroupPolygons.set(item.id, ngPolygons);
+                    infraNodeGroupNames.set(item.id, ngNames);
+                    infraNodeGroupColors.set(item.id, ngColorMap);
+                  }
                 }
               }
 
@@ -13953,12 +14013,12 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "OLLAMA_HOST=0.0.0.0:3000 ollama list";
       break;
     case "OpenWebUI":
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh | bash -s -- ollama \"$$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:3000))\"";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh | bash -s -- ollama \"$$Func(GetPublicIPs(target=this, label='accelerator=gpu', separator=;, prefix=http://, postfix=:3000))\"";
       defaultRemoteCommand[1] = "echo 'Access to $$Func(GetPublicIP(target=this, prefix=http://))'";
       defaultRemoteCommand[2] = "";
       break;
     case "OpenWebUI-vLLM":
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh | bash -s -- vllm \"$$Func(GetPublicIPs(target=this, separator=;, prefix=http://, postfix=:8000/v1))\"";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployOpenWebUI.sh | bash -s -- vllm \"$$Func(GetPublicIPs(target=this, label='accelerator=gpu', separator=;, prefix=http://, postfix=:8000/v1))\"";
       defaultRemoteCommand[1] = "echo 'Access to $$Func(GetPublicIP(target=this, prefix=http://))'";
       defaultRemoteCommand[2] = "";
       break;
@@ -22435,31 +22495,63 @@ function drawObjects(event) {
     vectorContext.drawGeometry(data.geometry);
   }
 
+  // Draw Infra NodeGroup labels
+  if (showInfraNodeGroupLabels && infraNodeGroupPolygons.size > 0) {
+    for (const [infraId, polygons] of infraNodeGroupPolygons) {
+      if (Array.isArray(polygons)) {
+        const ngNames = infraNodeGroupNames.get(infraId) || [];
+        const ngColors = infraNodeGroupColors.get(infraId) || new globalThis.Map();
+        polygons.forEach((polygon, idx) => {
+          if (polygon && ngNames[idx]) {
+            const extent = polygon.getExtent();
+            const centerX = (extent[0] + extent[2]) / 2;
+            const topY = extent[3];
+            const labelPoint = new Point([centerX, topY]);
+            const ngName = ngNames[idx];
+            const ngColor = ngColors.get(ngName) || '#2196F3';
+            const ngRgb = hexToRgb(ngColor);
+            const nodeCount = polygon.get('clusterNodeCount') || 0;
+            vectorContext.setStyle(new Style({
+              text: new Text({
+                text: `📦 ${ngName} (${nodeCount})`,
+                font: "bold 13px sans-serif",
+                offsetY: 12,
+                stroke: new Stroke({ color: [255, 255, 255, 1], width: 2 }),
+                fill: new Fill({ color: ngRgb }),
+              }),
+            }));
+            vectorContext.drawGeometry(labelPoint);
+          }
+        });
+      }
+    }
+  }
+
   // Draw Infra Cluster labels (drawn last to appear on top of polygons)
   if (showInfraClusterLabels && infraClusterPolygons.size > 0) {
     for (const [infraId, polygons] of infraClusterPolygons) {
       if (Array.isArray(polygons)) {
         const clusterNames = infraClusterNames.get(infraId) || [];
         const clusterColors = infraClusterColors.get(infraId) || new globalThis.Map();
-        
+
         polygons.forEach((polygon, idx) => {
           if (polygon && clusterNames[idx]) {
             const extent = polygon.getExtent();
             const centerX = (extent[0] + extent[2]) / 2;
-            const topY = extent[3]; // Use top of polygon
+            const topY = extent[3];
             const labelPoint = new Point([centerX, topY]);
-            
+
             const clusterName = clusterNames[idx];
             const clusterColor = clusterColors.get(clusterName) || '#FF5733';
             const rgbColor = hexToRgb(clusterColor);
-            
+
             const clusterNodeCount = polygon.get('clusterNodeCount') || 0;
             const infraClusterNameStyle = new Style({
               text: new Text({
                 text: `${clusterName} (${clusterNodeCount})`,
                 font: "bold 14px sans-serif",
                 scale: 1.0,
-                offsetY: 0,
+                offsetY: 12,
                 stroke: new Stroke({
                   color: [255, 255, 255, 1],
                   width: 2,
@@ -22469,7 +22561,7 @@ function drawObjects(event) {
                 }),
               }),
             });
-            
+
             vectorContext.setStyle(infraClusterNameStyle);
             vectorContext.drawGeometry(labelPoint);
           }
