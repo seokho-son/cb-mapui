@@ -14072,7 +14072,7 @@ function setDefaultRemoteCommandsByApp(appName) {
     case "HermesAgent":
       // All-in-one Hermes Agent deployment: vLLM + Hermes Gateway/Dashboard + nginx reverse proxy
       // Dashboard accessible via nginx on port 9120 after deployment
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployHermesAgent.sh -o /tmp/deployHermesAgent.sh && bash /tmp/deployHermesAgent.sh --run-as-user cb-user --vllm-version \"<VLLM_VERSION>\" --model \"<HERMES_MODEL>\" --ctx-len \"<CTX_LEN>\" --hermes-api-key \"<HERMES_API_KEY>\" --hf-token \"<HF_TOKEN>\" --discord-token \"<DISCORD_TOKEN>\" --discord-home-channel \"<DISCORD_HOME_CHANNEL>\" --discord-home-channel-name \"<DISCORD_HOME_CHANNEL_NAME>\" --ntfy-topic \"<NTFY_TOPIC>\" --tavily-api-key \"<TAVILY_API_KEY>\"";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployHermesAgent.sh -o /tmp/deployHermesAgent.sh && VLLM_VER=\"<VLLM_VERSION>\"; bash /tmp/deployHermesAgent.sh --run-as-user cb-user ${VLLM_VER:+--vllm-version \"$VLLM_VER\"} --model \"<HERMES_MODEL>\" --ctx-len \"<CTX_LEN>\" --hermes-api-key \"<HERMES_API_KEY>\" --hf-token \"<HF_TOKEN>\" --discord-token \"<DISCORD_TOKEN>\" --discord-home-channel \"<DISCORD_HOME_CHANNEL>\" --discord-home-channel-name \"<DISCORD_HOME_CHANNEL_NAME>\" --ntfy-topic \"<NTFY_TOPIC>\" --tavily-api-key \"<TAVILY_API_KEY>\"";
       defaultRemoteCommand[1] = "echo 'Hermes Dashboard: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:9120))'";
       defaultRemoteCommand[2] = "";
       break;
@@ -14252,10 +14252,35 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:1324))'";
       defaultRemoteCommand[2] = "";
       break;
-    case "M-CMP-Deploy":
+    case "M-CMP-Install":
+      // Stage 1: clone repo, configure env/certs, do NOT start containers
       defaultRemoteCommand[0] = "curl -sSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/set-tb.sh | bash";
-      defaultRemoteCommand[1] = "curl -sSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/set-mcmp.sh | sudo bash";
-      defaultRemoteCommand[2] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3001))'";
+      defaultRemoteCommand[1] = "curl -sSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/set-mcmp.sh | sudo bash -s -- install";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "M-CMP-Pull":
+      // Pre-pull Docker images (optional; run before M-CMP-Run to separate download from startup)
+      defaultRemoteCommand[0] = "curl -sSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/set-mcmp.sh | sudo bash -s -- pull";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "M-CMP-Run":
+      // Stage 2: start all M-CMP containers in background (detached)
+      defaultRemoteCommand[0] = "curl -sSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/set-mcmp.sh | sudo bash -s -- run";
+      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3001))'";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "M-CMP-Info":
+      // Show running container and image status
+      defaultRemoteCommand[0] = "curl -sSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/set-mcmp.sh | sudo bash -s -- info";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "M-CMP-Stop":
+      // Stop all M-CMP containers
+      defaultRemoteCommand[0] = "curl -sSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/set-mcmp.sh | sudo bash -s -- stop";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
       break;
     case "DevStack-Install":
       // Install DevStack on bare-metal VMs (e.g., AWS m5.metal)
@@ -14611,9 +14636,9 @@ window.PLACEHOLDER_METADATA = {
     secret: true,
   },
   'VLLM_VERSION': {
-    description: 'vLLM version to install',
-    hint: '0.22.0',
-    default: '0.22.0',
+    description: 'vLLM version to install (leave blank for latest)',
+    hint: '',
+    default: '',
     secret: false,
   },
   // Hermes Agent uses vLLM — same VRAM rules as VLLM_MODEL.
@@ -15215,8 +15240,12 @@ window.predefinedScriptCategories = {
     label: '🏗️ Platform',
     description: 'Cloud-Barista platform deployment',
     scripts: [
-      { value: 'CB-TB-Deploy', label: 'Deploy CB-Tumblebug', step: 1 },
-      { value: 'M-CMP-Deploy', label: 'Deploy M-CMP', step: 2 }
+      { value: 'CB-TB-Deploy',  label: 'Deploy CB-Tumblebug',         step: 1 },
+      { value: 'M-CMP-Install', label: '1. M-CMP: Install (Stage 1)', step: 2 },
+      { value: 'M-CMP-Pull',    label: '2. M-CMP: Pull Images',        step: 3 },
+      { value: 'M-CMP-Run',     label: '3. M-CMP: Run (Stage 2)',      step: 4 },
+      { value: 'M-CMP-Info',    label: '4. M-CMP: Check Status',       step: 5 },
+      { value: 'M-CMP-Stop',    label: '5. M-CMP: Stop',               step: 6 }
     ]
   },
   'openstack-devstack': {
