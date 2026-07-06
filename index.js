@@ -15898,7 +15898,10 @@ window.updateLabelMatchPreview = function() {
 window.escapeHtml = function(text) {
   const div = document.createElement('div');
   div.textContent = text;
-  return div.innerHTML;
+  // textContent->innerHTML escapes & < > but NOT quotes; escape them too so
+  // the result is safe inside double- or single-quoted HTML attributes
+  // (e.g., data-nodeid="${escapeHtml(id)}") as well as in text nodes.
+  return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 };
 
 // Setup Infra selector change handler for label updates
@@ -16804,6 +16807,8 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
     cleanupTimer: null,
     error: null,          // SSE transport/connection error
     commandError: null,   // Server-side command execution error (from CommandDone summary)
+    cancelArmed: {},      // { nodeId: expiryTs } — two-click confirm state for per-Node cancel
+    cancelPending: {},    // { nodeId: true } — cancel API request in flight
   };
 
   window._cmdStreamSessions[xRequestId] = session;
@@ -16845,8 +16850,12 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
       const nd = getOrCreateNode(event.nodeId);
       nd.status = event.status?.status || nd.status;
       nd.statusInfo = event.status || nd.statusInfo;
+      // commandIndex is required to build the per-Node taskId ({xRequestId}:{nodeId}:{index})
+      // for the task cancel API
+      if (typeof event.commandIndex === 'number' && event.commandIndex > 0) nd.commandIndex = event.commandIndex;
     } else if (event.type === 'CommandLog' && event.nodeId && event.log) {
       const nd = getOrCreateNode(event.nodeId);
+      if (typeof event.commandIndex === 'number' && event.commandIndex > 0) nd.commandIndex = event.commandIndex;
       const line = event.log.line || '';
       if (event.log.stream === 'stdout') {
         nd.stdoutLines.push(line);
@@ -16902,6 +16911,63 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
 }
 
 /**
+ * Cancel a single Node's command execution via the Tumblebug task cancel API.
+ * Uses a two-click confirm (arm then confirm) so no extra dialog is needed on
+ * top of the streaming modal. taskId format: {xRequestId}:{nodeId}:{commandIndex}
+ */
+function _cmdCancelNodeTask(session, nodeId) {
+  const nd = session.nodeState[nodeId];
+  if (!nd || !(nd.commandIndex > 0) || session.cancelPending[nodeId]) return;
+
+  // Repaint via the session's live callback: it is nulled when the modal
+  // closes, so async repaints (arm expiry, API response) can never paint
+  // this session's state into another session's modal.
+  const repaint = () => { if (session.rebuildCallback) session.rebuildCallback(); };
+
+  const now = Date.now();
+  if (!session.cancelArmed[nodeId] || session.cancelArmed[nodeId] <= now) {
+    // First click: arm the button for 8 seconds
+    session.cancelArmed[nodeId] = now + 8000;
+    repaint();
+    setTimeout(repaint, 8200); // repaint back to normal state after arm expires
+    return;
+  }
+
+  // Second click within the arm window: fire the cancel API
+  delete session.cancelArmed[nodeId];
+  session.cancelPending[nodeId] = true;
+  nd.cancelError = null;
+  repaint();
+
+  const cfg = (typeof getConfig === 'function') ? getConfig() : {};
+  const ns = cfg.namespace || window.configNamespace;
+  if (!cfg.hostname || !cfg.port || !ns || !session.infraId) {
+    delete session.cancelPending[nodeId];
+    nd.cancelError = 'Missing server configuration for cancel request';
+    repaint();
+    return;
+  }
+  // taskId components (xRequestId, nodeId) are validated lowercase [a-z0-9-]
+  // strings and ':' is a legal path character, so no URL encoding — this also
+  // keeps compatibility with Tumblebug versions that don't unescape the param.
+  const taskId = `${session.xRequestId}:${nodeId}:${nd.commandIndex}`;
+  const url = `http://${cfg.hostname}:${cfg.port}/tumblebug/ns/${ns}/cmd/infra/${session.infraId}/task/${taskId}/cancel`;
+  axios.post(url, { reason: 'Cancelled from streaming view' }, {
+    auth: { username: cfg.username, password: cfg.password },
+    timeout: 15000,
+  }).then(() => {
+    // The status flips to Cancelled via the SSE CommandStatus event published
+    // by the server — no local state change needed beyond clearing the flag.
+    delete session.cancelPending[nodeId];
+    repaint();
+  }).catch((err) => {
+    delete session.cancelPending[nodeId];
+    nd.cancelError = (err.response && err.response.data && err.response.data.message) || err.message || 'Cancel request failed';
+    repaint();
+  });
+}
+
+/**
  * Open (or re-open) the streaming modal for a given session.
  */
 function openStreamingSessionModal(xRequestId) {
@@ -16914,7 +16980,8 @@ function openStreamingSessionModal(xRequestId) {
   const statusBadge = (status) => {
     const colors = {
       'Queued': '#6c757d', 'Handling': '#0d6efd', 'Completed': '#198754',
-      'Failed': '#dc3545', 'Timeout': '#fd7e14', 'Cancelled': '#6c757d', 'Interrupted': '#ffc107'
+      'Failed': '#dc3545', 'CompletedWithError': '#fd7e14', 'Timeout': '#fd7e14',
+      'Cancelled': '#6c757d', 'Interrupted': '#ffc107'
     };
     const bg = colors[status] || '#6c757d';
     return `<span style="display:inline-block;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:600;color:#fff;background:${bg};">${window.escapeHtml(status)}</span>`;
@@ -16933,15 +17000,42 @@ function openStreamingSessionModal(xRequestId) {
       nodeIp: (session.nodeIpMap && session.nodeIpMap[nodeId]) || '',
     };
 
+    // Per-Node cancel button: only for still-active executions with a known
+    // commandIndex (required to build the taskId for the cancel API).
+    let cancelBtnHtml = '';
+    if (['Queued', 'Handling'].includes(nd.status) && nd.commandIndex > 0) {
+      const safeId = window.escapeHtml(nodeId);
+      if (session.cancelPending[nodeId]) {
+        cancelBtnHtml = `<span style="margin-left:auto;font-size:10px;color:#888;">⏳ Cancelling...</span>`;
+      } else if (session.cancelArmed[nodeId] && session.cancelArmed[nodeId] > Date.now()) {
+        cancelBtnHtml = `<button class="stream-cancel-btn" data-nodeid="${safeId}" type="button"
+          title="Click again to confirm cancellation"
+          style="margin-left:auto;padding:1px 8px;font-size:10px;font-weight:600;border:1px solid #dc3545;border-radius:3px;cursor:pointer;background:#dc3545;color:#fff;">⚠️ Confirm cancel?</button>`;
+      } else {
+        cancelBtnHtml = `<button class="stream-cancel-btn" data-nodeid="${safeId}" type="button"
+          title="Cancel this Node's command execution"
+          style="margin-left:auto;padding:1px 8px;font-size:10px;border:1px solid #dc3545;border-radius:3px;cursor:pointer;background:#fff;color:#dc3545;">✋ Cancel</button>`;
+      }
+    }
+
     let html = `
       <div style="margin-bottom:4px;display:flex;align-items:center;gap:8px;">
         <span style="font-weight:600;font-size:12px;color:#333;">${window.escapeHtml(nodeId)}</span>
         ${statusBadge(nd.status)}
         ${nd.statusInfo && nd.statusInfo.elapsedTime ? `<span style="font-size:10px;color:#888;">${nd.statusInfo.elapsedTime}s</span>` : ''}
+        ${cancelBtnHtml}
       </div>`;
 
-    // Show error details when status is Failed/Timeout (e.g. SSH connection failure, command timeout)
-    if (['Failed', 'Timeout'].includes(nd.status) && nd.statusInfo) {
+    if (nd.cancelError) {
+      html += `
+      <div style="margin-bottom:4px;padding:4px 8px;background:#fff3e0;border-left:4px solid #e65100;border-radius:4px;font-size:11px;color:#e65100;">
+        Cancel failed: ${window.escapeHtml(nd.cancelError)}
+      </div>`;
+    }
+
+    // Show error details for terminal error states (SSH connection failure,
+    // command timeout, non-zero exit, user cancellation)
+    if (['Failed', 'Timeout', 'CompletedWithError', 'Cancelled'].includes(nd.status) && nd.statusInfo) {
       const errMsg = nd.statusInfo.errorMessage;
       const summary = nd.statusInfo.resultSummary;
       if (errMsg || summary) {
@@ -17018,7 +17112,7 @@ function openStreamingSessionModal(xRequestId) {
 
     const nodeIds = Object.keys(session.nodeState).sort();
     const totalNodes = nodeIds.length;
-    const completedCount = nodeIds.filter(id => ['Completed','Failed','Timeout','Cancelled','Interrupted'].includes(session.nodeState[id].status)).length;
+    const completedCount = nodeIds.filter(id => ['Completed','CompletedWithError','Failed','Timeout','Cancelled','Interrupted'].includes(session.nodeState[id].status)).length;
     const handlingCount = nodeIds.filter(id => session.nodeState[id].status === 'Handling').length;
     const isFinished = session.doneSummary !== null;
 
@@ -17121,7 +17215,10 @@ function openStreamingSessionModal(xRequestId) {
       const tabBtns = nodeIds.map(id => {
         const isActive = id === activeTab;
         const nd = session.nodeState[id];
-        const statusDot = nd.status === 'Handling' ? '🔵' : (nd.status === 'Completed' ? '🟢' : (nd.status === 'Failed' ? '🔴' : '⚪'));
+        const statusDot = {
+          'Handling': '🔵', 'Completed': '🟢', 'Failed': '🔴',
+          'CompletedWithError': '🟠', 'Timeout': '⏰', 'Cancelled': '🚫', 'Interrupted': '🟡'
+        }[nd.status] || '⚪';
         return `<button type="button" class="stream-tab-btn${isActive ? ' stream-tab-active' : ''}" data-nodeid="${window.escapeHtml(id)}"
           style="padding:3px 8px;font-size:10px;border:1px solid #dee2e6;border-bottom:none;border-radius:4px 4px 0 0;cursor:pointer;
                  background:${isActive ? '#fff' : '#f1f3f5'};color:${isActive ? '#333' : '#888'};font-weight:${isActive ? '600' : '400'};">
@@ -17158,6 +17255,13 @@ function openStreamingSessionModal(xRequestId) {
         container.querySelectorAll('.stream-tab-panel').forEach(p => {
           p.style.display = p.dataset.nodeid === nodeid ? 'block' : 'none';
         });
+      });
+    });
+
+    // Per-Node cancel buttons (two-click confirm; see _cmdCancelNodeTask)
+    container.querySelectorAll('.stream-cancel-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        _cmdCancelNodeTask(session, btn.dataset.nodeid);
       });
     });
 
@@ -17287,7 +17391,7 @@ function showStreamingSessionList() {
     const s = sessions[reqId];
     const nodeIds = Object.keys(s.nodeState);
     const totalNodes = nodeIds.length;
-    const completedNodes = nodeIds.filter(id => ['Completed','Failed','Timeout','Cancelled','Interrupted'].includes(s.nodeState[id].status)).length;
+    const completedNodes = nodeIds.filter(id => ['Completed','CompletedWithError','Failed','Timeout','Cancelled','Interrupted'].includes(s.nodeState[id].status)).length;
     const isFinished = s.doneSummary !== null;
     const elapsed = ((Date.now() - s.startTime) / 1000).toFixed(0);
     const statusIcon = isFinished ? (s.commandError || s.doneSummary.failedNodes > 0 ? '⚠️' : '✅') : (s.error ? '❌' : '⏳');
