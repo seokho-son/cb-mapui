@@ -26389,7 +26389,7 @@ function renderAutopilotReview(reviewResult, req) {
   // Show labels / post-commands from the request so users can confirm before provisioning.
   var reqMeta = [];
   if (req.label && Object.keys(req.label).length > 0) {
-    reqMeta.push('🏷 ' + labelsToString(req.label));
+    reqMeta.push('🏷 ' + window.escapeHtml(labelsToString(req.label)));
   }
   if (req.postCommand && req.postCommand.command && req.postCommand.command.length > 0) {
     reqMeta.push('⚡ ' + req.postCommand.command.length + ' post-command(s) after all nodes ready' +
@@ -26813,9 +26813,9 @@ function _apPostCommandSummaryHtml(result) {
   var okCount = pcResults.filter(function(r) { return !r.err; }).length;
   var rows = pcResults.map(function(r) {
     var icon = r.err ? '<span style="color:#f85149">✕</span>' : '<span style="color:#3fb950">✓</span>';
-    var detail = r.err ? String(r.err) : (r.nodeIp || '');
+    var detail = window.escapeHtml(r.err ? String(r.err) : (r.nodeIp || ''));
     return '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">' +
-      '<span>' + icon + ' <span style="font-family:monospace;color:#e6edf3">' + (r.nodeId || '') + '</span></span>' +
+      '<span>' + icon + ' <span style="font-family:monospace;color:#e6edf3">' + window.escapeHtml(r.nodeId || '') + '</span></span>' +
       '<span style="color:#7d8590;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + detail + '</span></div>';
   }).join('');
   return '<div style="margin-top:10px;background:#0d1117;border-radius:4px;padding:8px">' +
