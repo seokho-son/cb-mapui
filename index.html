@@ -447,6 +447,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           <button type="button" id="graphToggle" class="btn btn-link text-muted" onclick="showGraph()">
             🕸️ Topol
           </button>
+          <button type="button" id="networkToggle" class="btn btn-link text-muted" onclick="showNetwork()">
+            🌐 Net
+          </button>
           <button type="button" id="dashboardToggle" class="btn btn-link text-muted" onclick="showDashboard()">
             📊 Board
           </button>
@@ -1134,6 +1137,41 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         </div>
         <!-- ========== END RESOURCE GRAPH CONTAINER ========== -->
 
+        <!-- ========== NETWORK GRAPH CONTAINER (Network Topology Feature) ========== -->
+        <div id="network-graph-container" style="display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; background: #f8f9fa;">
+          <div id="network-graph-canvas" style="width: 100%; height: 100%;"></div>
+          <!-- Controls (top-right floating) -->
+          <div onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(255,255,255,0.95); border-radius: 8px; padding: 4px 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 1px solid rgba(0,0,0,0.1); backdrop-filter: blur(10px);">
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 11px;">
+              <select id="ng-infra-select" onchange="window.NetworkGraph?.setInfra(this.value)"
+                      class="form-control form-control-sm" style="width: 150px; height: 26px; font-size: 11px; padding: 2px 6px;">
+                <option value="all">All Infras</option>
+              </select>
+              <button onclick="window.NetworkGraph?.runLayout()" class="btn btn-sm btn-outline-secondary" title="Re-run Layout" style="padding: 2px 6px;">
+                <i class="fas fa-project-diagram"></i>
+              </button>
+              <button onclick="window.NetworkGraph?.exportPng()" class="btn btn-sm btn-outline-info" title="Export as PNG" style="padding: 2px 6px;">
+                <i class="fas fa-image"></i>
+              </button>
+            </div>
+          </div>
+          <!-- Legend + display toggles (bottom-left) -->
+          <div id="network-graph-legend" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" style="position: absolute; bottom: 10px; left: 10px; z-index: 1000; background: rgba(255,255,255,0.95); border-radius: 8px; padding: 6px 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); font-size: 11px;">
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+              <span class="legend-item active" data-net-option="sg" onclick="window.NetworkGraph?.toggleOption('sg')" style="padding:2px 4px; border-radius:3px; cursor:pointer;" title="Toggle firewall rule chips (in/outbound summary attached to vNet, subnet, or node)"><span style="display:inline-block;padding:0 3px;background:#fff5f5;border:1px solid #dc3545;border-radius:3px;color:#b02a37;font-family:monospace;font-size:9px;margin-right:4px;">⬇⬆</span>SG rules</span>
+              <span class="legend-item inactive" data-net-option="publicIp" onclick="window.NetworkGraph?.toggleOption('publicIp')" style="padding:2px 4px; border-radius:3px; cursor:pointer;" title="Toggle the Internet node and its public-IP edges"><span style="display:inline-block;width:12px;height:3px;background:#1e90ff;margin:0 4px 3px 0;"></span>Internet</span>
+              <span class="legend-item active" data-net-option="bastion" onclick="window.NetworkGraph?.toggleOption('bastion')" style="padding:2px 4px; border-radius:3px; cursor:pointer;" title="Toggle Bastion SSH paths (private IP to private IP)"><span style="display:inline-block;width:12px;height:0;border-top:2px dashed #e83e8c;margin:0 4px 3px 0;"></span>Bastion path</span>
+              <span class="legend-item active" data-net-option="cbtb" onclick="window.NetworkGraph?.toggleOption('cbtb')" style="padding:2px 4px; border-radius:3px; cursor:pointer;" title="Toggle the CB-TB command path (SSH to the bastion's public IP)"><span style="display:inline-block;width:12px;height:0;border-top:2px dashed #6f42c1;margin:0 4px 3px 0;"></span>CB-TB cmd</span>
+              <span class="legend-item active" data-net-option="ipLabels" onclick="window.NetworkGraph?.toggleOption('ipLabels')" style="padding:2px 4px; border-radius:3px; cursor:pointer;" title="Toggle IP chips inside VM nodes"><span style="display:inline-block;padding:0 3px;background:#eaf3ff;border:1px solid #1e90ff;border-radius:3px;color:#0b5ed7;font-family:monospace;font-size:9px;margin-right:4px;">🌐IP</span>IP chips</span>
+              <span style="color:#ccc;">|</span>
+              <span title="vNet container"><span style="display:inline-block;width:12px;height:12px;background:#fff8e6;border:1.5px dashed #e6a700;margin-right:4px;"></span>vNet</span>
+              <span title="Subnet container"><span style="display:inline-block;width:12px;height:12px;background:#fdefd2;border:1px dotted #d39e00;margin-right:4px;"></span>Subnet</span>
+              <span title="Bastion node"><span style="display:inline-block;width:12px;height:12px;background:#28a745;border:2.5px solid #e83e8c;border-radius:2px;margin-right:4px;"></span>Bastion</span>
+            </div>
+          </div>
+        </div>
+        <!-- ========== END NETWORK GRAPH CONTAINER ========== -->
+
         <!-- Admin dashboards -->
         <div id="console" style="display:none; width:100%; height:100%; position:absolute; top:0; left:0;">
           <!-- API Doc Switcher (bottom-right floating) -->
@@ -1227,7 +1265,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       // Helper function to show/hide iframes
       function switchIframe(activeId, inactiveId, src) {
         document.getElementById('map').style.display = "none";
-        
+
         // Hide resource graph container
         var graphContainer = document.getElementById('resource-graph-container');
         if (graphContainer) {
@@ -1235,6 +1273,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         }
         if (window.ResourceGraph) {
           window.ResourceGraph.hide();
+        }
+        if (window.NetworkGraph) {
+          window.NetworkGraph.hide();
         }
         
         var console = document.getElementById('console');
@@ -1262,7 +1303,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         // Hide map and show console
         document.getElementById('map').style.display = "none";
         document.getElementById('console').style.display = "flex";
-        
+
         // Hide resource graph container
         var graphContainer = document.getElementById('resource-graph-container');
         if (graphContainer) {
@@ -1270,6 +1311,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         }
         if (window.ResourceGraph) {
           window.ResourceGraph.hide();
+        }
+        if (window.NetworkGraph) {
+          window.NetworkGraph.hide();
         }
         
         // Hide dashboard iframe
@@ -1463,10 +1507,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         if (window.ResourceGraph) {
           window.ResourceGraph.hide();
         }
-        
+        if (window.NetworkGraph) {
+          window.NetworkGraph.hide();
+        }
+
         // Show map
         document.getElementById('map').style.display = "block";
-        
+
         // Update toggle buttons
         updateToggleButtons('map');
       }
@@ -1474,46 +1521,81 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       function showGraph() {
         // Hide all dashboard views
         document.getElementById('console').style.display = "none";
-        
+
         // Hide API doc switcher
         document.getElementById('api-doc-switcher').style.display = 'none';
-        
+
         // Hide map (graph will be shown in its place)
         document.getElementById('map').style.display = "none";
-        
+
+        // Hide network graph
+        if (window.NetworkGraph) {
+          window.NetworkGraph.hide();
+        }
+
         // Show resource graph container
         var graphContainer = document.getElementById('resource-graph-container');
         if (graphContainer) {
           graphContainer.style.display = 'block';
         }
-        
+
         // Initialize/show resource graph
         if (window.ResourceGraph) {
           window.ResourceGraph.show();
         }
-        
+
         // Update toggle buttons
         updateToggleButtons('graph');
+      }
+
+      function showNetwork() {
+        // Hide all dashboard views
+        document.getElementById('console').style.display = "none";
+
+        // Hide API doc switcher
+        document.getElementById('api-doc-switcher').style.display = 'none';
+
+        // Hide map and resource graph (network graph shown in their place)
+        document.getElementById('map').style.display = "none";
+        var graphContainer = document.getElementById('resource-graph-container');
+        if (graphContainer) {
+          graphContainer.style.display = 'none';
+        }
+        if (window.ResourceGraph) {
+          window.ResourceGraph.hide();
+        }
+
+        // Show network graph
+        if (window.NetworkGraph) {
+          window.NetworkGraph.show();
+        }
+
+        // Update toggle buttons
+        updateToggleButtons('network');
       }
 
       // Update toggle button states
       function updateToggleButtons(activeView) {
         const mapToggle = document.getElementById('mapToggle');
         const graphToggle = document.getElementById('graphToggle');
+        const networkToggle = document.getElementById('networkToggle');
         const dashboardToggle = document.getElementById('dashboardToggle');
         const apiToggle = document.getElementById('apiToggle');
-        
+
         // Reset all buttons to link style (minimal appearance)
         mapToggle.className = 'btn btn-link text-muted';
         graphToggle.className = 'btn btn-link text-muted';
+        networkToggle.className = 'btn btn-link text-muted';
         dashboardToggle.className = 'btn btn-link text-muted';
         apiToggle.className = 'btn btn-link text-muted';
-        
+
         // Set active state
         if (activeView === 'map') {
           mapToggle.className = 'btn btn-link text-dark font-weight-bold';
         } else if (activeView === 'graph') {
           graphToggle.className = 'btn btn-link text-dark font-weight-bold';
+        } else if (activeView === 'network') {
+          networkToggle.className = 'btn btn-link text-dark font-weight-bold';
         } else if (activeView === 'dashboard') {
           dashboardToggle.className = 'btn btn-link text-dark font-weight-bold';
         } else if (activeView === 'api') {

@@ -110,6 +110,11 @@ window.Swal = Swal;
 import './resource-graph.js';
 // ========== END RESOURCE GRAPH MODULE ==========
 
+// ========== NETWORK GRAPH MODULE (Network Topology Feature) ==========
+// Import network graph module for network-focused infra topology view
+import './network-graph.js';
+// ========== END NETWORK GRAPH MODULE ==========
+
 useGeographic();
 var i, j;
 var cnti, cntj;
@@ -713,6 +718,30 @@ function clearCircle(option) {
   }
 }
 window.clearCircle = clearCircle;
+
+// Asks before wiping the whole MC-Infra configuration (all NodeGroups at once).
+// Individual NodeGroup removal stays confirmation-free — this guards only the
+// bulk clear. Skips the prompt when there is nothing to clear.
+function confirmClearInfraConfiguration() {
+  if (nodeGroupRequestFromSpecList.length === 0) {
+    clearCircle("clearText");
+    return;
+  }
+  Swal.fire({
+    title: 'Remove Infra Configuration?',
+    text: `This will remove all ${nodeGroupRequestFromSpecList.length} configured NodeGroup(s).`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Yes, Remove All',
+    cancelButtonText: 'Cancel',
+    confirmButtonColor: '#dc3545'
+  }).then((result) => {
+    if (result.isConfirmed) {
+      clearCircle("clearText");
+    }
+  });
+}
+window.confirmClearInfraConfiguration = confirmClearInfraConfiguration;
 
 function writeLatLonInputPair(idx, lat, lon) {
   var recommendedSpec = getRecommendedSpec(idx, lat, lon);
@@ -10497,7 +10526,7 @@ function updateNodeGroupReview() {
                 style="font-size: 0.75rem; padding: 6px 8px; flex: 1;" ${!hasOneNodeGroup ? 'disabled' : ''}>
           ➕ ScaleOut existing Infra
         </button>
-        <button type="button" onClick="clearCircle('clearText');" class="btn btn-outline-secondary btn-sm" 
+        <button type="button" onClick="confirmClearInfraConfiguration();" class="btn btn-outline-secondary btn-sm" title="Remove all configured NodeGroups" 
                 style="font-size: 0.7rem; padding: 6px 8px; min-width: 60px;">
           🗑️
         </button>
@@ -10518,7 +10547,7 @@ function updateNodeGroupReview() {
                   style="font-size: 0.75rem; padding: 6px 8px; flex: 1;" ${!hasNodeGroups ? 'disabled' : ''}>
             ➕ Add NodeGroup${nodeGroupRequestFromSpecList.length > 1 ? 's' : ''} to K8s Cluster
           </button>
-          <button type="button" onClick="clearCircle('clearText');" class="btn btn-outline-secondary btn-sm" 
+          <button type="button" onClick="confirmClearInfraConfiguration();" class="btn btn-outline-secondary btn-sm" title="Remove all configured NodeGroups" 
                   style="font-size: 0.7rem; padding: 6px 8px; min-width: 60px;">
             🗑️
           </button>
@@ -10537,7 +10566,7 @@ function updateNodeGroupReview() {
                 style="font-size: 0.75rem; padding: 6px 8px; flex: 1;" ${!hasOneNodeGroup ? 'disabled' : ''}>
           ➕ ScaleOut existing Infra
         </button>
-        <button type="button" onClick="clearCircle('clearText');" class="btn btn-outline-secondary btn-sm" 
+        <button type="button" onClick="confirmClearInfraConfiguration();" class="btn btn-outline-secondary btn-sm" title="Remove all configured NodeGroups" 
                 style="font-size: 0.7rem; padding: 6px 8px; min-width: 60px;">
           🗑️
         </button>
@@ -11373,33 +11402,25 @@ function readMatchCriteriaFromForm() {
   return result;
 }
 
+// Removes a single NodeGroup from the configuration immediately (no confirm:
+// it only edits the local, not-yet-provisioned configuration).
 function removeNodeGroup(index) {
-  const nodeConf = nodeGroupRequestFromSpecList[index];
-  
-  Swal.fire({
-    title: 'Remove NodeGroup?',
-    text: `Are you sure you want to remove "${nodeConf.name || `NodeGroup-${index + 1}`}"?`,
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonText: 'Yes, Remove',
-    cancelButtonText: 'Cancel',
-    confirmButtonColor: '#dc3545'
-  }).then((result) => {
-    if (result.isConfirmed) {
-      // Remove from arrays
-      nodeGroupRequestFromSpecList.splice(index, 1);
-      recommendedSpecList.splice(index, 1);
+  // Guard against a stale UI index: splicing would be a no-op but the
+  // counter decrement below would still desynchronize the configuration.
+  if (!Number.isInteger(index) || index < 0 || index >= nodeGroupRequestFromSpecList.length) {
+    return;
+  }
 
-      // Decrease the index counter
-      if (latLonInputPairIdx > 0) {
-        latLonInputPairIdx--;
-      }
+  nodeGroupRequestFromSpecList.splice(index, 1);
+  recommendedSpecList.splice(index, 1);
 
-      renderMapFromConfig();
-      updateNodeGroupReview();
-      // successAlert('NodeGroup removed successfully!');
-    }
-  });
+  // Decrease the index counter
+  if (latLonInputPairIdx > 0) {
+    latLonInputPairIdx--;
+  }
+
+  renderMapFromConfig();
+  updateNodeGroupReview();
 }
 
 // Make functions available globally

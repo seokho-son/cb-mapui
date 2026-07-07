@@ -20,6 +20,7 @@ RUN --mount=type=cache,target=/root/.npm \
 COPY ./index.html ./
 COPY ./index.js ./
 COPY ./resource-graph.js ./
+COPY ./network-graph.js ./
 COPY ./dashboard.html ./
 COPY ./dashboard.js ./
 COPY ./favicon.svg ./
@@ -50,6 +51,7 @@ WORKDIR /app
 COPY --from=builder /app/index.html ./
 COPY --from=builder /app/index.js ./
 COPY --from=builder /app/resource-graph.js ./
+COPY --from=builder /app/network-graph.js ./
 COPY --from=builder /app/dashboard.html ./
 COPY --from=builder /app/dashboard.js ./
 COPY --from=builder /app/favicon.svg ./
