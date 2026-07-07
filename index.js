@@ -26010,6 +26010,13 @@ function showAutopilotDialog() {
   var nameEl = document.getElementById('apInfraName');
   if (nameEl) nameEl.value = 'ap-' + generateInfraName();
 
+  var labelEl = document.getElementById('apInfraLabel');
+  if (labelEl) labelEl.value = '';
+  var postCmdEl = document.getElementById('apPostCommand');
+  if (postCmdEl) postCmdEl.value = '';
+  var postCmdTimeoutEl = document.getElementById('apPostCmdTimeout');
+  if (postCmdTimeoutEl) postCmdTimeoutEl.value = '';
+
   $('#autopilotModal').modal('show');
 }
 
@@ -26199,6 +26206,11 @@ function _apNodeSpecCardHtml(id) {
             <option value="false">force non-GPU image</option>
           </select>
         </div>
+        <div class="form-group col mb-0">
+          <label><small style="${labelStyle}">Node Labels</small></label>
+          <input type="text" id="apNs_${id}_label" class="form-control form-control-sm"
+                 placeholder="ex: role=worker" style="${inputStyle}">
+        </div>
       </div>
 
     </div>
@@ -26218,6 +26230,21 @@ function buildAutopilotReq() {
       onPartialFailure: document.getElementById('apOnPartialFailure').value || 'refine',
     }
   };
+
+  // Infra-level labels: "key=value, key2=value2" → map
+  var infraLabels = parseLabelsString(document.getElementById('apInfraLabel').value || '');
+  if (Object.keys(infraLabels).length > 0) req.label = infraLabels;
+
+  // Post-deployment commands: one per line; executed once after all NodeGroups complete
+  var postCmdText = (document.getElementById('apPostCommand').value || '').trim();
+  if (postCmdText) {
+    var commands = postCmdText.split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
+    if (commands.length > 0) {
+      req.postCommand = { command: commands };
+      var cmdTimeout = parseInt(document.getElementById('apPostCmdTimeout').value);
+      if (cmdTimeout > 0) req.postCommand.timeoutMinutes = Math.min(cmdTimeout, 120);
+    }
+  }
 
   _apActiveNodeSpecIds.forEach(function(id) {
     var filterPolicy = [];
@@ -26288,6 +26315,9 @@ function buildAutopilotReq() {
     var diskSize = document.getElementById('apNs_' + id + '_diskSize').value;
     if (diskSize) nodeSpec.rootDiskSize = parseInt(diskSize);
 
+    var nsLabels = parseLabelsString(document.getElementById('apNs_' + id + '_label').value || '');
+    if (Object.keys(nsLabels).length > 0) nodeSpec.label = nsLabels;
+
     req.nodeSpecs.push(nodeSpec);
   });
 
@@ -26355,6 +26385,20 @@ function renderAutopilotReview(reviewResult, req) {
     '<small style="color:#7d8590;margin-left:8px">' + (summary.desiredTotal || 0) + ' nodes total · ' +
     (summary.validCandidates || 0) + ' valid candidates</small></div>' +
     feasBadge + '</div>';
+
+  // Show labels / post-commands from the request so users can confirm before provisioning.
+  var reqMeta = [];
+  if (req.label && Object.keys(req.label).length > 0) {
+    reqMeta.push('🏷 ' + labelsToString(req.label));
+  }
+  if (req.postCommand && req.postCommand.command && req.postCommand.command.length > 0) {
+    reqMeta.push('⚡ ' + req.postCommand.command.length + ' post-command(s) after all nodes ready' +
+      (req.postCommand.timeoutMinutes ? ', timeout ' + req.postCommand.timeoutMinutes + 'min' : ''));
+  }
+  if (reqMeta.length > 0) {
+    html += '<div class="mb-2" style="font-size:11px;color:#7d8590;font-family:monospace">' +
+      reqMeta.join(' &nbsp;·&nbsp; ') + '</div>';
+  }
 
   reviews.forEach(function(ns) {
     var nsFeas = (ns.feasibility || '').toLowerCase();
@@ -26739,6 +26783,7 @@ function showAutopilotResult(result, req) {
       '<tbody>' + attemptRows + '</tbody></table></div>' +
       (stats.wastedCostPerHour > 0 ? '<div style="margin-top:6px;font-size:11px;color:#7d8590">Wasted: $' +
         stats.wastedCostPerHour.toFixed(3) + '/hr from failed nodes (refine cleaned up)</div>' : '') +
+      _apPostCommandSummaryHtml(result) +
       '</div>',
     showCloseButton: true,
     confirmButtonText: '🗺 View on Map',
@@ -26758,6 +26803,25 @@ function _apStatCell(label, value) {
   return '<div style="background:#1c2128;border-radius:3px;padding:8px;text-align:center">' +
     '<div style="font-size:10px;color:#7d8590;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">' + label + '</div>' +
     '<div style="font-size:15px;font-weight:700;color:#e6edf3;font-family:monospace">' + value + '</div></div>';
+}
+
+// Renders a compact per-node summary of post-deployment command results
+// (result.postCommandResult comes from the embedded InfraInfo).
+function _apPostCommandSummaryHtml(result) {
+  var pcResults = (result.postCommandResult && result.postCommandResult.results) || [];
+  if (pcResults.length === 0) return '';
+  var okCount = pcResults.filter(function(r) { return !r.err; }).length;
+  var rows = pcResults.map(function(r) {
+    var icon = r.err ? '<span style="color:#f85149">✕</span>' : '<span style="color:#3fb950">✓</span>';
+    var detail = r.err ? String(r.err) : (r.nodeIp || '');
+    return '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">' +
+      '<span>' + icon + ' <span style="font-family:monospace;color:#e6edf3">' + (r.nodeId || '') + '</span></span>' +
+      '<span style="color:#7d8590;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + detail + '</span></div>';
+  }).join('');
+  return '<div style="margin-top:10px;background:#0d1117;border-radius:4px;padding:8px">' +
+    '<div style="font-size:11px;color:#f0a500;margin-bottom:6px">⚡ Post-Deployment Commands ' +
+    '<span style="color:#7d8590">(' + okCount + '/' + pcResults.length + ' nodes ok)</span></div>' +
+    rows + '</div>';
 }
 
 // ── Provider multi-select helpers ─────────────────────────────────────────────
