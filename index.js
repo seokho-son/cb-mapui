@@ -5519,7 +5519,7 @@ function showFinalInfraConfirmation(createInfraReq, url, totalCost, totalNodeSca
           width: 900,
           html: `
             <div id="dynamicContainer" style="text-align: left;">
-              ${generateCommandsHtml(defaultRemoteCommand)}
+              ${generateCommandsHtml(['', '', ''])}
               ${generatePredefinedScriptsHtml(false)}
               ${generateLabelSelectorHtml(true)}
             </div>`,
@@ -5835,7 +5835,7 @@ function showPostCommandDialog(createInfraReq, infraCreationUrl, username, passw
     html: `
       <div id="dynamicContainer" style="text-align: left;">
         ${workflowInfoHtml}
-        ${generateCommandsHtml(defaultRemoteCommand)}
+        ${generateCommandsHtml(['', '', ''])}
         ${generatePredefinedScriptsHtml(false)}
         ${generateLabelSelectorHtml(true)}
         ${buildAgnosticImage ? generateCustomImageSettingsHtml() : ''}
