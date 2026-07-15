@@ -3667,8 +3667,11 @@ function buildInfraNodeSummaryHtml(data) {
           <td style="padding:7px 10px;font-size:12px;color:#94a3b8;font-family:${SANS};">${created}</td>
         </tr>`;
 
-      // Labels row: flex-wrap with consistent pill style
-      const ndLabels = nd.label && typeof nd.label === 'object' ? Object.entries(nd.label).filter(([k]) => k) : [];
+      // Labels row: only the meaningful keys (role, accelerator) to keep the
+      // per-node summary uncluttered; the rest are omitted here.
+      const ndLabels = nd.label && typeof nd.label === 'object'
+        ? Object.entries(nd.label).filter(([k]) => k === 'role' || k === 'accelerator')
+        : [];
       if (ndLabels.length > 0) {
         const pillsHtml = ndLabels.map(([k, v]) =>
           v ? `<span style="background:#f1f5f9;border:1px solid #e2e8f0;color:#475569;padding:2px 7px;border-radius:5px;font-size:11px;white-space:nowrap;font-family:${SANS};"><b style="color:#334155;">${esc(k)}</b>: ${esc(v)}</span>`
@@ -6837,7 +6840,6 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
                 </div>
               </div>
 
-              
               <div style="margin: 8px 0;">
                 <label style="display: flex; align-items: center; cursor: pointer; font-size: 0.9em;">
                   <input type="checkbox" id="postcommand-checkbox" style="margin-right: 8px; transform: scale(1.2);">
@@ -7038,7 +7040,7 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
               if (options.hold) {
                 infraCreationUrl += "?option=hold";
               }
-              
+
               // Handle post-deployment commands for force creation
               if (options.addPostCommand || options.buildAgnosticImage) {
                 // Show the same post-command dialog as normal flow (with buildAgnosticImage flag)
@@ -7100,9 +7102,9 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
       if (result.isConfirmed) {
         // Proceed to final confirmation even without review - call the same logic as successful review
         const options = { monitoring: false, hold: false, addPostCommand: false };
-        
+
         createInfraReq.installMonAgent = "no";
-        
+
         proceedWithInfraCreation(createInfraReq, finalUrl, username, password);
       }
     });
@@ -9933,6 +9935,12 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 createInfraReqVm.zone = selectedZone;
               }
 
+              // Distribute Nodes across subnets (per NodeGroup)
+              const distCb = document.getElementById('distributeSubnetsCheckbox');
+              if (distCb) {
+                createInfraReqVm.distributeSubnets = distCb.checked;
+              }
+
               // Parse labels using common helper function
               const vmLabelsInput = document.getElementById('vmLabels').value.trim();
               const labels = parseLabelsString(vmLabelsInput);
@@ -10279,6 +10287,21 @@ const POPUP_STYLES = `
  * @param {Object} options.validationResult - Validation result object
  * @returns {string} Complete HTML string for the popup content
  */
+// Returns a CSP-specific hint describing how "distribute Nodes across subnets" behaves for the
+// given provider, based on how CB-Tumblebug provisions subnets per CSP and each CSP's subnet model.
+function subnetDistributionCspHint(providerName) {
+  const p = resolveCloudPlatform(providerName);
+  if (p === 'ibm')
+    return "⚠ IBM uses a single subnet (VPC constraint) — distribution has no effect; all Nodes share one subnet.";
+  if (p === 'ncp')
+    return "⚠ NCP places all subnets in the same zone — Nodes spread across subnets but stay in one AZ.";
+  if (p === 'gcp' || p === 'azure')
+    return "ℹ " + p.toUpperCase() + " subnets are regional (not per-AZ): this spreads Nodes across subnets, but AZ placement is independent — limited AZ-HA benefit.";
+  if (p === 'aws' || p === 'alibaba' || p === 'tencent')
+    return "✅ " + p.toUpperCase() + " subnets are per-AZ: distribution spreads Nodes across AZs (higher availability). Note: cross-AZ traffic may incur extra cost/latency.";
+  return "ℹ Effect depends on this CSP's subnet/zone model; best-effort across zones where the spec is available.";
+}
+
 function buildSpecConfigPopupHtml(spec, nodeConf, options = {}) {
   const isEdit = options.isEdit || false;
   const imageSelectHTML = options.imageSelectHTML || `<span class="popup-value-sm">${nodeConf.imageId || 'N/A'}</span>`;
@@ -10349,7 +10372,26 @@ function buildSpecConfigPopupHtml(spec, nodeConf, options = {}) {
       </div>
     </div>
   `;
-  
+
+  // 🌐 Subnet distribution (per NodeGroup) with a CSP-specific hint.
+  // Default on (opt-out) unless this NodeGroup explicitly disabled it.
+  const distCbId = isEdit ? 'editDistributeSubnetsCheckbox' : 'distributeSubnetsCheckbox';
+  const distChecked = (nodeConf.distributeSubnets !== false) ? 'checked' : '';
+  html += `
+    <div class="popup-section">
+      <div class="popup-field">
+        <label class="popup-label" style="display:flex; align-items:center; cursor:pointer;">
+          <input type="checkbox" id="${distCbId}" ${distChecked} style="margin-right:8px; transform:scale(1.1);">
+          🌐 Distribute Nodes across subnets (multi-AZ)
+        </label>
+        <div class="popup-hint" style="margin-top:4px;">
+          Spread this NodeGroup's Nodes across the VNet's subnets instead of the first one (best-effort: only zones where the spec is available). Ignored when a Zone is selected above.<br>
+          ${subnetDistributionCspHint(spec.providerName)}
+        </div>
+      </div>
+    </div>
+  `;
+
   // 💻 Spec Section
   html += `
     <div class="popup-section">
@@ -10836,6 +10878,8 @@ function editNodeGroup(index) {
       const diskType = document.getElementById('editRootDiskTypeSelect').value;
       const diskSize = document.getElementById('editRootDiskSize').value.trim();
       const zone = document.getElementById('editZoneSelect').value;
+      const distCb = document.getElementById('editDistributeSubnetsCheckbox');
+      const distributeSubnets = distCb ? distCb.checked : true;
       const labelsText = document.getElementById('editVmLabels').value.trim();
       
       if (isNaN(count) || count < 1) {
@@ -10846,7 +10890,7 @@ function editNodeGroup(index) {
       // Use common helper for label parsing
       const labels = parseLabelsString(labelsText);
       
-      return { name, count, diskType, diskSize: parseInt(diskSize, 10) || 0, zone, labels };
+      return { name, count, diskType, diskSize: parseInt(diskSize, 10) || 0, zone, labels, distributeSubnets };
     }
   }).then((result) => {
     window.editingNodeGroupIndex = -1; // Reset editing mode
@@ -10857,7 +10901,8 @@ function editNodeGroup(index) {
       nodeGroupRequestFromSpecList[index].nodeGroupSize = result.value.count;
       nodeGroupRequestFromSpecList[index].rootDiskType = result.value.diskType;
       nodeGroupRequestFromSpecList[index].rootDiskSize = result.value.diskSize;
-      
+      nodeGroupRequestFromSpecList[index].distributeSubnets = result.value.distributeSubnets;
+
       if (result.value.zone) {
         nodeGroupRequestFromSpecList[index].zone = result.value.zone;
       } else {
@@ -17759,111 +17804,144 @@ window.clearRecentCmds = function() {
   if (section) section.style.display = 'none';
 };
 
-async function setBastionNode() {
+// Set (register) a bastion for a SUBNET. Bastions are stored per subnet in
+// CB-Tumblebug and serve every node in that subnet, so this dialog is framed
+// around "which node is the bastion for this subnet" rather than a per-target
+// assignment. `preset` (from the Net-graph right-click menu) scopes the dialog
+// to a specific subnet and pre-selects the clicked node as the bastion:
+//   { targetInfraId, subnetMemberNodeId, subnetId, defaultBastionNodeId }
+async function setBastionNode(preset) {
   var config = getConfig();
   var hostname = config.hostname;
   var port = config.port;
   var username = config.username;
   var password = config.password;
   var namespace = configNamespace;
-  var infraid = getSelectedInfraId();
+  var infraid = (preset && preset.targetInfraId) || getSelectedInfraId();
+  const hasPreset = !!(preset && preset.subnetMemberNodeId);
+  const presetSubnetMemberNodeId = (preset && preset.subnetMemberNodeId) || '';
+  const presetDefaultBastionNodeId = (preset && preset.defaultBastionNodeId) || '';
 
-  if (!namespace || !infraid) {
-    errorAlert("Please select a namespace and Infra first");
+  if (!namespace || !infraid || infraid === 'all') {
+    errorAlert("Please select a namespace and a specific Infra first");
     return;
   }
 
-  // Load VMs in the current (target) Infra
-  let targetNodeOptions = '<option value="">-- select Node --</option>';
+  // Load the nodes of the (target) Infra so we can group them by subnet.
+  let nodes = [];
   try {
     const infraRes = await axios.get(
       `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}`,
       { auth: { username, password } }
     );
-    const nodes = infraRes.data.node || [];
-    nodes.forEach(nd => {
-      const rawLabel = nd.publicIP ? `${nd.id} (${nd.publicIP})` : nd.id;
-      const escapedValue = window.escapeHtml(String(nd.id));
-      const escapedLabel = window.escapeHtml(String(rawLabel));
-      targetNodeOptions += `<option value="${escapedValue}">${escapedLabel}</option>`;
-    });
+    nodes = infraRes.data.node || [];
   } catch (err) {
     console.error("Failed to fetch target Infra Nodes:", err);
   }
 
+  const esc = (v) => window.escapeHtml(String(v == null ? '' : v));
+
+  // Resolve which subnet this dialog targets.
+  let presetSubnetId = (preset && preset.subnetId) || '';
+  if (hasPreset && !presetSubnetId) {
+    const m = nodes.find(n => String(n.id) === String(presetSubnetMemberNodeId));
+    presetSubnetId = m ? (m.subnetId || '') : '';
+  }
+
+  // Options for the "pick any node to identify the subnet" selector (no-preset).
+  const subnetPickerOptions = ['<option value="">-- select a node in the target subnet --</option>']
+    .concat(nodes.map(n => {
+      const ip = n.publicIP ? ` (${n.publicIP})` : '';
+      return `<option value="${esc(n.id)}" data-subnet="${esc(n.subnetId || '')}">` +
+        `${esc(n.id)} — subnet ${esc(n.subnetId || '?')}${esc(ip)}</option>`;
+    })).join('');
+
+  // Read-only "serves" block when the subnet is fixed by the preset; otherwise a picker.
+  const servesHtml = hasPreset
+    ? `<div class="popup-row">
+         <div class="popup-col"><div class="popup-field"><label class="popup-label">Namespace</label><span class="popup-value">${esc(namespace)}</span></div></div>
+         <div class="popup-col"><div class="popup-field"><label class="popup-label">Infra</label><span class="popup-value">${esc(infraid)}</span></div></div>
+         <div class="popup-col" style="flex:2;"><div class="popup-field"><label class="popup-label">Subnet</label><span class="popup-value">${esc(presetSubnetId || '(unknown)')}</span></div></div>
+       </div>
+       <div class="popup-row"><div class="popup-col"><span class="popup-hint">All nodes in this subnet use this bastion.</span></div></div>`
+    : `<div class="popup-row">
+         <div class="popup-col"><div class="popup-field"><label class="popup-label">Namespace</label><span class="popup-value">${esc(namespace)}</span></div></div>
+         <div class="popup-col"><div class="popup-field"><label class="popup-label">Infra</label><span class="popup-value">${esc(infraid)}</span></div></div>
+         <div class="popup-col" style="flex:2;"><div class="popup-field"><label class="popup-label">Subnet (pick any node in it)</label>
+           <select id="subnetMemberSel" class="popup-select">${subnetPickerOptions}</select></div></div>
+       </div>`;
+
   Swal.fire({
-    title: "🔗 Set Bastion Node",
+    title: "🛡️ Set Bastion for Subnet",
     width: 680,
     html: `
     ${POPUP_STYLES}
     <div class="popup-container">
 
-      <!-- Target Node Section -->
+      <!-- Which subnet this bastion serves -->
       <div class="popup-section">
-        <div class="popup-section-title">🎯 Target Node (needs bastion access)</div>
-        <div class="popup-row">
-          <div class="popup-col">
-            <div class="popup-field">
-              <label class="popup-label">Namespace</label>
-              <span class="popup-value">${window.escapeHtml(namespace)}</span>
-            </div>
-          </div>
-          <div class="popup-col">
-            <div class="popup-field">
-              <label class="popup-label">Infra</label>
-              <span class="popup-value">${window.escapeHtml(infraid)}</span>
-            </div>
-          </div>
-          <div class="popup-col" style="flex: 2;">
-            <div class="popup-field">
-              <label class="popup-label">Target Node</label>
-              <select id="bastionTargetNodeId" class="popup-select">${targetNodeOptions}</select>
-            </div>
-          </div>
-        </div>
+        <div class="popup-section-title">🌐 Bastion serves (subnet)</div>
+        ${servesHtml}
       </div>
 
-      <!-- Bastion Node Section -->
+      <!-- Which node acts as the bastion -->
       <div class="popup-section">
-        <div class="popup-section-title">🛡️ Bastion Node (jump host — can be from another namespace/Infra)</div>
-        <div class="popup-row">
-          <div class="popup-col">
-            <div class="popup-field">
-              <label class="popup-label">Namespace</label>
-              <input type="text" id="bastionNsId" class="popup-input" value="${namespace}"
-                placeholder="${namespace}" title="Bastion Node's namespace (leave as-is for same namespace)">
-            </div>
-          </div>
-          <div class="popup-col" style="flex: 0 0 auto;">
-            <div class="popup-field">
-              <label class="popup-label">&nbsp;</label>
-              <button type="button" id="loadBastionInfraBtn"
-                style="padding: 6px 12px; background: #0d6efd; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.82rem; white-space: nowrap;">
-                🔄 Load Infras
-              </button>
-            </div>
-          </div>
-          <div class="popup-col" style="flex: 2;">
-            <div class="popup-field">
-              <label class="popup-label">Infra</label>
-              <select id="bastionInfraId" class="popup-select">
-                <option value="">-- click Load Infras --</option>
-              </select>
-            </div>
-          </div>
-          <div class="popup-col" style="flex: 2;">
-            <div class="popup-field">
-              <label class="popup-label">Bastion Node</label>
-              <select id="bastionNodeId" class="popup-select">
-                <option value="">-- select Infra first --</option>
-              </select>
-            </div>
-          </div>
+        <div class="popup-section-title">🛡️ Bastion node (jump host)</div>
+        <div class="popup-row" style="gap:16px;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.9rem;">
+            <input type="radio" name="bastionMode" value="subnet" checked> Node in this subnet
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.9rem;">
+            <input type="radio" name="bastionMode" value="external"> External bastion (other NS / Infra)
+          </label>
         </div>
-        <div class="popup-row">
-          <div class="popup-col">
-            <span class="popup-hint">💡 For cross-namespace bastions (e.g. AWS Node in a shared-services namespace), change the namespace above and click Load Infras.</span>
+
+        <!-- Simple: a node in the same subnet -->
+        <div id="bastionSubnetBlock" class="popup-row">
+          <div class="popup-col" style="flex:2;">
+            <div class="popup-field">
+              <label class="popup-label">Bastion Node (same subnet)</label>
+              <select id="bastionSubnetNodeSel" class="popup-select"><option value="">-- loading --</option></select>
+            </div>
           </div>
+          <div class="popup-col"><span class="popup-hint">💡 A node with a ✅ public IP is required so CB-TB can reach it to relay remote commands.</span></div>
+        </div>
+
+        <!-- Advanced: external bastion (e.g. AWS node running OpenStack that fronts a new provider) -->
+        <div id="bastionExternalBlock" style="display:none;">
+          <div class="popup-row">
+            <div class="popup-col">
+              <div class="popup-field">
+                <label class="popup-label">Namespace</label>
+                <input type="text" id="bastionNsId" class="popup-input" value="${esc(namespace)}"
+                  placeholder="${esc(namespace)}" title="Bastion Node's namespace (leave as-is for same namespace)">
+              </div>
+            </div>
+            <div class="popup-col" style="flex: 0 0 auto;">
+              <div class="popup-field">
+                <label class="popup-label">&nbsp;</label>
+                <button type="button" id="loadBastionInfraBtn"
+                  style="padding: 6px 12px; background: #0d6efd; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.82rem; white-space: nowrap;">
+                  🔄 Load Infras
+                </button>
+              </div>
+            </div>
+            <div class="popup-col" style="flex: 2;">
+              <div class="popup-field">
+                <label class="popup-label">Infra</label>
+                <select id="bastionInfraId" class="popup-select"><option value="">-- click Load Infras --</option></select>
+              </div>
+            </div>
+            <div class="popup-col" style="flex: 2;">
+              <div class="popup-field">
+                <label class="popup-label">Bastion Node</label>
+                <select id="bastionNodeId" class="popup-select"><option value="">-- select Infra first --</option></select>
+              </div>
+            </div>
+          </div>
+          <div class="popup-row"><div class="popup-col">
+            <span class="popup-hint">💡 For cross-namespace bastions (e.g. an AWS node in a shared-services namespace fronting an OpenStack provider), set the namespace and click Load Infras.</span>
+          </div></div>
         </div>
       </div>
 
@@ -17872,7 +17950,48 @@ async function setBastionNode() {
     confirmButtonText: "Set Bastion",
     cancelButtonText: "Cancel",
     didOpen: () => {
-      // Load Infras button handler
+      const subnetSel = document.getElementById('subnetMemberSel'); // null when preset-fixed
+      const subnetNodeSel = document.getElementById('bastionSubnetNodeSel');
+      const subnetBlock = document.getElementById('bastionSubnetBlock');
+      const externalBlock = document.getElementById('bastionExternalBlock');
+
+      const currentSubnetId = () => {
+        if (hasPreset) return presetSubnetId;
+        const opt = subnetSel && subnetSel.selectedOptions[0];
+        return opt ? (opt.getAttribute('data-subnet') || '') : '';
+      };
+      const repopulateSubnetBastions = (preselectId) => {
+        const sid = currentSubnetId();
+        const inSubnet = nodes.filter(n => (n.subnetId || '') === sid);
+        if (!sid) {
+          subnetNodeSel.innerHTML = '<option value="">-- pick the subnet first --</option>';
+          return;
+        }
+        if (!inSubnet.length) {
+          subnetNodeSel.innerHTML = '<option value="">-- no nodes in this subnet --</option>';
+          return;
+        }
+        subnetNodeSel.innerHTML = inSubnet.map(n => {
+          const has = !!n.publicIP;
+          const label = has ? `${n.id}  ✅ ${n.publicIP}` : `${n.id}  (no public IP)`;
+          const sel = preselectId && String(n.id) === String(preselectId) ? ' selected' : '';
+          const style = has ? '' : ' style="color:#aaa"';
+          return `<option value="${esc(n.id)}"${sel}${style}>${esc(label)}</option>`;
+        }).join('');
+      };
+      repopulateSubnetBastions(presetDefaultBastionNodeId);
+      if (subnetSel) subnetSel.addEventListener('change', () => repopulateSubnetBastions(''));
+
+      // Mode toggle: show the matching block only.
+      document.querySelectorAll('input[name="bastionMode"]').forEach(r => {
+        r.addEventListener('change', () => {
+          const mode = document.querySelector('input[name="bastionMode"]:checked').value;
+          subnetBlock.style.display = mode === 'subnet' ? '' : 'none';
+          externalBlock.style.display = mode === 'external' ? '' : 'none';
+        });
+      });
+
+      // External bastion loaders (advanced).
       document.getElementById('loadBastionInfraBtn').addEventListener('click', async () => {
         const bastionNs = document.getElementById('bastionNsId').value.trim();
         if (!bastionNs) { return; }
@@ -17898,7 +18017,6 @@ async function setBastionNode() {
         }
       });
 
-      // Infra change → load VMs
       document.getElementById('bastionInfraId').addEventListener('change', async () => {
         const bastionNs = document.getElementById('bastionNsId').value.trim();
         const bastionInfra = document.getElementById('bastionInfraId').value;
@@ -17913,10 +18031,9 @@ async function setBastionNode() {
             `http://${hostname}:${port}/tumblebug/ns/${bastionNs}/infra/${bastionInfra}`,
             { auth: { username, password } }
           );
-          const nodes = res.data.node || [];
-          // Only show VMs — no auto-select placeholder (auto-select is not supported)
+          const extNodes = res.data.node || [];
           nodeSel.innerHTML = '<option value="">-- select Node --</option>';
-          nodes.forEach(nd => {
+          extNodes.forEach(nd => {
             const hasPublic = !!nd.publicIP;
             const opt = document.createElement('option');
             opt.value = String(nd.id);
@@ -17931,19 +18048,32 @@ async function setBastionNode() {
       });
     },
     preConfirm: () => {
-      const targetNodeId = document.getElementById('bastionTargetNodeId').value;
-      const bastionNsId = document.getElementById('bastionNsId').value.trim();
-      const bastionInfraId = document.getElementById('bastionInfraId').value;
-      const bastionNodeId = document.getElementById('bastionNodeId').value; // may be empty → auto-select
+      // Any node in the target subnet identifies the subnet for the API.
+      const targetNodeId = hasPreset
+        ? presetSubnetMemberNodeId
+        : (document.getElementById('subnetMemberSel') || {}).value;
       if (!targetNodeId) {
-        Swal.showValidationMessage("Please select a target Node");
+        Swal.showValidationMessage("Please pick the target subnet (select a node in it)");
         return false;
       }
-      if (!bastionInfraId) {
-        Swal.showValidationMessage("Please load Infras and select a bastion Infra");
+      const mode = (document.querySelector('input[name="bastionMode"]:checked') || {}).value;
+      if (mode === 'external') {
+        const bastionNsId = document.getElementById('bastionNsId').value.trim();
+        const bastionInfraId = document.getElementById('bastionInfraId').value;
+        const bastionNodeId = document.getElementById('bastionNodeId').value;
+        if (!bastionInfraId || !bastionNodeId) {
+          Swal.showValidationMessage("Please load Infras and select an external bastion Node");
+          return false;
+        }
+        return { targetNodeId, bastionNsId, bastionInfraId, bastionNodeId };
+      }
+      // Same-subnet node acts as the bastion.
+      const bastionNodeId = document.getElementById('bastionSubnetNodeSel').value;
+      if (!bastionNodeId) {
+        Swal.showValidationMessage("Please select a node in this subnet to act as the bastion");
         return false;
       }
-      return { targetNodeId, bastionNsId, bastionInfraId, bastionNodeId };
+      return { targetNodeId, bastionNsId: namespace, bastionInfraId: infraid, bastionNodeId };
     },
   }).then(async (result) => {
     if (!result.isConfirmed || !result.value) return;
@@ -19892,7 +20022,10 @@ function updateFirewallRules() {
                 const badge = btn.querySelector('span:last-child');
                 if (badge) badge.style.backgroundColor = '#6c757d';
               });
-              document.querySelectorAll('.tab-pane').forEach(pane => {
+              // Scope to THIS modal's tab content only — a bare '.tab-pane'
+              // selector also matched the map's left Control/Provisioning panes
+              // (they are Bootstrap tab-panes too), wiping the Control panel.
+              document.querySelectorAll('#sgTabContent .tab-pane').forEach(pane => {
                 pane.classList.remove('show', 'active');
               });
               

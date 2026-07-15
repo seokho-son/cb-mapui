@@ -1097,6 +1097,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                   <i class="fas fa-project-diagram"></i>
                 </button>
               </div>
+              <div class="btn-group" role="group" aria-label="Edge line pattern">
+                <button data-edge-style="straight" onclick="window.ResourceGraph?.setEdgeStyle('straight')" class="btn btn-sm btn-outline-secondary" title="Straight edges" aria-label="Straight edges" style="padding: 2px 8px; font-weight: bold;">━</button>
+                <button data-edge-style="arc" onclick="window.ResourceGraph?.setEdgeStyle('arc')" class="btn btn-sm btn-outline-secondary active" title="Curved (arc) edges" aria-label="Curved edges" style="padding: 2px 8px; font-weight: bold;">⌒</button>
+                <button data-edge-style="orthogonal" onclick="window.ResourceGraph?.setEdgeStyle('orthogonal')" class="btn btn-sm btn-outline-secondary" title="Orthogonal (right-angle) edges" aria-label="Orthogonal edges" style="padding: 2px 8px; font-weight: bold;">⌐</button>
+              </div>
               <button onclick="window.ResourceGraph?.exportPng()" class="btn btn-sm btn-outline-info" title="Export as PNG" aria-label="Export as PNG" style="padding: 2px 6px;">
                 <i class="fas fa-image"></i>
               </button>
@@ -1158,7 +1163,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           <!-- Legend + display toggles (bottom-left) -->
           <div id="network-graph-legend" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" style="position: absolute; bottom: 10px; left: 10px; z-index: 1000; background: rgba(255,255,255,0.95); border-radius: 8px; padding: 6px 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); font-size: 11px;">
             <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
-              <span class="legend-item active" data-net-option="sg" onclick="window.NetworkGraph?.toggleOption('sg')" style="padding:2px 4px; border-radius:3px; cursor:pointer;" title="Toggle firewall rule chips (in/outbound summary attached to vNet, subnet, or node)"><span style="display:inline-block;padding:0 3px;background:#fff5f5;border:1px solid #dc3545;border-radius:3px;color:#b02a37;font-family:monospace;font-size:9px;margin-right:4px;">⬇⬆</span>SG rules</span>
+              <span class="legend-item active" data-net-option="sg" onclick="window.NetworkGraph?.toggleOption('sg')" style="padding:2px 4px; border-radius:3px; cursor:pointer;" title="Toggle SG group boxes: nodes are grouped inside their Security Group (subnet ⊃ SG group ⊃ node), with firewall rules in the box label (per-NodeGroup firewall)"><span style="display:inline-block;padding:0 3px;background:#eef6ff;border:1px solid #0d6efd;border-radius:3px;color:#0a3d8f;font-family:monospace;font-size:9px;margin-right:4px;">🛡SG</span>SG groups</span>
               <span class="legend-item inactive" data-net-option="publicIp" onclick="window.NetworkGraph?.toggleOption('publicIp')" style="padding:2px 4px; border-radius:3px; cursor:pointer;" title="Toggle the Internet node and its public-IP edges"><span style="display:inline-block;width:12px;height:3px;background:#1e90ff;margin:0 4px 3px 0;"></span>Internet</span>
               <span class="legend-item active" data-net-option="bastion" onclick="window.NetworkGraph?.toggleOption('bastion')" style="padding:2px 4px; border-radius:3px; cursor:pointer;" title="Toggle Bastion SSH paths (private IP to private IP)"><span style="display:inline-block;width:12px;height:0;border-top:2px dashed #e83e8c;margin:0 4px 3px 0;"></span>Bastion path</span>
               <span class="legend-item active" data-net-option="cbtb" onclick="window.NetworkGraph?.toggleOption('cbtb')" style="padding:2px 4px; border-radius:3px; cursor:pointer;" title="Toggle the CB-TB command path (SSH to the bastion's public IP)"><span style="display:inline-block;width:12px;height:0;border-top:2px dashed #6f42c1;margin:0 4px 3px 0;"></span>CB-TB cmd</span>
