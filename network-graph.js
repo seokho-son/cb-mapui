@@ -1246,6 +1246,18 @@ function buildBastionMenuItems(node, type) {
         action: () => removeBastionViaApi(memberInfraId, b.nodeId, b.nsId, b.infraId),
       });
     });
+  } else if (type === 'sggroup') {
+    // Open the Update Security Group Rules dialog scoped to this group's Infra,
+    // pre-selecting this SG's tab.
+    const sgId = node.data('sgId');
+    const members = node.descendants('[type="vm"]').toArray();
+    const infraId = members.length ? members[0].data('infraId') : selectedInfraId;
+    if (sgId && infraId && infraId !== 'all' && window.updateFirewallRules) {
+      items.push({
+        label: '🛡️ Update firewall rules…',
+        action: () => window.updateFirewallRules({ infraId, preselectSgId: sgId }),
+      });
+    }
   }
   return items;
 }
@@ -1269,9 +1281,12 @@ function showNetContextMenu(evt) {
     `left:${x}px;top:${y}px;`;
 
   const raw = node.data('raw') || {};
-  const titleId = type === 'vm' ? raw.id : (type === 'subnet' ? `subnet ${raw.id}` : type);
+  let titleId = type;
+  if (type === 'vm') titleId = raw.id;
+  else if (type === 'subnet') titleId = `subnet ${raw.id}`;
+  else if (type === 'sggroup') titleId = `SG ${node.data('sgId') || ''}`;
   const header = document.createElement('div');
-  header.textContent = `🛡️ Bastion · ${titleId || ''}`;
+  header.textContent = `⚙️ ${titleId || ''}`;
   header.style.cssText = 'padding:4px 8px 6px;color:#57606a;font-weight:600;border-bottom:1px solid #eaeef2;margin-bottom:4px;';
   menu.appendChild(header);
 

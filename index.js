@@ -19800,13 +19800,16 @@ function jsonToTable(jsonText) {
 }
 
 
-function updateFirewallRules() {
+function updateFirewallRules(opts) {
   var config = getConfig(); var hostname = config.hostname;
   var port = config.port;
   var username = config.username;
   var password = config.password;
   var nsId = configNamespace;
-  var infraId = infraidElement.value;
+  // opts.infraId / opts.preselectSgId let callers (e.g. the Net-graph SG group
+  // right-click) target a specific Infra and pre-open that SG's tab.
+  var infraId = (opts && opts.infraId) || infraidElement.value;
+  var preselectSgId = (opts && opts.preselectSgId) || '';
   var nodegroupid = getNodeGroupIdFromNodeSelection();
   var nodeid = document.getElementById("nodeid").value;
 
@@ -19839,6 +19842,9 @@ function updateFirewallRules() {
       }).then(res => res.data)
     )).then((sgList) => {
 
+      // Pre-select the tab for the requested SG (default: first).
+      const activeIdx = Math.max(0, sgList.findIndex(sg => sg.id === preselectSgId || sg.name === preselectSgId));
+
       let summaryHtml = `
         <div style="margin-bottom:8px; font-size:12px; color:#444;">
           <b style="font-size:13px;">Security Group Rule Summary</b>
@@ -19847,12 +19853,12 @@ function updateFirewallRules() {
             <ul class="nav nav-tabs" id="sgTabs" role="tablist" style="margin-bottom: 15px; border-bottom: 2px solid #dee2e6;">
               ${sgList.map((sg, idx) => `
                 <li class="nav-item" role="presentation">
-                  <button class="nav-link ${idx === 0 ? 'active' : ''}" id="sg-tab-${idx}" data-bs-toggle="tab" data-bs-target="#sg-content-${idx}" type="button" role="tab" aria-controls="sg-content-${idx}" aria-selected="${idx === 0}"
-                          style="border: none; border-bottom: 3px solid transparent; padding: 10px 15px; margin-right: 5px; background: none; color: #6c757d; font-weight: 500; transition: all 0.3s ease; ${idx === 0 ? 'color: #007bff; border-bottom-color: #007bff;' : ''}"
+                  <button class="nav-link ${idx === activeIdx ? 'active' : ''}" id="sg-tab-${idx}" data-bs-toggle="tab" data-bs-target="#sg-content-${idx}" type="button" role="tab" aria-controls="sg-content-${idx}" aria-selected="${idx === activeIdx}"
+                          style="border: none; border-bottom: 3px solid transparent; padding: 10px 15px; margin-right: 5px; background: none; color: #6c757d; font-weight: 500; transition: all 0.3s ease; ${idx === activeIdx ? 'color: #007bff; border-bottom-color: #007bff;' : ''}"
                           onmouseover="if(!this.classList.contains('active')) { this.style.color='#007bff'; this.style.backgroundColor='#f8f9fa'; }"
                           onmouseout="if(!this.classList.contains('active')) { this.style.color='#6c757d'; this.style.backgroundColor='transparent'; }">
                     <span style="font-size: 12px; font-weight: 600;">${sg.name}</span>
-                    <span style="margin-left: 6px; background-color: ${idx === 0 ? '#007bff' : '#6c757d'}; color: white; font-size: 9px; padding: 2px 6px; border-radius: 10px; font-weight: bold;">${(sg.firewallRules||[]).length}</span>
+                    <span style="margin-left: 6px; background-color: ${idx === activeIdx ? '#007bff' : '#6c757d'}; color: white; font-size: 9px; padding: 2px 6px; border-radius: 10px; font-weight: bold;">${(sg.firewallRules||[]).length}</span>
                   </button>
                 </li>
               `).join("")}
@@ -19861,7 +19867,7 @@ function updateFirewallRules() {
             <!-- Tab Content -->
             <div class="tab-content" id="sgTabContent">
               ${sgList.map((sg, idx) => `
-                <div class="tab-pane fade ${idx === 0 ? 'show active' : ''}" id="sg-content-${idx}" role="tabpanel" aria-labelledby="sg-tab-${idx}">
+                <div class="tab-pane fade ${idx === activeIdx ? 'show active' : ''}" id="sg-content-${idx}" role="tabpanel" aria-labelledby="sg-tab-${idx}">
                   <div style="border: 1px solid #dee2e6; border-radius: 6px; padding: 15px; background-color: #f8f9fa;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                       <div>
