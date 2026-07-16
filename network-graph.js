@@ -48,6 +48,9 @@ const netOptions = {
   bastion: true,   // show bastion SSH-path edges (private IP to private IP)
   cbtb: true,      // show CB-TB command path (SSH to the bastion's public IP)
   ipLabels: true,  // show IP chips inside VM nodes
+  nlb: true,       // show NLB (regional load balancer) front-end nodes + target edges
+  vpn: true,       // show site-to-site VPN tunnel nodes linking the two site connections
+  mcnlb: true,     // show Global NLB (MCNLB/HAProxy) as one node fronting the target Infra's VMs
 };
 
 // ============================================================================
@@ -147,6 +150,28 @@ function buildElements(centralData) {
   const sgMap = new Map();
   sgList.forEach((s) => sgMap.set(s.id, s));
 
+  // A Global NLB (MCNLB) is deployed as its own Infra named "{targetInfraId}-nlb".
+  // Represent it as a single global-LB node fronting the target's VMs rather than
+  // drawing its raw VM cluster, so the "Net" view stays meaningful.
+  const mcnlbHosts = infraList.filter((i) =>
+    String(i.id || '').endsWith('-nlb') ||
+    (i.label && i.label['sys.description'] === 'Infra for Global-NLB'));
+  const mcnlbHostIds = new Set(mcnlbHosts.map((i) => i.id));
+
+  // Connections that host an active (Available) site-to-site VPN — their vNets
+  // get a darker tint to signal the tunnel is up. Only when the VPN layer is on,
+  // so toggling VPN off in the legend also clears the vNet tint.
+  const activeVpnConns = new Set();
+  if (netOptions.vpn) {
+    (centralData.vpn || []).forEach((v) => {
+      if (!/available/i.test(v.status || '')) return;
+      (v.vpnSites || []).forEach((s) => { if (s.connectionName) activeVpnConns.add(s.connectionName); });
+    });
+  }
+
+  // Front-facing load-balancer node ids the Internet node should also link to.
+  const internetFacing = [];
+
   const elements = [];
   const added = new Set();
   const addOnce = (el) => {
@@ -159,6 +184,7 @@ function buildElements(centralData) {
   const vmEntries = []; // {infraId, node, vnetId, subnetId, conn, vmId}
   infraList.forEach((infra) => {
     if (selectedInfraId !== 'all' && infra.id !== selectedInfraId) return;
+    if (mcnlbHostIds.has(infra.id)) return; // drawn as a Global NLB node instead
     (infra.node || []).forEach((n) => {
       const vnetInfo = vNetMap.get(n.vNetId);
       vmEntries.push({
@@ -195,6 +221,7 @@ function buildElements(centralData) {
       data: {
         id: vnetElId(conn, vnet.id), type: 'vnet', parent: connId,
         label: `vNet ${vnet.id}${cidr ? '\n' + cidr : ''}`, raw: vnet,
+        vpnActive: activeVpnConns.has(conn),
       },
     });
     (vnet.subnetInfoList || []).forEach((subnet) => {
@@ -223,7 +250,7 @@ function buildElements(centralData) {
       const vId = vnetElId(e.conn, e.vnetId);
       if (!added.has(vId)) {
         addOnce({
-          data: { id: vId, type: 'vnet', parent: connId, label: `vNet ${e.vnetId}`, raw: vnet || { id: e.vnetId } },
+          data: { id: vId, type: 'vnet', parent: connId, label: `vNet ${e.vnetId}`, raw: vnet || { id: e.vnetId }, vpnActive: activeVpnConns.has(e.conn) },
         });
       }
       parentId = vId;
@@ -342,9 +369,126 @@ function buildElements(centralData) {
     }
   });
 
-  // Internet pseudo-node (only when a public edge exists)
-  if (netOptions.publicIp && hasPublic) {
+  // ── NLB (regional load balancers): a front-end node linked to its target VMs ──
+  // An NLB fronts a NodeGroup's VMs, so draw it as a distinct node with edges down
+  // to each target VM. The label carries the client-facing listener endpoint.
+  if (netOptions.nlb) {
+    (centralData.nlb || []).forEach((nlb) => {
+      const infraId = nlb.infraId;
+      const tg = nlb.targetGroup || {};
+      let targetNodeIds = tg.nodes || [];
+      if (targetNodeIds.length === 0 && tg.nodeGroupId) {
+        // Fall back to VMs whose id belongs to the target NodeGroup (id like "{ng}-N").
+        targetNodeIds = vmEntries
+          .filter((e) => e.infraId === infraId && String(e.node.id || '').startsWith(tg.nodeGroupId + '-'))
+          .map((e) => e.node.id);
+      }
+      const targets = targetNodeIds
+        .map((nid) => `ng-vm-${infraId}-${nid}`)
+        .filter((vid) => added.has(vid));
+      if (targets.length === 0) return; // no visible targets to attach to
+
+      const li = nlb.listener || {};
+      const endpoint = li.ip || li.dnsName || '';
+      const nlbEl = `ng-nlb-${infraId}-${nlb.id}`;
+      addOnce({
+        data: {
+          id: nlbEl, type: 'nlb', raw: nlb, nlbStatus: nlb.status || '',
+          label: `⚖️ ${nlb.name || nlb.id}${endpoint || li.port ? '\n' + (endpoint ? endpoint + ':' : '') + (li.port || '') : ''}`,
+        },
+      });
+      // A PUBLIC NLB is internet-facing → link it from the Internet node.
+      if (String(nlb.Type || nlb.type || '').toUpperCase() === 'PUBLIC') internetFacing.push(nlbEl);
+      targets.forEach((vid) => {
+        addOnce({ data: { id: `ng-nlblink-${nlb.id}-${vid}`, source: nlbEl, target: vid, type: 'nlbLink' } });
+      });
+    });
+  }
+
+  // ── Global NLB (MCNLB): one node fronting the target Infra's VMs ──
+  if (netOptions.mcnlb) {
+    mcnlbHosts.forEach((hostInfra) => {
+      const hostId = hostInfra.id;
+      const targetId = String(hostId).endsWith('-nlb') ? hostId.slice(0, -4) : hostId;
+      const targetInfra = infraList.find((i) => i.id === targetId);
+      const targets = ((targetInfra && targetInfra.node) || [])
+        .map((n) => `ng-vm-${targetId}-${n.id}`)
+        .filter((vid) => added.has(vid));
+      if (targets.length === 0) return; // target VMs not visible
+      const hostIps = (hostInfra.node || []).map((n) => n.publicIP).filter(Boolean);
+      const mcEl = `ng-mcnlb-${hostId}`;
+      addOnce({
+        data: {
+          id: mcEl, type: 'mcnlb', raw: hostInfra, targetInfraId: targetId,
+          label: `🌐 Global NLB${hostIps.length ? '\n' + hostIps[0] : ''}`,
+        },
+      });
+      internetFacing.push(mcEl); // HAProxy front is public → link from the Internet node
+
+      targets.forEach((vid) => {
+        addOnce({ data: { id: `ng-mcnlblink-${hostId}-${vid}`, source: mcEl, target: vid, type: 'mcnlbLink' } });
+      });
+    });
+  }
+
+  // ── Site-to-site VPN: a tunnel node bridging the two sites' vNets ──
+  // A VPN links two CSP sites (VNets). Connect it to each site's vNet node(s)
+  // (per the site connectionName) so it reads as a tunnel between the two vNets;
+  // fall back to the connection block only when no vNet node is present.
+  if (netOptions.vpn) {
+    // connectionName -> vNet element ids visible in the graph
+    const connToVnetEls = new Map();
+    vNetList.forEach((v) => {
+      const conn = connOf(v);
+      const el = vnetElId(conn, v.id);
+      if (!added.has(el)) return;
+      if (!connToVnetEls.has(conn)) connToVnetEls.set(conn, []);
+      connToVnetEls.get(conn).push(el);
+    });
+
+    // De-duplicate VPNs: the same site-to-site VPN is listed under multiple Infras
+    // (notably the "-nlb" MCNLB host that shares the vNets), which would create a
+    // second, redundant/floating VPN node. Keep one per identity, preferring a
+    // non-host Infra so the right-click manager opens the real Infra.
+    const vpnByKey = new Map();
+    (centralData.vpn || []).forEach((v) => {
+      const key = v.uid || String(v.id);
+      const isHost = mcnlbHostIds.has(v.infraId);
+      const cur = vpnByKey.get(key);
+      if (!cur || (cur.isHost && !isHost)) vpnByKey.set(key, { vpn: v, isHost });
+    });
+
+    [...vpnByKey.values()].map((x) => x.vpn).forEach((vpn) => {
+      const siteConns = [...new Set((vpn.vpnSites || []).map((s) => s.connectionName).filter(Boolean))];
+      const endpoints = [];
+      siteConns.forEach((cn) => {
+        const vnets = connToVnetEls.get(cn) || [];
+        if (vnets.length) endpoints.push(...vnets);
+        else if (added.has(`ng-conn-${cn}`)) endpoints.push(`ng-conn-${cn}`);
+      });
+      const uniq = [...new Set(endpoints)];
+      if (uniq.length === 0) return; // neither site visible
+      const vpnEl = `ng-vpn-${vpn.infraId}-${vpn.id}`;
+      addOnce({
+        data: {
+          id: vpnEl, type: 'vpn', raw: vpn,
+          label: `🔒 ${vpn.name || vpn.id}${vpn.status ? '\n' + vpn.status : ''}`,
+        },
+      });
+      uniq.forEach((eid) => {
+        addOnce({ data: { id: `ng-vpnlink-${vpn.id}-${eid}`, source: vpnEl, target: eid, type: 'vpnLink' } });
+      });
+    });
+  }
+
+  // Internet pseudo-node: shown when there is any public-facing element — a VM
+  // public IP, a PUBLIC regional NLB, or a Global NLB.
+  if (netOptions.publicIp && (hasPublic || internetFacing.length > 0)) {
     addOnce({ data: { id: 'ng-internet', type: 'internet', label: '🌐 Internet' } });
+    // Internet → front-facing load balancers (they are the public entry points).
+    internetFacing.forEach((el) => {
+      if (added.has(el)) addOnce({ data: { id: `ng-pub-${el}`, source: 'ng-internet', target: el, type: 'public' } });
+    });
   }
 
   // Bastion SSH paths + CB-TB command path (independently toggleable).
@@ -487,6 +631,16 @@ const NET_STYLE = [
       'font-size': 17, 'font-weight': 'bold', color: '#4a3800', 'text-outline-color': '#ffffff', 'text-outline-width': 2.5, padding: 9, 'text-wrap': 'wrap',
     },
   },
+  // vNet joined to an ACTIVE site-to-site VPN → darker/grey tint (semi-transparent
+  // so the subnets/VMs inside stay readable). vNets without an active VPN keep the
+  // default look.
+  {
+    selector: 'node[type="vnet"][?vpnActive]',
+    style: {
+      'background-color': '#374151', 'background-opacity': 0.4,
+      'border-color': '#9ca3af', color: '#e5e7eb', 'text-outline-color': '#111827',
+    },
+  },
   {
     selector: 'node[type="subnet"]',
     style: {
@@ -615,6 +769,68 @@ const NET_STYLE = [
   {
     selector: 'node[type="vnet"]:childless',
     style: { width: 230, height: 82 },
+  },
+  // NLB (regional load balancer): a per-region appliance fronting a NodeGroup —
+  // compact rounded box, violet.
+  {
+    selector: 'node[type="nlb"]',
+    style: {
+      shape: 'round-rectangle', width: 'label', height: 'label',
+      'background-color': '#7c3aed', 'background-opacity': 0.92,
+      'border-width': 1.5, 'border-color': '#c4b5fd',
+      label: 'data(label)', 'text-wrap': 'wrap', 'text-valign': 'center', 'text-halign': 'center',
+      'font-size': 14, 'font-family': 'monospace', 'font-weight': 'bold', color: '#ffffff',
+      'text-outline-color': '#3d2a63', 'text-outline-width': 1.5, padding: 8,
+    },
+  },
+  {
+    selector: 'edge[type="nlbLink"]',
+    style: {
+      width: 2, 'line-color': '#6f42c1', opacity: 0.7,
+      'target-arrow-shape': 'triangle', 'target-arrow-color': '#6f42c1', 'arrow-scale': 0.9,
+      'curve-style': 'round-taxi', 'taxi-direction': 'downward', 'taxi-turn': 20, 'taxi-turn-min-distance': 8,
+    },
+  },
+  // Global NLB (MCNLB/HAProxy): a global multi-cloud hub — hexagon, larger/darker.
+  {
+    selector: 'node[type="mcnlb"]',
+    style: {
+      shape: 'round-hexagon', width: 'label', height: 'label',
+      'background-color': '#3b1e6e', 'background-opacity': 0.96,
+      'border-width': 2.5, 'border-color': '#8257e6',
+      label: 'data(label)', 'text-wrap': 'wrap', 'text-valign': 'center', 'text-halign': 'center',
+      'font-size': 15, 'font-family': 'monospace', 'font-weight': 'bold', color: '#ffffff',
+      'text-outline-color': '#180a2e', 'text-outline-width': 2.5, padding: 18,
+    },
+  },
+  {
+    selector: 'edge[type="mcnlbLink"]',
+    style: {
+      width: 2, 'line-color': '#6f42c1', 'line-style': 'dashed', opacity: 0.7,
+      'target-arrow-shape': 'triangle', 'target-arrow-color': '#6f42c1', 'arrow-scale': 0.9,
+      'curve-style': 'round-taxi', 'taxi-direction': 'downward', 'taxi-turn': 26, 'taxi-turn-min-distance': 8,
+    },
+  },
+  // Site-to-site VPN: a secure tunnel gateway between two vNets — cut-rectangle,
+  // near-black with a teal dashed border to read as a secure tunnel endpoint.
+  {
+    selector: 'node[type="vpn"]',
+    style: {
+      shape: 'cut-rectangle', width: 'label', height: 'label',
+      'background-color': '#111827', 'background-opacity': 0.97,
+      'border-width': 2, 'border-color': '#5eead4', 'border-style': 'dashed',
+      label: 'data(label)', 'text-wrap': 'wrap', 'text-valign': 'center', 'text-halign': 'center',
+      'font-size': 14, 'font-family': 'monospace', 'font-weight': 'bold', color: '#ffffff',
+      'text-outline-color': '#000000', 'text-outline-width': 2, padding: 12,
+    },
+  },
+  {
+    selector: 'edge[type="vpnLink"]',
+    style: {
+      width: 4, 'line-color': '#0d9488', 'line-style': 'dashed', 'line-dash-pattern': [10, 6], opacity: 0.9,
+      'target-arrow-shape': 'none',
+      'curve-style': 'unbundled-bezier', 'control-point-distances': [30], 'control-point-weights': [0.5],
+    },
   },
   {
     selector: 'edge[type="public"]',
@@ -899,6 +1115,36 @@ function runNetLayout() {
     rowMaxH = Math.max(rowMaxH, size.h);
   });
 
+  // NLB nodes: pin each just above the bounding box of the VMs it targets, so it
+  // reads as a front-end sitting in front of its target group.
+  netCy.nodes('[type="nlb"]').forEach((nlb) => {
+    const targets = nlb.connectedEdges('[type="nlbLink"]').targets();
+    if (targets.nonempty()) {
+      const bb = targets.boundingBox();
+      nlb.position({ x: (bb.x1 + bb.x2) / 2, y: bb.y1 - 84 });
+    }
+  });
+
+  // Global NLB nodes: pin above their target VMs (higher than regional NLBs).
+  netCy.nodes('[type="mcnlb"]').forEach((mc) => {
+    const targets = mc.connectedEdges('[type="mcnlbLink"]').targets();
+    if (targets.nonempty()) {
+      const bb = targets.boundingBox();
+      mc.position({ x: (bb.x1 + bb.x2) / 2, y: bb.y1 - 132 });
+    }
+  });
+
+  // VPN tunnel nodes: pin ABOVE both linked vNets (not at their midpoint —
+  // that would land inside a large vNet compound and hide one edge), so both
+  // tunnel edges come down to each side and stay visible.
+  netCy.nodes('[type="vpn"]').forEach((vpn) => {
+    const targets = vpn.connectedEdges('[type="vpnLink"]').targets();
+    if (targets.nonempty()) {
+      const bb = targets.boundingBox();
+      vpn.position({ x: (bb.x1 + bb.x2) / 2, y: bb.y1 - 96 });
+    }
+  });
+
   // Internet pinned top-center; CB-TB: Command pinned beside it (both are
   // external entry points into the network)
   const inet = netCy.getElementById('ng-internet');
@@ -1073,6 +1319,47 @@ function showDetail(node) {
       `Applies to: <b>${esc(node.data('scopeText') || '')}</b><br>Security Groups: ${esc(sgIds.join(', '))}</div>` +
       `<table style="font-size:12px;text-align:left;font-family:monospace">` +
       `<tr style="color:#888"><td>sg</td><td>dir</td><td>proto</td><td>port</td><td>cidr</td></tr>${ruleRows}</table>`;
+  } else if (type === 'nlb') {
+    const nlb = node.data('raw') || {};
+    const li = nlb.listener || {}, tg = nlb.targetGroup || {}, hc = nlb.healthChecker || {};
+    const kvState = ((nlb.keyValueList || []).find((k) => (k.Key || k.key) === 'State') || {});
+    const stateM = /Code:\s*([A-Za-z_-]+)/.exec(kvState.Value || kvState.value || '');
+    const status = nlb.status || (stateM ? stateM[1] : 'Unknown');
+    title = `⚖️ ${esc(nlb.name || nlb.id)}`;
+    html = `<table style="font-size:13px;text-align:left">${
+      row('Status', status)}${
+      row('Type / Scope', `${nlb.Type || nlb.type || ''} / ${nlb.Scope || nlb.scope || ''}`)}${
+      row('Connection', nlb.connectionName)}${
+      row('Listener', `${li.protocol || ''} ${li.ip || li.dnsName || ''}:${li.port || ''}`)}${
+      row('Target NodeGroup', tg.nodeGroupId)}${
+      row('Targets', (tg.nodes || []).join(', '))}${
+      row('Health check', `interval ${hc.interval || '-'}s / timeout ${hc.timeout || '-'}s / threshold ${hc.threshold || '-'}`)}${
+      row('CSP Resource', nlb.cspResourceId || nlb.cspResourceName)}
+      </table>`;
+  } else if (type === 'mcnlb') {
+    const hostInfra = node.data('raw') || {};
+    const ips = (hostInfra.node || []).map((n) => n.publicIP).filter(Boolean);
+    title = `🌐 Global NLB (${esc(node.data('targetInfraId') || '')})`;
+    html = `<table style="font-size:13px;text-align:left">${
+      row('Host Infra', hostInfra.id)}${
+      row('Fronts', node.data('targetInfraId'))}${
+      row('Status', hostInfra.status)}${
+      row('Host public IPs', ips.join(', '))}${
+      row('HAProxy stats', ips.length ? `http://${ips[0]}:9000/ (admin: default/default)` : '')}
+      </table><div style="font-size:11px;color:#888;margin-top:6px;">HAProxy fronts the target Infra's VMs via their public IPs. The host is itself an Infra (${esc(hostInfra.id)}).</div>`;
+  } else if (type === 'vpn') {
+    const vpn = node.data('raw') || {};
+    const sites = (vpn.vpnSites || []).map((s) => {
+      const cc = s.connectionConfig || {};
+      const region = (cc.regionDetail && cc.regionDetail.regionName) || '';
+      return `${esc(s.connectionName)}${region ? ' (' + esc(region) + ')' : ''}`;
+    }).join(' ⇄ ');
+    title = `🔒 ${esc(vpn.name || vpn.id)}`;
+    html = `<table style="font-size:13px;text-align:left">${
+      row('Status', vpn.status)}${
+      row('Sites', sites)}${
+      row('Message', vpn.systemMessage)}
+      </table>`;
   } else if (type === 'sggroup') {
     const rules = node.data('rules') || [];
     const members = node.children('[type="vm"]').map((v) => (v.data('raw') || {}).id).filter(Boolean);
@@ -1246,6 +1533,41 @@ function buildBastionMenuItems(node, type) {
         action: () => removeBastionViaApi(memberInfraId, b.nodeId, b.nsId, b.infraId),
       });
     });
+  } else if (type === 'nlb') {
+    // Open the NLB manager scoped to this NLB's Infra, pre-selecting its tab.
+    const nlb = node.data('raw') || {};
+    if (nlb.infraId && window.manageNLB) {
+      items.push({
+        label: '⚖️ Open NLB Manager…',
+        action: () => window.manageNLB({ infraId: nlb.infraId, preselectNlbId: nlb.id }),
+      });
+    }
+  } else if (type === 'mcnlb') {
+    // Open the Global NLB manager scoped to the fronted (target) Infra, and offer
+    // to open the host's firewall (the host is its own Infra, e.g. to allow 80/9000).
+    const targetId = node.data('targetInfraId');
+    const hostId = (node.data('raw') || {}).id;
+    if (targetId && window.manageMCNLB) {
+      items.push({
+        label: '🌐 Open Global NLB Manager…',
+        action: () => window.manageMCNLB({ infraId: targetId }),
+      });
+    }
+    if (hostId && window.updateFirewallRules) {
+      items.push({
+        label: '🔥 Update host firewall rules…',
+        action: () => window.updateFirewallRules({ infraId: hostId }),
+      });
+    }
+  } else if (type === 'vpn') {
+    // Open the VPN manager scoped to this VPN's Infra, pre-selecting its tab.
+    const vpn = node.data('raw') || {};
+    if (vpn.infraId && window.manageVPN) {
+      items.push({
+        label: '🔒 Open VPN Manager…',
+        action: () => window.manageVPN({ infraId: vpn.infraId, preselectVpnId: vpn.id }),
+      });
+    }
   } else if (type === 'sggroup') {
     // Open the Update Security Group Rules dialog scoped to this group's Infra,
     // pre-selecting this SG's tab.
@@ -1285,6 +1607,9 @@ function showNetContextMenu(evt) {
   if (type === 'vm') titleId = raw.id;
   else if (type === 'subnet') titleId = `subnet ${raw.id}`;
   else if (type === 'sggroup') titleId = `SG ${node.data('sgId') || ''}`;
+  else if (type === 'nlb') titleId = `NLB ${raw.name || raw.id || ''}`;
+  else if (type === 'mcnlb') titleId = `Global NLB (${node.data('targetInfraId') || ''})`;
+  else if (type === 'vpn') titleId = `VPN ${raw.name || raw.id || ''}`;
   const header = document.createElement('div');
   header.textContent = `⚙️ ${titleId || ''}`;
   header.style.cssText = 'padding:4px 8px 6px;color:#57606a;font-weight:600;border-bottom:1px solid #eaeef2;margin-bottom:4px;';
@@ -1328,6 +1653,9 @@ function showNetworkGraph() {
   container.style.display = 'block';
   isVisible = true;
   if (!netCy) initNetworkGraph();
+  // NLB data is only loaded while this view is visible; fetch it now on open so
+  // NLB nodes appear immediately (subsequent refresh cycles keep it fresh).
+  if (window.loadNlbDataFromInfras) window.loadNlbDataFromInfras();
   refresh(true);
 }
 

@@ -232,6 +232,7 @@ window.cloudBaristaCentralData = {
   k8sCluster: [],
   connection: [],
   vpn: [],
+  nlb: [],
   customImage: [],
   dataDisk: [],
   objectStorage: [],
@@ -1255,6 +1256,8 @@ function showInfraContextMenu(pixel, infraInfo) {
         <button onclick="setBastionNode(); Swal.close();" class="btn btn-warning btn-context">🔗 Set Bastion</button>
 
         <button class="btn btn-info btn-context btn-infra-action" data-action="nlb">⚖️ NLB</button>
+        <button class="btn btn-info btn-context btn-infra-action" data-action="mcnlb">🌐 Global NLB</button>
+        <button class="btn btn-info btn-context btn-infra-action" data-action="vpn">🔒 VPN</button>
         <button onclick="updateFirewallRules(); Swal.close();" class="btn btn-info btn-context">🔥 Firewall</button>
         <button onclick="showSnapshotManagementModal(); Swal.close();" class="btn btn-info btn-context">📸 Snapshots</button>
         <button class="btn btn-info btn-context btn-infra-action" data-action="scaleOut">⬆️ Scale Out</button>
@@ -1280,6 +1283,8 @@ function showInfraContextMenu(pixel, infraInfo) {
           // Functions that open their own Swal (no explicit close needed)
           if (action === 'control') { showActionsMenu(); return; }
           if (action === 'nlb') { manageNLB(); return; }
+          if (action === 'mcnlb') { manageMCNLB(); return; }
+          if (action === 'vpn') { manageVPN(); return; }
           if (action === 'delete') { executeAction('delete'); return; }
           if (action === 'sshKeys') { downloadAllSshKeys(); return; }
           // Functions that don't open Swal — close context menu after
@@ -3920,11 +3925,10 @@ function handleInfraWithoutNodes(infraItem) {
   }
   defaultLat -= verticalSpacing * preparingInfraCount;
   
+  // Keep the original Infra name/id (do NOT relabel "-nlb" to "NLB") so a Global
+  // NLB host stays identifiable and operable as its own Infra on the map.
   var newName = infraItem.name;
-  if (newName.includes("-nlb")) {
-    newName = "NLB";
-  }
-  
+
   // Create Infra render entry and store in map
   var infraEntry = {
     id: infraItem.id,
@@ -3994,8 +3998,13 @@ function getInfra() {
           });
           window.cloudBaristaCentralData.nodeData = allNodes;
           
-          // Load VPN data from the Infras we just fetched (reusing Infra data)
+          // Load VPN data (feeds the always-visible map icons).
           loadVpnDataFromInfras();
+          // NLB data feeds only the "Net" graph, so fetch it per refresh cycle ONLY
+          // while that view is visible — otherwise we'd poll /nlb for every Infra
+          // constantly. The NLB manager fetches its own fresh data when opened.
+          const _netEl = document.getElementById('network-graph-container');
+          if (_netEl && _netEl.style.display !== 'none') loadNlbDataFromInfras();
 
           // Update running cost display
           updateRunningCostDisplay(obj.infra);
@@ -4227,10 +4236,9 @@ function getInfra() {
                 }
               }
 
+              // Keep the original Infra name/id (no "-nlb" -> "NLB" relabel) so a
+              // Global NLB host remains identifiable/operable as its own Infra.
               var newName = item.name;
-              if (newName.includes("-nlb")) {
-                newName = "NLB";
-              }
 
               // Create Infra render entry
               var infraEntry = {
@@ -13894,36 +13902,640 @@ function deleteRegionalNLB(infraid, nodegroupid, namespace, hostname, port, user
 }
 window.DelNLB = DelNLB;
 
-// Unified NLB Management function
-function manageNLB() {
+// ============================================================================
+// NLB (Regional CSP NLB) — rich manager: list / status / health / targets /
+// create / delete. Loads the Infra's NLBs live and shows one tab per NLB plus a
+// Create tab. Per-NLB actions run via window.nlb* handlers that reuse window._nlbCtx.
+// ============================================================================
+// TB does not populate NLBInfo.Status; derive a display status from the CSP
+// State carried in keyValueList (e.g. "{Code:provisioning,Reason:null}").
+function nlbDisplayStatus(nlb) {
+  if (nlb && nlb.status) return nlb.status;
+  const kv = ((nlb && nlb.keyValueList) || []).find(k => (k.Key || k.key) === 'State');
+  if (kv) {
+    const m = /Code:\s*([A-Za-z_-]+)/.exec(kv.Value || kv.value || '');
+    if (m) return m[1];
+  }
+  return 'Unknown';
+}
+
+function nlbStatusBadge(status) {
+  const s = (status || '').toLowerCase();
+  let bg = '#6c757d';
+  if (s.includes('available') || s.includes('running') || s.includes('active')) bg = '#28a745';
+  else if (s.includes('creat') || s.includes('pending') || s.includes('progress')) bg = '#f0ad4e';
+  else if (s.includes('fail') || s.includes('error')) bg = '#dc3545';
+  return `<span class="popup-badge" style="background:${bg};color:#fff;">${window.escapeHtml(status || 'Unknown')}</span>`;
+}
+
+async function manageNLB(opts) {
+  const config = getConfig();
+  const { hostname, port, username, password } = config;
+  const namespace = configNamespace;
+  // opts.infraId / opts.preselectNlbId let the Net-graph NLB node right-click open
+  // this manager scoped to that NLB's Infra with its tab pre-selected.
+  const infraid = (opts && opts.infraId) || infraidElement.value;
+  const preselectNlbId = (opts && opts.preselectNlbId) || '';
+  if (!namespace) { errorAlert("Please select a namespace first"); return; }
+  if (!infraid) { errorAlert("Please select an Infra first"); return; }
+  window._nlbCtx = { hostname, port, username, password, namespace, infraid };
+  const base = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}`;
+  const esc = (v) => window.escapeHtml(String(v == null ? '' : v));
+
+  const spinnerId = addSpinnerTask("Loading NLBs");
+  let nlbs = [], nodeGroups = [];
+  try {
+    const [nlbRes, ngRes] = await Promise.all([
+      axios({ method: 'get', url: `${base}/nlb`, auth: { username, password } }).catch(() => ({ data: {} })),
+      axios({ method: 'get', url: `${base}/nodegroup`, auth: { username, password } }).catch(() => ({ data: {} })),
+    ]);
+    nlbs = (nlbRes.data && nlbRes.data.nlb) || [];
+    nodeGroups = (ngRes.data && ngRes.data.output) || [];
+  } finally { removeSpinnerTask(spinnerId); }
+
+  // Which NLB tab to open first (preselect from the Net graph, else the first).
+  const activeIdx = Math.max(0, nlbs.findIndex(n => n.id === preselectNlbId));
+
+  const tabBtn = (id, target, label, color, active) =>
+    `<li class="nav-item" role="presentation"><button class="nav-link ${active ? 'active' : ''}" id="${id}" data-bs-toggle="tab" data-bs-target="${target}" type="button" role="tab" style="padding:8px 14px;border:none;background:none;font-weight:600;font-size:12px;color:${active ? color : '#6c757d'};border-bottom:3px solid ${active ? color : 'transparent'};">${label}</button></li>`;
+
+  const tabButtons = nlbs.map((nlb, idx) => tabBtn(`nlb-tab-${idx}`, `#nlb-content-${idx}`, esc(nlb.name || nlb.id), '#0d6efd', idx === activeIdx)).join('')
+    + tabBtn('nlb-tab-create', '#nlb-content-create', '➕ Create', '#28a745', nlbs.length === 0);
+
+  const nlbPanes = nlbs.map((nlb, idx) => {
+    const li = nlb.listener || {}, tg = nlb.targetGroup || {}, hc = nlb.healthChecker || {};
+    const nodes = tg.nodes || [];
+    const lHost = li.ip || li.dnsName || '';
+    const endpoint = lHost || '—';
+    const lScheme = String(li.port) === '443' ? 'https' : 'http';
+    const openUrl = lHost ? `${lScheme}://${lHost}${li.port ? ':' + li.port : ''}` : '';
+    return `
+    <div class="tab-pane fade ${idx === activeIdx ? 'show active' : ''}" id="nlb-content-${idx}" role="tabpanel">
+      <div class="popup-section">
+        <div class="popup-section-title">⚖️ ${esc(nlb.name || nlb.id)} &nbsp; <span id="nlb-status-${idx}">${nlbStatusBadge(nlbDisplayStatus(nlb))}</span></div>
+        <div class="popup-row">
+          <div class="popup-col"><div class="popup-field"><label class="popup-label">Type / Scope</label><span class="popup-value-sm">${esc(nlb.Type || nlb.type)} / ${esc(nlb.Scope || nlb.scope)}</span></div></div>
+          <div class="popup-col"><div class="popup-field"><label class="popup-label">Connection</label><span class="popup-value-sm">${esc(nlb.connectionName)}</span></div></div>
+          <div class="popup-col" style="flex:2;"><div class="popup-field"><label class="popup-label">CSP Resource</label><span class="popup-value-sm">${esc(nlb.cspResourceId || nlb.cspResourceName || '—')}</span></div></div>
+        </div>
+        <div class="popup-row"><div class="popup-col"><span class="popup-hint">ℹ️ Status is captured at creation time — CB-Tumblebug does not re-sync NLB state from the CSP (a "provisioning" NLB is usually already active by now). Use ❤️ Health below for the live state.</span></div></div>
+      </div>
+      <div class="popup-section">
+        <div class="popup-section-title">🔌 Listener (client endpoint)</div>
+        <div class="popup-row">
+          <div class="popup-col" style="flex:2;"><div class="popup-field"><label class="popup-label">Endpoint</label><span class="popup-value-highlight">${esc(endpoint)}:${esc(li.port)}</span>${openUrl ? ` <a href="${esc(openUrl)}" target="_blank" rel="noopener" style="margin-left:8px;font-size:12px;text-decoration:none;" title="Open ${esc(openUrl)} in a new tab">🔗 Open</a>` : ''}</div></div>
+          <div class="popup-col"><div class="popup-field"><label class="popup-label">Protocol</label><span class="popup-value-sm">${esc(li.protocol)}</span></div></div>
+        </div>
+        ${li.dnsName ? `<div class="popup-row"><div class="popup-col"><span class="popup-hint">DNS: ${esc(li.dnsName)}</span></div></div>` : ''}
+      </div>
+      <div class="popup-section">
+        <div class="popup-section-title">🎯 Target — NodeGroup <b>${esc(tg.nodeGroupId)}</b> (${esc(tg.protocol)}:${esc(tg.port)})</div>
+        <div class="popup-row"><div class="popup-col" style="flex:1;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+          ${nodes.length ? nodes.map(nd => `<span class="popup-badge" style="background:#eef2f7;color:#334155;">${esc(nd)} <a href="#" onclick="window.nlbRemoveNode('${esc(nlb.id)}','${esc(nd)}');return false;" style="color:#dc3545;text-decoration:none;font-weight:bold;" title="Remove from NLB">✕</a></span>`).join('') : '<span class="popup-hint">No target nodes</span>'}
+        </div></div>
+        <div class="popup-row"><div class="popup-col"><button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.nlbAddNode('${esc(nlb.id)}')">➕ Add target node</button></div></div>
+      </div>
+      <div class="popup-section">
+        <div class="popup-section-title">❤️ Health <button type="button" class="btn btn-sm btn-outline-info" style="margin-left:8px;" onclick="window.nlbCheckHealth('${esc(nlb.id)}', ${idx})">Check now</button></div>
+        <div id="nlb-health-${idx}"><span class="popup-hint">Health checker: interval ${esc(hc.interval)}s · timeout ${esc(hc.timeout)}s · threshold ${esc(hc.threshold)}</span></div>
+      </div>
+      <div class="popup-row" style="margin-top:10px;"><div class="popup-col">
+        <button type="button" class="btn btn-danger btn-sm" onclick="window.nlbDoDelete('${esc(nlb.id)}')">🗑️ Delete this NLB</button>
+      </div></div>
+    </div>`;
+  }).join('');
+
+  const ngOptions = nodeGroups.map(ng => `<option value="${esc(ng)}">${esc(ng)}</option>`).join('');
+  const createPane = `
+    <div class="tab-pane fade ${nlbs.length === 0 ? 'show active' : ''}" id="nlb-content-create" role="tabpanel">
+      <div class="popup-section">
+        <div class="popup-section-title">➕ Create Regional NLB (CSP-native)</div>
+        <div class="popup-row">
+          <div class="popup-col" style="flex:2;"><div class="popup-field"><label class="popup-label">Target NodeGroup</label>
+            <select id="nlb-c-ng" class="popup-select"><option value="">-- select --</option>${ngOptions}</select></div></div>
+        </div>
+        <div class="popup-row">
+          <div class="popup-col"><div class="popup-field"><label class="popup-label">Listener proto</label><select id="nlb-c-lproto" class="popup-select"><option>TCP</option><option>UDP</option></select></div></div>
+          <div class="popup-col"><div class="popup-field"><label class="popup-label">Listener port</label><input id="nlb-c-lport" class="popup-input" type="number" value="80" min="1" max="65535"></div></div>
+          <div class="popup-col"><div class="popup-field"><label class="popup-label">Target proto</label><select id="nlb-c-tproto" class="popup-select"><option>TCP</option><option>HTTP</option><option>HTTPS</option></select></div></div>
+          <div class="popup-col"><div class="popup-field"><label class="popup-label">Target port</label><input id="nlb-c-tport" class="popup-input" type="number" value="80" min="1" max="65535"></div></div>
+        </div>
+        <div class="popup-row">
+          <div class="popup-col"><div class="popup-field"><label class="popup-label">HC interval (s)</label><input id="nlb-c-hcint" class="popup-input" type="number" value="10" min="0"></div></div>
+          <div class="popup-col"><div class="popup-field"><label class="popup-label">HC timeout (s)</label><input id="nlb-c-hcto" class="popup-input" type="number" value="10" min="0"></div></div>
+          <div class="popup-col"><div class="popup-field"><label class="popup-label">HC threshold</label><input id="nlb-c-hcth" class="popup-input" type="number" value="3" min="0"></div></div>
+          <div class="popup-col"></div>
+        </div>
+        <div class="popup-row"><div class="popup-col"><button type="button" class="btn btn-info" onclick="window.nlbDoCreate()">Create Regional NLB</button></div></div>
+      </div>
+      <div class="popup-section">
+        <div class="popup-section-title">🌍 Global NLB (Multi-cloud HAProxy)</div>
+        <div class="popup-row"><div class="popup-col"><span class="popup-hint">Deploys a software (HAProxy) load balancer Infra fronting this Infra's VMs across regions.</span></div></div>
+        <div class="popup-row"><div class="popup-col"><button type="button" class="btn btn-success btn-sm" onclick="Swal.close(); manageMCNLB();">🌍 Open Global NLB manager…</button></div></div>
+      </div>
+    </div>`;
+
   Swal.fire({
-    title: '⚖️ NLB Management',
-    html: `
-      <div style="text-align: left; margin-bottom: 20px;">
-        <p><strong>Select NLB Operation:</strong></p>
-      </div>
-      <div style="display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 15px;">
-        <button onclick="executeNLBAction('addGlobal')" class="btn btn-success btn-context" style="width: 100%; padding: 12px;">
-          🌍 Add Global-NLB (Multi-Cloud SW NLB)
-        </button>
-        <button onclick="executeNLBAction('addRegional')" class="btn btn-info btn-context" style="width: 100%; padding: 12px;">
-          🏗️ Add Regional-NLB (CSP NLB)
-        </button>
-        <button onclick="executeNLBAction('delete')" class="btn btn-danger btn-context" style="width: 100%; padding: 12px;">
-          🗑️ Delete Regional-NLB
-        </button>
-      </div>
-    `,
+    title: `⚖️ NLB Management — ${esc(infraid)}`,
+    width: 920,
+    html: `${POPUP_STYLES}
+      <div class="popup-container">
+        <ul class="nav nav-tabs" id="nlbTabs" role="tablist" style="border-bottom:2px solid #dee2e6;margin-bottom:12px;">${tabButtons}</ul>
+        <div class="tab-content" id="nlbTabContent">${nlbPanes}${createPane}</div>
+      </div>`,
     showConfirmButton: false,
     showCancelButton: true,
-    cancelButtonText: '❌ Close',
-    width: '500px',
-    customClass: {
-      popup: 'swal2-infra-context'
-    }
+    cancelButtonText: 'Close',
+    willClose: () => stopAllNlbPolls(),
+    didOpen: () => {
+      // Scoped tab switching — only this modal's panes/buttons (never the map's).
+      const btns = document.querySelectorAll('#nlbTabs button[data-bs-toggle="tab"]');
+      btns.forEach(b => b.addEventListener('click', function (e) {
+        e.preventDefault();
+        btns.forEach(x => { x.classList.remove('active'); x.style.color = '#6c757d'; x.style.borderBottomColor = 'transparent'; });
+        document.querySelectorAll('#nlbTabContent .tab-pane').forEach(p => p.classList.remove('show', 'active'));
+        const color = this.id === 'nlb-tab-create' ? '#28a745' : '#0d6efd';
+        this.classList.add('active'); this.style.color = color; this.style.borderBottomColor = color;
+        const t = document.querySelector(this.getAttribute('data-bs-target'));
+        if (t) t.classList.add('show', 'active');
+      }));
+      // Auto-poll health (3s) for NLBs not yet active; stop each when its targets
+      // are all healthy (readiness), flipping its badge to "active".
+      nlbs.forEach((nlb, idx) => {
+        if ((nlbDisplayStatus(nlb) || '').toLowerCase() !== 'active') startNlbHealthPoll(nlb.id, idx);
+      });
+    },
   });
 }
 window.manageNLB = manageNLB;
+
+window.nlbManagerRefresh = () => { Swal.close(); setTimeout(manageNLB, 150); };
+
+window.nlbDoCreate = async () => {
+  const c = window._nlbCtx; if (!c) return;
+  const ng = document.getElementById('nlb-c-ng').value;
+  if (!ng) { errorAlert("Select a target NodeGroup"); return; }
+  const body = {
+    type: "PUBLIC", scope: "REGION",
+    listener: { Protocol: document.getElementById('nlb-c-lproto').value, Port: String(document.getElementById('nlb-c-lport').value || 80) },
+    targetGroup: { Protocol: document.getElementById('nlb-c-tproto').value, Port: String(document.getElementById('nlb-c-tport').value || 80), nodeGroupId: ng },
+    HealthChecker: {
+      Interval: Number(document.getElementById('nlb-c-hcint').value || 10),
+      Timeout: Number(document.getElementById('nlb-c-hcto').value || 10),
+      Threshold: Number(document.getElementById('nlb-c-hcth').value || 3),
+    },
+  };
+  const s = addSpinnerTask("Creating Regional NLB");
+  try {
+    await axios({ method: 'post', url: `http://${c.hostname}:${c.port}/tumblebug/ns/${c.namespace}/infra/${c.infraid}/nlb`, headers: { 'Content-Type': 'application/json' }, data: body, auth: { username: c.username, password: c.password } });
+    successAlert("Regional NLB created");
+    getInfra();
+    window.nlbManagerRefresh();
+  } catch (e) { errorAlert("Create NLB failed: " + (e.response?.data?.message || e.message)); }
+  finally { removeSpinnerTask(s); }
+};
+
+window.nlbDoDelete = async (nlbId) => {
+  const c = window._nlbCtx; if (!c) return;
+  const r = await Swal.fire({ icon: 'warning', title: 'Delete NLB?', text: nlbId, showCancelButton: true, confirmButtonText: 'Delete', confirmButtonColor: '#d33' });
+  if (!r.isConfirmed) return;
+  const s = addSpinnerTask("Deleting NLB");
+  try {
+    await axios({ method: 'delete', url: `http://${c.hostname}:${c.port}/tumblebug/ns/${c.namespace}/infra/${c.infraid}/nlb/${nlbId}`, auth: { username: c.username, password: c.password } });
+    successAlert("NLB deleted");
+    getInfra();
+    window.nlbManagerRefresh();
+  } catch (e) { errorAlert("Delete NLB failed: " + (e.response?.data?.message || e.message)); }
+  finally { removeSpinnerTask(s); }
+};
+
+// Fetch live health (Spider call) for an NLB → {healthy, unhealthy, all}.
+async function nlbFetchHealth(c, nlbId) {
+  const res = await axios({ method: 'get', url: `http://${c.hostname}:${c.port}/tumblebug/ns/${c.namespace}/infra/${c.infraid}/nlb/${nlbId}/healthz`, auth: { username: c.username, password: c.password } });
+  const h = res.data || {};
+  return {
+    healthy: h.healthyNodes || h.HealthyNodes || [],
+    unhealthy: h.unHealthyNodes || h.unhealthyNodes || h.UnHealthyNodes || [],
+    all: h.allNodes || h.AllNodes || [],
+  };
+}
+
+function nlbRenderHealth(idx, r, polling) {
+  const div = document.getElementById(`nlb-health-${idx}`);
+  if (!div) return;
+  const esc = (v) => window.escapeHtml(String(v == null ? '' : v));
+  const note = polling ? ' <span style="color:#0d6efd;">🔄 auto-updating every 3s…</span>' : '';
+  div.innerHTML = `<div style="font-size:12px;line-height:1.7;">
+    <div>✅ Healthy (${r.healthy.length}): ${r.healthy.map(esc).join(', ') || '—'}</div>
+    <div>❌ Unhealthy (${r.unhealthy.length}): ${r.unhealthy.map(esc).join(', ') || '—'}</div>
+    <div style="color:#888;">Total nodes: ${r.all.length}${note}</div></div>`;
+}
+
+window.nlbCheckHealth = async (nlbId, idx) => {
+  const c = window._nlbCtx; if (!c) return;
+  const div = document.getElementById(`nlb-health-${idx}`);
+  if (div) div.innerHTML = '<span class="popup-hint">Checking…</span>';
+  try { nlbRenderHealth(idx, await nlbFetchHealth(c, nlbId), false); }
+  catch (e) {
+    if (div) div.innerHTML = `<span style="color:#dc3545;font-size:12px;">Health check failed: ${window.escapeHtml(e.response?.data?.message || e.message)}</span>`;
+  }
+};
+
+// Auto-poll health every 3s until an NLB is ready (all targets healthy), then flip
+// its status badge to "active" and stop. TB never re-syncs NLB state from the CSP,
+// so "all targets healthy" (a live Spider signal) is the practical readiness stop
+// condition. Capped so a genuinely unhealthy target cannot poll forever.
+window._nlbPollers = window._nlbPollers || {};
+function stopNlbPoll(idx) {
+  if (window._nlbPollers[idx]) { clearInterval(window._nlbPollers[idx]); delete window._nlbPollers[idx]; }
+}
+function stopAllNlbPolls() { Object.keys(window._nlbPollers || {}).forEach(stopNlbPoll); }
+function markNlbActive(idx) {
+  const el = document.getElementById(`nlb-status-${idx}`);
+  if (el) el.innerHTML = nlbStatusBadge('active');
+}
+function startNlbHealthPoll(nlbId, idx) {
+  const c = window._nlbCtx; if (!c) return;
+  stopNlbPoll(idx);
+  let attempts = 0;
+  const MAX = 60; // ~3 min at 3s
+  const tick = async () => {
+    attempts++;
+    if (!document.getElementById(`nlb-health-${idx}`)) { stopNlbPoll(idx); return; } // modal closed
+    let r = null;
+    try { r = await nlbFetchHealth(c, nlbId); } catch (e) { /* transient — keep polling */ }
+    if (r) {
+      const ready = r.all.length > 0 && r.unhealthy.length === 0;
+      nlbRenderHealth(idx, r, !ready);
+      if (ready) { markNlbActive(idx); stopNlbPoll(idx); return; }
+    }
+    if (attempts >= MAX) stopNlbPoll(idx);
+  };
+  window._nlbPollers[idx] = setInterval(tick, 3000);
+  tick(); // immediate first check
+}
+
+window.nlbAddNode = async (nlbId) => {
+  const c = window._nlbCtx; if (!c) return;
+  let nodes = [];
+  try {
+    const res = await axios({ method: 'get', url: `http://${c.hostname}:${c.port}/tumblebug/ns/${c.namespace}/infra/${c.infraid}`, auth: { username: c.username, password: c.password } });
+    nodes = (res.data && res.data.node || []).map(n => n.id);
+  } catch (e) { /* ignore */ }
+  if (!nodes.length) { errorAlert("No nodes available in this Infra"); return; }
+  const { value: nodeId } = await Swal.fire({
+    title: 'Add target node to NLB', input: 'select',
+    inputOptions: Object.fromEntries(nodes.map(n => [n, n])), inputPlaceholder: 'Select a node',
+    showCancelButton: true, confirmButtonText: 'Add',
+  });
+  if (!nodeId) return;
+  const s = addSpinnerTask("Adding node to NLB");
+  try {
+    await axios({ method: 'post', url: `http://${c.hostname}:${c.port}/tumblebug/ns/${c.namespace}/infra/${c.infraid}/nlb/${nlbId}/node`, headers: { 'Content-Type': 'application/json' }, data: { targetGroup: { nodes: [nodeId] } }, auth: { username: c.username, password: c.password } });
+    successAlert("Node added to NLB");
+    window.nlbManagerRefresh();
+  } catch (e) { errorAlert("Add node failed: " + (e.response?.data?.message || e.message)); }
+  finally { removeSpinnerTask(s); }
+};
+
+window.nlbRemoveNode = async (nlbId, nodeId) => {
+  const c = window._nlbCtx; if (!c) return;
+  const r = await Swal.fire({ icon: 'warning', title: 'Remove node from NLB?', text: nodeId, showCancelButton: true, confirmButtonText: 'Remove', confirmButtonColor: '#d33' });
+  if (!r.isConfirmed) return;
+  const s = addSpinnerTask("Removing node from NLB");
+  try {
+    await axios({ method: 'delete', url: `http://${c.hostname}:${c.port}/tumblebug/ns/${c.namespace}/infra/${c.infraid}/nlb/${nlbId}/node`, headers: { 'Content-Type': 'application/json' }, data: { targetGroup: { nodes: [nodeId] } }, auth: { username: c.username, password: c.password } });
+    successAlert("Node removed from NLB");
+    window.nlbManagerRefresh();
+  } catch (e) { errorAlert("Remove node failed: " + (e.response?.data?.message || e.message)); }
+  finally { removeSpinnerTask(s); }
+};
+
+// ============================================================================
+// Site-to-site VPN — rich manager: list / status / sites / health / create /
+// delete / reconcile. VPN status is derived by TB (from conditions), so it is
+// populated; a per-VPN "Refresh from CSP" re-syncs live via Terrarium.
+// ============================================================================
+function vpnStatusBadge(status) {
+  const s = (status || '').toLowerCase();
+  let bg = '#6c757d';
+  if (s.includes('available')) bg = '#28a745';
+  else if (s.includes('creat') || s.includes('regist')) bg = '#f0ad4e';
+  else if (s.includes('delet') || s.includes('deregist')) bg = '#e67e22';
+  else if (s.includes('fail') || s.includes('error')) bg = '#dc3545';
+  return `<span class="popup-badge" style="background:${bg};color:#fff;">${window.escapeHtml(status || 'Unknown')}</span>`;
+}
+
+// Best-effort scan of the raw terrarium cspResourceDetail for gateway public IPs.
+function vpnGatewayIps(resourceDetails) {
+  const out = [];
+  const scan = (o) => {
+    if (!o || typeof o !== 'object') return;
+    Object.keys(o).forEach((k) => {
+      const val = o[k];
+      if (typeof val === 'string' && /ip/i.test(k) && /^\d{1,3}(\.\d{1,3}){3}$/.test(val)) out.push(val);
+      else if (val && typeof val === 'object') scan(val);
+    });
+  };
+  (resourceDetails || []).forEach((r) => {
+    const d = r.cspResourceDetail;
+    if (Array.isArray(d)) d.forEach(scan); else scan(d);
+  });
+  return [...new Set(out)];
+}
+
+async function manageVPN(opts) {
+  const config = getConfig();
+  const { hostname, port, username, password } = config;
+  const namespace = configNamespace;
+  const infraid = (opts && opts.infraId) || infraidElement.value;
+  const preselectVpnId = (opts && opts.preselectVpnId) || '';
+  if (!namespace) { errorAlert("Please select a namespace first"); return; }
+  if (!infraid) { errorAlert("Please select an Infra first"); return; }
+  window._vpnCtx = { hostname, port, username, password, namespace, infraid };
+  const base = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}`;
+  const esc = (v) => window.escapeHtml(String(v == null ? '' : v));
+
+  const spinnerId = addSpinnerTask("Loading VPNs");
+  let vpns = [], sites = {};
+  try {
+    const [vpnRes, siteRes] = await Promise.all([
+      axios({ method: 'get', url: `${base}/vpn?option=InfoList`, auth: { username, password } }).catch(() => ({ data: {} })),
+      axios({ method: 'get', url: `${base}/site`, auth: { username, password } }).catch(() => ({ data: {} })),
+    ]);
+    vpns = (vpnRes.data && vpnRes.data.vpnInfoList) || [];
+    sites = (siteRes.data && siteRes.data.sites) || {};
+  } finally { removeSpinnerTask(spinnerId); }
+
+  const activeIdx = Math.max(0, vpns.findIndex(v => v.id === preselectVpnId));
+
+  const tabBtn = (id, target, label, color, active) =>
+    `<li class="nav-item" role="presentation"><button class="nav-link ${active ? 'active' : ''}" id="${id}" data-bs-toggle="tab" data-bs-target="${target}" type="button" role="tab" style="padding:8px 14px;border:none;background:none;font-weight:600;font-size:12px;color:${active ? color : '#6c757d'};border-bottom:3px solid ${active ? color : 'transparent'};">${label}</button></li>`;
+
+  const tabButtons = vpns.map((v, idx) => tabBtn(`vpn-tab-${idx}`, `#vpn-content-${idx}`, esc(v.name || v.id), '#0d6efd', idx === activeIdx)).join('')
+    + tabBtn('vpn-tab-create', '#vpn-content-create', '➕ Create', '#28a745', vpns.length === 0);
+
+  const vpnPanes = vpns.map((v, idx) => {
+    const sitesHtml = (v.vpnSites || []).map((site) => {
+      const cc = site.connectionConfig || {};
+      const region = (cc.regionDetail && cc.regionDetail.regionName) || cc.regionZoneInfoName || '';
+      const provider = cc.providerName || '';
+      const rd = site.resourceDetails || [];
+      const ips = vpnGatewayIps(rd);
+      return `<div style="border:1px solid #e2e8f0;border-radius:6px;padding:8px;margin:5px 0;">
+        <div style="font-weight:600;">${esc(site.connectionName)} <span style="color:#888;font-weight:400;font-size:12px;">${esc(provider)} ${esc(region)}</span></div>
+        ${ips.length ? `<div style="font-size:12px;">Gateway IP: <b>${ips.map(esc).join(', ')}</b></div>` : ''}
+        <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${rd.map(r => `${esc(r.cspResourceId || r.cspResourceName || '')}${r.status ? ' (' + esc(r.status) + ')' : ''}`).join('<br>') || '—'}</div>
+      </div>`;
+    }).join('');
+    return `<div class="tab-pane fade ${idx === activeIdx ? 'show active' : ''}" id="vpn-content-${idx}" role="tabpanel">
+      <div class="popup-section">
+        <div class="popup-section-title">🔒 ${esc(v.name || v.id)} &nbsp; <span id="vpn-status-${idx}">${vpnStatusBadge(v.status)}</span></div>
+        ${v.systemMessage ? `<div class="popup-row"><div class="popup-col"><span class="popup-hint">${esc(v.systemMessage)}</span></div></div>` : ''}
+        <div class="popup-row"><div class="popup-col"><button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.vpnRefresh('${esc(v.id)}')">🔄 Refresh from CSP</button></div></div>
+      </div>
+      <div class="popup-section">
+        <div class="popup-section-title">🌐 Sites (tunnel endpoints)</div>
+        ${sitesHtml || '<span class="popup-hint">No site details</span>'}
+      </div>
+      <div class="popup-section">
+        <div class="popup-section-title">❤️ Health (bidirectional ping) <button type="button" class="btn btn-sm btn-outline-info" style="margin-left:8px;" onclick="window.vpnHealth('${esc(v.id)}', ${idx})">Run check</button></div>
+        <div id="vpn-health-${idx}"><span class="popup-hint">Pings between site nodes through the tunnel (may take up to ~1 min).</span></div>
+      </div>
+      <div class="popup-row" style="margin-top:10px;"><div class="popup-col">
+        <button type="button" class="btn btn-danger btn-sm" onclick="window.vpnDelete('${esc(v.id)}', false)">🗑️ Delete</button>
+        <button type="button" class="btn btn-outline-danger btn-sm" style="margin-left:6px;" onclick="window.vpnDelete('${esc(v.id)}', true)" title="Reconcile TB metadata vs CSP (fixes stuck/failed state) without a Terrarium delete">🧹 Reconcile</button>
+      </div></div>
+    </div>`;
+  }).join('');
+
+  const siteOptions = [];
+  Object.keys(sites).forEach((csp) => (sites[csp] || []).forEach((s) => siteOptions.push({ csp, ...s })));
+  window._vpnSiteOptions = siteOptions;
+  const siteOptHtml = siteOptions.map((s, i) => `<option value="${i}">${esc(s.csp)} · ${esc(s.region)} · ${esc(s.vnet)}</option>`).join('');
+  const createPane = `<div class="tab-pane fade ${vpns.length === 0 ? 'show active' : ''}" id="vpn-content-create" role="tabpanel">
+    <div class="popup-section">
+      <div class="popup-section-title">➕ Create Site-to-site VPN</div>
+      <div class="popup-row"><div class="popup-col"><span class="popup-hint">⏱️ Creation is long-running (typically 15–45 min). It runs in the background — you can keep working; you'll be notified when done. One site must be <b>AWS</b>.</span></div></div>
+      <div class="popup-row"><div class="popup-col" style="flex:2;"><div class="popup-field"><label class="popup-label">VPN name</label><input id="vpn-c-name" class="popup-input" placeholder="vpn01"></div></div></div>
+      <div class="popup-row">
+        <div class="popup-col" style="flex:2;"><div class="popup-field"><label class="popup-label">Site 1 (VNet)</label><select id="vpn-c-site1" class="popup-select"><option value="">-- select --</option>${siteOptHtml}</select></div></div>
+        <div class="popup-col"><div class="popup-field"><label class="popup-label">Site 1 BGP ASN (opt)</label><input id="vpn-c-asn1" class="popup-input" placeholder="auto"></div></div>
+      </div>
+      <div class="popup-row">
+        <div class="popup-col" style="flex:2;"><div class="popup-field"><label class="popup-label">Site 2 (VNet)</label><select id="vpn-c-site2" class="popup-select"><option value="">-- select --</option>${siteOptHtml}</select></div></div>
+        <div class="popup-col"><div class="popup-field"><label class="popup-label">Site 2 BGP ASN (opt)</label><input id="vpn-c-asn2" class="popup-input" placeholder="auto"></div></div>
+      </div>
+      <div class="popup-row"><div class="popup-col"><button type="button" class="btn btn-success" onclick="window.vpnCreate()">Create VPN (background)</button></div></div>
+    </div>
+  </div>`;
+
+  Swal.fire({
+    title: `🔒 Site-to-site VPN — ${esc(infraid)}`,
+    width: 920,
+    html: `${POPUP_STYLES}<div class="popup-container">
+      <ul class="nav nav-tabs" id="vpnTabs" role="tablist" style="border-bottom:2px solid #dee2e6;margin-bottom:12px;">${tabButtons}</ul>
+      <div class="tab-content" id="vpnTabContent">${vpnPanes}${createPane}</div>
+    </div>`,
+    showConfirmButton: false, showCancelButton: true, cancelButtonText: 'Close',
+    didOpen: () => {
+      const btns = document.querySelectorAll('#vpnTabs button[data-bs-toggle="tab"]');
+      btns.forEach(b => b.addEventListener('click', function (e) {
+        e.preventDefault();
+        btns.forEach(x => { x.classList.remove('active'); x.style.color = '#6c757d'; x.style.borderBottomColor = 'transparent'; });
+        document.querySelectorAll('#vpnTabContent .tab-pane').forEach(p => p.classList.remove('show', 'active'));
+        const color = this.id === 'vpn-tab-create' ? '#28a745' : '#0d6efd';
+        this.classList.add('active'); this.style.color = color; this.style.borderBottomColor = color;
+        const t = document.querySelector(this.getAttribute('data-bs-target'));
+        if (t) t.classList.add('show', 'active');
+      }));
+    },
+  });
+}
+window.manageVPN = manageVPN;
+window.vpnManagerRefresh = () => { Swal.close(); setTimeout(manageVPN, 150); };
+
+function vpnSiteBody(opt, asn) {
+  const csp = (opt.csp || '').toLowerCase();
+  const prop = {};
+  const inner = {};
+  if (asn) inner.bgpAsn = String(asn);
+  if (csp === 'azure' && opt.gatewaySubnetCidr) inner.gatewaySubnetCidr = opt.gatewaySubnetCidr;
+  prop[csp] = inner;
+  return { vNetId: opt.vnet, cspSpecificProperty: prop };
+}
+
+window.vpnCreate = async () => {
+  const c = window._vpnCtx; if (!c) return;
+  const name = document.getElementById('vpn-c-name').value.trim();
+  const i1 = document.getElementById('vpn-c-site1').value, i2 = document.getElementById('vpn-c-site2').value;
+  const asn1 = document.getElementById('vpn-c-asn1').value.trim(), asn2 = document.getElementById('vpn-c-asn2').value.trim();
+  if (!name) { errorAlert("Enter a VPN name"); return; }
+  if (i1 === '' || i2 === '' || i1 === i2) { errorAlert("Select two different sites"); return; }
+  const opts = window._vpnSiteOptions || [];
+  const s1 = opts[Number(i1)], s2 = opts[Number(i2)];
+  if (![s1.csp, s2.csp].map(x => (x || '').toLowerCase()).includes('aws')) { errorAlert("One site must be AWS"); return; }
+  const body = { name, site1: vpnSiteBody(s1, asn1), site2: vpnSiteBody(s2, asn2) };
+  Swal.close();
+  const sp = addSpinnerTask(`Creating VPN '${name}' (15–45 min)…`);
+  try {
+    await axios({ method: 'post', url: `http://${c.hostname}:${c.port}/tumblebug/ns/${c.namespace}/infra/${c.infraid}/vpn`, headers: { 'Content-Type': 'application/json' }, data: body, auth: { username: c.username, password: c.password }, timeout: 3600000 });
+    successAlert(`VPN '${name}' created`);
+    getInfra();
+  } catch (e) { errorAlert("Create VPN failed: " + (e.response?.data?.message || e.message)); }
+  finally { removeSpinnerTask(sp); }
+};
+
+window.vpnDelete = async (vpnId, reconcile) => {
+  const c = window._vpnCtx; if (!c) return;
+  const r = await Swal.fire({ icon: 'warning', title: reconcile ? 'Reconcile VPN metadata?' : 'Delete VPN?', text: vpnId, showCancelButton: true, confirmButtonText: reconcile ? 'Reconcile' : 'Delete', confirmButtonColor: '#d33' });
+  if (!r.isConfirmed) return;
+  const sp = addSpinnerTask(reconcile ? "Reconciling VPN…" : "Deleting VPN (may take minutes)…");
+  try {
+    const url = `http://${c.hostname}:${c.port}/tumblebug/ns/${c.namespace}/infra/${c.infraid}/vpn/${vpnId}${reconcile ? '?option=reconcile' : ''}`;
+    await axios({ method: 'delete', url, auth: { username: c.username, password: c.password }, timeout: 3600000 });
+    successAlert(reconcile ? "VPN reconciled" : "VPN deleted");
+    getInfra();
+    window.vpnManagerRefresh();
+  } catch (e) { errorAlert("VPN delete failed: " + (e.response?.data?.message || e.message)); }
+  finally { removeSpinnerTask(sp); }
+};
+
+window.vpnHealth = async (vpnId, idx) => {
+  const c = window._vpnCtx; if (!c) return;
+  const div = document.getElementById(`vpn-health-${idx}`);
+  if (div) div.innerHTML = '<span class="popup-hint">Running ping test through the tunnel…</span>';
+  try {
+    const res = await axios({ method: 'post', url: `http://${c.hostname}:${c.port}/tumblebug/ns/${c.namespace}/infra/${c.infraid}/vpn/${vpnId}/health`, headers: { 'Content-Type': 'application/json' }, data: {}, auth: { username: c.username, password: c.password }, timeout: 300000 });
+    const h = res.data || {};
+    const e2 = (v) => window.escapeHtml(String(v == null ? '' : v));
+    const rows = (h.results || []).map(r => `<div>${r.reachable ? '✅' : '❌'} ${e2(r.direction)}: ${e2(r.message || '')}</div>`).join('');
+    if (div) div.innerHTML = `<div style="font-size:12px;line-height:1.7;"><div><b>${h.reachable ? '✅ Reachable' : '❌ Not reachable'}</b> — ${e2(h.message || '')}</div>${rows}</div>`;
+  } catch (e) {
+    if (div) div.innerHTML = `<span style="color:#dc3545;font-size:12px;">Health check failed: ${window.escapeHtml(e.response?.data?.message || e.message)}</span>`;
+  }
+};
+
+window.vpnRefresh = async (vpnId) => {
+  const c = window._vpnCtx; if (!c) return;
+  const sp = addSpinnerTask("Refreshing VPN from CSP…");
+  try {
+    await axios({ method: 'get', url: `http://${c.hostname}:${c.port}/tumblebug/ns/${c.namespace}/infra/${c.infraid}/vpn/${vpnId}?refresh=true`, auth: { username: c.username, password: c.password }, timeout: 120000 });
+    window.vpnManagerRefresh();
+  } catch (e) { errorAlert("Refresh failed: " + (e.response?.data?.message || e.message)); }
+  finally { removeSpinnerTask(sp); }
+};
+
+// ============================================================================
+// Global NLB (MCNLB, multi-cloud HAProxy) — manager.
+// IMPORTANT: an MCNLB has no dedicated resource endpoints; it is deployed as its
+// OWN Infra named "{targetInfraId}-nlb" (see nlbPostfix) and is created/queried/
+// deleted as an Infra. So this manager works against that host Infra: create it,
+// view the HAProxy host + stats, or delete it.
+// ============================================================================
+async function manageMCNLB(opts) {
+  const config = getConfig();
+  const { hostname, port, username, password } = config;
+  const namespace = configNamespace;
+  let infraid = (opts && opts.infraId) || infraidElement.value;
+  if (!namespace) { errorAlert("Please select a namespace first"); return; }
+  if (!infraid) { errorAlert("Please select an Infra first"); return; }
+  // Accept being opened from either the target Infra or its "-nlb" host.
+  const targetInfraId = infraid.endsWith('-nlb') ? infraid.slice(0, -4) : infraid;
+  const hostInfraId = `${targetInfraId}-nlb`;
+  window._mcnlbCtx = { hostname, port, username, password, namespace, targetInfraId, hostInfraId };
+  const esc = (v) => window.escapeHtml(String(v == null ? '' : v));
+
+  const spinnerId = addSpinnerTask("Loading Global NLB");
+  let host = null;
+  try {
+    const res = await axios({ method: 'get', url: `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${hostInfraId}`, auth: { username, password } }).catch(() => null);
+    if (res && res.data && (res.data.id || (res.data.node && res.data.node.length))) host = res.data;
+  } finally { removeSpinnerTask(spinnerId); }
+
+  let bodyHtml;
+  if (host) {
+    const nodes = host.node || [];
+    const nodeRows = nodes.map((n) => {
+      const ip = n.publicIP || '';
+      const stats = ip ? `<a href="http://${esc(ip)}:9000/" target="_blank" rel="noopener" style="margin-left:8px;font-size:12px;text-decoration:none;" title="HAProxy stats (admin: default/default)">🔗 HAProxy stats</a>` : '';
+      const running = /running/i.test(n.status || '');
+      return `<div style="border:1px solid #e2e8f0;border-radius:6px;padding:6px 8px;margin:4px 0;">
+        <b>${esc(n.id)}</b> <span class="popup-badge" style="background:${running ? '#28a745' : '#6c757d'};color:#fff;">${esc(n.status || '')}</span>
+        <div style="font-size:12px;">public: ${esc(n.publicIP || '—')} · private: ${esc(n.privateIP || '—')}${stats}</div>
+      </div>`;
+    }).join('');
+    bodyHtml = `
+      <div class="popup-section">
+        <div class="popup-section-title">🌐 Global NLB host: ${esc(hostInfraId)} <span class="popup-badge" style="background:#4b2c85;color:#fff;">${esc(host.status || '')}</span></div>
+        <div class="popup-row"><div class="popup-col"><span class="popup-hint">HAProxy cluster fronting <b>${esc(targetInfraId)}</b>'s VMs (backends via their public IPs). Open a host's HAProxy stats (admin: default/default) for live frontends/backends. Note: this host is itself an Infra.</span></div></div>
+        ${nodeRows || '<span class="popup-hint">No host nodes</span>'}
+      </div>
+      <div class="popup-section">
+        <div class="popup-section-title">🔥 Firewall (host)</div>
+        <div class="popup-row"><div class="popup-col"><span class="popup-hint">HAProxy binds the frontend port and <b>:9000</b> (stats). Open those inbound ports on this host Infra's Security Group for external access.</span></div></div>
+        <div class="popup-row"><div class="popup-col"><button type="button" class="btn btn-warning btn-sm" onclick="Swal.close(); updateFirewallRules({ infraId: '${esc(hostInfraId)}' });">🔥 Update host firewall rules…</button></div></div>
+      </div>
+      <div class="popup-row" style="margin-top:10px;"><div class="popup-col">
+        <button type="button" class="btn btn-danger btn-sm" onclick="window.mcnlbDelete()">🗑️ Delete Global NLB (host Infra)</button>
+      </div></div>`;
+  } else {
+    bodyHtml = `
+      <div class="popup-section">
+        <div class="popup-section-title">➕ Create Global NLB (Multi-cloud HAProxy)</div>
+        <div class="popup-row"><div class="popup-col"><span class="popup-hint">⏱️ Deploys a dedicated VM cluster at a latency-fair location and installs HAProxy to front <b>${esc(targetInfraId)}</b>'s VMs. Long-running (VM provisioning + install); runs in the background. Targets must have public IPs and allow the target port from the NLB host.</span></div></div>
+        <div class="popup-row">
+          <div class="popup-col"><div class="popup-field"><label class="popup-label">Protocol</label><select id="mcnlb-c-proto" class="popup-select"><option>TCP</option><option>HTTP</option></select></div></div>
+          <div class="popup-col"><div class="popup-field"><label class="popup-label">Port (listen/target)</label><input id="mcnlb-c-port" class="popup-input" type="number" value="80" min="1" max="65535"></div></div>
+        </div>
+        <div class="popup-row"><div class="popup-col"><button type="button" class="btn btn-success" onclick="window.mcnlbCreate()">Create Global NLB (background)</button></div></div>
+      </div>`;
+  }
+
+  Swal.fire({
+    title: `🌐 Global NLB — ${esc(targetInfraId)}`,
+    width: 760,
+    html: `${POPUP_STYLES}<div class="popup-container">${bodyHtml}</div>`,
+    showConfirmButton: false, showCancelButton: true, cancelButtonText: 'Close',
+  });
+}
+window.manageMCNLB = manageMCNLB;
+window.mcnlbManagerRefresh = () => { Swal.close(); setTimeout(manageMCNLB, 200); };
+
+window.mcnlbCreate = async () => {
+  const c = window._mcnlbCtx; if (!c) return;
+  const proto = document.getElementById('mcnlb-c-proto').value;
+  let p = parseInt(document.getElementById('mcnlb-c-port').value, 10);
+  if (isNaN(p) || p <= 0) p = 80;
+  const body = {
+    type: "PUBLIC", scope: "GLOBAL",
+    listener: { Protocol: proto, Port: `${p}` },
+    targetGroup: { Protocol: proto, Port: `${p}` },
+    HealthChecker: { Interval: 10, Timeout: 10, Threshold: 3 },
+  };
+  Swal.close();
+  const sp = addSpinnerTask("Creating Global NLB (VM cluster + HAProxy)…");
+  try {
+    await axios({ method: 'post', url: `http://${c.hostname}:${c.port}/tumblebug/ns/${c.namespace}/infra/${c.targetInfraId}/mcSwNlb`, headers: { 'Content-Type': 'application/json' }, data: body, auth: { username: c.username, password: c.password }, timeout: 3600000 });
+    successAlert("Global NLB created");
+    getInfra();
+  } catch (e) { errorAlert("Create Global NLB failed: " + (e.response?.data?.message || e.message)); }
+  finally { removeSpinnerTask(sp); }
+};
+
+window.mcnlbDelete = async () => {
+  const c = window._mcnlbCtx; if (!c) return;
+  const r = await Swal.fire({ icon: 'warning', title: 'Delete Global NLB?', html: `Deletes the host Infra <b>${window.escapeHtml(c.hostInfraId)}</b> (terminates its VMs).`, showCancelButton: true, confirmButtonText: 'Delete', confirmButtonColor: '#d33' });
+  if (!r.isConfirmed) return;
+  const sp = addSpinnerTask("Deleting Global NLB host…");
+  try {
+    await axios({ method: 'delete', url: `http://${c.hostname}:${c.port}/tumblebug/ns/${c.namespace}/infra/${c.hostInfraId}?option=terminate`, auth: { username: c.username, password: c.password }, timeout: 1800000 });
+    successAlert("Global NLB deleted");
+    getInfra();
+    window.mcnlbManagerRefresh();
+  } catch (e) { errorAlert("Delete Global NLB failed: " + (e.response?.data?.message || e.message)); }
+  finally { removeSpinnerTask(sp); }
+};
 
 // Function to execute selected NLB action and close SweetAlert
 function executeNLBAction(action) {
@@ -23092,16 +23704,56 @@ function loadK8sClusterData() {
 }
 
 // Load VPN data from all Infras (reusing existing Infra data)
+// Load NLB (regional CSP NLB) data from each Infra into the central store so both
+// the NLB manager and the Net graph can consume window.cloudBaristaCentralData.nlb.
+async function loadNlbDataFromInfras() {
+  try {
+    const config = getConfig();
+    const { hostname, port, username, password } = config;
+    const namespace = configNamespace || config.username;
+
+    const infraData = (window.cloudBaristaCentralData && window.cloudBaristaCentralData.infraData) || [];
+    if (!infraData.length) {
+      window.cloudBaristaCentralData.nlb = [];
+      return;
+    }
+
+    const all = [];
+    for (const infra of infraData) {
+      try {
+        const res = await axios({
+          method: "get",
+          url: `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infra.id}/nlb`,
+          auth: { username, password },
+          timeout: 5000,
+        });
+        const list = (res.data && res.data.nlb) || [];
+        list.forEach((nlb) => { nlb.infraId = infra.id; all.push(nlb); });
+      } catch (e) {
+        // Per-Infra NLB fetch failure is non-fatal.
+      }
+    }
+    window.cloudBaristaCentralData.nlb = all;
+    notifyDataSubscribers();
+  } catch (e) {
+    console.log("loadNlbDataFromInfras error:", e && e.message);
+  }
+}
+window.loadNlbDataFromInfras = loadNlbDataFromInfras;
+
 async function loadVpnDataFromInfras() {
   try {
     const config = getConfig();
     const { hostname, port, username, password } = config;
     const namespace = configNamespace || config.username;
     
-    // Use existing Infra data from central store - no fallback API call
+    // Use existing Infra data from central store - no fallback API call.
+    // NOTE: the central store key is `infraData` (not `infra`); reading `.infra`
+    // here silently bailed, so VPN data was never loaded into the store and the
+    // Net graph never saw any VPN. Read the correct key.
     let infraData = [];
-    if (window.cloudBaristaCentralData && window.cloudBaristaCentralData.infra) {
-      infraData = window.cloudBaristaCentralData.infra;
+    if (window.cloudBaristaCentralData && window.cloudBaristaCentralData.infraData) {
+      infraData = window.cloudBaristaCentralData.infraData;
       debugLog.resource('Using cached Infra data for VPN loading:', infraData.length, 'Infras');
     } else {
       debugLog.resource('Central Infra data not available, skipping VPN loading');
@@ -23125,15 +23777,17 @@ async function loadVpnDataFromInfras() {
     // Load VPN data from each Infra
     for (const infra of infraData) {
       try {
-        const vpnUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infra.id}/vpn`;
+        // option=InfoList returns full VpnInfo objects (stored, fast) under
+        // vpnInfoList; the default (IdList) returns only ids under vpnIdList.
+        const vpnUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infra.id}/vpn?option=InfoList`;
         const vpnResponse = await axios({
           method: "get",
           url: vpnUrl,
           auth: { username, password },
-          timeout: 5000
+          timeout: 8000
         });
-        
-        const vpnData = vpnResponse.data?.vpn || [];
+
+        const vpnData = vpnResponse.data?.vpnInfoList || vpnResponse.data?.vpn || [];
         debugLog.api(`VPN data for Infra ${infra.id}:`, vpnData.length, 'VPNs');
         
         // Add Infra ID to each VPN for reference
