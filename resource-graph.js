@@ -467,6 +467,33 @@ function generateDataHash(data) {
  * Initialize the Cytoscape graph instance
  * @param {string} containerId - DOM container ID for the graph
  */
+// ── Edge line pattern (user-selectable at runtime) ──
+// Three presets; different situations read better with different routing.
+const EDGE_STYLES = {
+  straight: { 'curve-style': 'bezier' }, // single edges straight, parallels fan
+  arc: { 'curve-style': 'unbundled-bezier', 'control-point-distances': [36], 'control-point-weights': [0.5] },
+  orthogonal: { 'curve-style': 'round-taxi', 'taxi-direction': 'auto', 'taxi-turn': 30, 'taxi-turn-min-distance': 10 },
+};
+let currentEdgeMode = 'arc'; // default
+
+// Re-apply the chosen pattern as inline style on all edges (needed after
+// updateGraph rebuilds edges, since new edges get the base stylesheet only).
+function applyCurrentEdgeStyle() {
+  if (!cy) return;
+  cy.edges().style(EDGE_STYLES[currentEdgeMode]);
+}
+
+// Switch the edge line pattern: 'straight' | 'arc' | 'orthogonal'.
+export function setEdgeStyle(mode) {
+  if (!EDGE_STYLES[mode]) return;
+  currentEdgeMode = mode;
+  applyCurrentEdgeStyle();
+  // Reflect the active button on the toolbar, if present.
+  document.querySelectorAll('[data-edge-style]').forEach((b) => {
+    b.classList.toggle('active', b.getAttribute('data-edge-style') === mode);
+  });
+}
+
 export function initResourceGraph(containerId = 'resource-graph-container') {
   const container = document.getElementById(containerId);
   if (!container) {
@@ -577,8 +604,13 @@ export function initResourceGraph(containerId = 'resource-graph-container') {
           'line-color': '#999',
           'target-arrow-color': '#999',
           'target-arrow-shape': 'triangle',
-          'curve-style': 'bezier',
-          'control-point-step-size': 40,  // Spacing between parallel edges
+          // Default line pattern = Arc (smooth). The user can switch between
+          // Straight / Arc / Orthogonal at runtime via setEdgeStyle() — see
+          // EDGE_STYLES. These base props match the 'arc' preset for first paint.
+          'curve-style': 'unbundled-bezier',
+          'control-point-distances': [36],  // arc height at the midpoint
+          'control-point-weights': [0.5],   // control point at the edge midpoint
+          'control-point-step-size': 40,    // spacing when parallel edges fan out
           'opacity': 0.7,
           'events': 'no'  // Disable mouse events on edges (not selectable)
         }
@@ -2403,6 +2435,9 @@ export function updateGraph(infraList, namespace, force = false, centralData = n
     cy.add(validEdges);
   });
 
+  // Keep the user's chosen line pattern on the freshly-added edges.
+  applyCurrentEdgeStyle();
+
   // Run layout (will restore focus state after layout completes)
   runLayout();
 
@@ -4017,6 +4052,7 @@ window.ResourceGraph = {
   focus: focusOnNeighbors,
   reset: resetFocus,
   runLayout: runLayout,
+  setEdgeStyle: setEdgeStyle,
   exportPng: exportGraphAsPng,
   exportJson: exportGraphAsJson,
   subscribeToUpdates: subscribeToUpdates,
