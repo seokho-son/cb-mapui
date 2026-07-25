@@ -14950,6 +14950,12 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
+    case "KServeMonitoring":
+      // Prometheus + Grafana with DCGM (GPU) and vLLM (LLM) dashboards on NodePort 30300
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/kserve/deploy-monitoring.sh | bash; echo ''; echo '[GRAFANA_URL]'; echo 'http://$$Func(GetPublicIP(target=this)):30300 (admin / admin)'";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
     case "HermesAgent-KServe":
       // Deploy Hermes Agent connected to the KServe model API (hermes-only mode; no local vLLM)
       // Requires KServeVllmServe with NodePort 30800 (localhost works on any cluster node)
@@ -15984,7 +15990,8 @@ window.predefinedScriptCategories = {
       { value: 'KServeExampleC',         label: '11. Example: plain Deployment serving (no KServe)', step: 11, targetLabel: 'role=control', optional: true },
       { value: 'KServeRegistryDeploy',   label: '12. Deploy Private Registry (in-cluster)',          step: 12, targetLabel: 'role=control', optional: true },
       { value: 'KServeRegistryAccess',   label: '13. Enable Registry Access (run on ALL nodes)',     step: 13, optional: true },
-      { value: 'KServeExampleB',         label: '14. Example: build & serve custom model (registry)', step: 14, targetLabel: 'role=control', optional: true }
+      { value: 'KServeExampleB',         label: '14. Example: build & serve custom model (registry)', step: 14, targetLabel: 'role=control', optional: true },
+      { value: 'KServeMonitoring',       label: '15. Deploy Monitoring (Prometheus + Grafana, GPU/LLM dashboards)', step: 15, targetLabel: 'role=control', optional: true }
     ]
   },
   'ml-ray': {
