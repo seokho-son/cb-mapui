@@ -14920,10 +14920,40 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
+    case "KServeExampleA":
+      // Serve a standard-format sklearn model via KServe runtime — no image build needed
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/kserve/examples/a-sklearn-isvc.sh | bash";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "KServeExampleC":
+      // Serve the same model as a plain Deployment + Service (no KServe) for comparison
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/kserve/examples/c-plain-deployment.sh | bash";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "KServeRegistryDeploy":
+      // In-cluster private registry on NodePort 30500 (vNet-internal; keep the port closed in the SG)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/kserve/deploy-private-registry.sh | bash";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "KServeRegistryAccess":
+      // Configure containerd on every node to pull from the plain-HTTP registry (target: Infra / all nodes)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/kserve/config-registry-access.sh | bash";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "KServeExampleB":
+      // Build a custom model image, push to the private registry, and serve via KServe
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/kserve/examples/build-serve-custom-model.sh | bash";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
     case "HermesAgent-KServe":
       // Deploy Hermes Agent connected to the KServe model API (hermes-only mode; no local vLLM)
       // Requires KServeVllmServe with NodePort 30800 (localhost works on any cluster node)
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployHermesAgent.sh -o /tmp/deployHermesAgent.sh && bash /tmp/deployHermesAgent.sh --run-as-user cb-user --mode hermes-only --skip-vllm --vllm-base-url http://localhost:30800/openai/v1 --model llm --hermes-api-key \"<HERMES_API_KEY>\" --discord-token \"<DISCORD_TOKEN>\" --discord-home-channel \"<DISCORD_HOME_CHANNEL>\" --discord-home-channel-name \"<DISCORD_HOME_CHANNEL_NAME>\" --ntfy-topic \"<NTFY_TOPIC>\" --tavily-api-key \"<TAVILY_API_KEY>\"";
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployHermesAgent.sh -o /tmp/deployHermesAgent.sh && MODEL=\"<VLLM_MODEL>\"; [ -z \"$MODEL\" ] && MODEL=\"Qwen/Qwen2.5-7B-Instruct\"; bash /tmp/deployHermesAgent.sh --run-as-user cb-user --mode hermes-only --skip-vllm --vllm-base-url http://localhost:30800/openai/v1 --model \"${MODEL##*/}\" --hermes-api-key \"<HERMES_API_KEY>\" --discord-token \"<DISCORD_TOKEN>\" --discord-home-channel \"<DISCORD_HOME_CHANNEL>\" --discord-home-channel-name \"<DISCORD_HOME_CHANNEL_NAME>\" --ntfy-topic \"<NTFY_TOPIC>\" --tavily-api-key \"<TAVILY_API_KEY>\"";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
@@ -15949,7 +15979,12 @@ window.predefinedScriptCategories = {
       { value: 'KServeVllmServe',        label: '6. Serve LLM Model (vLLM InferenceService)',       step: 6, targetLabel: 'role=control' },
       { value: 'KServeStatus',           label: '7. Check Serving Status',                          step: 7, targetLabel: 'role=control', syncMode: true },
       { value: 'KServeOpenWebUI',        label: '8. Install Open WebUI (KServe)',                   step: 8, targetLabel: 'role=control' },
-      { value: 'HermesAgent-KServe',     label: '9. Deploy Hermes Agent (uses KServe endpoint)',    step: 9, targetLabel: 'role=control', optional: true, experimental: true }
+      { value: 'HermesAgent-KServe',     label: '9. Deploy Hermes Agent (uses KServe endpoint)',    step: 9, targetLabel: 'role=control', optional: true, experimental: true },
+      { value: 'KServeExampleA',         label: '10. Example: serve sklearn model (no image build)', step: 10, targetLabel: 'role=control', optional: true },
+      { value: 'KServeExampleC',         label: '11. Example: plain Deployment serving (no KServe)', step: 11, targetLabel: 'role=control', optional: true },
+      { value: 'KServeRegistryDeploy',   label: '12. Deploy Private Registry (in-cluster)',          step: 12, targetLabel: 'role=control', optional: true },
+      { value: 'KServeRegistryAccess',   label: '13. Enable Registry Access (run on ALL nodes)',     step: 13, optional: true },
+      { value: 'KServeExampleB',         label: '14. Example: build & serve custom model (registry)', step: 14, targetLabel: 'role=control', optional: true }
     ]
   },
   'ml-ray': {
