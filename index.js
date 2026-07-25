@@ -14894,6 +14894,39 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
+    case "KServeDeploy":
+      // Deploy KServe stack on K8s: default StorageClass, GPU Operator, cert-manager, KServe (RawDeployment)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/kserve/deploy-kserve-stack.sh | bash";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "KServeVllmServe":
+      // Serve a HuggingFace model via KServe InferenceService (vLLM backend, OpenAI-compatible API)
+      // Re-run with a different model to swap in place; tool parser is auto-detected from the model
+      // NodePort 30800 exposes the API externally (allow in SG for direct API / Hermes Agent use)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/kserve/serve-vllm-model.sh -o /tmp/serve-vllm-model.sh && MODEL=\"<VLLM_MODEL>\"; HF_TOKEN=\"<VLLM_HF_TOKEN>\"; CTX_LEN=\"<VLLM_CTX_LEN>\"; ARGS=(--nodeport 30800); [ -n \"$MODEL\" ] && ARGS+=(--model \"$MODEL\"); [ -n \"$HF_TOKEN\" ] && ARGS+=(--hf-token \"$HF_TOKEN\"); [ -n \"$CTX_LEN\" ] && ARGS+=(--ctx-len \"$CTX_LEN\"); bash /tmp/serve-vllm-model.sh \"${ARGS[@]}\"";
+      defaultRemoteCommand[1] = "echo 'External API: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:30800/openai/v1))'";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "KServeStatus":
+      // Check KServe serving status (run on control plane)
+      defaultRemoteCommand[0] = "echo '=== InferenceServices ==='; kubectl get isvc 2>/dev/null || echo '  (KServe not installed)'; echo ''; echo '=== Predictor Pods ==='; kubectl get pods -l serving.kserve.io/inferenceservice -o wide 2>/dev/null; echo ''; echo '=== GPU Resources ==='; kubectl get nodes -o custom-columns='NAME:.metadata.name,GPU:.status.allocatable.nvidia\\.com/gpu' 2>/dev/null; echo ''; echo '=== External API ==='; NP=$(kubectl get svc -o jsonpath='{.items[?(@.metadata.name==\"llm-api\")].spec.ports[0].nodePort}' 2>/dev/null); if [ -n \"$NP\" ]; then echo \"  http://$$Func(GetPublicIP(target=this)):${NP}/openai/v1\"; else echo '  (not exposed; serve with --nodeport to expose)'; fi; echo ''; echo '=== Model Logs (tail) ==='; kubectl logs -l serving.kserve.io/inferenceservice --tail=5 2>/dev/null || echo '  (no model pods yet)'";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "KServeOpenWebUI":
+      // Deploy Open WebUI connected to the KServe endpoint (NodePort 30080; open it in the SG)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/kserve/deploy-open-webui-kserve.sh | bash -s -- --nodeport 30080; echo ''; echo '[OPEN_WEBUI_URL]'; echo 'http://$$Func(GetPublicIP(target=this)):30080'";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "HermesAgent-KServe":
+      // Deploy Hermes Agent connected to the KServe model API (hermes-only mode; no local vLLM)
+      // Requires KServeVllmServe with NodePort 30800 (localhost works on any cluster node)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/llm/deployHermesAgent.sh -o /tmp/deployHermesAgent.sh && bash /tmp/deployHermesAgent.sh --run-as-user cb-user --mode hermes-only --skip-vllm --vllm-base-url http://localhost:30800/openai/v1 --model llm --hermes-api-key \"<HERMES_API_KEY>\" --discord-token \"<DISCORD_TOKEN>\" --discord-home-channel \"<DISCORD_HOME_CHANNEL>\" --discord-home-channel-name \"<DISCORD_HOME_CHANNEL_NAME>\" --ntfy-topic \"<NTFY_TOPIC>\" --tavily-api-key \"<TAVILY_API_KEY>\"";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
     case "Westward":
       defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh";
       defaultRemoteCommand[1] = "chmod +x ~/setgame.sh; sudo ~/setgame.sh";
@@ -15900,6 +15933,23 @@ window.predefinedScriptCategories = {
       { value: 'K8sLoadTest',            label: '16. Run Load Test (Batch Job → demo app)',        step: 16, targetLabel: 'role=control', syncMode: true },
       { value: 'K8sDashboard',           label: '17. Install K8s Dashboard (Visualization)',       step: 17, targetLabel: 'role=control', syncMode: true },
       { value: 'K8sPortainer',           label: '18. Install Portainer CE (Visual Cluster Monitor)', step: 18, targetLabel: 'role=control', syncMode: true }
+    ]
+  },
+  'kserve': {
+    label: '🚀 KServe (LLM Serving)',
+    description: 'KServe(RawDeployment) + vLLM + Open WebUI on K8s — build the cluster with steps 1-4 (GPU driver steps only if not pre-installed on the image), then deploy serving with steps 5-8',
+    scripts: [
+      { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane',                          step: 1, targetLabel: 'role=control' },
+      { value: 'K8sGetJoinCommand',      label: '2. Get Join Command',                              step: 2, targetLabel: 'role=control', syncMode: true },
+      { value: 'Nvidia',                 label: '2-opt. Install GPU Driver (skip on GPU-ready images)', step: 2, targetLabel: 'accelerator=gpu', optional: true },
+      { value: 'RebootVM',               label: '2-opt. Reboot GPU Node (after driver install)',    step: 2, targetLabel: 'accelerator=gpu', optional: true },
+      { value: 'K8sWorker-Deploy',       label: '3. Deploy Worker & Join Cluster',                  step: 3, targetLabel: 'role=node' },
+      { value: 'K8sClusterStatus',       label: '4. Check Cluster Status',                          step: 4, targetLabel: 'role=control', syncMode: true },
+      { value: 'KServeDeploy',           label: '5. Deploy KServe Stack (GPU Operator + cert-manager + KServe)', step: 5, targetLabel: 'role=control' },
+      { value: 'KServeVllmServe',        label: '6. Serve LLM Model (vLLM InferenceService)',       step: 6, targetLabel: 'role=control' },
+      { value: 'KServeStatus',           label: '7. Check Serving Status',                          step: 7, targetLabel: 'role=control', syncMode: true },
+      { value: 'KServeOpenWebUI',        label: '8. Install Open WebUI (KServe)',                   step: 8, targetLabel: 'role=control' },
+      { value: 'HermesAgent-KServe',     label: '9. Deploy Hermes Agent (uses KServe endpoint)',    step: 9, targetLabel: 'role=control', optional: true, experimental: true }
     ]
   },
   'ml-ray': {
@@ -19109,6 +19159,7 @@ async function executeRemoteCmd() {
         let completed = 0;
         let succeeded = 0;
         let failed = 0;
+        const failedNames = new Set();
 
         // Upload in batches of CONCURRENCY
         const nodeFailDetails = []; // { fileName, nodeId, error }
@@ -19131,12 +19182,14 @@ async function executeRemoteCmd() {
               if (nodeFails.length > 0) {
                 nodeFails.forEach(r => nodeFailDetails.push({ fileName: file.name, nodeId: r.nodeId || '?', error: r.error }));
                 failed++;
+                failedNames.add(file.name);
                 console.warn(`RC upload Node-level failure for ${file.name}:`, nodeFails);
               } else {
                 succeeded++;
               }
             } catch (e) {
               failed++;
+              failedNames.add(file.name);
               console.error(`RC upload error for ${file.name}:`, e);
             }
             completed++;
@@ -19152,6 +19205,28 @@ async function executeRemoteCmd() {
             `<div style="margin-top:2px;">• ${window.escapeHtml(d.fileName)} → Node <b>${window.escapeHtml(d.nodeId)}</b>: ${window.escapeHtml(d.error)}</div>`
           ).join('');
           statusMsg += `<div style="margin-top:4px; color:#dc3545; font-size:0.75rem;">${detailLines}</div>`;
+        }
+
+        // Auto-insert run commands for successfully uploaded shell scripts
+        const appendRunCommand = (text) => {
+          const cmdContainer = document.getElementById('cmdContainer');
+          if (!cmdContainer) return;
+          let target = Array.from(cmdContainer.querySelectorAll('textarea[id^="cmd"]'))
+            .find(t => !t.value.trim());
+          if (!target) {
+            if (typeof window.addCmd === 'function') window.addCmd();
+            const all = cmdContainer.querySelectorAll('textarea[id^="cmd"]');
+            target = all[all.length - 1];
+          }
+          if (target && !target.value.trim()) {
+            target.value = text;
+            if (typeof autoResizeTextarea === 'function') autoResizeTextarea(target);
+          }
+        };
+        const uploadedScripts = files.filter(f => /\.(sh|bash)$/i.test(f.name) && !failedNames.has(f.name));
+        uploadedScripts.forEach(f => appendRunCommand(`bash /home/cb-user/${f.name}`));
+        if (uploadedScripts.length > 0) {
+          statusMsg += `<div style="margin-top:4px; color:#0d6efd; font-size:0.75rem;">▶ Run command${uploadedScripts.length > 1 ? 's' : ''} added to Commands below</div>`;
         }
         statusEl.innerHTML = statusMsg;
       });
