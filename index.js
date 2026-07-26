@@ -14963,6 +14963,42 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
+    case "McpDemoDb":
+      // Deploy demo PostgreSQL with sample web-shop data (namespace mcp-demo)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/mcp/deploy-demo-db.sh | bash";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "McpDemoApi":
+      // Deploy demo REST API (FastAPI) backed by the demo PostgreSQL
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/mcp/deploy-demo-api.sh | bash";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "McpServers":
+      // Deploy two MCP servers: curated API tools (write path) + read-only SQL (analysis path)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/mcp/deploy-mcp-servers.sh | bash";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "McpAgentgateway":
+      // agentgateway federates both MCP servers behind one endpoint (NodePort 30900; open it in the SG)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/mcp/deploy-agentgateway.sh | bash; echo ''; echo '[MCP_ENDPOINT]'; echo 'http://$$Func(GetPublicIP(target=this)):30900/mcp'; echo '[AGENTGATEWAY_UI]'; echo 'http://$$Func(GetPublicIP(target=this)):30901/ui/'; echo ''; echo 'Register in Claude Code:'; echo 'claude mcp add --transport http shop-demo http://$$Func(GetPublicIP(target=this)):30900/mcp'";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "McpE2eTest":
+      // Scripted demo through the gateway: federated tools, SQL analysis, write governance
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/mcp/test-mcp-e2e.sh | bash";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "McpStatus":
+      // Check MCP demo stack status (run on control plane)
+      defaultRemoteCommand[0] = "echo '=== MCP demo stack (namespace mcp-demo) ==='; kubectl -n mcp-demo get pods,svc 2>/dev/null || echo '  (mcp-demo namespace not found)'; echo ''; echo '=== External endpoints ==='; echo '  MCP:  http://$$Func(GetPublicIP(target=this)):30900/mcp'; echo '  UI:   http://$$Func(GetPublicIP(target=this)):30901/ui/'; echo ''; echo '=== agentgateway logs (tail) ==='; kubectl -n mcp-demo logs deploy/agentgateway --tail=5 2>/dev/null || echo '  (agentgateway not deployed yet)'";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
     case "Westward":
       defaultRemoteCommand[0] = "wget https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/setgame.sh";
       defaultRemoteCommand[1] = "chmod +x ~/setgame.sh; sudo ~/setgame.sh";
@@ -15992,6 +16028,22 @@ window.predefinedScriptCategories = {
       { value: 'KServeRegistryAccess',   label: '13. Enable Registry Access (run on ALL nodes)',     step: 13, optional: true },
       { value: 'KServeExampleB',         label: '14. Example: build & serve custom model (registry)', step: 14, targetLabel: 'role=control', optional: true },
       { value: 'KServeMonitoring',       label: '15. Deploy Monitoring (Prometheus + Grafana, GPU/LLM dashboards)', step: 15, targetLabel: 'role=control', optional: true }
+    ]
+  },
+  'mcp': {
+    label: '🔌 MCP (agentgateway)',
+    description: 'Model Context Protocol demo — a REST API and PostgreSQL exposed as MCP servers, federated by agentgateway into one external endpoint (NodePort 30900). Build the cluster with steps 1-4 (CPU nodes are enough), then deploy the MCP stack with steps 5-10',
+    scripts: [
+      { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane',                            step: 1,  targetLabel: 'role=control' },
+      { value: 'K8sGetJoinCommand',      label: '2. Get Join Command',                                step: 2,  targetLabel: 'role=control', syncMode: true },
+      { value: 'K8sWorker-Deploy',       label: '3. Deploy Worker & Join Cluster',                    step: 3,  targetLabel: 'role=node' },
+      { value: 'K8sClusterStatus',       label: '4. Check Cluster Status',                            step: 4,  targetLabel: 'role=control', syncMode: true },
+      { value: 'McpDemoDb',              label: '5. Deploy Demo PostgreSQL (+ sample data)',          step: 5,  targetLabel: 'role=control' },
+      { value: 'McpDemoApi',             label: '6. Deploy Demo REST API (FastAPI)',                  step: 6,  targetLabel: 'role=control' },
+      { value: 'McpServers',             label: '7. Deploy MCP Servers (API tools + read-only SQL)',  step: 7,  targetLabel: 'role=control' },
+      { value: 'McpAgentgateway',        label: '8. Deploy agentgateway (federated MCP endpoint)',    step: 8,  targetLabel: 'role=control' },
+      { value: 'McpE2eTest',             label: '9. Run E2E Demo (tools via gateway)',                step: 9,  targetLabel: 'role=control', syncMode: true },
+      { value: 'McpStatus',              label: '10. Check MCP Stack Status',                         step: 10, targetLabel: 'role=control', syncMode: true }
     ]
   },
   'ml-ray': {
