@@ -186,7 +186,12 @@ var showInfraClusterLabels = false;
 var showInfraNodeGroupLabels = false;
 
 // Configuration variables (previously from removed form elements)
-var configHostname = "localhost";
+// Bracket bare IPv6 literals so http://${host}:${port} URLs stay valid
+function normalizeHostname(h) {
+  return h.includes(":") && !h.startsWith("[") ? "[" + h + "]" : h;
+}
+// Default hostname follows the page origin so remote/ingress access works without manual setup
+var configHostname = normalizeHostname(window.location.hostname || "localhost");
 var configPort = "1323";
 var configUsername = "default";
 var configPassword = "default";
@@ -194,6 +199,35 @@ var configCredentialHolder = "admin";
 var configNamespace = "";
 window.configNamespace = configNamespace;
 var cachedNamespaceList = [];
+
+// Persist API endpoint settings across reloads (password excluded)
+// Values are validated on load to keep stored strings out of HTML/URL injection range
+const API_CONFIG_KEY = "mapui-api-config";
+const isValidHostname = (v) => typeof v === "string" && /^[A-Za-z0-9.\-:[\]]{1,253}$/.test(v);
+const isValidPort = (v) => typeof v === "string" && /^\d{1,5}$/.test(v) && Number(v) <= 65535;
+const isValidName = (v) => typeof v === "string" && /^[A-Za-z0-9._-]{1,64}$/.test(v);
+try {
+  const saved = JSON.parse(localStorage.getItem(API_CONFIG_KEY) || "{}");
+  if (isValidHostname(saved.hostname)) configHostname = normalizeHostname(saved.hostname);
+  if (isValidPort(saved.port)) configPort = saved.port;
+  if (isValidName(saved.username)) configUsername = saved.username;
+  if (isValidName(saved.credentialHolder)) configCredentialHolder = saved.credentialHolder;
+} catch (e) {
+  console.warn("Failed to load saved API config:", e);
+}
+
+function saveApiConfig() {
+  try {
+    localStorage.setItem(API_CONFIG_KEY, JSON.stringify({
+      hostname: configHostname,
+      port: configPort,
+      username: configUsername,
+      credentialHolder: configCredentialHolder,
+    }));
+  } catch (e) {
+    console.warn("Failed to save API config:", e);
+  }
+}
 
 // Helper function to get current configuration
 function getConfig() {
@@ -4769,19 +4803,19 @@ function checkConnectionWithRetry() {
         <div class="config-form">
           <div class="config-input-group">
             <label for="config-hostname">Hostname:</label>
-            <input type="text" id="config-hostname" value="${configHostname}">
+            <input type="text" id="config-hostname" value="${window.escapeHtml(configHostname)}">
           </div>
           <div class="config-input-group">
             <label for="config-port">Port:</label>
-            <input type="text" id="config-port" value="${configPort}">
+            <input type="text" id="config-port" value="${window.escapeHtml(configPort)}">
           </div>
           <div class="config-input-group">
             <label for="config-username">Username:</label>
-            <input type="text" id="config-username" value="${configUsername}">
+            <input type="text" id="config-username" value="${window.escapeHtml(configUsername)}">
           </div>
           <div class="config-input-group">
             <label for="config-password">Password:</label>
-            <input type="password" id="config-password" value="${configPassword}">
+            <input type="password" id="config-password" value="${window.escapeHtml(configPassword)}">
           </div>
           <div class="config-input-group">
             <label for="config-credentialHolder">Credential Holder:</label>
@@ -5130,13 +5164,19 @@ function checkConnectionWithRetry() {
         const newUsername = document.getElementById('config-username').value;
         const newPassword = document.getElementById('config-password').value;
 
-        if (newHostname) configHostname = newHostname;
-        if (newPort) configPort = newPort;
-        if (newUsername) configUsername = newUsername;
+        if (isValidHostname(newHostname)) configHostname = normalizeHostname(newHostname);
+        else if (newHostname) console.warn('Invalid hostname ignored:', newHostname);
+        if (isValidPort(newPort)) configPort = newPort;
+        else if (newPort) console.warn('Invalid port ignored:', newPort);
+        if (isValidName(newUsername)) configUsername = newUsername;
+        else if (newUsername) console.warn('Invalid username ignored:', newUsername);
         if (newPassword) configPassword = newPassword;
 
         const newCredentialHolder = document.getElementById('config-credentialHolder').value;
-        if (newCredentialHolder) configCredentialHolder = newCredentialHolder;
+        if (isValidName(newCredentialHolder)) configCredentialHolder = newCredentialHolder;
+        else if (newCredentialHolder) console.warn('Invalid credential holder ignored:', newCredentialHolder);
+
+        saveApiConfig();
 
         console.log('[Config Updated] ' + configHostname + ':' + configPort + ' holder=' + configCredentialHolder);
 
