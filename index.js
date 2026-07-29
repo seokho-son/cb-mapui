@@ -14902,15 +14902,29 @@ function setDefaultRemoteCommandsByApp(appName) {
       break;
     case "KServeVllmServe":
       // Serve a HuggingFace model via KServe InferenceService (vLLM backend, OpenAI-compatible API)
-      // Re-run with a different model to swap in place; tool parser is auto-detected from the model
-      // NodePort 30800 exposes the API externally (allow in SG for direct API / Hermes Agent use)
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/kserve/serve-vllm-model.sh -o /tmp/serve-vllm-model.sh && MODEL=\"<VLLM_MODEL>\"; HF_TOKEN=\"<VLLM_HF_TOKEN>\"; CTX_LEN=\"<VLLM_CTX_LEN>\"; ARGS=(--nodeport 30800); [ -n \"$MODEL\" ] && ARGS+=(--model \"$MODEL\"); [ -n \"$HF_TOKEN\" ] && ARGS+=(--hf-token \"$HF_TOKEN\"); [ -n \"$CTX_LEN\" ] && ARGS+=(--ctx-len \"$CTX_LEN\"); bash /tmp/serve-vllm-model.sh \"${ARGS[@]}\"";
-      defaultRemoteCommand[1] = "echo 'External API: $$Func(GetPublicIP(target=this, prefix=http://, postfix=:30800/openai/v1))'";
+      // Multiple LLMs: run once per model with a unique name/port (llm/30800, llm2/30801, ...)
+      // On time-sliced (shared) GPUs also set GPU memory fraction, e.g. 0.45 for 2 models per GPU
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/kserve/serve-vllm-model.sh -o /tmp/serve-vllm-model.sh && MODEL=\"<VLLM_MODEL>\"; HF_TOKEN=\"<VLLM_HF_TOKEN>\"; CTX_LEN=\"<VLLM_CTX_LEN>\"; NAME=\"<VLLM_ISVC_NAME>\"; PORT=\"<VLLM_NODEPORT>\"; GPU_UTIL=\"<VLLM_GPU_UTIL>\"; NODE=\"<VLLM_TARGET_NODE>\"; [ -z \"$NAME\" ] && NAME=llm; [ -z \"$PORT\" ] && PORT=30800; ARGS=(--name \"$NAME\" --nodeport \"$PORT\"); [ -n \"$MODEL\" ] && ARGS+=(--model \"$MODEL\"); [ -n \"$HF_TOKEN\" ] && ARGS+=(--hf-token \"$HF_TOKEN\"); [ -n \"$CTX_LEN\" ] && ARGS+=(--ctx-len \"$CTX_LEN\"); [ -n \"$GPU_UTIL\" ] && ARGS+=(--gpu-mem-util \"$GPU_UTIL\"); [ -n \"$NODE\" ] && ARGS+=(--node \"$NODE\"); bash /tmp/serve-vllm-model.sh \"${ARGS[@]}\"";
+      defaultRemoteCommand[1] = "echo 'External API: http://$$Func(GetPublicIP(target=this)):<VLLM_NODEPORT>/openai/v1'";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "KServeGpuTimeslice":
+      // Optional GPU sharing: N pods per physical GPU (no VRAM isolation — set GPU_UTIL per model)
+      // On mixed-GPU clusters set the node name to slice only that node (e.g. slice L40S, MIG the A100)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/kserve/config-gpu-timeslicing.sh -o /tmp/config-gpu-timeslicing.sh && NODE=\"<GPU_TIMESLICE_NODE>\"; ARGS=(--replicas <GPU_TIMESLICE_REPLICAS>); [ -n \"$NODE\" ] && ARGS+=(--node \"$NODE\"); bash /tmp/config-gpu-timeslicing.sh \"${ARGS[@]}\"";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "KServeGpuMig":
+      // Optional MIG partitioning (A100/H100 only): hardware-isolated slices, each seen as one GPU
+      // WARNING: applying a profile resets the GPU (model pods on the node restart)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/kserve/config-gpu-mig.sh | bash -s -- --profile <MIG_PROFILE>";
+      defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
     case "KServeStatus":
       // Check KServe serving status (run on control plane)
-      defaultRemoteCommand[0] = "echo '=== InferenceServices ==='; kubectl get isvc 2>/dev/null || echo '  (KServe not installed)'; echo ''; echo '=== Predictor Pods ==='; kubectl get pods -l serving.kserve.io/inferenceservice -o wide 2>/dev/null; echo ''; echo '=== GPU Resources ==='; kubectl get nodes -o custom-columns='NAME:.metadata.name,GPU:.status.allocatable.nvidia\\.com/gpu' 2>/dev/null; echo ''; echo '=== External API ==='; NP=$(kubectl get svc -o jsonpath='{.items[?(@.metadata.name==\"llm-api\")].spec.ports[0].nodePort}' 2>/dev/null); if [ -n \"$NP\" ]; then echo \"  http://$$Func(GetPublicIP(target=this)):${NP}/openai/v1\"; else echo '  (not exposed; serve with --nodeport to expose)'; fi; echo ''; echo '=== Model Logs (tail) ==='; kubectl logs -l serving.kserve.io/inferenceservice --tail=5 2>/dev/null || echo '  (no model pods yet)'";
+      defaultRemoteCommand[0] = "echo '=== InferenceServices ==='; kubectl get isvc 2>/dev/null || echo '  (KServe not installed)'; echo ''; echo '=== Predictor Pods ==='; kubectl get pods -l serving.kserve.io/inferenceservice -o wide 2>/dev/null; echo ''; echo '=== GPU Resources ==='; kubectl get nodes -o custom-columns='NAME:.metadata.name,GPU:.status.allocatable.nvidia\\.com/gpu' 2>/dev/null; echo ''; echo '=== External APIs (per served LLM) ==='; APIS=$(kubectl get svc -o jsonpath='{range .items[*]}{.metadata.name}{\" \"}{.spec.ports[0].nodePort}{\"\\n\"}{end}' 2>/dev/null | grep -- '-api '); if [ -n \"$APIS\" ]; then echo \"$APIS\" | sed 's|\\(.*\\)-api \\(.*\\)|  \\1: http://$$Func(GetPublicIP(target=this)):\\2/openai/v1|'; else echo '  (not exposed; serve with --nodeport to expose)'; fi; echo ''; echo '=== Model Logs (tail) ==='; kubectl logs -l serving.kserve.io/inferenceservice --tail=5 2>/dev/null || echo '  (no model pods yet)'";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
@@ -14963,39 +14977,51 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
-    case "McpDemoDb":
-      // Deploy demo PostgreSQL with sample web-shop data (namespace mcp-demo)
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/mcp/deploy-demo-db.sh | bash";
+    case "McpRegistryDb":
+      // Deploy Model Registry DB (PostgreSQL seeded with a HF-style model catalog)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/mcp/deploy-registry-db.sh | bash";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
-    case "McpDemoApi":
-      // Deploy demo REST API (FastAPI) backed by the demo PostgreSQL
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/mcp/deploy-demo-api.sh | bash";
+    case "McpRegistryBackend":
+      // Deploy Model Registry backend (FastAPI: search/get/register/delete models)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/mcp/deploy-registry-backend.sh | bash";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "McpRegistryWeb":
+      // Deploy the registry web catalog (NodePort 30902; open it in the SG)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/mcp/deploy-registry-web.sh | bash; echo ''; echo '[MODEL_REGISTRY_WEB]'; echo 'http://$$Func(GetPublicIP(target=this)):30902'";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
     case "McpServers":
-      // Deploy two MCP servers: curated API tools (write path) + read-only SQL (analysis path)
+      // Deploy two MCP adapters: curated catalog tools (write path) + read-only SQL (analysis path)
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/mcp/deploy-mcp-servers.sh | bash";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
+    case "McpServingAdapter":
+      // Optional: live KServe InferenceService list as a 3rd MCP target (same-cluster KServe; re-run step 9 after)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/mcp/deploy-mcp-serving-adapter.sh | bash";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
     case "McpAgentgateway":
-      // agentgateway federates both MCP servers behind one endpoint (NodePort 30900; open it in the SG)
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/mcp/deploy-agentgateway.sh | bash; echo ''; echo '[MCP_ENDPOINT]'; echo 'http://$$Func(GetPublicIP(target=this)):30900/mcp'; echo '[AGENTGATEWAY_UI]'; echo 'http://$$Func(GetPublicIP(target=this)):30901/ui/'; echo ''; echo 'Register in Claude Code:'; echo 'claude mcp add --transport http shop-demo http://$$Func(GetPublicIP(target=this)):30900/mcp'";
+      // agentgateway federates the MCP adapters behind one endpoint (NodePort 30900; open it in the SG)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/mcp/deploy-agentgateway.sh | bash; echo ''; echo '[MCP_ENDPOINT (all tools)]'; echo 'http://$$Func(GetPublicIP(target=this)):30900/mcp'; echo '[MCP_ENDPOINT_REGISTRY (catalog view)]'; echo 'http://$$Func(GetPublicIP(target=this)):30900/mcp-registry'; echo '[MCP_ENDPOINT_SERVING (KServe view; needs step 8-opt)]'; echo 'http://$$Func(GetPublicIP(target=this)):30900/mcp-serving'; echo '[AGENTGATEWAY_UI]'; echo 'http://$$Func(GetPublicIP(target=this)):30901/ui/'; echo ''; echo 'Register in Claude Code:'; echo 'claude mcp add --transport http model-registry http://$$Func(GetPublicIP(target=this)):30900/mcp'; echo ''; echo 'Register in VS Code Copilot:'; echo 'Ctrl+Shift+P -> MCP: Add Server... -> HTTP -> paste an endpoint URL above, then use Copilot Chat in Agent mode'";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
     case "McpE2eTest":
-      // Scripted demo through the gateway: federated tools, SQL analysis, write governance
+      // Scripted demo through the gateway: federated tools, SQL analytics, register/delete governance
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/mcp/test-mcp-e2e.sh | bash";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
     case "McpStatus":
       // Check MCP demo stack status (run on control plane)
-      defaultRemoteCommand[0] = "echo '=== MCP demo stack (namespace mcp-demo) ==='; kubectl -n mcp-demo get pods,svc 2>/dev/null || echo '  (mcp-demo namespace not found)'; echo ''; echo '=== External endpoints ==='; echo '  MCP:  http://$$Func(GetPublicIP(target=this)):30900/mcp'; echo '  UI:   http://$$Func(GetPublicIP(target=this)):30901/ui/'; echo ''; echo '=== agentgateway logs (tail) ==='; kubectl -n mcp-demo logs deploy/agentgateway --tail=5 2>/dev/null || echo '  (agentgateway not deployed yet)'";
+      defaultRemoteCommand[0] = "echo '=== MCP demo stack (namespace mcp-demo) ==='; kubectl -n mcp-demo get pods,svc 2>/dev/null || echo '  (mcp-demo namespace not found)'; echo ''; echo '=== External endpoints ==='; echo '  Web:  http://$$Func(GetPublicIP(target=this)):30902'; echo '  MCP:  http://$$Func(GetPublicIP(target=this)):30900/mcp (views: /mcp-registry, /mcp-serving)'; echo '  UI:   http://$$Func(GetPublicIP(target=this)):30901/ui/'; echo ''; echo '=== agentgateway logs (tail) ==='; kubectl -n mcp-demo logs deploy/agentgateway --tail=5 2>/dev/null || echo '  (agentgateway not deployed yet)'";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
@@ -15496,8 +15522,9 @@ window.PLACEHOLDER_METADATA = {
     secret: true,
   },
   // vLLM — VRAM guide: BF16 ≈ 2 GB/B · FP8 ≈ 1 GB/B
-  // L4 (Ampere 24GB): BF16 only → ≤12B safe  |  L40S (Ada 24GB): FP8 → ≤24B
+  // L4 (Ampere 24GB): BF16 only → ≤12B safe  |  L40S (Ada 48GB): FP8 → ≤40B
   // A100 80GB: BF16 ≤40B  |  H100 80GB: FP8 W8A8 → ≤72B single card
+  // Time-sliced (shared) GPU: divide the budget — 2 models on one L40S ≈ 24GB each
   'VLLM_MODEL': {
     description: 'HuggingFace model name to serve',
     hint: 'meta-llama/Llama-3.1-8B-Instruct',
@@ -15516,15 +15543,17 @@ window.PLACEHOLDER_METADATA = {
       { label: '24GB · Llama3.1-8B          (BF16≈16GB, L4)',    value: 'meta-llama/Llama-3.1-8B-Instruct' },
       { label: '24GB · Qwen3-8B             (BF16≈16GB, L4)',    value: 'Qwen/Qwen3-8B' },
       { label: '24GB · DeepSeek-R1-8B       (BF16≈16GB, L4)',    value: 'deepseek-ai/DeepSeek-R1-Distill-Llama-8B' },
-      // ── 24 GB L40S · FP8 (Ada Lovelace, up to 24B) — 8 presets ───────
-      { label: '24GB · Gemma3-12B           (FP8≈12GB,  L40S)',  value: 'google/gemma-3-12b-it' },
-      { label: '24GB · Mistral-Nemo-12B     (FP8≈12GB,  L40S)',  value: 'mistralai/Mistral-Nemo-Instruct-2407' },
-      { label: '24GB · Phi-4                (FP8≈14GB,  L40S)',  value: 'microsoft/Phi-4' },
-      { label: '24GB · Qwen2.5-14B          (FP8≈14GB,  L40S)',  value: 'Qwen/Qwen2.5-14B-Instruct' },
-      { label: '24GB · Qwen3-14B            (FP8≈14GB,  L40S)',  value: 'Qwen/Qwen3-14B' },
-      { label: '24GB · DeepSeek-R1-14B      (FP8≈14GB,  L40S)',  value: 'deepseek-ai/DeepSeek-R1-Distill-Qwen-14B' },
-      { label: '24GB · Qwen2.5-Coder-14B    (FP8≈14GB,  L40S)',  value: 'Qwen/Qwen2.5-Coder-14B-Instruct' },
-      { label: '24GB · Mistral-Small3.1-24B (FP8≈24GB,  L40S)',  value: 'mistralai/Mistral-Small-3.1-24B-Instruct-2503' },
+      // ── 48 GB L40S · FP8 (Ada Lovelace, ≤40B; ≤14B fits a half-sliced GPU) — 10 presets ──
+      { label: '48GB · Gemma3-12B           (FP8≈12GB,  L40S)',  value: 'google/gemma-3-12b-it' },
+      { label: '48GB · Mistral-Nemo-12B     (FP8≈12GB,  L40S)',  value: 'mistralai/Mistral-Nemo-Instruct-2407' },
+      { label: '48GB · Phi-4                (FP8≈14GB,  L40S)',  value: 'microsoft/Phi-4' },
+      { label: '48GB · Qwen2.5-14B          (FP8≈14GB,  L40S)',  value: 'Qwen/Qwen2.5-14B-Instruct' },
+      { label: '48GB · Qwen3-14B            (FP8≈14GB,  L40S)',  value: 'Qwen/Qwen3-14B' },
+      { label: '48GB · DeepSeek-R1-14B      (FP8≈14GB,  L40S)',  value: 'deepseek-ai/DeepSeek-R1-Distill-Qwen-14B' },
+      { label: '48GB · Qwen2.5-Coder-14B    (FP8≈14GB,  L40S)',  value: 'Qwen/Qwen2.5-Coder-14B-Instruct' },
+      { label: '48GB · Mistral-Small3.1-24B (FP8≈24GB,  L40S)',  value: 'mistralai/Mistral-Small-3.1-24B-Instruct-2503' },
+      { label: '48GB · Qwen3-30B-A3B        (FP8≈30GB,  L40S)',  value: 'Qwen/Qwen3-30B-A3B-Instruct-2507-FP8' },
+      { label: '48GB · Qwen2.5-32B          (FP8≈32GB,  L40S)',  value: 'Qwen/Qwen2.5-32B-Instruct' },
       // ── 80 GB A100 · FP8 mid (24-40B, good headroom) — 8 presets ─────
       { label: '80GB · Mistral-Small3.1-24B (FP8≈24GB,  A100)',  value: 'mistralai/Mistral-Small-3.1-24B-Instruct-2503' },
       { label: '80GB · Gemma3-27B           (FP8≈27GB,  A100)',  value: 'google/gemma-3-27b-it' },
@@ -15568,6 +15597,60 @@ window.PLACEHOLDER_METADATA = {
       { label: '32K · 24GB / 80GB',       value: '32768' },
       { label: '64K · 80GB recommended',  value: '65536' },
       { label: '128K · H100 large',       value: '131072' }
+    ]
+  },
+  'VLLM_ISVC_NAME': {
+    description: 'InferenceService name — use a unique name (llm2, llm3, ...) to ADD a model instead of replacing',
+    hint: 'llm',
+    default: 'llm',
+    secret: false,
+    presets: [
+      { label: 'llm  (1st model, port 30800)', value: 'llm' },
+      { label: 'llm2 (2nd model, port 30801)', value: 'llm2' },
+      { label: 'llm3 (3rd model, port 30802)', value: 'llm3' },
+      { label: 'llm4 (4th model, port 30803)', value: 'llm4' }
+    ]
+  },
+  'VLLM_NODEPORT': {
+    description: 'NodePort for this model\'s OpenAI API (unique per model; allow in the Security Group)',
+    hint: '30800',
+    default: '30800',
+    secret: false,
+    presets: [
+      { label: '30800 (llm)',  value: '30800' },
+      { label: '30801 (llm2)', value: '30801' },
+      { label: '30802 (llm3)', value: '30802' },
+      { label: '30803 (llm4)', value: '30803' }
+    ]
+  },
+  'GPU_TIMESLICE_REPLICAS': {
+    description: 'Pods per physical GPU (time-slicing; no VRAM isolation — cap each model with GPU_UTIL)',
+    hint: '2',
+    default: '2',
+    secret: false,
+  },
+  'GPU_TIMESLICE_NODE': {
+    description: 'Node name to time-slice (blank = all GPU nodes; set on mixed clusters, e.g. slice only the L40S node)',
+    hint: 'mc-xxx-g1-1',
+    default: '',
+    secret: false,
+  },
+  'VLLM_TARGET_NODE': {
+    description: 'Pin this model to a node (blank = scheduler decides; set on mixed GPU types)',
+    hint: 'mc-xxx-g1-1',
+    default: '',
+    secret: false,
+  },
+  'MIG_PROFILE': {
+    description: 'MIG profile (A100/H100 only) — each slice is an isolated GPU; no GPU_UTIL needed',
+    hint: 'all-3g.40gb',
+    default: 'all-3g.40gb',
+    secret: false,
+    presets: [
+      { label: '80GB · all-3g.40gb (2 slices x 40GB, ≤32B FP8 each)', value: 'all-3g.40gb' },
+      { label: '80GB · all-2g.20gb (3 slices x 20GB, ≤14B FP8 each)', value: 'all-2g.20gb' },
+      { label: '80GB · all-1g.10gb (7 slices x 10GB, ≤8B FP8 each)',  value: 'all-1g.10gb' },
+      { label: 'Disable MIG (restore full GPUs)',                     value: 'all-disabled' }
     ]
   },
   // GuideLLM Benchmark
@@ -16009,7 +16092,7 @@ window.predefinedScriptCategories = {
   },
   'kserve': {
     label: '🚀 KServe (LLM Serving)',
-    description: 'KServe(RawDeployment) + vLLM + Open WebUI on K8s — build the cluster with steps 1-4 (GPU driver steps only if not pre-installed on the image), then deploy serving with steps 5-8',
+    description: 'KServe(RawDeployment) + vLLM + Open WebUI on K8s — build the cluster with steps 1-4 (GPU driver steps only if not pre-installed on the image), then deploy serving with steps 5-8. Multiple LLMs: repeat step 6 with unique name/port per model (one GPU each; 5-opt shares a GPU across models), then re-run step 8 to connect all of them to the WebUI',
     scripts: [
       { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane',                          step: 1, targetLabel: 'role=control' },
       { value: 'K8sGetJoinCommand',      label: '2. Get Join Command',                              step: 2, targetLabel: 'role=control', syncMode: true },
@@ -16018,7 +16101,9 @@ window.predefinedScriptCategories = {
       { value: 'K8sWorker-Deploy',       label: '3. Deploy Worker & Join Cluster',                  step: 3, targetLabel: 'role=node' },
       { value: 'K8sClusterStatus',       label: '4. Check Cluster Status',                          step: 4, targetLabel: 'role=control', syncMode: true },
       { value: 'KServeDeploy',           label: '5. Deploy KServe Stack (GPU Operator + cert-manager + KServe)', step: 5, targetLabel: 'role=control' },
-      { value: 'KServeVllmServe',        label: '6. Serve LLM Model (vLLM InferenceService)',       step: 6, targetLabel: 'role=control' },
+      { value: 'KServeGpuTimeslice',     label: '5-opt. Enable GPU Time-Slicing (share one GPU across LLMs)', step: 5, targetLabel: 'role=control', optional: true },
+      { value: 'KServeGpuMig',           label: '5-opt. Enable MIG Partitioning (A100/H100 only, isolated slices)', step: 5, targetLabel: 'role=control', optional: true },
+      { value: 'KServeVllmServe',        label: '6. Serve LLM Model (repeat per model: unique name/port)', step: 6, targetLabel: 'role=control' },
       { value: 'KServeStatus',           label: '7. Check Serving Status',                          step: 7, targetLabel: 'role=control', syncMode: true },
       { value: 'KServeOpenWebUI',        label: '8. Install Open WebUI (KServe)',                   step: 8, targetLabel: 'role=control' },
       { value: 'HermesAgent-KServe',     label: '9. Deploy Hermes Agent (uses KServe endpoint)',    step: 9, targetLabel: 'role=control', optional: true, experimental: true },
@@ -16032,18 +16117,20 @@ window.predefinedScriptCategories = {
   },
   'mcp': {
     label: '🔌 MCP (agentgateway)',
-    description: 'Model Context Protocol demo — a REST API and PostgreSQL exposed as MCP servers, federated by agentgateway into one external endpoint (NodePort 30900). Build the cluster with steps 1-4 (CPU nodes are enough), then deploy the MCP stack with steps 5-10',
+    description: 'AI-operated model registry demo — a Hugging Face-style model catalog (web + REST + PostgreSQL) exposed as MCP adapters, federated by agentgateway into one external endpoint (NodePort 30900). Build the cluster with steps 1-4 (CPU nodes are enough), then deploy the registry + MCP stack with steps 5-11',
     scripts: [
-      { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane',                            step: 1,  targetLabel: 'role=control' },
-      { value: 'K8sGetJoinCommand',      label: '2. Get Join Command',                                step: 2,  targetLabel: 'role=control', syncMode: true },
-      { value: 'K8sWorker-Deploy',       label: '3. Deploy Worker & Join Cluster',                    step: 3,  targetLabel: 'role=node' },
-      { value: 'K8sClusterStatus',       label: '4. Check Cluster Status',                            step: 4,  targetLabel: 'role=control', syncMode: true },
-      { value: 'McpDemoDb',              label: '5. Deploy Demo PostgreSQL (+ sample data)',          step: 5,  targetLabel: 'role=control' },
-      { value: 'McpDemoApi',             label: '6. Deploy Demo REST API (FastAPI)',                  step: 6,  targetLabel: 'role=control' },
-      { value: 'McpServers',             label: '7. Deploy MCP Servers (API tools + read-only SQL)',  step: 7,  targetLabel: 'role=control' },
-      { value: 'McpAgentgateway',        label: '8. Deploy agentgateway (federated MCP endpoint)',    step: 8,  targetLabel: 'role=control' },
-      { value: 'McpE2eTest',             label: '9. Run E2E Demo (tools via gateway)',                step: 9,  targetLabel: 'role=control', syncMode: true },
-      { value: 'McpStatus',              label: '10. Check MCP Stack Status',                         step: 10, targetLabel: 'role=control', syncMode: true }
+      { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane',                                step: 1,  targetLabel: 'role=control' },
+      { value: 'K8sGetJoinCommand',      label: '2. Get Join Command',                                    step: 2,  targetLabel: 'role=control', syncMode: true },
+      { value: 'K8sWorker-Deploy',       label: '3. Deploy Worker & Join Cluster',                        step: 3,  targetLabel: 'role=node' },
+      { value: 'K8sClusterStatus',       label: '4. Check Cluster Status',                                step: 4,  targetLabel: 'role=control', syncMode: true },
+      { value: 'McpRegistryDb',          label: '5. Deploy Model Registry DB (+ model catalog)',          step: 5,  targetLabel: 'role=control' },
+      { value: 'McpRegistryBackend',     label: '6. Deploy Model Registry Backend (REST API)',            step: 6,  targetLabel: 'role=control' },
+      { value: 'McpRegistryWeb',         label: '7. Deploy Model Registry Web (NodePort 30902)',          step: 7,  targetLabel: 'role=control' },
+      { value: 'McpServers',             label: '8. Deploy MCP Adapters (catalog tools + read-only SQL)', step: 8,  targetLabel: 'role=control' },
+      { value: 'McpServingAdapter',      label: '8-opt. Deploy KServe Serving Adapter (same-cluster KServe)', step: 8, targetLabel: 'role=control', optional: true },
+      { value: 'McpAgentgateway',        label: '9. Deploy agentgateway (federated MCP endpoint)',        step: 9,  targetLabel: 'role=control' },
+      { value: 'McpE2eTest',             label: '10. Run E2E Demo (tools via gateway)',                   step: 10, targetLabel: 'role=control', syncMode: true },
+      { value: 'McpStatus',              label: '11. Check MCP Stack Status',                             step: 11, targetLabel: 'role=control', syncMode: true }
     ]
   },
   'ml-ray': {
