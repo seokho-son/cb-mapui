@@ -61,6 +61,9 @@ const debugLog = {
 
 // OpenLayers CSS
 import "ol/ol.css";
+// Deployment-provided parameter defaults (MAPUI_PARAM_* envs -> docker-entrypoint.sh)
+import runtimeParams from "./runtime-params.json";
+window.RUNTIME_PARAM_DEFAULTS = runtimeParams || {};
 
 // OpenLayers core components
 import Map from "ol/Map";
@@ -14842,7 +14845,7 @@ function setDefaultRemoteCommandsByApp(appName) {
     case "K8sControlPlane-Deploy":
       // Deploys K8s control plane with auto-detected IPs
       // Output includes: [K8S_JOIN_COMMAND], [K8S_KUBECONFIG_BASE64] for easy parsing
-      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/k8s/k8s-control-plane-setup.sh | bash";
+      defaultRemoteCommand[0] = "CNI=$(echo \"<K8S_CNI>\" | tr 'A-Z' 'a-z' | xargs); [ -z \"$CNI\" ] && CNI=flannel; curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/k8s/k8s-control-plane-setup.sh | bash -s -- --cni \"$CNI\"";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
@@ -14965,6 +14968,18 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
+    case "K8sHubbleUI":
+      // Enable the Cilium Hubble UI service map (requires a cluster deployed with CNI=cilium)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/k8s/enable-hubble-ui.sh | bash; echo ''; echo '[HUBBLE_UI_URL]'; echo 'http://$$Func(GetPublicIP(target=this)):30012'; echo '(open SG port 30012 for YOUR IP only)'";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "WeaveScopeK8s":
+      // Live cluster topology map (archived project — demo only; UI is unauthenticated with exec controls)
+      defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/weavescope/deploy-weavescope-k8s.sh | bash; echo ''; echo '[WEAVESCOPE_URL]'; echo 'http://$$Func(GetPublicIP(target=this)):30040'; echo '(open SG port 30040 for YOUR IP only — UI has no auth and can exec into containers)'";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
     case "KServeDeploy":
       // Deploy KServe stack on K8s: default StorageClass, GPU Operator, cert-manager, KServe (RawDeployment)
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/kserve/deploy-kserve-stack.sh | bash";
@@ -15063,6 +15078,18 @@ function setDefaultRemoteCommandsByApp(appName) {
     case "McpRegistryWeb":
       // Deploy the registry web catalog (NodePort 30902; open it in the SG)
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/mcp/deploy-registry-web.sh | bash; echo ''; echo '[MODEL_REGISTRY_WEB]'; echo 'http://$$Func(GetPublicIP(target=this)):30902'";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "McpRegistryWebScaleOut":
+      // Traffic-burst demo: scale out the registry web and watch pods spread (e.g., in Headlamp)
+      defaultRemoteCommand[0] = "R=\"<REGISTRY_WEB_REPLICAS>\"; [ -z \"$R\" ] && R=30; kubectl -n mcp-demo scale deployment model-registry-web --replicas=$R; kubectl -n mcp-demo rollout status deployment/model-registry-web --timeout=180s; echo ''; echo '=== Pods ==='; kubectl -n mcp-demo get pods -l app=model-registry-web -o wide";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
+    case "McpRegistryWebScaleIn":
+      // Scale the registry web back to a single replica after the demo
+      defaultRemoteCommand[0] = "kubectl -n mcp-demo scale deployment model-registry-web --replicas=1; kubectl -n mcp-demo rollout status deployment/model-registry-web --timeout=180s; echo ''; echo '=== Pods ==='; kubectl -n mcp-demo get pods -l app=model-registry-web -o wide";
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
@@ -15456,6 +15483,16 @@ window.PLACEHOLDER_METADATA = {
   'REPLICA_COUNT': {
     description: 'Number of pod replicas',
     hint: '3',
+    secret: false,
+  },
+  'REGISTRY_WEB_REPLICAS': {
+    description: 'Registry web replica count (scale-out demo)',
+    hint: '30',
+    secret: false,
+  },
+  'K8S_CNI': {
+    description: 'CNI plugin — empty/flannel (default) or cilium (enables the optional Hubble UI step)',
+    hint: 'flannel',
     secret: false,
   },
   'HF_TOKEN': {
@@ -15889,6 +15926,8 @@ window.renderPlaceholderInputs = function() {
       // secret fields (tokens, keys) are intentionally left blank.
       if (savedValues[name]) {
         input.value = savedValues[name];
+      } else if (window.RUNTIME_PARAM_DEFAULTS[name]) {
+        input.value = window.RUNTIME_PARAM_DEFAULTS[name];
       } else if (!ph.isSecret && ph.default) {
         input.value = ph.default;
       }
@@ -16028,6 +16067,8 @@ window.renderPlaceholderInputs = function() {
       input.style.cssText = 'flex:1; padding:4px 8px; font-size:0.8rem; border:1px solid #b3d7ff; border-radius:4px;';
       if (existingValues[ph.name]) {
         input.value = existingValues[ph.name];
+      } else if (window.RUNTIME_PARAM_DEFAULTS[ph.name]) {
+        input.value = window.RUNTIME_PARAM_DEFAULTS[ph.name];
       } else if (!ph.isSecret && ph.default) {
         input.value = ph.default;
       }
@@ -16140,7 +16181,7 @@ window.predefinedScriptCategories = {
     description: 'Kubernetes cluster deployment — Standard, GPU, or llm-d (distributed LLM inference). Steps 4-6 are for GPU workers; steps 9-13 are for llm-d only. Steps 14-17 are demo apps and visualization tools.',
     scripts: [
       { value: 'Setup-WireGuard',        label: '0. Setup WireGuard VPN (optional)',              step: 0,  optional: true },
-      { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane (Standard)',              step: 1,  targetLabel: 'role=control' },
+      { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane (Standard; opt CNI=cilium)', step: 1,  targetLabel: 'role=control' },
       { value: 'K8sLlmdControlPlane',    label: '1-alt. Deploy Control Plane (llm-d)',             step: 1,  targetLabel: 'role=control', optional: true },
       { value: 'K8sGetJoinCommand',      label: '2. Get Join Command',                             step: 2,  targetLabel: 'role=control', syncMode: true },
       { value: 'K8sGetKubeconfig',       label: '3. Get Kubeconfig (Base64)',                      step: 3,  targetLabel: 'role=control', syncMode: true },
@@ -16158,14 +16199,16 @@ window.predefinedScriptCategories = {
       { value: 'K8sScaleApp',            label: '15. Scale Demo App (set replica count)',          step: 15, targetLabel: 'role=control', syncMode: true },
       { value: 'K8sLoadTest',            label: '16. Run Load Test (Batch Job → demo app)',        step: 16, targetLabel: 'role=control', syncMode: true },
       { value: 'K8sDashboard',           label: '17. Install K8s Dashboard (Visualization)',       step: 17, targetLabel: 'role=control', syncMode: true },
-      { value: 'K8sPortainer',           label: '18. Install Portainer CE (Visual Cluster Monitor)', step: 18, targetLabel: 'role=control', syncMode: true }
+      { value: 'K8sPortainer',           label: '18. Install Portainer CE (Visual Cluster Monitor)', step: 18, targetLabel: 'role=control', syncMode: true },
+      { value: 'WeaveScopeK8s',          label: '19. Install Weave Scope (Live Topology Map — NodePort 30040)', step: 19, targetLabel: 'role=control', optional: true },
+      { value: 'K8sHubbleUI',            label: '20. Enable Hubble UI (Cilium service map — NodePort 30012)', step: 20, targetLabel: 'role=control', optional: true }
     ]
   },
   'kserve': {
     label: '🚀 KServe (LLM Serving)',
     description: 'KServe(RawDeployment) + vLLM + Open WebUI on K8s — build the cluster with steps 1-4 (GPU driver steps only if not pre-installed on the image), then deploy serving with steps 5-8. Multiple LLMs: repeat step 6 with unique name/port per model (one GPU each; 5-opt shares a GPU across models), then re-run step 8 to connect all of them to the WebUI',
     scripts: [
-      { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane',                          step: 1, targetLabel: 'role=control' },
+      { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane (opt CNI=cilium)', step: 1, targetLabel: 'role=control' },
       { value: 'K8sGetJoinCommand',      label: '2. Get Join Command',                              step: 2, targetLabel: 'role=control', syncMode: true },
       { value: 'Nvidia',                 label: '2-opt. Install GPU Driver (skip on GPU-ready images)', step: 2, targetLabel: 'accelerator=gpu', optional: true },
       { value: 'RebootVM',               label: '2-opt. Reboot GPU Node (after driver install)',    step: 2, targetLabel: 'accelerator=gpu', optional: true },
@@ -16190,18 +16233,22 @@ window.predefinedScriptCategories = {
     label: '🔌 MCP (agentgateway)',
     description: 'AI-operated model registry demo — a Hugging Face-style model catalog (web + REST + PostgreSQL) exposed as MCP adapters, federated by agentgateway into one external endpoint (NodePort 30900). Build the cluster with steps 1-4 (CPU nodes are enough), then deploy the registry + MCP stack with steps 5-11',
     scripts: [
-      { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane',                                step: 1,  targetLabel: 'role=control' },
+      { value: 'K8sControlPlane-Deploy', label: '1. Deploy Control Plane (opt CNI=cilium)',  step: 1,  targetLabel: 'role=control' },
       { value: 'K8sGetJoinCommand',      label: '2. Get Join Command',                                    step: 2,  targetLabel: 'role=control', syncMode: true },
       { value: 'K8sWorker-Deploy',       label: '3. Deploy Worker & Join Cluster',                        step: 3,  targetLabel: 'role=node' },
       { value: 'K8sClusterStatus',       label: '4. Check Cluster Status',                                step: 4,  targetLabel: 'role=control', syncMode: true },
-      { value: 'McpRegistryDb',          label: '5. Deploy Model Registry DB (+ model catalog)',          step: 5,  targetLabel: 'role=control' },
+      { value: 'McpRegistryDb',          label: '5. Deploy Model Registry DB (+ agri/livestock sample catalog)', step: 5,  targetLabel: 'role=control' },
       { value: 'McpRegistryBackend',     label: '6. Deploy Model Registry Backend (REST API)',            step: 6,  targetLabel: 'role=control' },
       { value: 'McpRegistryWeb',         label: '7. Deploy Model Registry Web (NodePort 30902)',          step: 7,  targetLabel: 'role=control' },
+      { value: 'McpRegistryWebScaleOut', label: '7-opt. Scale OUT Registry Web (traffic-burst demo — watch in Headlamp)', step: 7, targetLabel: 'role=control', optional: true, syncMode: true },
+      { value: 'McpRegistryWebScaleIn',  label: '7-opt. Scale IN Registry Web (back to 1 replica)',       step: 7,  targetLabel: 'role=control', optional: true, syncMode: true },
       { value: 'McpServers',             label: '8. Deploy MCP Adapters (catalog tools + read-only SQL)', step: 8,  targetLabel: 'role=control' },
       { value: 'McpServingAdapter',      label: '8-opt. Deploy KServe Serving Adapter (same-cluster KServe)', step: 8, targetLabel: 'role=control', optional: true },
       { value: 'McpAgentgateway',        label: '9. Deploy agentgateway (federated MCP endpoint)',        step: 9,  targetLabel: 'role=control' },
       { value: 'McpE2eTest',             label: '10. Run E2E Demo (tools via gateway)',                   step: 10, targetLabel: 'role=control', syncMode: true },
-      { value: 'McpStatus',              label: '11. Check MCP Stack Status',                             step: 11, targetLabel: 'role=control', syncMode: true }
+      { value: 'McpStatus',              label: '11. Check MCP Stack Status',                             step: 11, targetLabel: 'role=control', syncMode: true },
+      { value: 'WeaveScopeK8s',          label: '11-opt. Install Weave Scope (Live Topology Map — NodePort 30040)', step: 11, targetLabel: 'role=control', optional: true },
+      { value: 'K8sHubbleUI',            label: '11-opt. Enable Hubble UI (Cilium service map — NodePort 30012)', step: 11, targetLabel: 'role=control', optional: true }
     ]
   },
   'ml-ray': {

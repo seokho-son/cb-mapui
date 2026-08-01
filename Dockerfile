@@ -19,6 +19,7 @@ RUN --mount=type=cache,target=/root/.npm \
 # Copy only necessary source files
 COPY ./index.html ./
 COPY ./index.js ./
+COPY ./runtime-params.json ./
 COPY ./resource-graph.js ./
 COPY ./network-graph.js ./
 COPY ./dashboard.html ./
@@ -50,6 +51,7 @@ WORKDIR /app
 # Copy necessary files from builder
 COPY --from=builder /app/index.html ./
 COPY --from=builder /app/index.js ./
+COPY --from=builder /app/runtime-params.json ./
 COPY --from=builder /app/resource-graph.js ./
 COPY --from=builder /app/network-graph.js ./
 COPY --from=builder /app/dashboard.html ./
@@ -70,4 +72,7 @@ COPY --from=builder /app/dist ./dist
 
 EXPOSE 1324
 
-ENTRYPOINT ["npm", "start"]
+COPY ./docker-entrypoint.sh ./
+
+# Entrypoint collects MAPUI_PARAM_* envs into runtime-params.json, then starts parcel
+ENTRYPOINT ["sh", "./docker-entrypoint.sh"]
