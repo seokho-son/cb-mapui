@@ -223,10 +223,34 @@ function saveApiConfig() {
       port: configPort,
       username: configUsername,
       credentialHolder: configCredentialHolder,
+      apiBaseUrl: configApiBaseUrl,
     }));
   } catch (e) {
     console.warn("Failed to save API config:", e);
   }
+}
+
+// --- API base URL (single-entrypoint / same-origin support) -----------------
+// All Tumblebug API calls go through tbApiBase(). Default behavior:
+//  - mapui on its canonical port 1324 (compose / direct port-forward):
+//    legacy model http://<hostname>:<port>/tumblebug  (unchanged)
+//  - any other port (served behind a gateway, e.g. Gateway API entrypoint):
+//    same-origin  <origin>/tumblebug  (fixes CORS/mixed-content, no setup)
+// A persisted explicit Base URL (settings popup) overrides both.
+const isValidBaseUrl = (v) =>
+  typeof v === "string" &&
+  /^https?:\/\/[A-Za-z0-9.\-:[\]]+(\/[A-Za-z0-9._\-/]*)?$/.test(v) &&
+  !/[<>"'\s]/.test(v);
+var configApiBaseUrl = "";
+try {
+  const savedBase = JSON.parse(localStorage.getItem(API_CONFIG_KEY) || "{}").apiBaseUrl;
+  if (isValidBaseUrl(savedBase)) configApiBaseUrl = savedBase.replace(/\/+$/, "");
+} catch (e) { /* ignore */ }
+if (!configApiBaseUrl && window.location.port !== "1324" && window.location.protocol !== "file:") {
+  configApiBaseUrl = `${window.location.protocol}//${window.location.host}/tumblebug`;
+}
+function tbApiBase() {
+  return configApiBaseUrl || `http://${configHostname}:${configPort}/tumblebug`;
 }
 
 // Helper function to get current configuration
@@ -1466,7 +1490,8 @@ function endpointChanged() {
   var iframe = document.getElementById('iframe');
   var iframe2 = document.getElementById('iframe2');
 
-  iframe.src = "http://" + configHostname + ":1324/swagger.html";
+  // Same-origin: swagger.html is served by mapui itself (works at :1324 and behind a gateway)
+  iframe.src = "/swagger.html";
   iframe2.src = "http://" + configHostname + ":1024/spider/adminweb";
 }
 window.endpointChanged = endpointChanged;
@@ -4003,7 +4028,7 @@ function getInfra() {
 
   if (namespace && namespace != "") {
     // get infra list and put them on the map - full details including connectionConfig
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra`;
+    var url = `${tbApiBase()}/ns/${namespace}/infra`;
 
     axios({
       method: "get",
@@ -4416,7 +4441,7 @@ function getInfra() {
       });
 
     // get vnet list and put them on the map
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/vNet`;
+    var url = `${tbApiBase()}/ns/${namespace}/resources/vNet`;
     axios({
       method: "get",
       url: url,
@@ -4459,7 +4484,7 @@ function getInfra() {
       });
 
     // get securityGroup list and put them on the map
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/securityGroup`;
+    var url = `${tbApiBase()}/ns/${namespace}/resources/securityGroup`;
     axios({
       method: "get",
       url: url,
@@ -4503,7 +4528,7 @@ function getInfra() {
 
 
     // get sshKey list and put them on the map
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/sshKey`;
+    var url = `${tbApiBase()}/ns/${namespace}/resources/sshKey`;
     axios({
       method: "get",
       url: url,
@@ -4549,7 +4574,7 @@ function getInfra() {
     loadVpnDataFromInfras();
 
     // Get custom images
-    var customImageUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/customImage`;
+    var customImageUrl = `${tbApiBase()}/ns/${namespace}/resources/customImage`;
     axios({
       method: "get",
       url: customImageUrl,
@@ -4579,7 +4604,7 @@ function getInfra() {
     });
 
     // Get data disks
-    var dataDiskUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/dataDisk`;
+    var dataDiskUrl = `${tbApiBase()}/ns/${namespace}/resources/dataDisk`;
     axios({
       method: "get",
       url: dataDiskUrl,
@@ -4612,7 +4637,7 @@ function getInfra() {
 
     // TODO: Object Storage API not yet available in CB-Tumblebug
     // Get object storage - DISABLED until API is implemented
-    // var objectStorageUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/objectStorage`;
+    // var objectStorageUrl = `${tbApiBase()}/ns/${namespace}/resources/objectStorage`;
     // axios({
     //   method: "get",
     //   url: objectStorageUrl,
@@ -4632,7 +4657,7 @@ function getInfra() {
 
     // TODO: SQL Database API not yet available in CB-Tumblebug
     // Get SQL databases - DISABLED until API is implemented
-    // var sqlDbUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/sqlDb`;
+    // var sqlDbUrl = `${tbApiBase()}/ns/${namespace}/resources/sqlDb`;
     // axios({
     //   method: "get",
     //   url: sqlDbUrl,
@@ -4821,6 +4846,10 @@ function checkConnectionWithRetry() {
             <label for="config-credentialHolder">Credential Holder:</label>
             <input type="text" id="config-credentialHolder" value="${window.escapeHtml(configCredentialHolder)}">
           </div>
+          <div class="config-input-group">
+            <label for="config-apibase">API Base URL (optional; overrides host/port, e.g. https://host/tumblebug):</label>
+            <input type="text" id="config-apibase" value="${window.escapeHtml(configApiBaseUrl)}" placeholder="auto">
+          </div>
           <button id="apply-config-btn" class="apply-config-btn">Apply & Retry Now</button>
         </div>
       </details>
@@ -4890,8 +4919,8 @@ function checkConnectionWithRetry() {
     retryCount++;
     updateStatusUI(CONNECTION_STATUS.CHECKING);
 
-    const readyzUrl = `http://${configHostname}:${configPort}/tumblebug/readyz`;
-    const connConfigUrl = `http://${configHostname}:${configPort}/tumblebug/connConfig?filterVerified=true&filterRegionRepresentative=true&filterCredentialHolder=${encodeURIComponent(configCredentialHolder)}`;
+    const readyzUrl = `${tbApiBase()}/readyz`;
+    const connConfigUrl = `${tbApiBase()}/connConfig?filterVerified=true&filterRegionRepresentative=true&filterCredentialHolder=${encodeURIComponent(configCredentialHolder)}`;
 
     try {
       // Step 1: Check readyz status first
@@ -5176,6 +5205,11 @@ function checkConnectionWithRetry() {
         if (isValidName(newCredentialHolder)) configCredentialHolder = newCredentialHolder;
         else if (newCredentialHolder) console.warn('Invalid credential holder ignored:', newCredentialHolder);
 
+        const newApiBase = (document.getElementById('config-apibase')?.value || '').trim();
+        if (newApiBase === '') configApiBaseUrl = '';           // back to auto
+        else if (isValidBaseUrl(newApiBase)) configApiBaseUrl = newApiBase.replace(/\/+$/, '');
+        else console.warn('Invalid API base URL ignored:', newApiBase);
+
         saveApiConfig();
 
         console.log('[Config Updated] ' + configHostname + ':' + configPort + ' holder=' + configCredentialHolder);
@@ -5301,7 +5335,7 @@ function getConnection() {
     : 5;
   //setTimeout(() => console.log(getConnection()), filteredRefreshInterval*1000);
 
-  var url = `http://${hostname}:${port}/tumblebug/connConfig?filterVerified=true&filterRegionRepresentative=true&filterCredentialHolder=${encodeURIComponent(configCredentialHolder)}`;
+  var url = `${tbApiBase()}/connConfig?filterVerified=true&filterRegionRepresentative=true&filterCredentialHolder=${encodeURIComponent(configCredentialHolder)}`;
 
   axios({
     method: "get",
@@ -5606,7 +5640,7 @@ function proceedWithBuildAgnosticImage(createInfraReq, snapshotName, snapshotDes
   const hostname = configHostname;
   const port = configPort;
   const namespace = configNamespace;
-  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/buildAgnosticImage`;
+  const url = `${tbApiBase()}/ns/${namespace}/buildAgnosticImage`;
   
   // Prepare buildAgnosticImage request body
   const buildImageReq = {
@@ -5943,7 +5977,7 @@ function showPostCommandDialog(createInfraReq, infraCreationUrl, username, passw
 
 // Infra Review function - checks configuration before creation
 function reviewInfraConfiguration(createInfraReq, hostname, port, username, password, namespace, finalUrl, totalCost, totalNodeScale, costDetailsHtml, nodeGroupReqString) {
-  var reviewUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infraDynamicReview`;
+  var reviewUrl = `${tbApiBase()}/ns/${namespace}/infraDynamicReview`;
   
   // Show loading spinner for review
   Swal.fire({
@@ -7222,7 +7256,7 @@ function reviewWithSelectedNodeGroups(selectedNodeGroups) {
     </div>
   `;
   
-  var finalUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infraDynamic`;
+  var finalUrl = `${tbApiBase()}/ns/${namespace}/infraDynamic`;
   
   // Show loading message
   Swal.fire({
@@ -7263,7 +7297,7 @@ function createInfra() {
     var password = configPassword;
     var namespace = configNamespace;
 
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infraDynamic`;
+    var url = `${tbApiBase()}/ns/${namespace}/infraDynamic`;
 
     var createInfraReq = createInfraReqTmplt;
     createInfraReq.name = "mc-" + generateInfraName();
@@ -7359,7 +7393,7 @@ window.proceedWithBuildAgnosticImage = proceedWithBuildAgnosticImage;
 // Function to check if K8s node image designation is needed
 async function checkK8sNodeImageDesignation(providerName, hostname, port, username, password) {
   try {
-    const url = `http://${hostname}:${port}/tumblebug/checkK8sNodeImageDesignation?providerName=${providerName}`;
+    const url = `${tbApiBase()}/checkK8sNodeImageDesignation?providerName=${providerName}`;
     
     const response = await axios.get(url, {
       auth: {
@@ -7477,7 +7511,7 @@ function createK8sCluster() {
         };
 
         // Do not use skipVersionCheck without explicit version - let CB-TB use default versions per CSP
-        const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sMultiClusterDynamic`;
+        const url = `${tbApiBase()}/ns/${namespace}/k8sMultiClusterDynamic`;
         const taskId = addSpinnerTask(`Create ${clusters.length} K8s Clusters`);
 
         axios.post(url, multiClusterReq, {
@@ -7539,7 +7573,7 @@ function createK8sCluster() {
 
   // Single cluster creation (original flow)
   // First, get available K8s versions
-  const versionUrl = `http://${hostname}:${port}/tumblebug/availableK8sVersion?providerName=${spec.providerName}&regionName=${spec.regionName}`;
+  const versionUrl = `${tbApiBase()}/availableK8sVersion?providerName=${spec.providerName}&regionName=${spec.regionName}`;
   
   const versionTaskId = addSpinnerTask("getK8sVersions");
   
@@ -7688,7 +7722,7 @@ function createK8sCluster() {
             
             // Add skipVersionCheck parameter for custom versions
             const skipVersionParam = isCustomVersion ? '?skipVersionCheck=true' : '';
-            const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sClusterDynamic${skipVersionParam}`;
+            const url = `${tbApiBase()}/ns/${namespace}/k8sClusterDynamic${skipVersionParam}`;
             
             // Debug: uncomment if K8s creation debugging needed
             // console.log("Creating K8s Cluster:", k8sClusterReq);
@@ -7786,7 +7820,7 @@ function addNodeGroupToK8sCluster() {
   const namespace = configNamespace;
 
   // First, get list of existing K8s clusters
-  const listUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster`;
+  const listUrl = `${tbApiBase()}/ns/${namespace}/k8sCluster`;
   const listTaskId = addSpinnerTask("listK8sClusters");
   
   axios.get(listUrl, { auth: { username, password } }).then(function (response) {
@@ -7968,7 +8002,7 @@ function showSingleNodeGroupDialog(clusters, hostname, port, username, password,
               nodeGroupReq.rootDiskSize = nodeGroup.rootDiskSize;
             }
 
-            const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster/${clusterId}/k8sNodeGroupDynamic`;
+            const url = `${tbApiBase()}/ns/${namespace}/k8sCluster/${clusterId}/k8sNodeGroupDynamic`;
             
             console.log("Adding NodeGroup to K8s Cluster:", nodeGroupReq);
             console.log("Image designation needed:", imageDesignationNeeded);
@@ -8148,7 +8182,7 @@ async function executeMultiNodeGroupAddition(selections, prefix, hostname, port,
       if (sg.rootDiskType) nodeGroupReq.rootDiskType = sg.rootDiskType;
       if (sg.rootDiskSize) nodeGroupReq.rootDiskSize = sg.rootDiskSize;
 
-      const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster/${sel.clusterId}/k8sNodeGroupDynamic`;
+      const url = `${tbApiBase()}/ns/${namespace}/k8sCluster/${sel.clusterId}/k8sNodeGroupDynamic`;
       
       try {
         await axios.post(url, nodeGroupReq, {
@@ -8344,7 +8378,7 @@ async function fetchK8sClusterInfo() {
   const username = configUsername;
   const password = configPassword;
   
-  const url = `http://${hostname}:${port}/tumblebug/k8sClusterInfo`;
+  const url = `${tbApiBase()}/k8sClusterInfo`;
   const auth = btoa(`${username}:${password}`);
   
   try {
@@ -8637,7 +8671,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
   var minAMEM = document.getElementById("minAMEM").value;
   var maxAMEM = document.getElementById("maxAMEM").value;
 
-  var url = `http://${hostname}:${port}/tumblebug/recommendSpec`;
+  var url = `${tbApiBase()}/recommendSpec`;
 
   function createPolicyConditions(metric, values, type) {
     const conditions = [];
@@ -8993,7 +9027,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
         console.log("User selected spec:", selectedSpec);
 
         // Search for images based on the selected spec
-        const searchImageURL = `http://${hostname}:${port}/tumblebug/ns/system/resources/searchImage`;
+        const searchImageURL = `${tbApiBase()}/ns/system/resources/searchImage`;
         const searchImageBody = {
           matchedSpecId: selectedSpec.id,
           osType: document.getElementById("osImage").value,
@@ -9020,7 +9054,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
           // Custom images fetch
           axios({
             method: "get",
-            url: `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/customImage`,
+            url: `${tbApiBase()}/ns/${namespace}/resources/customImage`,
             headers: { "Content-Type": "application/json" },
             auth: {
               username: `${username}`,
@@ -9684,10 +9718,7 @@ function getRecommendedSpec(idx, latitude, longitude) {
                 const refinements = getReviewRefinements();
 
                 try {
-                  // Match the page protocol so HTTPS deployments don't trip
-                  // mixed-content blocking on this fetch.
-                  const reviewApiProtocol = window.location.protocol === 'https:' ? 'https' : 'http';
-                  const response = await fetch(`${reviewApiProtocol}://${hostname}:${port}/tumblebug/specImagePairReview`, {
+                  const response = await fetch(`${tbApiBase()}/specImagePairReview`, {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
@@ -10181,7 +10212,7 @@ async function populateZoneSelect(selectId, spinnerId, specId, currentZone, stat
   const apiProtocol = window.location.protocol === 'https:' ? 'https' : 'http';
   
   try {
-    const response = await fetch(`${apiProtocol}://${configHostname}:${configPort}/tumblebug/availableZonesForSpec?specId=${encodeURIComponent(specId)}`, {
+    const response = await fetch(`${tbApiBase()}/availableZonesForSpec?specId=${encodeURIComponent(specId)}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -11093,7 +11124,7 @@ async function findAlternativeNodeConfig(index) {
         if (!prov) return;
         try {
           const res = await axios.get(
-            `http://${hostname}:${port}/tumblebug/provider/${prov}/region`,
+            `${tbApiBase()}/provider/${prov}/region`,
             { auth: { username, password } });
           const regions = (res.data?.regions || [])
             .filter(r => r.regionName)
@@ -11148,7 +11179,7 @@ async function findAlternativeNodeConfig(index) {
       matchCriteria:         criteria,
     };
     const res = await axios.post(
-      `http://${hostname}:${port}/tumblebug/recommendAlternativeNodeConfig`,
+      `${tbApiBase()}/recommendAlternativeNodeConfig`,
       reqBody,
       { auth: { username, password } });
     apiResp = res.data;
@@ -11624,7 +11655,7 @@ function controlInfra(action) {
   var spinnerId = addSpinnerTask(action + ": " + infraid);
   infoAlert(action + ": " + infraid);
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/control/infra/${infraid}?action=${action}`;
+  var url = `${tbApiBase()}/ns/${namespace}/control/infra/${infraid}?action=${action}`;
 
   console.log("Infra control:[" + action + "]");
 
@@ -11689,7 +11720,7 @@ function hideInfra() {
   var password = config.password;
   var namespace = configNamespace;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra?option=id`;
+  var url = `${tbApiBase()}/ns/${namespace}/infra?option=id`;
 
   var hideListString = "";
   for (i = 0; i < infraHideList.length; i++) {
@@ -11826,7 +11857,7 @@ function statusInfra() {
     return;
   }
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}`;
+  var url = `${tbApiBase()}/ns/${namespace}/infra/${infraid}`;
 
   axios({
     method: "get",
@@ -11877,7 +11908,7 @@ function deleteInfra() {
   var namespace = configNamespace;
   var infraid = getSelectedInfraId();
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}?option=terminate`;
+  var url = `${tbApiBase()}/ns/${namespace}/infra/${infraid}?option=terminate`;
 
   var spinnerId = addSpinnerTask("Deleting Infra: " + infraid);
   infoAlert("Delete: " + infraid + " (option=terminate)");
@@ -11922,7 +11953,7 @@ function releaseResources() {
   var password = config.password;
   var namespace = configNamespace;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/sharedResources`;
+  var url = `${tbApiBase()}/ns/${namespace}/sharedResources`;
 
   axios({
     method: "delete",
@@ -11987,7 +12018,7 @@ function resourceOverview() {
   var username = config.username;
   var password = config.password;
 
-  var url = `http://${hostname}:${port}/tumblebug/inspectResourcesOverview`;
+  var url = `${tbApiBase()}/inspectResourcesOverview`;
 
   axios({
     method: "get",
@@ -12019,7 +12050,7 @@ function recoverSharedResourceDependencies() {
   var password = config.password;
   var namespace = configNamespace;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/sharedResources/recoverDependencies`;
+  var url = `${tbApiBase()}/ns/${namespace}/sharedResources/recoverDependencies`;
 
   axios({
     method: "post",
@@ -12086,7 +12117,7 @@ function registerCspResource() {
   var password = config.password;
   var namespace = configNamespace;
 
-  var url = `http://${hostname}:${port}/tumblebug/registerCspResourcesAll?infraFlag=n`;
+  var url = `${tbApiBase()}/registerCspResourcesAll?infraFlag=n`;
 
   var commandReqTmp = {
     infraName: "csp",
@@ -12140,10 +12171,10 @@ async function showScheduleJobManagement() {
   
   try {
     const [nsResponse, connResponse] = await Promise.all([
-      axios.get(`http://${hostname}:${port}/tumblebug/ns?option=id`, {
+      axios.get(`${tbApiBase()}/ns?option=id`, {
         auth: { username, password }
       }),
-      axios.get(`http://${hostname}:${port}/tumblebug/connConfig`, {
+      axios.get(`${tbApiBase()}/connConfig`, {
         auth: { username, password }
       })
     ]);
@@ -12607,7 +12638,7 @@ async function loadScheduleJobsInModal() {
   
   try {
     const response = await axios.get(
-      `http://${config.hostname}:${config.port}/tumblebug/registerCspResources/schedule`,
+      `${tbApiBase()}/registerCspResources/schedule`,
       { auth: { username: config.username, password: config.password } }
     );
     
@@ -12761,7 +12792,7 @@ async function createScheduleJobFromModal() {
     }
     
     const response = await axios.post(
-      `http://${config.hostname}:${config.port}/tumblebug/registerCspResources/schedule`,
+      `${tbApiBase()}/registerCspResources/schedule`,
       requestBody,
       {
         headers: { "Content-Type": "application/json" },
@@ -12802,7 +12833,7 @@ async function viewJobDetails(jobId) {
   
   try {
     const response = await axios.get(
-      `http://${config.hostname}:${config.port}/tumblebug/registerCspResources/schedule/${jobId}`,
+      `${tbApiBase()}/registerCspResources/schedule/${jobId}`,
       { auth: { username: config.username, password: config.password } }
     );
     
@@ -12868,7 +12899,7 @@ async function pauseJobFromModal(jobId) {
   
   try {
     await axios.put(
-      `http://${config.hostname}:${config.port}/tumblebug/registerCspResources/schedule/${jobId}/pause`,
+      `${tbApiBase()}/registerCspResources/schedule/${jobId}/pause`,
       {},
       { auth: { username: config.username, password: config.password } }
     );
@@ -12901,7 +12932,7 @@ async function resumeJobFromModal(jobId) {
   
   try {
     await axios.put(
-      `http://${config.hostname}:${config.port}/tumblebug/registerCspResources/schedule/${jobId}/resume`,
+      `${tbApiBase()}/registerCspResources/schedule/${jobId}/resume`,
       {},
       { auth: { username: config.username, password: config.password } }
     );
@@ -12946,7 +12977,7 @@ async function deleteJobFromModal(jobId) {
   
   try {
     await axios.delete(
-      `http://${config.hostname}:${config.port}/tumblebug/registerCspResources/schedule/${jobId}`,
+      `${tbApiBase()}/registerCspResources/schedule/${jobId}`,
       { auth: { username: config.username, password: config.password } }
     );
     
@@ -12987,7 +13018,7 @@ function updateCredentialHolderList(callback) {
   var password = config.password;
 
   if (hostname && hostname != "" && port && port != "") {
-    var url = `http://${hostname}:${port}/tumblebug/credentialHolder`;
+    var url = `${tbApiBase()}/credentialHolder`;
 
     axios({
       method: "get",
@@ -13064,7 +13095,7 @@ function reloadConnectionsForHolder() {
   var username = config.username;
   var password = config.password;
 
-  var url = `http://${hostname}:${port}/tumblebug/connConfig?filterVerified=true&filterRegionRepresentative=true&filterCredentialHolder=${encodeURIComponent(configCredentialHolder)}`;
+  var url = `${tbApiBase()}/connConfig?filterVerified=true&filterRegionRepresentative=true&filterCredentialHolder=${encodeURIComponent(configCredentialHolder)}`;
 
   console.log('[CredentialHolder] Reloading connections for holder:', configCredentialHolder);
   updateMapConnectionStatus('connecting');
@@ -13193,7 +13224,7 @@ function updateNsList() {
 
   if (!hostname || hostname === "" || !port || port === "") return;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns?option=id`;
+  var url = `${tbApiBase()}/ns?option=id`;
 
   axios({
     method: "get",
@@ -13255,7 +13286,7 @@ function updateInfraList() {
   var namespace = configNamespace;
 
   if (namespace && namespace != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra?option=id`;
+    var url = `${tbApiBase()}/ns/${namespace}/infra?option=id`;
 
     axios({
       method: "get",
@@ -13361,7 +13392,7 @@ function updateNodeAndIpListsFromInfra() {
   var infraid = infraidElement.value;
 
   if (namespace && namespace != "" && infraid && infraid != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}`;
+    var url = `${tbApiBase()}/ns/${namespace}/infra/${infraid}`;
 
     axios({
       method: "get",
@@ -13441,7 +13472,7 @@ function updateResourceList(resourceType) {
   var namespace = configNamespace;
 
   if (namespace && namespace != "" && resourceType && resourceType != "") {
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/resources/${resourceType}?option=id`;
+    var url = `${tbApiBase()}/ns/${namespace}/resources/${resourceType}?option=id`;
 
     axios({
       method: "get",
@@ -13528,7 +13559,7 @@ function updateConnectionList() {
   var username = config.username;
   var password = config.password;
 
-  var url = `http://${hostname}:${port}/tumblebug/connConfig?filterVerified=true&filterRegionRepresentative=true&filterCredentialHolder=${encodeURIComponent(configCredentialHolder)}`;
+  var url = `${tbApiBase()}/connConfig?filterVerified=true&filterRegionRepresentative=true&filterCredentialHolder=${encodeURIComponent(configCredentialHolder)}`;
 
   axios({
     method: "get",
@@ -13585,7 +13616,7 @@ function AddMcNLB() {
     return;
   }
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/mcSwNlb`;
+  var url = `${tbApiBase()}/ns/${namespace}/infra/${infraid}/mcSwNlb`;
 
   Swal.fire({
     title: "Configuration for Global NLB",
@@ -13686,7 +13717,7 @@ function AddNLB() {
   }
 
   // Load NodeGroup list for selection
-  var nodeGroupUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/nodegroup`;
+  var nodeGroupUrl = `${tbApiBase()}/ns/${namespace}/infra/${infraid}/nodegroup`;
   var spinnerId = addSpinnerTask("Loading NodeGroup list");
 
   axios({
@@ -13779,7 +13810,7 @@ function AddNLB() {
 
 // Create Regional NLB with selected NodeGroup and port
 function createRegionalNLB(infraid, nodegroupid, nlbport, namespace, hostname, port, username, password) {
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/nlb`;
+  var url = `${tbApiBase()}/ns/${namespace}/infra/${infraid}/nlb`;
 
   var nlbReqTmp = {
     type: "PUBLIC",
@@ -13845,7 +13876,7 @@ function DelNLB() {
   }
 
   // Load NodeGroup list for selection
-  var nodeGroupUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/nodegroup`;
+  var nodeGroupUrl = `${tbApiBase()}/ns/${namespace}/infra/${infraid}/nodegroup`;
   var spinnerId = addSpinnerTask("Loading NodeGroup list");
 
   axios({
@@ -13922,7 +13953,7 @@ function DelNLB() {
 // Show deletion confirmation dialog after NodeGroup selection
 // Separate function to handle the actual deletion
 function deleteRegionalNLB(infraid, nodegroupid, namespace, hostname, port, username, password) {
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/nlb/${nodegroupid}`;
+  var url = `${tbApiBase()}/ns/${namespace}/infra/${infraid}/nlb/${nodegroupid}`;
   var spinnerId = addSpinnerTask("Deleting Regional NLB");
   
   axios({
@@ -13983,7 +14014,7 @@ async function manageNLB(opts) {
   if (!namespace) { errorAlert("Please select a namespace first"); return; }
   if (!infraid) { errorAlert("Please select an Infra first"); return; }
   window._nlbCtx = { hostname, port, username, password, namespace, infraid };
-  const base = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}`;
+  const base = `${tbApiBase()}/ns/${namespace}/infra/${infraid}`;
   const esc = (v) => window.escapeHtml(String(v == null ? '' : v));
 
   const spinnerId = addSpinnerTask("Loading NLBs");
@@ -14297,7 +14328,7 @@ async function manageVPN(opts) {
   if (!namespace) { errorAlert("Please select a namespace first"); return; }
   if (!infraid) { errorAlert("Please select an Infra first"); return; }
   window._vpnCtx = { hostname, port, username, password, namespace, infraid };
-  const base = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}`;
+  const base = `${tbApiBase()}/ns/${namespace}/infra/${infraid}`;
   const esc = (v) => window.escapeHtml(String(v == null ? '' : v));
 
   const spinnerId = addSpinnerTask("Loading VPNs");
@@ -14493,7 +14524,7 @@ async function manageMCNLB(opts) {
   const spinnerId = addSpinnerTask("Loading Global NLB");
   let host = null;
   try {
-    const res = await axios({ method: 'get', url: `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${hostInfraId}`, auth: { username, password } }).catch(() => null);
+    const res = await axios({ method: 'get', url: `${tbApiBase()}/ns/${namespace}/infra/${hostInfraId}`, auth: { username, password } }).catch(() => null);
     if (res && res.data && (res.data.id || (res.data.node && res.data.node.length))) host = res.data;
   } finally { removeSpinnerTask(spinnerId); }
 
@@ -15218,7 +15249,7 @@ function stopApp() {
     var password = config.password;
     var namespace = configNamespace;
 
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/infra/${infraid}`;
+    var url = `${tbApiBase()}/ns/${namespace}/cmd/infra/${infraid}`;
     var cmd = [];
     if (selectApp.value == "Xonotic") {
       cmd.push(
@@ -15292,7 +15323,7 @@ function statusApp() {
   if (infraid) {
     console.log(" Getting status " + selectApp.value);
 
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/infra/${infraid}`;
+    var url = `${tbApiBase()}/ns/${namespace}/cmd/infra/${infraid}`;
     var cmd = [];
     if (selectApp.value == "Xonotic") {
       cmd.push(
@@ -18718,7 +18749,7 @@ async function setBastionNode(preset) {
   let nodes = [];
   try {
     const infraRes = await axios.get(
-      `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}`,
+      `${tbApiBase()}/ns/${namespace}/infra/${infraid}`,
       { auth: { username, password } }
     );
     nodes = infraRes.data.node || [];
@@ -18887,7 +18918,7 @@ async function setBastionNode(preset) {
         document.getElementById('bastionNodeId').innerHTML = '<option value="">-- select Infra first --</option>';
         try {
           const res = await axios.get(
-            `http://${hostname}:${port}/tumblebug/ns/${bastionNs}/infra?option=id`,
+            `${tbApiBase()}/ns/${bastionNs}/infra?option=id`,
             { auth: { username, password } }
           );
           const infras = Array.isArray(res.data.output) ? res.data.output : [];
@@ -18915,7 +18946,7 @@ async function setBastionNode(preset) {
         nodeSel.innerHTML = '<option value="">Loading...</option>';
         try {
           const res = await axios.get(
-            `http://${hostname}:${port}/tumblebug/ns/${bastionNs}/infra/${bastionInfra}`,
+            `${tbApiBase()}/ns/${bastionNs}/infra/${bastionInfra}`,
             { auth: { username, password } }
           );
           const extNodes = res.data.node || [];
@@ -18974,19 +19005,19 @@ async function setBastionNode(preset) {
 
     if (sameBastionNs && sameBastionInfra && bastionNodeId) {
       // Same NS, same Infra
-      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionNodeId}`;
+      url = `${tbApiBase()}/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionNodeId}`;
     } else if (sameBastionNs && bastionNodeId) {
       // Same NS, different Infra
-      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionInfraId}/${bastionNodeId}`;
+      url = `${tbApiBase()}/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionInfraId}/${bastionNodeId}`;
     } else if (sameBastionNs && !bastionNodeId) {
       // Same NS, different Infra, auto-select Node
-      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionInfraId}/`;
+      url = `${tbApiBase()}/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionInfraId}/`;
     } else if (bastionNodeId) {
       // Cross-NS with explicit Node
-      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionNsId}/${bastionInfraId}/${bastionNodeId}`;
+      url = `${tbApiBase()}/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionNsId}/${bastionInfraId}/${bastionNodeId}`;
     } else {
       // Cross-NS, auto-select Node — not supported via URL params; fall back to explicit auto-select call
-      url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionNsId}/${bastionInfraId}/`;
+      url = `${tbApiBase()}/ns/${namespace}/infra/${infraid}/node/${targetNodeId}/bastion/${bastionNsId}/${bastionInfraId}/`;
     }
 
     // Remove trailing slash if bastionNodeId is empty (auto-select not available via 3-segment route)
@@ -19044,7 +19075,7 @@ async function executeRemoteCmd() {
   // Fetch Infra list for selector
   let infraListOptions = [];
   try {
-    const infraListUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra?option=id`;
+    const infraListUrl = `${tbApiBase()}/ns/${namespace}/infra?option=id`;
     const infraRes = await axios.get(infraListUrl, {
       auth: { username: username, password: password }
     });
@@ -19368,7 +19399,7 @@ async function executeRemoteCmd() {
 
         const radioEl = Swal.getPopup().querySelector('input[name="selectOption"]:checked');
         const radioValue = radioEl ? radioEl.value : 'Infra';
-        let uploadUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/transferFile/infra/${infraId}`;
+        let uploadUrl = `${tbApiBase()}/ns/${namespace}/transferFile/infra/${infraId}`;
         if (radioValue === 'NodeGroup') uploadUrl += `?nodeGroupId=${encodeURIComponent(nodegroupid)}`;
         else if (radioValue === 'Node') uploadUrl += `?nodeId=${encodeURIComponent(nodeid)}`;
 
@@ -19456,7 +19487,7 @@ async function executeRemoteCmd() {
       (async () => {
         try {
           const res = await axios.get(
-            `http://${hostname}:${port}/tumblebug/resources/globalDns/hostedZone`,
+            `${tbApiBase()}/resources/globalDns/hostedZone`,
             { headers: { 'Authorization': `Basic ${btoa(`${username}:${password}`)}` } }
           );
           const zones = res.data?.hostedZones || [];
@@ -19506,7 +19537,7 @@ async function executeRemoteCmd() {
             setBy: { infra: { nsId: namespace, infraId } },
           };
           await axios.put(
-            `http://${hostname}:${port}/tumblebug/resources/globalDns/record`,
+            `${tbApiBase()}/resources/globalDns/record`,
             body,
             { headers: { 'Authorization': `Basic ${btoa(`${username}:${password}`)}` } }
           );
@@ -19559,13 +19590,13 @@ async function executeRemoteCmd() {
           'input[name="selectOption"]:checked'
         ).value;
         if (radioValue === "Infra") {
-          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/infra/${selectedInfraId}`;
+          var url = `${tbApiBase()}/ns/${namespace}/cmd/infra/${selectedInfraId}`;
           console.log("Performing remote command for Infra:", selectedInfraId);
         } else if (radioValue === "NodeGroup") {
-          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/infra/${selectedInfraId}?nodeGroupId=${encodeURIComponent(nodegroupid)}`;
+          var url = `${tbApiBase()}/ns/${namespace}/cmd/infra/${selectedInfraId}?nodeGroupId=${encodeURIComponent(nodegroupid)}`;
           console.log("Performing remote command for NodeGroup:", nodegroupid, "in Infra:", selectedInfraId);
         } else if (radioValue === "Node") {
-          var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/infra/${selectedInfraId}?nodeId=${encodeURIComponent(nodeid)}`;
+          var url = `${tbApiBase()}/ns/${namespace}/cmd/infra/${selectedInfraId}?nodeId=${encodeURIComponent(nodeid)}`;
           console.log("Performing remote command for Node:", nodeid, "in Infra:", selectedInfraId);
         }
 
@@ -19645,7 +19676,7 @@ async function executeRemoteCmd() {
             if (res.status === 202 && res.data && res.data.xRequestId) {
               // Async mode accepted - start background SSE session and open streaming modal
               var xReqId = res.data.xRequestId;
-              var streamUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/stream/cmd/infra/${selectedInfraId}?xRequestId=${encodeURIComponent(xReqId)}`;
+              var streamUrl = `${tbApiBase()}/ns/${namespace}/stream/cmd/infra/${selectedInfraId}?xRequestId=${encodeURIComponent(xReqId)}`;
               console.log('[RemoteCmd] Starting streaming session:', xReqId);
               startStreamingSession(streamUrl, username, password, xReqId, selectedInfraId, spinnerId, appliedDnsUrl, templateCommands);
             } else {
@@ -19712,7 +19743,7 @@ async function transferFileToInfra(opts = {}) {
   // Fetch Infra list for selector
   let infraListOptions = [];
   try {
-    const infraListUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra?option=id`;
+    const infraListUrl = `${tbApiBase()}/ns/${namespace}/infra?option=id`;
     const infraRes = await axios.get(infraListUrl, {
       auth: { username: username, password: password }
     });
@@ -19737,7 +19768,7 @@ async function transferFileToInfra(opts = {}) {
   let vmListOptions = [];
   const fetchVmList = async (targetInfraId) => {
     try {
-      const vmListUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${targetInfraId}`;
+      const vmListUrl = `${tbApiBase()}/ns/${namespace}/infra/${targetInfraId}`;
       const vmRes = await axios.get(vmListUrl, {
         auth: { username: username, password: password }
       });
@@ -20129,7 +20160,7 @@ async function transferFileToInfra(opts = {}) {
         const { files, targetPath, postTransferCmd } = result.value;
         const radioValue = Swal.getPopup().querySelector('input[name="selectOption"]:checked').value;
         const endpoint = postTransferCmd ? 'transferFileAndCmd' : 'transferFile';
-        let url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/${endpoint}/infra/${selectedInfra}`;
+        let url = `${tbApiBase()}/ns/${namespace}/${endpoint}/infra/${selectedInfra}`;
         if (radioValue === 'NodeGroup') {
           url += `?nodeGroupId=${encodeURIComponent(nodegroupid)}`;
         } else if (radioValue === 'Node') {
@@ -20244,7 +20275,7 @@ async function transferFileToInfra(opts = {}) {
       } else {
         // === DOWNLOAD ===
         const { selectedVm, sourcePath } = result.value;
-        const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/downloadFile/infra/${selectedInfra}/node/${selectedVm}`;
+        const url = `${tbApiBase()}/ns/${namespace}/downloadFile/infra/${selectedInfra}/node/${selectedVm}`;
 
         Swal.fire({
           title: '⬇️ Downloading...',
@@ -20342,7 +20373,7 @@ function getAccessInfo() {
     "Retrieve access information for Infra:" + infraid
   );
 
-    var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}?option=accessinfo`;
+    var url = `${tbApiBase()}/ns/${namespace}/infra/${infraid}?option=accessinfo`;
 
     axios({
       method: "get",
@@ -20373,7 +20404,7 @@ saveBtn.addEventListener("click", function () {
   var groupid = getNodeGroupIdFromNodeSelection();
   var nodeid = document.getElementById("nodeid").value;
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}?option=accessinfo&accessInfoOption=showSshKey`;
+  var url = `${tbApiBase()}/ns/${namespace}/infra/${infraid}?option=accessinfo&accessInfoOption=showSshKey`;
 
   axios({
     method: "get",
@@ -20428,7 +20459,7 @@ function downloadAllSshKeys(infraIdOverride) {
     return;
   }
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}?option=accessinfo&accessInfoOption=showSshKey`;
+  var url = `${tbApiBase()}/ns/${namespace}/infra/${infraid}?option=accessinfo&accessInfoOption=showSshKey`;
 
   Swal.fire({
     title: "Downloading SSH Keys...",
@@ -20438,7 +20469,7 @@ function downloadAllSshKeys(infraIdOverride) {
   });
 
   // Fetch both Infra info and access info in parallel
-  var infraInfoUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}`;
+  var infraInfoUrl = `${tbApiBase()}/ns/${namespace}/infra/${infraid}`;
   var authConfig = { username: username, password: password };
 
   Promise.all([
@@ -20572,7 +20603,7 @@ function handleRequestIdSelection() {
     var username = config.username;
     var password = config.password;
 
-    var url = `http://${hostname}:${port}/tumblebug/request/${selectedRequestId}`;
+    var url = `${tbApiBase()}/request/${selectedRequestId}`;
 
     axios({
       method: "get",
@@ -20734,7 +20765,7 @@ function updateFirewallRules(opts) {
     return;
   }
 
-  const assocUrl = `http://${hostname}:${port}/tumblebug/ns/${nsId}/infra/${infraId}/associatedResources`;
+  const assocUrl = `${tbApiBase()}/ns/${nsId}/infra/${infraId}/associatedResources`;
   axios({
     method: "get",
     url: assocUrl,
@@ -20749,7 +20780,7 @@ function updateFirewallRules(opts) {
     Promise.all(sgIds.map(sgId =>
       axios({
         method: "get",
-        url: `http://${hostname}:${port}/tumblebug/ns/${nsId}/resources/securityGroup/${sgId}`,
+        url: `${tbApiBase()}/ns/${nsId}/resources/securityGroup/${sgId}`,
         auth: { username, password },
       }).then(res => res.data)
     )).then((sgList) => {
@@ -21157,7 +21188,7 @@ function updateFirewallRules(opts) {
           // Since we now use UpdateMultipleFirewallRules, make a single API call instead of multiple calls
           const updatePromise = axios({
             method: "put",
-            url: `http://${hostname}:${port}/tumblebug/ns/${nsId}/infra/${infraId}/associatedSecurityGroups`,
+            url: `${tbApiBase()}/ns/${nsId}/infra/${infraId}/associatedSecurityGroups`,
             headers: { "Content-Type": "application/json" },
             data: JSON.stringify({
               firewallRules: result.value[0].firewallRules // All SGs get the same rules
@@ -21502,7 +21533,7 @@ function deleteFirewallRule(sgId, sgName, ruleData) {
 
         axios({
           method: "delete",
-          url: `http://${hostname}:${port}/tumblebug/ns/${nsId}/resources/securityGroup/${sgId}/rules`,
+          url: `${tbApiBase()}/ns/${nsId}/resources/securityGroup/${sgId}/rules`,
           headers: { "Content-Type": "application/json" },
           data: JSON.stringify({
             firewallRules: [deleteRule]
@@ -21969,8 +22000,8 @@ function copyInfraConfig(infraId) {
   var spinnerId = addSpinnerTask("Copying Infra configuration");
 
   // Fetch both configCopy and Infra info in parallel
-  var configCopyUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraId}/configCopy`;
-  var infraInfoUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraId}`;
+  var configCopyUrl = `${tbApiBase()}/ns/${namespace}/infra/${infraId}/configCopy`;
+  var infraInfoUrl = `${tbApiBase()}/ns/${namespace}/infra/${infraId}`;
   var authConfig = { username: username, password: password };
 
   Promise.all([
@@ -22113,7 +22144,7 @@ function saveInfraAsTemplate(infraId) {
   }
 
   var spinnerId = addSpinnerTask("Extracting Infra configuration");
-  var configCopyUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraId}/configCopy`;
+  var configCopyUrl = `${tbApiBase()}/ns/${namespace}/infra/${infraId}/configCopy`;
 
   axios({
     method: "get",
@@ -22136,7 +22167,7 @@ window.saveInfraAsTemplate = saveInfraAsTemplate;
 
 // Step 2: Show NodeGroup selection dialog
 function showNodeGroupSelectionForScaleOut(selectedInfraId, namespace, hostname, port, username, password) {
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${selectedInfraId}/nodegroup`;
+  var url = `${tbApiBase()}/ns/${namespace}/infra/${selectedInfraId}/nodegroup`;
   
   var spinnerId = addSpinnerTask("Loading NodeGroup list");
 
@@ -22278,7 +22309,7 @@ function showScaleOutConfiguration(infraId, nodeGroupId, namespace, hostname, po
 
 // Function to execute the scale out operation
 function executeScaleOut(namespace, infraid, nodegroupid, numNodesToAdd, hostname, port, username, password) {
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraid}/nodegroup/${nodegroupid}`;
+  var url = `${tbApiBase()}/ns/${namespace}/infra/${infraid}/nodegroup/${nodegroupid}`;
   
   var scaleOutReq = {
     numNodesToAdd: numNodesToAdd
@@ -22751,7 +22782,7 @@ function showInfraSelectionForScaleOut(title, description, successCallback) {
     return;
   }
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra?option=id`;
+  var url = `${tbApiBase()}/ns/${namespace}/infra?option=id`;
   var spinnerId = addSpinnerTask("Loading Infra list for ScaleOut");
 
   axios({
@@ -22977,7 +23008,7 @@ function showInfraScaleOutReview(selectedInfraId, nodeGroupName, nodeCountPerLoc
     reviewReq.connectionName = vmTemplate.connectionName;
   }
 
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${selectedInfraId}/nodeGroupDynamicReview`;
+  var url = `${tbApiBase()}/ns/${namespace}/infra/${selectedInfraId}/nodeGroupDynamicReview`;
   var jsonBody = JSON.stringify(reviewReq, undefined, 4);
   
   console.log("Reviewing NodeGroup configuration...");
@@ -23172,7 +23203,7 @@ function showInfraScaleOutConfirmation(infraId, nodeGroupName, nodeCountPerLocat
 
 // Execute Infra scale out operation
 function executeInfraScaleOut(namespace, infraId, nodeGroupName, nodeCountPerLocation, hostname, port, username, password) {
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infraId}/nodeGroupDynamic`;
+  var url = `${tbApiBase()}/ns/${namespace}/infra/${infraId}/nodeGroupDynamic`;
   
   // Build the request body using current map configuration
   var nodeGroupDynamicReq = {
@@ -23858,7 +23889,7 @@ function loadK8sClusterData() {
   window.cloudBaristaCentralData.apiStatus.k8sCluster = 'loading';
 
   // get k8sCluster list and put them on the map
-  var url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/k8sCluster`;
+  var url = `${tbApiBase()}/ns/${namespace}/k8sCluster`;
   axios({
     method: "get",
     url: url,
@@ -24023,7 +24054,7 @@ async function loadNlbDataFromInfras() {
       try {
         const res = await axios({
           method: "get",
-          url: `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infra.id}/nlb`,
+          url: `${tbApiBase()}/ns/${namespace}/infra/${infra.id}/nlb`,
           auth: { username, password },
           timeout: 5000,
         });
@@ -24079,7 +24110,7 @@ async function loadVpnDataFromInfras() {
       try {
         // option=InfoList returns full VpnInfo objects (stored, fast) under
         // vpnInfoList; the default (IdList) returns only ids under vpnIdList.
-        const vpnUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra/${infra.id}/vpn?option=InfoList`;
+        const vpnUrl = `${tbApiBase()}/ns/${namespace}/infra/${infra.id}/vpn?option=InfoList`;
         const vpnResponse = await axios({
           method: "get",
           url: vpnUrl,
@@ -24186,7 +24217,7 @@ async function showSnapshotManagementModal() {
   const config = getConfig();
   let infraList = [];
   try {
-    const response = await axios.get(`http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/infra`, {
+    const response = await axios.get(`${tbApiBase()}/ns/${namespace}/infra`, {
       auth: { username: config.username, password: config.password },
       headers: { 'Content-Type': 'application/json' }
     });
@@ -24280,7 +24311,7 @@ async function showSnapshotManagementModal() {
 
         try {
           const response = await axios.get(
-            `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/infra/${infraId}`,
+            `${tbApiBase()}/ns/${namespace}/infra/${infraId}`,
             {
               auth: { username: config.username, password: config.password },
               headers: { 'Content-Type': 'application/json' }
@@ -24400,7 +24431,7 @@ async function createNodeSnapshotFromModal() {
     if (isInfraSnapshot) {
       // Infra-wide snapshot (all nodegroups)
       response = await axios.post(
-        `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/infra/${infraId}/snapshot`,
+        `${tbApiBase()}/ns/${namespace}/infra/${infraId}/snapshot`,
         requestBody,
         {
           auth: { username: config.username, password: config.password },
@@ -24472,7 +24503,7 @@ async function createNodeSnapshotFromModal() {
     } else {
       // Single Node snapshot
       response = await axios.post(
-        `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/infra/${infraId}/node/${nodeId}/snapshot`,
+        `${tbApiBase()}/ns/${namespace}/infra/${infraId}/node/${nodeId}/snapshot`,
         requestBody,
         {
           auth: { username: config.username, password: config.password },
@@ -24556,7 +24587,7 @@ async function loadCustomImagesInModal(namespace) {
 
   try {
     const response = await axios.get(
-      `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/resources/customImage`,
+      `${tbApiBase()}/ns/${namespace}/resources/customImage`,
       {
         auth: { username: config.username, password: config.password },
         headers: { 'Content-Type': 'application/json' }
@@ -24643,7 +24674,7 @@ async function viewCustomImageDetails(imageId) {
 
   try {
     const response = await axios.get(
-      `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/resources/customImage/${imageId}`,
+      `${tbApiBase()}/ns/${namespace}/resources/customImage/${imageId}`,
       {
         auth: { username: config.username, password: config.password },
         headers: { 'Content-Type': 'application/json' }
@@ -24735,7 +24766,7 @@ async function deleteCustomImageFromModal(imageId) {
 
   try {
     await axios.delete(
-      `http://${config.hostname}:${config.port}/tumblebug/ns/${namespace}/resources/customImage/${imageId}`,
+      `${tbApiBase()}/ns/${namespace}/resources/customImage/${imageId}`,
       {
         auth: { username: config.username, password: config.password },
         headers: { 'Content-Type': 'application/json' }
@@ -24780,7 +24811,7 @@ async function loadTaskListInModal(namespace, infraid) {
   var username = config.username;
   var password = config.password;
 
-  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/cmd/infra/${infraid}/task`;
+  const url = `${tbApiBase()}/ns/${namespace}/cmd/infra/${infraid}/task`;
 
   try {
     const res = await axios.get(url, {
@@ -25034,7 +25065,7 @@ async function showTaskManagementModal() {
   // Fetch Infra list for selector
   let infraListOptions = [];
   try {
-    const infraListUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}/infra?option=id`;
+    const infraListUrl = `${tbApiBase()}/ns/${namespace}/infra?option=id`;
     const infraRes = await axios.get(infraListUrl, {
       auth: { username: username, password: password }
     });
@@ -25191,7 +25222,7 @@ async function cancelTaskFromModal(taskId, nsId, infraId) {
     return;
   }
 
-  const url = `http://${hostname}:${port}/tumblebug/ns/${nsId}/cmd/infra/${infraId}/task/${taskId}/cancel`;
+  const url = `${tbApiBase()}/ns/${nsId}/cmd/infra/${infraId}/task/${taskId}/cancel`;
 
   const result = await Swal.fire({
     title: 'Cancel Task?',
@@ -25358,7 +25389,7 @@ async function showTemplateManagement(overrideNs) {
   // Load namespace list
   let namespaces = [];
   try {
-    const nsRes = await axios.get(`http://${hostname}:${port}/tumblebug/ns?option=id`, { auth: authConfig });
+    const nsRes = await axios.get(`${tbApiBase()}/ns?option=id`, { auth: authConfig });
     namespaces = nsRes.data.output || nsRes.data.ns || [];
   } catch (e) {
     console.error('Error loading namespaces:', e);
@@ -25456,7 +25487,7 @@ async function tmplLoadTemplates(namespace) {
   const config = getConfig();
   const { hostname, port, username, password } = config;
   const authConfig = { username, password };
-  const baseUrl = `http://${hostname}:${port}/tumblebug/ns/${namespace}`;
+  const baseUrl = `${tbApiBase()}/ns/${namespace}`;
   const container = document.getElementById('tmplListContainer');
   const statusBar = document.getElementById('tmplStatusBar');
 
@@ -25635,7 +25666,7 @@ window.tmplCreateNew = tmplCreateNew;
 async function viewTemplateDetail(namespace, type, templateId) {
   const config = getConfig();
   const { hostname, port, username, password } = config;
-  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/template/${type}/${templateId}`;
+  const url = `${tbApiBase()}/ns/${namespace}/template/${type}/${templateId}`;
   const typeMeta = getTemplateTypeMeta(type);
 
   try {
@@ -25716,7 +25747,7 @@ async function applyTemplate(sourceNs, type, templateId) {
   // Load namespace list for target namespace selection
   let namespaces = [];
   try {
-    const nsRes = await axios.get(`http://${hostname}:${port}/tumblebug/ns?option=id`, { auth: authConfig });
+    const nsRes = await axios.get(`${tbApiBase()}/ns?option=id`, { auth: authConfig });
     namespaces = nsRes.data.output || nsRes.data.ns || [];
   } catch (e) {
     console.error('Error loading namespaces:', e);
@@ -25789,7 +25820,7 @@ async function applyTemplate(sourceNs, type, templateId) {
   if (!formValues) return;
 
   const targetNs = formValues.targetNs;
-  const targetBaseUrl = `http://${hostname}:${port}/tumblebug/ns/${targetNs}`;
+  const targetBaseUrl = `${tbApiBase()}/ns/${targetNs}`;
 
   const spinnerId = addSpinnerTask(`Creating ${typeMeta.label} from template`);
   try {
@@ -25808,7 +25839,7 @@ async function applyTemplate(sourceNs, type, templateId) {
       res = await axios.post(url, applyBody, { auth: authConfig });
     } else {
       // Cross-namespace: GET template from source ns, then directly create in target ns
-      const templateUrl = `http://${hostname}:${port}/tumblebug/ns/${sourceNs}/template/${type}/${templateId}`;
+      const templateUrl = `${tbApiBase()}/ns/${sourceNs}/template/${type}/${templateId}`;
       const tmplRes = await axios.get(templateUrl, { auth: authConfig });
       const tmplData = tmplRes.data;
 
@@ -25867,7 +25898,7 @@ async function deleteTemplate(namespace, type, templateId) {
 
   const config = getConfig();
   const { hostname, port, username, password } = config;
-  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/template/${type}/${templateId}`;
+  const url = `${tbApiBase()}/ns/${namespace}/template/${type}/${templateId}`;
 
   try {
     await axios.delete(url, { auth: { username, password } });
@@ -25937,7 +25968,7 @@ async function createTemplateDialog(namespace, type) {
 
   const config = getConfig();
   const { hostname, port, username, password } = config;
-  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/template/${type}`;
+  const url = `${tbApiBase()}/ns/${namespace}/template/${type}`;
 
   const spinnerId = addSpinnerTask('Creating template');
   try {
@@ -26000,7 +26031,7 @@ async function saveConfigAsTemplate(namespace, infraId, infraReq) {
 
   const config = getConfig();
   const { hostname, port, username, password } = config;
-  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/template/infra`;
+  const url = `${tbApiBase()}/ns/${namespace}/template/infra`;
 
   const spinnerId = addSpinnerTask('Saving template');
   try {
@@ -26024,7 +26055,7 @@ window.saveConfigAsTemplate = saveConfigAsTemplate;
 async function loadTemplateToInfraConfig(namespace, templateId) {
   const config = getConfig();
   const { hostname, port, username, password } = config;
-  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/template/infra/${templateId}`;
+  const url = `${tbApiBase()}/ns/${namespace}/template/infra/${templateId}`;
 
   const spinnerId = addSpinnerTask('Loading template to MC-Infra Configuration');
   let data;
@@ -26070,7 +26101,7 @@ async function loadTemplateToInfraConfig(namespace, templateId) {
 
     // Fetch spec details if specId is available
     if (sg.specId) {
-      const specUrl = `http://${hostname}:${port}/tumblebug/ns/system/resources/spec/${sg.specId}`;
+      const specUrl = `${tbApiBase()}/ns/system/resources/spec/${sg.specId}`;
       return axios.get(specUrl, { auth: { username, password } })
         .then(function(specRes) {
           const s = specRes.data;
@@ -26157,7 +26188,7 @@ window.loadTemplateToInfraConfig = loadTemplateToInfraConfig;
 async function loadTemplateToK8sConfig(namespace, templateId) {
   const config = getConfig();
   const { hostname, port, username, password } = config;
-  const url = `http://${hostname}:${port}/tumblebug/ns/${namespace}/template/k8sCluster/${templateId}`;
+  const url = `${tbApiBase()}/ns/${namespace}/template/k8sCluster/${templateId}`;
 
   const spinnerId = addSpinnerTask('Loading K8s template to Configuration');
   let data;
@@ -26212,7 +26243,7 @@ async function loadTemplateToK8sConfig(namespace, templateId) {
     nodeGroupRequestFromSpecList.push(nodeConfig);
 
     if (cluster.specId) {
-      const specUrl = `http://${hostname}:${port}/tumblebug/ns/system/resources/spec/${cluster.specId}`;
+      const specUrl = `${tbApiBase()}/ns/system/resources/spec/${cluster.specId}`;
       return axios.get(specUrl, { auth: { username, password } })
         .then(function(specRes) {
           const s = specRes.data;
@@ -26310,7 +26341,7 @@ async function showDnsManagementModal(preselectedInfraId) {
   let hostedZoneOptions = '<option value="">Loading...</option>';
   let hostedZoneWarning = '';
   try {
-    const hzResp = await axios.get(`http://${config.hostname}:${config.port}/tumblebug/resources/globalDns/hostedZone`, {
+    const hzResp = await axios.get(`${tbApiBase()}/resources/globalDns/hostedZone`, {
       auth: { username: config.username, password: config.password }, timeout: 15000
     });
     const zones = hzResp.data?.hostedZones || [];
@@ -26632,7 +26663,7 @@ async function showDnsManagementModal(preselectedInfraId) {
         resultDiv.innerHTML = '<div style="color: #6c757d;"><i class="fas fa-spinner fa-spin"></i> Querying...</div>';
 
         try {
-          let url = `http://${config.hostname}:${config.port}/tumblebug/resources/globalDns/record?domainName=${encodeURIComponent(domain)}`;
+          let url = `${tbApiBase()}/resources/globalDns/record?domainName=${encodeURIComponent(domain)}`;
           if (recordName) url += `&recordName=${encodeURIComponent(recordName)}`;
           const resp = await axios.get(url, { auth: { username: config.username, password: config.password }, timeout: 30000 });
           const records = resp.data?.record || [];
@@ -26746,7 +26777,7 @@ async function showDnsManagementModal(preselectedInfraId) {
                     return rec;
                   });
 
-                  const resp = await axios.delete(`http://${config.hostname}:${config.port}/tumblebug/resources/globalDns/records`, {
+                  const resp = await axios.delete(`${tbApiBase()}/resources/globalDns/records`, {
                     data: { records },
                     auth: { username: config.username, password: config.password },
                     timeout: 60000
@@ -26789,7 +26820,7 @@ async function showDnsManagementModal(preselectedInfraId) {
                 try {
                   const delBody = { domainName: domain, recordName: recName, recordType: recType };
                   if (setId) delBody.setIdentifier = setId;
-                  await axios.delete(`http://${config.hostname}:${config.port}/tumblebug/resources/globalDns/record`, {
+                  await axios.delete(`${tbApiBase()}/resources/globalDns/record`, {
                     data: delBody,
                     auth: { username: config.username, password: config.password },
                     timeout: 30000
@@ -26866,14 +26897,14 @@ async function showDnsManagementModal(preselectedInfraId) {
         this.disabled = true;
 
         try {
-          const url = `http://${config.hostname}:${config.port}/tumblebug/resources/globalDns/record`;
+          const url = `${tbApiBase()}/resources/globalDns/record`;
           const resp = await axios.put(url, body, { auth: { username: config.username, password: config.password }, timeout: 60000 });
 
           // After success, query the updated records to show detailed result
           resultDiv.innerHTML = '<div style="color: #6c757d;"><i class="fas fa-spinner fa-spin"></i> Record updated. Fetching results...</div>';
           try {
             await new Promise(resolve => setTimeout(resolve, 500)); // brief delay for Route53 consistency
-            let queryUrl = `http://${config.hostname}:${config.port}/tumblebug/resources/globalDns/record?domainName=${encodeURIComponent(domain)}`;
+            let queryUrl = `${tbApiBase()}/resources/globalDns/record?domainName=${encodeURIComponent(domain)}`;
             if (recordName) queryUrl += `&recordName=${encodeURIComponent(recordName)}`;
             console.log('[DNS] Auto-query URL:', queryUrl);
             const qResp = await axios.get(queryUrl, { auth: { username: config.username, password: config.password }, timeout: 30000 });

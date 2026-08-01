@@ -62,9 +62,19 @@
 
         const protocol = window.location.protocol;
         const hostname = window.location.hostname;
-        const apiPort = '1323';
-        const apiDocPath = '/tumblebug/api/doc.yaml';
-        const apiDocUrl = `${protocol}//${hostname}:${apiPort}${apiDocPath}`;
+        // API base: honor the base URL persisted by the main UI settings;
+        // otherwise same-origin behind a gateway (mapui's canonical port is
+        // 1324) or the classic <hostname>:1323 model.
+        let apiBase = '';
+        try {
+            apiBase = (JSON.parse(localStorage.getItem('mapui-api-config') || '{}').apiBaseUrl) || '';
+        } catch (e) { /* ignore */ }
+        if (!apiBase) {
+            apiBase = (window.location.port === '1324')
+                ? `${protocol}//${hostname}:1323/tumblebug`
+                : `${protocol}//${window.location.host}/tumblebug`;
+        }
+        const apiDocUrl = `${apiBase}/api/doc.yaml`;
 
         console.log('API Document URL:', apiDocUrl);
 
