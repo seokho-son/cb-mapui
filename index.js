@@ -3929,7 +3929,6 @@ function buildPostCommandStatusHtml(data) {
 
   // Per-phase view when available, else the legacy single-result view
   const phases = data.postCommandResults || [];
-  const legacy = ((data.postCommandResult || {}).results) || [];
   let detail = '';
 
   const failedLines = (results, prefix) => (results || [])
@@ -3944,9 +3943,6 @@ function buildPostCommandStatusHtml(data) {
       return `<li style="margin:3px 0;">${head}${lines ? `<ul style="margin:2px 0 0 14px;">${lines}</ul>` : ''}</li>`;
     }).join('');
     detail = `<ul style="margin:6px 0 0 16px;padding:0;font-size:12px;">${detail}</ul>`;
-  } else {
-    const lines = failedLines(legacy, '');
-    if (lines) detail = `<ul style="margin:6px 0 0 16px;padding:0;font-size:12px;">${lines}</ul>`;
   }
 
   // Streaming/replay entry point. The event buffer is kept server-side for a while
@@ -5704,10 +5700,8 @@ function showFinalInfraConfirmation(createInfraReq, url, totalCost, totalNodeSca
           preConfirm: () => collectCommands(),
         }).then((cmdResult) => {
           if (cmdResult.isConfirmed && cmdResult.value && cmdResult.value.length > 0) {
-            createInfraReq.postCommand = {
-              command: cmdResult.value,
-              // userName omitted: the server resolves the verified username per node
-            };
+            // Single command set = one phase
+            createInfraReq.postCommands = [{ command: cmdResult.value }];
             // Async: creation returns once nodes are provisioned (watch bootstrap live)
             createInfraReq.postCommandAsync = true;
             proceedWithInfraCreation(createInfraReq, url, username, password);
@@ -6083,10 +6077,9 @@ function showPostCommandDialog(createInfraReq, infraCreationUrl, username, passw
         // Async: return once nodes are provisioned; watch the bootstrap via streaming
         if (!buildAgnosticImage) createInfraReq.postCommandAsync = true;
       } else if (cv.commands && cv.commands.length > 0) {
-        createInfraReq.postCommand = applyOpts({ command: cv.commands });
-        if (cv.labelSelector) {
-          createInfraReq.postCommand.labelSelector = cv.labelSelector;
-        }
+        const single = applyOpts({ command: cv.commands });
+        if (cv.labelSelector) single.labelSelector = cv.labelSelector;
+        createInfraReq.postCommands = [single];
         // Async: return once nodes are provisioned; watch the bootstrap via streaming
         // (image building needs the result before snapshotting, so it stays synchronous)
         if (!buildAgnosticImage) createInfraReq.postCommandAsync = true;
@@ -23686,7 +23679,7 @@ function executeInfraScaleOut(namespace, infraId, nodeGroupName, nodeCountPerLoc
     nodeGroupDynamicReq.postCommandAsync = true;
     window.pendingNodeGroupPostCommandPhases = null;
   } else if (window.pendingNodeGroupPostCommands && window.pendingNodeGroupPostCommands.length > 0) {
-    nodeGroupDynamicReq.postCommand = { command: window.pendingNodeGroupPostCommands };
+    nodeGroupDynamicReq.postCommands = [{ command: window.pendingNodeGroupPostCommands }];
     nodeGroupDynamicReq.postCommandAsync = true;
   }
   window.pendingNodeGroupPostCommands = null;
@@ -27859,9 +27852,10 @@ function buildAutopilotReq() {
   if (postCmdText) {
     var commands = postCmdText.split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
     if (commands.length > 0) {
-      req.postCommand = { command: commands };
+      var phase = { command: commands };
       var cmdTimeout = parseInt(document.getElementById('apPostCmdTimeout').value);
-      if (cmdTimeout > 0) req.postCommand.timeoutMinutes = Math.min(cmdTimeout, 120);
+      if (cmdTimeout > 0) phase.timeoutMinutes = Math.min(cmdTimeout, 120);
+      req.postCommands = [phase];
     }
   }
 
@@ -28010,9 +28004,10 @@ function renderAutopilotReview(reviewResult, req) {
   if (req.label && Object.keys(req.label).length > 0) {
     reqMeta.push('🏷 ' + window.escapeHtml(labelsToString(req.label)));
   }
-  if (req.postCommand && req.postCommand.command && req.postCommand.command.length > 0) {
-    reqMeta.push('⚡ ' + req.postCommand.command.length + ' post-command(s) after all nodes ready' +
-      (req.postCommand.timeoutMinutes ? ', timeout ' + req.postCommand.timeoutMinutes + 'min' : ''));
+  var apPhase = (req.postCommands && req.postCommands[0]) || null;
+  if (apPhase && apPhase.command && apPhase.command.length > 0) {
+    reqMeta.push('⚡ ' + apPhase.command.length + ' post-command(s) after all nodes ready' +
+      (apPhase.timeoutMinutes ? ', timeout ' + apPhase.timeoutMinutes + 'min' : ''));
   }
   if (reqMeta.length > 0) {
     html += '<div class="mb-2" style="font-size:11px;color:#7d8590;font-family:monospace">' +
@@ -28425,14 +28420,16 @@ function _apStatCell(label, value) {
 }
 
 // Renders a compact per-node summary of post-deployment command results
-// (result.postCommandResult comes from the embedded InfraInfo).
+// (flattened from result.postCommandResults phases of the embedded InfraInfo).
 function _apPostCommandSummaryHtml(result) {
-  var pcResults = (result.postCommandResult && result.postCommandResult.results) || [];
+  var pcResults = (result.postCommandResults || []).reduce(function(acc, ph) {
+    return acc.concat((ph.results && ph.results.results) || []);
+  }, []);
   if (pcResults.length === 0) return '';
-  var okCount = pcResults.filter(function(r) { return !r.err; }).length;
+  var okCount = pcResults.filter(function(r) { return !r.error; }).length;
   var rows = pcResults.map(function(r) {
-    var icon = r.err ? '<span style="color:#f85149">✕</span>' : '<span style="color:#3fb950">✓</span>';
-    var detail = window.escapeHtml(r.err ? String(r.err) : (r.nodeIp || ''));
+    var icon = r.error ? '<span style="color:#f85149">✕</span>' : '<span style="color:#3fb950">✓</span>';
+    var detail = window.escapeHtml(r.error ? String(r.error) : (r.nodeIp || ''));
     return '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">' +
       '<span>' + icon + ' <span style="font-family:monospace;color:#e6edf3">' + window.escapeHtml(r.nodeId || '') + '</span></span>' +
       '<span style="color:#7d8590;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + detail + '</span></div>';
