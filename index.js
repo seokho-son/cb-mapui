@@ -3622,7 +3622,7 @@ function buildInfraNodeSummaryHtml(data) {
     html += `</div>`;
   }
 
-  // ── Per-NodeGroup sections ─────────────────────────────────────
+  // ── Per-NodeGroup sections ─
   const COL_COUNT = 6;
   Object.entries(groups).forEach(([gid, gnodes]) => {
     const first = gnodes[0] || {};
@@ -3912,6 +3912,76 @@ function displayAccessInfoGui(data, infraId) {
 }
 
 // Rich GUI for infraDynamic provisioning result (replaces raw JSON in proceedWithInfraCreation)
+// Render post-deployment command outcome (postCommandStatus/postCommandResults).
+// Bootstrap failures must be visible: infra creation can succeed while commands fail.
+function buildPostCommandStatusHtml(data) {
+  const esc = window.escapeHtml || (s => String(s));
+  const status = data.postCommandStatus;
+  if (!status || status === 'None') return '';
+
+  const style = {
+    Running:             { bg: '#eff6ff', border: '#93c5fd', fg: '#1d4ed8', icon: '⏳', label: 'Post-deployment commands are running in the background' },
+    Completed:           { bg: '#f0fdf4', border: '#86efac', fg: '#15803d', icon: '✅', label: 'Post-deployment commands completed' },
+    CompletedWithErrors: { bg: '#fffbeb', border: '#fcd34d', fg: '#b45309', icon: '⚠️', label: 'Post-deployment commands completed with errors' },
+    Failed:              { bg: '#fef2f2', border: '#fca5a5', fg: '#b91c1c', icon: '❌', label: 'Post-deployment commands failed' },
+    Skipped:             { bg: '#f8fafc', border: '#cbd5e1', fg: '#475569', icon: '⏭️', label: 'Post-deployment commands skipped' },
+  }[status] || { bg: '#f8fafc', border: '#cbd5e1', fg: '#475569', icon: 'ℹ️', label: 'Post-deployment commands: ' + status };
+
+  // Per-phase view when available, else the legacy single-result view
+  const phases = data.postCommandResults || [];
+  const legacy = ((data.postCommandResult || {}).results) || [];
+  let detail = '';
+
+  const failedLines = (results, prefix) => (results || [])
+    .filter(r => r.error)
+    .map(r => `<li style="margin:2px 0;"><b>${esc(r.nodeId)}</b>${prefix}: ${esc(r.error)}</li>`)
+    .join('');
+
+  if (phases.length > 0) {
+    detail = phases.map(ph => {
+      const lines = failedLines(ph.results && ph.results.results, '');
+      const head = `phase ${ph.phase} (${esc(ph.target || 'all nodes')}) — ${esc(ph.status)}`;
+      return `<li style="margin:3px 0;">${head}${lines ? `<ul style="margin:2px 0 0 14px;">${lines}</ul>` : ''}</li>`;
+    }).join('');
+    detail = `<ul style="margin:6px 0 0 16px;padding:0;font-size:12px;">${detail}</ul>`;
+  } else {
+    const lines = failedLines(legacy, '');
+    if (lines) detail = `<ul style="margin:6px 0 0 16px;padding:0;font-size:12px;">${lines}</ul>`;
+  }
+
+  // Async run in progress: offer live streaming (same SSE view as remote commands)
+  if (status === 'Running' && data.postCommandRequestId) {
+    window._postCmdStreamCtx = { infraId: data.id || data.name, xRequestId: data.postCommandRequestId };
+    detail = `
+      <div style="margin-top:6px;font-size:12px;color:#334155;">
+        Nodes are ready and billing has started; bootstrap continues in the background.
+        <div style="margin-top:6px;">
+          <button type="button" onclick="watchPostCommandStream()"
+            style="padding:5px 12px;font-size:12px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
+            📡 Watch live output
+          </button>
+          <span style="color:#64748b;margin-left:8px;">or re-open this Infra later to see the result</span>
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div style="background:${style.bg};border:1px solid ${style.border};border-left:4px solid ${style.fg};border-radius:8px;padding:10px 14px;margin-bottom:14px;">
+      <p style="color:${style.fg};margin:0;font-weight:700;font-size:13px;">${style.icon} ${style.label}</p>
+      ${detail}
+    </div>`;
+}
+
+// Open the live streaming view for a background post-deployment run
+window.watchPostCommandStream = function () {
+  const ctx = window._postCmdStreamCtx;
+  if (!ctx) return;
+  const cfg = getConfig();
+  const streamUrl = `${tbApiBase()}/ns/${configNamespace}/stream/cmd/infra/${ctx.infraId}?xRequestId=${encodeURIComponent(ctx.xRequestId)}`;
+  const spinnerId = addSpinnerTask(`Bootstrap: ${ctx.infraId}`);
+  startStreamingSession(streamUrl, cfg.username, cfg.password, ctx.xRequestId, ctx.infraId, spinnerId, null, []);
+};
+
 function displayInfraDynamicResultGui(data) {
   window._currentJsonOutput = data;
   window._currentJsonString = JSON.stringify(data, null, 2);
@@ -3931,6 +4001,7 @@ function displayInfraDynamicResultGui(data) {
             ${runningCount} / ${nodes.length} node(s) running${data.description ? '  ·  ' + esc(data.description) : ''}
           </p>
         </div>
+        ${buildPostCommandStatusHtml(data)}
         ${buildInfraNodeSummaryHtml(data)}
         <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;flex-wrap:wrap;">
           <button type="button" onclick="downloadAllSshKeys(window._currentInfraId)"
@@ -5623,8 +5694,10 @@ function showFinalInfraConfirmation(createInfraReq, url, totalCost, totalNodeSca
           if (cmdResult.isConfirmed && cmdResult.value && cmdResult.value.length > 0) {
             createInfraReq.postCommand = {
               command: cmdResult.value,
-              userName: "cb-user"
+              // userName omitted: the server resolves the verified username per node
             };
+            // Async: creation returns once nodes are provisioned (watch bootstrap live)
+            createInfraReq.postCommandAsync = true;
             proceedWithInfraCreation(createInfraReq, url, username, password);
           }
           // User cancelled the postCommand dialog or no commands were entered
@@ -5921,24 +5994,57 @@ function showPostCommandDialog(createInfraReq, infraCreationUrl, username, passw
 
   Swal.fire({
     title: buildAgnosticImage ?
-      "<font size=5><b>📦 Build Cloud-Agnostic Custom Image</b></font>" :
-      "<font size=5><b>Add post-deployment commands</b></font>",
-    width: 900,
+      "📦 Build Cloud-Agnostic Custom Image" :
+      "🚀 Post-deployment Commands",
+    width: 850,
     html: `
-      <div id="dynamicContainer" style="text-align: left;">
-        ${workflowInfoHtml}
-        ${generateCommandsHtml(['', '', ''])}
-        ${generatePredefinedScriptsHtml(false)}
-        ${generateLabelSelectorHtml(true)}
-        ${buildAgnosticImage ? generateCustomImageSettingsHtml() : ''}
-      </div>`,
+    ${POPUP_STYLES}
+    <div id="dynamicContainer" class="popup-container">
+      ${workflowInfoHtml}
+      <div class="popup-section" style="background:#f8fbff; border:1px solid #b3d7ff;">
+        <div class="popup-section-title" style="color:#0d6efd;">🎯 Scope</div>
+        <div style="font-size:0.78rem; color:#495057;">
+          Runs on the new Infra's nodes right after provisioning${buildAgnosticImage ?
+            ' — the result is required before snapshotting, so it runs synchronously.' :
+            '. Creation returns as soon as nodes are ready; watch the bootstrap live from the result popup.'}
+        </div>
+        <div class="popup-row" style="margin-top:8px;">
+          <div class="popup-col" style="flex:0 0 auto;">
+            <div class="popup-field">
+              <label class="popup-label">Timeout</label>
+              <div class="popup-inline">
+                <input type="number" id="postCmdTimeout" class="popup-input" style="width:60px;" value="30" min="1" max="120">
+                <span style="font-size:0.75rem; color:#666;">min</span>
+              </div>
+            </div>
+          </div>
+          <div class="popup-col" style="flex:0 0 auto;">
+            <div class="popup-field">
+              <label class="popup-label">SSH User</label>
+              <input type="text" id="postCmdSshUser" class="popup-input" style="width:110px;" placeholder="auto"
+                title="Leave blank so each node uses its own verified username (recommended for mixed images).">
+            </div>
+          </div>
+        </div>
+      </div>
+      ${window.generateCommandComposerHtml({
+        commands: ['', '', ''],
+        showPhases: true,
+        showLabelSelector: true,
+        includeDeployOptions: false,
+      })}
+      ${buildAgnosticImage ? generateCustomImageSettingsHtml() : ''}
+    </div>`,
     showCancelButton: true,
     confirmButtonText: buildAgnosticImage ? "🚀 Build Custom Images" : "Add & Create Infra",
     didOpen: () => setupCommandsPopup(10),
     preConfirm: () => {
-      const commands = collectCommands();
+      const phases = collectPhases();
+      const commands = phases ? [] : collectCommands();
       const labelSelector = document.getElementById('labelSelector')?.value?.trim() || '';
-      const result = { commands, labelSelector };
+      const timeoutMinutes = parseInt(document.getElementById('postCmdTimeout')?.value) || 0;
+      const sshUserName = document.getElementById('postCmdSshUser')?.value?.trim() || '';
+      const result = { commands, phases, labelSelector, timeoutMinutes, sshUserName };
 
       // Add buildAgnosticImage specific parameters if applicable
       if (buildAgnosticImage) {
@@ -5951,14 +6057,27 @@ function showPostCommandDialog(createInfraReq, infraCreationUrl, username, passw
     }
   }).then((commandResult) => {
     if (commandResult.isConfirmed) {
-      if (commandResult.value.commands && commandResult.value.commands.length > 0) {
-        createInfraReq.postCommand = {
-          command: commandResult.value.commands,
-          userName: "cb-user"
-        };
-        if (commandResult.value.labelSelector) {
-          createInfraReq.postCommand.labelSelector = commandResult.value.labelSelector;
+      const cv = commandResult.value;
+      // Options shared by both shapes (blank userName = per-node auto-resolution)
+      const applyOpts = (target) => {
+        if (cv.timeoutMinutes > 0) target.timeoutMinutes = cv.timeoutMinutes;
+        if (cv.sshUserName) target.userName = cv.sshUserName;
+        return target;
+      };
+
+      if (cv.phases && cv.phases.length > 0) {
+        // Ordered phases (server runs them sequentially with per-phase targets)
+        createInfraReq.postCommands = cv.phases.map(p => applyOpts(p));
+        // Async: return once nodes are provisioned; watch the bootstrap via streaming
+        if (!buildAgnosticImage) createInfraReq.postCommandAsync = true;
+      } else if (cv.commands && cv.commands.length > 0) {
+        createInfraReq.postCommand = applyOpts({ command: cv.commands });
+        if (cv.labelSelector) {
+          createInfraReq.postCommand.labelSelector = cv.labelSelector;
         }
+        // Async: return once nodes are provisioned; watch the bootstrap via streaming
+        // (image building needs the result before snapshotting, so it stays synchronous)
+        if (!buildAgnosticImage) createInfraReq.postCommandAsync = true;
       }
 
       // Handle buildAgnosticImage workflow
@@ -11012,7 +11131,7 @@ function editNodeGroup(index) {
   });
 }
 
-// ─── Find Alternative NodeGroup ─────────────────────────────────────────────
+// ─── Find Alternative NodeGroup ──
 
 async function findAlternativeNodeConfig(index) {
   const hostname = configHostname;
@@ -11038,7 +11157,7 @@ async function findAlternativeNodeConfig(index) {
     return `<span style="color:${colour};font-weight:bold;">${sign}${esc(String(num))}${esc(unit)}</span>`;
   }
 
-  // ── Step 1: Target CSP / Region / Options ────────────────────────────────
+  // ── Step 1: Target CSP / Region / Options ─
   const providerOptions = knownPlatforms
     .map(p => `<option value="${p}">${p.toUpperCase()}</option>`)
     .join('');
@@ -11166,7 +11285,7 @@ async function findAlternativeNodeConfig(index) {
   if (!step1Result.isConfirmed) return;
   const { provider, region, tolerance, limit, criteria } = step1Result.value;
 
-  // ── Call API ──────────────────────────────────────────────────────────────
+  // ── Call API ──
   Swal.fire({ title: 'Searching…', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
 
   let apiResp;
@@ -11198,7 +11317,7 @@ async function findAlternativeNodeConfig(index) {
     return;
   }
 
-  // ── Step 2: Show candidates ───────────────────────────────────────────────
+  // ── Step 2: Show candidates 
   const src = apiResp.sourceSpec;
 
   const candidateRows = apiResp.candidates.map((c, i) => {
@@ -11326,7 +11445,7 @@ async function findAlternativeNodeConfig(index) {
   const candidate = apiResp.candidates[selectedCandidateIdx];
   const isReplace = step2Result.isDenied;
 
-  // ── Step 3: Image selection (reuse existing image-selection flow) ─────────
+  // ── Step 3: Image selection (reuse existing image-selection flow) ──
   // Build image list from candidate's primary + alternatives
   const candImages = [
     ...(candidate.primaryImage ? [candidate.primaryImage] : []),
@@ -11469,7 +11588,7 @@ async function findAlternativeNodeConfig(index) {
 
   const selectedImage = candImages[step3Result.value];
 
-  // ── Apply result ──────────────────────────────────────────────────────────
+  // ── Apply result ───
   // Preserve rootDiskType only when the CSP is unchanged; cross-CSP disk type
   // names are incompatible so fall back to the candidate spec's default.
   const originalProvider = (spec.providerName || '').toLowerCase();
@@ -15574,14 +15693,14 @@ window.PLACEHOLDER_METADATA = {
       { label: 'HuggingFace Models', url: 'https://huggingface.co/models?pipeline_tag=text-generation&sort=downloads' }
     ],
     presets: [
-      // ── 24 GB · L4 (Ampere, BF16 only) ───────────────────────────────
+      // ── 24 GB · L4 (Ampere, BF16 only) 
       { label: '24GB · Phi-4-mini      (BF16≈8GB)',        value: 'microsoft/Phi-4-mini-instruct' },
       { label: '24GB · Qwen3-8B        (BF16≈16GB)',       value: 'Qwen/Qwen3-8B' },
       { label: '24GB · Qwen2.5-7B      (BF16≈14GB)',       value: 'Qwen/Qwen2.5-7B-Instruct' },
-      // ── 24 GB · L40S (Ada Lovelace, FP8 supported) ───────────────────
+      // ── 24 GB · L40S (Ada Lovelace, FP8 supported) 
       { label: '24GB · Qwen2.5-14B     (FP8≈14GB, L40S)',  value: 'Qwen/Qwen2.5-14B-Instruct' },
       { label: '24GB · Qwen3-14B       (FP8≈14GB, L40S)',  value: 'Qwen/Qwen3-14B' },
-      // ── 80 GB · A100 / H100 ──────────────────────────────────────────
+      // ── 80 GB · A100 / H100 ──
       { label: '80GB · Qwen3-30B-A3B   (FP8≈30GB)',        value: 'Qwen/Qwen3-30B-A3B-Instruct-2507-FP8' },
       { label: '80GB · Qwen2.5-32B     (FP8≈32GB)',        value: 'Qwen/Qwen2.5-32B-Instruct' },
       { label: '80GB · Llama3.3-70B    (FP8≈70GB, H100)',  value: 'meta-llama/Llama-3.3-70B-Instruct' },
@@ -15642,7 +15761,7 @@ window.PLACEHOLDER_METADATA = {
       { label: 'HuggingFace Models', url: 'https://huggingface.co/models?pipeline_tag=text-generation&sort=downloads' }
     ],
     presets: [
-      // ── 24 GB L4 · BF16 only (Ampere, ≤12B safe) — 8 presets ─────────
+      // ── 24 GB L4 · BF16 only (Ampere, ≤12B safe) — 8 presets ──
       { label: '24GB · Phi-4-mini           (BF16≈8GB,  L4)',    value: 'microsoft/Phi-4-mini-instruct' },
       { label: '24GB · Llama3.2-3B          (BF16≈6GB,  L4)',    value: 'meta-llama/Llama-3.2-3B-Instruct' },
       { label: '24GB · Qwen2.5-7B           (BF16≈14GB, L4)',    value: 'Qwen/Qwen2.5-7B-Instruct' },
@@ -15662,7 +15781,7 @@ window.PLACEHOLDER_METADATA = {
       { label: '48GB · Mistral-Small3.1-24B (FP8≈24GB,  L40S)',  value: 'mistralai/Mistral-Small-3.1-24B-Instruct-2503' },
       { label: '48GB · Qwen3-30B-A3B        (FP8≈30GB,  L40S)',  value: 'Qwen/Qwen3-30B-A3B-Instruct-2507-FP8' },
       { label: '48GB · Qwen2.5-32B          (FP8≈32GB,  L40S)',  value: 'Qwen/Qwen2.5-32B-Instruct' },
-      // ── 80 GB A100 · FP8 mid (24-40B, good headroom) — 8 presets ─────
+      // ── 80 GB A100 · FP8 mid (24-40B, good headroom) — 8 presets ─
       { label: '80GB · Mistral-Small3.1-24B (FP8≈24GB,  A100)',  value: 'mistralai/Mistral-Small-3.1-24B-Instruct-2503' },
       { label: '80GB · Gemma3-27B           (FP8≈27GB,  A100)',  value: 'google/gemma-3-27b-it' },
       { label: '80GB · Qwen3-30B-A3B        (FP8≈30GB,  A100)',  value: 'Qwen/Qwen3-30B-A3B-Instruct-2507-FP8' },
@@ -15671,7 +15790,7 @@ window.PLACEHOLDER_METADATA = {
       { label: '80GB · DeepSeek-R1-32B      (FP8≈32GB,  A100)',  value: 'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B' },
       { label: '80GB · Qwen2.5-Coder-32B    (FP8≈32GB,  A100)',  value: 'Qwen/Qwen2.5-Coder-32B-Instruct' },
       { label: '80GB · Qwen2.5-Math-32B     (FP8≈32GB,  A100)',  value: 'Qwen/Qwen2.5-Math-32B-Instruct' },
-      // ── 80 GB H100 · FP8 W8A8 large (70B+) — 8 presets ──────────────
+      // ── 80 GB H100 · FP8 W8A8 large (70B+) — 8 presets ──
       { label: '80GB · Llama3.3-70B         (FP8≈70GB,  H100)',  value: 'meta-llama/Llama-3.3-70B-Instruct' },
       { label: '80GB · Llama3.1-70B         (FP8≈70GB,  H100)',  value: 'meta-llama/Llama-3.1-70B-Instruct' },
       { label: '80GB · Qwen3-72B            (FP8≈72GB,  H100)',  value: 'Qwen/Qwen3-72B' },
@@ -15802,16 +15921,16 @@ window.PLACEHOLDER_METADATA = {
       { label: 'Ollama Model Library', url: 'https://ollama.com/library' }
     ],
     presets: [
-      // ── 24 GB GPU · Tiny 3-4B (~2GB Q4) — 8 models ───────────────────
+      // ── 24 GB GPU · Tiny 3-4B (~2GB Q4) — 8 models 
       { label: '24GB · 3-4B   (~2GB Q4)',
         value: 'llama3.2:3b, qwen2.5:3b, qwen3:4b, gemma3:4b, phi4-mini, qwen3:1.7b, qwen2.5:1.5b, smollm2:1.7b' },
-      // ── 24 GB GPU · General 7-14B (~5-9GB Q4) — 8 models ─────────────
+      // ── 24 GB GPU · General 7-14B (~5-9GB Q4) — 8 models ─
       { label: '24GB · 7-14B  (~5-9GB Q4)',
         value: 'llama3.1:8b, qwen3:8b, qwen2.5:7b, mistral:7b, gemma3:9b, deepseek-r1:8b, qwen2.5:14b, gemma3:12b' },
-      // ── 24 GB GPU · Large 22-32B (~14-20GB Q4) — 8 models ────────────
+      // ── 24 GB GPU · Large 22-32B (~14-20GB Q4) — 8 models 
       { label: '24GB · 22-32B (~14-20GB Q4)',
         value: 'deepseek-r1:32b, qwen2.5:32b, qwen3:32b, qwen3-coder:30b, devstral:24b, codestral:22b, gemma3:27b, qwen2.5-coder:32b' },
-      // ── 80 GB GPU (A100 / H100) · 70B+ (~43GB Q4) — 8 models ─────────
+      // ── 80 GB GPU (A100 / H100) · 70B+ (~43GB Q4) — 8 models ──
       { label: '80GB · 70B+   (~43GB Q4)',
         value: 'llama3.3:70b, llama3.1:70b, qwen2.5:72b, qwen3:72b, deepseek-r1:70b, qwen2.5-coder:72b, mixtral:8x7b, command-r-plus' }
     ]
@@ -15874,7 +15993,7 @@ window.renderPlaceholderInputs = function() {
   const paramsPanel   = document.getElementById('cmdParamsPanel');
 
   if (paramsPanel) {
-    // ── Consolidated mode ──────────────────────────────────────────────────
+    // ── Consolidated mode ──
     // Save existing values by placeholder name
     const savedValues = {};
     paramsPanel.querySelectorAll('.placeholder-input').forEach(input => {
@@ -16019,7 +16138,7 @@ window.renderPlaceholderInputs = function() {
     return;
   }
 
-  // ── Inline legacy mode (old popups without #cmdParamsPanel) ───────────────
+  // ── Inline legacy mode (old popups without #cmdParamsPanel) ───
   const savedValues = {};
   cmdContainer.querySelectorAll('.placeholder-panel').forEach(panel => {
     panel.querySelectorAll('.placeholder-input').forEach(input => {
@@ -16108,6 +16227,327 @@ window.renderPlaceholderInputs = function() {
 // ============================================================
 
 // Generate Commands section HTML
+// ── Shared NodeGroup configuration ──
+// Used when adding a NodeGroup to an existing Infra; mirrors the sections of the
+// Infra creation flow (identity → labels → spec summary) so both look the same.
+window.generateNodeGroupConfigHtml = function (opts = {}) {
+  const o = Object.assign({
+    infraId: '', nodeGroupName: '', specSummaryHtml: '', totalNodes: 0,
+  }, opts);
+  const esc = window.escapeHtml || (s => String(s));
+
+  return `
+      <div class="popup-section">
+        <div class="popup-section-title">🎯 Target Infra</div>
+        <div style="font-size:0.82rem; color:#495057;">
+          Adding a new NodeGroup to <b>${esc(o.infraId)}</b> — existing nodes are not touched.
+        </div>
+      </div>
+
+      <div class="popup-section">
+        <div class="popup-section-title">🧩 NodeGroup</div>
+        <div class="popup-row">
+          <div class="popup-col" style="flex:2;">
+            <div class="popup-field">
+              <label class="popup-label">Name</label>
+              <input id="nodegroup-name" class="popup-input" placeholder="e.g., web-servers-2" value="${esc(o.nodeGroupName)}">
+            </div>
+          </div>
+          <div class="popup-col" style="flex:1;">
+            <div class="popup-field">
+              <label class="popup-label">Nodes per location</label>
+              <input id="node-count" type="number" class="popup-input" min="1" max="10" value="1">
+            </div>
+          </div>
+          <div class="popup-col" style="flex:1;">
+            <div class="popup-field">
+              <label class="popup-label">Total nodes to add</label>
+              <div class="popup-inline" style="min-height:32px;">
+                <span class="popup-badge" style="background:#0d6efd; color:white;" id="total-nodes">${o.totalNodes}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="popup-section">
+        <div class="popup-section-title">🏷️ Labels <span style="font-weight:normal; font-size:0.72rem; color:#666;">— key=value; enables labelSelector targeting later</span></div>
+        <div id="nodegroup-label-rows"></div>
+        <button type="button" id="add-label-row"
+          style="margin-top:6px; padding:4px 12px; border:1px solid #6c757d; border-radius:4px; background:#f8f9fa; color:#333; cursor:pointer; font-size:12px;">
+          + Add label
+        </button>
+      </div>
+
+      <div class="popup-section">
+        <div class="popup-section-title">🖥️ Node Specification <span style="font-weight:normal; font-size:0.72rem; color:#666;">— from the map configuration</span></div>
+        <div style="max-height:180px; overflow-y:auto;">${o.specSummaryHtml}</div>
+      </div>
+`;
+};
+
+// Label editor wiring for the NodeGroup config section
+window.setupNodeGroupLabelEditor = function (prefillLabels = {}, suggestedKeys = ['role']) {
+  const rows = document.getElementById('nodegroup-label-rows');
+  if (!rows) return;
+  const esc = window.escapeHtml || (s => String(s));
+  const addLabelRow = (k, v) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; gap:6px; margin-bottom:4px;';
+    row.innerHTML = `<input class="popup-input label-key" style="flex:1;" placeholder="key" value="${esc(k || '')}">
+                     <input class="popup-input label-val" style="flex:1;" placeholder="value" value="${esc(v || '')}">
+                     <button type="button" class="label-del"
+                       style="padding:2px 10px; border:1px solid #dc3545; border-radius:4px; background:#fff; color:#dc3545; cursor:pointer;">✕</button>`;
+    row.querySelector('.label-del').onclick = () => row.remove();
+    rows.appendChild(row);
+  };
+  const keys = Object.keys(prefillLabels || {});
+  if (keys.length === 0) {
+    suggestedKeys.forEach(k => addLabelRow(k, ''));
+  } else {
+    keys.forEach(k => addLabelRow(k, prefillLabels[k]));
+  }
+  const addBtn = document.getElementById('add-label-row');
+  if (addBtn) addBtn.onclick = () => addLabelRow('', '');
+
+  const countInput = document.getElementById('node-count');
+  if (countInput) {
+    countInput.addEventListener('input', function () {
+      const perLocation = parseInt(this.value) || 1;
+      const locations = (window.nodeGroupRequestFromSpecList || []).length || 1;
+      const totalEl = document.getElementById('total-nodes');
+      if (totalEl) totalEl.textContent = perLocation * locations;
+    });
+  }
+};
+
+// Validate + read the NodeGroup config section
+window.collectNodeGroupConfig = function () {
+  const nodeGroupName = (document.getElementById('nodegroup-name')?.value || '').trim();
+  const ndCount = parseInt(document.getElementById('node-count')?.value) || 1;
+  if (!nodeGroupName) return { error: 'Please enter a NodeGroup name' };
+  if (ndCount < 1 || ndCount > 10) return { error: 'Node count must be between 1 and 10' };
+
+  const labels = {};
+  document.querySelectorAll('#nodegroup-label-rows > div').forEach(row => {
+    const k = (row.querySelector('.label-key')?.value || '').trim();
+    const v = (row.querySelector('.label-val')?.value || '').trim();
+    if (k) labels[k] = v;
+  });
+  return { nodeGroupName, ndCount, labels };
+};
+
+// ── Shared command composer ─
+// Single source for the "Predefined Scripts / Parameters / Commands" UI used by
+// the Application Deployment popup, the post-deployment command dialog, and the
+// NodeGroup add dialog. The markup is the one from Application Deployment, so
+// that popup renders identically after the extraction.
+//
+// Wiring is unchanged: setupCommandsPopup() (didOpen) + collectCommands() /
+// collectPhases() (preConfirm) work on the ids emitted here.
+window.generateCommandComposerHtml = function (opts = {}) {
+  const o = Object.assign({
+    commands: ['', '', ''],        // initial command values
+    showScripts: true,             // 📜 Predefined Scripts (with category tabs)
+    showParams: true,              // 📋 Parameters (consolidated placeholder panel)
+    showCommands: true,            // ⌨️ Commands
+    showPhases: false,             // ordered post-deployment phases (postCommands[])
+    showLabelSelector: false,      // target filter by labels
+    labelSelectorOptional: true,
+    includeDeployOptions: true,    // show the 'platform' script category
+  }, opts);
+
+  const defaultCat = window._currentScriptCategory || 'llm-ollama';
+  const cat = (window.predefinedScriptCategories || {})[defaultCat] ||
+              (window.predefinedScriptCategories || {})['llm-ollama'] || { description: '', scripts: [] };
+
+  let html = '';
+
+  if (o.showScripts) {
+    html += `
+      <!-- Predefined Scripts Section -->
+      <div class="popup-section">
+        <div class="popup-section-title">📜 Predefined Scripts</div>
+        <div id="scriptCategoryTabs" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
+          ${window.generateScriptCategoryTabsHtml(o.includeDeployOptions)}
+        </div>
+        <div id="categoryDescription" style="font-size: 0.7rem; color: #666; margin-bottom: 6px; padding: 4px 8px; background: #fff3cd; border-radius: 4px;">
+          📝 ${cat.description}
+        </div>
+        <div class="popup-row">
+          <div class="popup-col" style="flex: 3;">
+            <div class="popup-field">
+              <select id="predefinedScripts" class="popup-select">
+                ${window.generateScriptOptionsHtml(cat.scripts)}
+              </select>
+            </div>
+          </div>
+          <div class="popup-col" style="flex: 1;">
+            <div class="popup-field">
+              <label class="popup-inline" style="font-size: 0.8rem;">
+                <input type="checkbox" id="scriptAppendMode"> Append
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Reference: shown when a script has refs/presets but no <PLACEHOLDER> params -->
+        <div id="scriptQuickRef" style="display:none; margin-top:8px; padding:8px 12px; background:#f8fbff; border:1px dashed #b3d7ff; border-radius:6px;">
+          <div id="scriptQuickRefRefs" style="display:flex; flex-wrap:wrap; align-items:center; gap:6px;"></div>
+          <div id="scriptQuickRefPresets"></div>
+        </div>
+      </div>
+`;
+  }
+
+  if (o.showParams) {
+    html += `
+      <!-- Parameters Section: auto-shown when commands contain <PLACEHOLDER> tokens -->
+      <div id="cmdParamsSection" class="popup-section" style="display:none; border:1px solid #b3d7ff; background:#f0f7ff;">
+        <div class="popup-section-title" style="color:#0d6efd;">
+          📋 Parameters
+          <span style="font-weight:normal; font-size:0.72rem; color:#555; margin-left:6px;">— detected from commands. Fill values before executing.</span>
+        </div>
+        <div id="cmdParamsPanel"></div>
+      </div>
+`;
+  }
+
+  if (o.showCommands) {
+    let cmdRows = '';
+    for (let i = 1; i <= 3; i++) {
+      cmdRows += `
+          <div id="cmdDiv${i}" class="cmdRow" style="margin-bottom: 6px;">
+            <div class="popup-field">
+              <div class="popup-inline" style="justify-content: space-between;">
+                <label class="popup-label">Command ${i}</label>
+                <button type="button" onclick="document.getElementById('cmd${i}').value = ''; autoResizeTextarea(document.getElementById('cmd${i}'));"
+                  style="font-size: 10px; padding: 1px 6px; border: 1px solid #ccc; border-radius: 3px; background: #f8f9fa; cursor: pointer;">Clear</button>
+              </div>
+              <textarea id="cmd${i}" rows="1" class="popup-input" style="resize: vertical; overflow: hidden; min-height: 32px;"
+                oninput="autoResizeTextarea(this)">${o.commands[i - 1] || ''}</textarea>
+            </div>
+          </div>`;
+    }
+    html += `
+      <!-- Commands Section -->
+      <div class="popup-section">
+        <div class="popup-section-title">⌨️ Commands</div>
+        <div id="cmdContainer">${cmdRows}
+          <div class="popup-inline" style="gap: 8px; margin-top: 8px;">
+            <button id="addCmd" type="button" onclick="addCmd()"
+              style="padding: 4px 12px; border: 1px solid #28a745; border-radius: 4px; background: #28a745; color: white; cursor: pointer; font-size: 12px;">
+              + Add Command
+            </button>
+            <button type="button" onclick="resetCommands()"
+              style="padding: 4px 12px; border: 1px solid #6c757d; border-radius: 4px; background: #f8f9fa; color: #333; cursor: pointer; font-size: 12px;">
+              Reset
+            </button>
+          </div>
+        </div>
+      </div>
+`;
+  }
+
+  if (o.showPhases) {
+    html += `
+      <div class="popup-section">
+        <div class="popup-section-title">🧭 Ordered Phases <span style="font-weight:normal; font-size:0.72rem; color:#666;">— optional: run groups of commands in order, each with its own target</span></div>
+        ${window.generatePhaseEditorHtml()}
+      </div>
+`;
+  }
+
+  if (o.showLabelSelector) {
+    html += window.generateLabelSelectorHtml(o.labelSelectorOptional, true);
+  }
+
+  return html;
+};
+
+// ── Post-deployment phase editor ─
+// Optional multi-phase bootstrap: each phase runs in order against its own
+// target (all nodes / nodeGroup / labelSelector). Server contract: postCommands[].
+window.generatePhaseEditorHtml = function () {
+  return `
+    <div id="phaseEditorWrap" style="display:none; margin-top:10px; border:1px solid #b3d7ff; border-radius:8px; padding:10px; background:#f8fbff;">
+      <div style="font-size:0.85em;color:#495057;margin-bottom:6px;">
+        Phases run <b>in order</b>. A failed phase stops the rest unless "continue on error" is checked.
+      </div>
+      <div id="phaseList"></div>
+      <button type="button" onclick="addPhaseBlock()" class="btn btn-sm btn-outline-primary" style="margin-top:6px;">+ Add phase</button>
+    </div>
+    <div style="margin-top:8px;">
+      <label style="font-weight:600;font-size:0.9em;cursor:pointer;">
+        <input type="checkbox" id="usePhasesToggle" onchange="togglePhaseEditor(this.checked)"> Use ordered phases (per-phase targets)
+      </label>
+    </div>`;
+};
+
+window.togglePhaseEditor = function (on) {
+  const wrap = document.getElementById('phaseEditorWrap');
+  const cmds = document.getElementById('cmdContainer');
+  if (wrap) wrap.style.display = on ? '' : 'none';
+  if (cmds) cmds.style.display = on ? 'none' : '';
+  if (on && document.querySelectorAll('#phaseList .phase-block').length === 0) addPhaseBlock();
+};
+
+window.addPhaseBlock = function () {
+  const list = document.getElementById('phaseList');
+  if (!list) return;
+  const idx = list.querySelectorAll('.phase-block').length + 1;
+  const block = document.createElement('div');
+  block.className = 'phase-block';
+  block.style.cssText = 'border:1px solid #d0e3ff;border-radius:6px;padding:8px;margin-bottom:8px;background:#fff;';
+  block.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <b class="phase-title" style="font-size:0.9em;">Phase ${idx}</b>
+      <select class="form-control form-control-sm phase-target-type" style="width:auto;">
+        <option value="">All nodes</option>
+        <option value="nodeGroupId">nodeGroupId</option>
+        <option value="labelSelector">labelSelector</option>
+        <option value="nodeId">nodeId</option>
+      </select>
+      <input class="form-control form-control-sm phase-target-val" style="width:auto;flex:1;" placeholder="target value" disabled>
+      <label style="font-size:0.8em;white-space:nowrap;margin:0;cursor:pointer;">
+        <input type="checkbox" class="phase-continue"> continue on error
+      </label>
+      <button type="button" class="btn btn-sm btn-outline-danger phase-del">✕</button>
+    </div>
+    <textarea class="form-control form-control-sm phase-cmds" rows="2" placeholder="One command per line"></textarea>`;
+  block.querySelector('.phase-target-type').onchange = function () {
+    const val = block.querySelector('.phase-target-val');
+    val.disabled = !this.value;
+    if (!this.value) val.value = '';
+  };
+  block.querySelector('.phase-del').onclick = function () {
+    block.remove();
+    document.querySelectorAll('#phaseList .phase-block').forEach((b, i) => {
+      b.querySelector('.phase-title').textContent = 'Phase ' + (i + 1);
+    });
+  };
+  list.appendChild(block);
+};
+
+// Returns postCommands[] when the phase editor is active, else null
+window.collectPhases = function () {
+  const toggle = document.getElementById('usePhasesToggle');
+  if (!toggle || !toggle.checked) return null;
+  const phases = [];
+  document.querySelectorAll('#phaseList .phase-block').forEach(block => {
+    const commands = block.querySelector('.phase-cmds').value
+      .split('\n').map(c => c.trim()).filter(c => c.length > 0);
+    if (commands.length === 0) return;
+    const phase = { command: commands };
+    const type = block.querySelector('.phase-target-type').value;
+    const val = block.querySelector('.phase-target-val').value.trim();
+    if (type && val) phase[type] = val;
+    if (block.querySelector('.phase-continue').checked) phase.continueOnError = true;
+    phases.push(phase);
+  });
+  return phases.length > 0 ? phases : null;
+};
+
 window.generateCommandsHtml = function (defaultCommands = ['', '', '']) {
   let html = `
     <p><font size=4><b>[Commands]</b></font> <button onclick="resetCommands()" style="font-size: 12px; padding: 2px 8px; margin-left: 10px;">Reset</button></p>
@@ -19295,97 +19735,8 @@ async function executeRemoteCmd() {
         <div id="rcUploadStatus" style="margin-top:5px; font-size:0.78rem;"></div>
       </div>
 
-      <!-- Predefined Scripts Section -->
-      <div class="popup-section">
-        <div class="popup-section-title">📜 Predefined Scripts</div>
-        <div id="scriptCategoryTabs" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
-          ${window.generateScriptCategoryTabsHtml(true)}
-        </div>
-        <div id="categoryDescription" style="font-size: 0.7rem; color: #666; margin-bottom: 6px; padding: 4px 8px; background: #fff3cd; border-radius: 4px;">
-          📝 ${(window.predefinedScriptCategories[window._currentScriptCategory || 'llm-ollama'] || window.predefinedScriptCategories['llm-ollama']).description}
-        </div>
-        <div class="popup-row">
-          <div class="popup-col" style="flex: 3;">
-            <div class="popup-field">
-              <select id="predefinedScripts" class="popup-select">
-                ${window.generateScriptOptionsHtml((window.predefinedScriptCategories[window._currentScriptCategory || 'llm-ollama'] || window.predefinedScriptCategories['llm-ollama']).scripts)}
-              </select>
-            </div>
-          </div>
-          <div class="popup-col" style="flex: 1;">
-            <div class="popup-field">
-              <label class="popup-inline" style="font-size: 0.8rem;">
-                <input type="checkbox" id="scriptAppendMode"> Append
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <!-- Quick Reference: shown when a script has refs/presets but no <PLACEHOLDER> params -->
-        <div id="scriptQuickRef" style="display:none; margin-top:8px; padding:8px 12px; background:#f8fbff; border:1px dashed #b3d7ff; border-radius:6px;">
-          <div id="scriptQuickRefRefs" style="display:flex; flex-wrap:wrap; align-items:center; gap:6px;"></div>
-          <div id="scriptQuickRefPresets"></div>
-        </div>
-      </div>
-
-      <!-- Parameters Section: auto-shown when commands contain <PLACEHOLDER> tokens -->
-      <div id="cmdParamsSection" class="popup-section" style="display:none; border:1px solid #b3d7ff; background:#f0f7ff;">
-        <div class="popup-section-title" style="color:#0d6efd;">
-          📋 Parameters
-          <span style="font-weight:normal; font-size:0.72rem; color:#555; margin-left:6px;">— detected from commands. Fill values before executing.</span>
-        </div>
-        <div id="cmdParamsPanel"></div>
-      </div>
-
-      <!-- Commands Section -->
-      <div class="popup-section">
-        <div class="popup-section-title">⌨️ Commands</div>
-        <div id="cmdContainer">
-          <div id="cmdDiv1" class="cmdRow" style="margin-bottom: 6px;">
-            <div class="popup-field">
-              <div class="popup-inline" style="justify-content: space-between;">
-                <label class="popup-label">Command 1</label>
-                <button type="button" onclick="document.getElementById('cmd1').value = ''; autoResizeTextarea(document.getElementById('cmd1'));" 
-                  style="font-size: 10px; padding: 1px 6px; border: 1px solid #ccc; border-radius: 3px; background: #f8f9fa; cursor: pointer;">Clear</button>
-              </div>
-              <textarea id="cmd1" rows="1" class="popup-input" style="resize: vertical; overflow: hidden; min-height: 32px;" 
-                oninput="autoResizeTextarea(this)">${defaultRemoteCommand[0] || ''}</textarea>
-            </div>
-          </div>
-          <div id="cmdDiv2" class="cmdRow" style="margin-bottom: 6px;">
-            <div class="popup-field">
-              <div class="popup-inline" style="justify-content: space-between;">
-                <label class="popup-label">Command 2</label>
-                <button type="button" onclick="document.getElementById('cmd2').value = ''; autoResizeTextarea(document.getElementById('cmd2'));" 
-                  style="font-size: 10px; padding: 1px 6px; border: 1px solid #ccc; border-radius: 3px; background: #f8f9fa; cursor: pointer;">Clear</button>
-              </div>
-              <textarea id="cmd2" rows="1" class="popup-input" style="resize: vertical; overflow: hidden; min-height: 32px;" 
-                oninput="autoResizeTextarea(this)">${defaultRemoteCommand[1] || ''}</textarea>
-            </div>
-          </div>
-          <div id="cmdDiv3" class="cmdRow" style="margin-bottom: 6px;">
-            <div class="popup-field">
-              <div class="popup-inline" style="justify-content: space-between;">
-                <label class="popup-label">Command 3</label>
-                <button type="button" onclick="document.getElementById('cmd3').value = ''; autoResizeTextarea(document.getElementById('cmd3'));" 
-                  style="font-size: 10px; padding: 1px 6px; border: 1px solid #ccc; border-radius: 3px; background: #f8f9fa; cursor: pointer;">Clear</button>
-              </div>
-              <textarea id="cmd3" rows="1" class="popup-input" style="resize: vertical; overflow: hidden; min-height: 32px;" 
-                oninput="autoResizeTextarea(this)">${defaultRemoteCommand[2] || ''}</textarea>
-            </div>
-          </div>
-          <div class="popup-inline" style="gap: 8px; margin-top: 8px;">
-            <button id="addCmd" type="button" onclick="addCmd()" 
-              style="padding: 4px 12px; border: 1px solid #28a745; border-radius: 4px; background: #28a745; color: white; cursor: pointer; font-size: 12px;">
-              + Add Command
-            </button>
-            <button type="button" onclick="resetCommands()" 
-              style="padding: 4px 12px; border: 1px solid #6c757d; border-radius: 4px; background: #f8f9fa; color: #333; cursor: pointer; font-size: 12px;">
-              Reset
-            </button>
-          </div>
-        </div>
-      </div>
+      <!-- Predefined Scripts + Parameters + Commands (shared command composer) -->
+      ${window.generateCommandComposerHtml({ commands: defaultRemoteCommand })}
 
       <!-- Recent Commands Section -->
       ${buildRecentCmdsSectionHtml()}
@@ -22935,6 +23286,20 @@ window.scaleOutInfraWithConfiguration = scaleOutInfraWithConfiguration;
 
 // Step 2: Show Infra scale out configuration dialog
 function showInfraScaleOutConfiguration(selectedInfraId, namespace, hostname, port, username, password) {
+  // Collect label keys already used by this infra so the editor can suggest them
+  // (keeps label schemes consistent for labelSelector targeting)
+  window._scaleOutExistingLabelKeys = ['role'];
+  axios({ method: "get", url: `${tbApiBase()}/ns/${namespace}/infra/${selectedInfraId}`,
+          auth: { username: username, password: password } })
+    .then(function (res) {
+      var keys = new Set();
+      (res.data.node || []).forEach(function (nd) {
+        Object.keys(nd.label || {}).forEach(function (k) { if (!k.startsWith('sys.') && k !== 'Name') keys.add(k); });
+      });
+      if (keys.size > 0) window._scaleOutExistingLabelKeys = Array.from(keys);
+    })
+    .catch(function () { /* suggestion only; keep the default */ });
+
   // Build Node configuration summary from current map settings
   var vmConfigSummary = "";
   var totalNodes = 0;
@@ -22954,36 +23319,29 @@ function showInfraScaleOutConfiguration(selectedInfraId, namespace, hostname, po
   }
 
   Swal.fire({
-    title: "Configure Infra Scale Out",
-    width: 700,
-    html:
-      "<div style='text-align: left; margin: 20px;'>" +
-      "<p><b>Step 2:</b> Configure Node addition to Infra</p>" +
-      "<p><b>Selected Infra:</b> " + selectedInfraId + "</p>" +
-      "<hr>" +
-      "<div style='margin-bottom: 15px;'>" +
-      "<label for='nodegroup-name'><b>New NodeGroup Name:</b></label>" +
-      "<input id='nodegroup-name' class='form-control' style='margin-top: 5px;' " +
-      "placeholder='Enter nodegroup name (e.g., web-servers-2)' value='dynamic-group-" + Date.now() + "'>" +
-      "</div>" +
-      "<div style='margin-bottom: 15px;'>" +
-      "<label for='node-count'><b>Number of Nodes per location:</b></label>" +
-      "<input id='node-count' type='number' class='form-control' style='margin-top: 5px;' " +
-      "min='1' max='10' value='1' placeholder='Enter number of Nodes'>" +
-      "</div>" +
-      "<hr>" +
-      "<p><b>Node Configuration Summary:</b></p>" +
-      "<div style='max-height: 200px; overflow-y: auto;'>" +
-      vmConfigSummary +
-      "</div>" +
-      "<hr>" +
-      "<p><b>Total Nodes to add:</b> <span id='total-nodes'>" + totalNodes + "</span></p>" +
-      "</div>",
+    title: "➕ Add NodeGroup to " + selectedInfraId,
+    width: 850,
+    html: `
+    ${POPUP_STYLES}
+    <div class="popup-container">
+      ${window.generateNodeGroupConfigHtml({
+        infraId: selectedInfraId,
+        nodeGroupName: 'dynamic-group-' + Date.now(),
+        specSummaryHtml: vmConfigSummary,
+        totalNodes: totalNodes,
+      })}
+      ${window.generateCommandComposerHtml({
+        commands: ['', '', ''],
+        showPhases: true,
+        includeDeployOptions: false,
+      })}
+    </div>`,
     showCancelButton: true,
     confirmButtonText: "Review Configuration",
     cancelButtonText: "Back",
     confirmButtonColor: "#17a2b8",
     didOpen: () => {
+      setupCommandsPopup(10);
       // Update total Node count when Node count per location changes
       document.getElementById('node-count').addEventListener('input', function() {
         var vmPerLocation = parseInt(this.value) || 1;
@@ -22991,27 +23349,29 @@ function showInfraScaleOutConfiguration(selectedInfraId, namespace, hostname, po
         var newTotal = vmPerLocation * totalLocations;
         document.getElementById('total-nodes').textContent = newTotal;
       });
+      // Label editor: prefill from the map configuration, else from existing infra groups
+      setupNodeGroupLabelEditor(
+        (nodeGroupRequestFromSpecList && nodeGroupRequestFromSpecList[0] && nodeGroupRequestFromSpecList[0].label) || {},
+        window._scaleOutExistingLabelKeys || ['role']
+      );
     },
     preConfirm: () => {
-      const nodeGroupName = document.getElementById('nodegroup-name').value.trim();
-      const ndCount = parseInt(document.getElementById('node-count').value) || 1;
-      
-      if (!nodeGroupName) {
-        Swal.showValidationMessage('Please enter a NodeGroup name');
+      const cfg = collectNodeGroupConfig();
+      if (cfg.error) {
+        Swal.showValidationMessage(cfg.error);
         return false;
       }
-      
-      if (ndCount < 1 || ndCount > 10) {
-        Swal.showValidationMessage('Node count must be between 1 and 10');
-        return false;
-      }
-      
-      return { nodeGroupName, ndCount };
+      const phases = collectPhases();
+      const commands = phases ? [] : ((typeof collectCommands === 'function' ? collectCommands() : []) || []);
+      return { nodeGroupName: cfg.nodeGroupName, ndCount: cfg.ndCount, labels: cfg.labels, commands, phases };
     }
   }).then((result) => {
     if (result.isConfirmed) {
       var config = result.value;
-      // Go to review step first
+      // Carry the dialog's labels/bootstrap commands into the review + execute steps
+      window.pendingNodeGroupLabels = config.labels || {};
+      window.pendingNodeGroupPostCommands = (config.commands && config.commands.length > 0) ? config.commands : null;
+      window.pendingNodeGroupPostCommandPhases = (config.phases && config.phases.length > 0) ? config.phases : null;
       showInfraScaleOutReview(selectedInfraId, config.nodeGroupName, config.ndCount, namespace, hostname, port, username, password);
     } else if (result.dismiss === Swal.DismissReason.cancel) {
       // Go back to Infra selection
@@ -23037,11 +23397,12 @@ function showInfraScaleOutReview(selectedInfraId, nodeGroupName, nodeCountPerLoc
     specId: vmTemplate.specId,
     imageId: vmTemplate.imageId,
     description: "Dynamically added via CB-MapUI Scale Out Infra",
-    label: {
+    // User-configured labels win; mapui provenance labels are added underneath
+    label: Object.assign({
       "created-by": "cb-mapui",
       "creation-type": "scale-out-infra",
       "timestamp": new Date().toISOString()
-    }
+    }, vmTemplate.label || {}, window.pendingNodeGroupLabels || {})
   };
 
   // Add optional fields if available
@@ -23253,16 +23614,31 @@ function executeInfraScaleOut(namespace, infraId, nodeGroupName, nodeCountPerLoc
   var url = `${tbApiBase()}/ns/${namespace}/infra/${infraId}/nodeGroupDynamic`;
   
   // Build the request body using current map configuration
+  var templateLabel = (nodeGroupRequestFromSpecList && nodeGroupRequestFromSpecList.length > 0)
+    ? (nodeGroupRequestFromSpecList[0].label || {}) : {};
   var nodeGroupDynamicReq = {
     name: nodeGroupName,
     nodeGroupSize: nodeCountPerLocation,
     description: "Dynamically added via CB-MapUI Scale Out Infra",
-    label: {
+    // User-configured labels win; mapui provenance labels are added underneath
+    label: Object.assign({
       "created-by": "cb-mapui",
       "creation-type": "scale-out-infra",
       "timestamp": new Date().toISOString()
-    }
+    }, templateLabel, window.pendingNodeGroupLabels || {})
   };
+
+  // Bootstrap for the newly added nodeGroup (optional; runs on the NEW nodes only).
+  // Async so the call returns once the nodes are provisioned.
+  if (window.pendingNodeGroupPostCommandPhases && window.pendingNodeGroupPostCommandPhases.length > 0) {
+    nodeGroupDynamicReq.postCommands = window.pendingNodeGroupPostCommandPhases;
+    nodeGroupDynamicReq.postCommandAsync = true;
+    window.pendingNodeGroupPostCommandPhases = null;
+  } else if (window.pendingNodeGroupPostCommands && window.pendingNodeGroupPostCommands.length > 0) {
+    nodeGroupDynamicReq.postCommand = { command: window.pendingNodeGroupPostCommands };
+    nodeGroupDynamicReq.postCommandAsync = true;
+  }
+  window.pendingNodeGroupPostCommands = null;
 
   // Use the first Node configuration from the map as the template
   // In a real scenario, you might want to let users select which configuration to use
@@ -27183,7 +27559,7 @@ var _apPollingStop = false;
 var _apElapsedTimer = null;
 var _apCurrentReq = null;
 
-// ── Entry point ───────────────────────────────────────────────────────────────
+// ── Entry point ───
 function showAutopilotDialog() {
   // Reset state
   _apNodeSpecCounter = 0;
@@ -27212,7 +27588,7 @@ function showAutopilotDialog() {
   $('#autopilotModal').modal('show');
 }
 
-// ── NodeSpec card management ──────────────────────────────────────────────────
+// ── NodeSpec card management ──
 function addAutopilotNodeSpec() {
   var id = ++_apNodeSpecCounter;
   _apActiveNodeSpecIds.push(id);
@@ -27409,7 +27785,7 @@ function _apNodeSpecCardHtml(id) {
   </div>`;
 }
 
-// ── Build InfraAutopilotReq from form ─────────────────────────────────────────
+// ── Build InfraAutopilotReq from form ─
 function buildAutopilotReq() {
   var req = {
     name: (document.getElementById('apInfraName').value || '').trim(),
@@ -27516,7 +27892,7 @@ function buildAutopilotReq() {
   return req;
 }
 
-// ── Review step ───────────────────────────────────────────────────────────────
+// ── Review step ───
 function submitAutopilotReview() {
   if (!configNamespace) {
     Swal.fire({ icon: 'error', title: 'No namespace', text: 'Please select a namespace in settings.' });
@@ -27697,7 +28073,7 @@ function _apShowReviewPanel(html) {
   if (reviewFooter) { reviewFooter.style.cssText = 'display:flex!important;width:100%;justify-content:space-between;align-items:center'; }
 }
 
-// ── Provision step ─────────────────────────────────────────────────────────────
+// ── Provision step ─
 function proceedWithAutopilotProvision() {
   var req = _apCurrentReq;
   if (!req) return;
@@ -27769,7 +28145,7 @@ function _apStopPolling() {
   if (_apElapsedTimer) { clearInterval(_apElapsedTimer); _apElapsedTimer = null; }
 }
 
-// ── Progress display ─────────────────────────────────────────────────────────
+// ── Progress display ──
 function _apRenderProgressInit(req) {
   var specsHtml = (req.nodeSpecs || []).map(function(ns) {
     return '<div class="mb-2" id="apNsProgressRow_' + ns.name + '">' +
@@ -27898,7 +28274,7 @@ function _apRenderProgressUpdate(status) {
   }
 }
 
-// ── Final result ───────────────────────────────────────────────────────────────
+// ── Final result ───
 function showAutopilotResult(result, req) {
   _apStopPolling();
 
@@ -28016,7 +28392,7 @@ function _apPostCommandSummaryHtml(result) {
     rows + '</div>';
 }
 
-// ── Provider multi-select helpers ─────────────────────────────────────────────
+// ── Provider multi-select helpers ──
 // Returns unique provider names from loaded connection configs (same source as
 // the global "☁️ Provider" dropdown in MC-Infra Recommendation).
 function _apGetAvailableProviders() {
@@ -28068,7 +28444,7 @@ function _apProviderCheckboxChange(id) {
   _apUpdateProviderText(id);
 }
 
-// ── Progress panel helpers ─────────────────────────────────────────────────────
+// ── Progress panel helpers ─
 var _apProgressPanelExpanded = true;
 
 function _apShowProgressPanel(title) {
@@ -28097,7 +28473,7 @@ function _apSyncPanelState() {
   if (icon) icon.textContent = _apProgressPanelExpanded ? '▼' : '▲';
 }
 
-// ── Window exports ─────────────────────────────────────────────────────────────
+// ── Window exports ─
 window.showAutopilotDialog = showAutopilotDialog;
 window.addAutopilotNodeSpec = addAutopilotNodeSpec;
 window.removeAutopilotNodeSpec = removeAutopilotNodeSpec;

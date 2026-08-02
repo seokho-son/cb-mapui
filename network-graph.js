@@ -1194,7 +1194,7 @@ function refresh(force = false) {
   updateFlowAnimation();
 }
 
-// ── Command-flow animation ───────────────────────────────────────────────────
+// ── Command-flow animation ───
 // A single timer advances the dash offset of every flow-active edge, making
 // the dashes "march" from source to target (CB-TB → bastion → target node)
 // while a remote command is in Handling state. Starts/stops on demand.
