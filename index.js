@@ -3949,10 +3949,12 @@ function buildPostCommandStatusHtml(data) {
     if (lines) detail = `<ul style="margin:6px 0 0 16px;padding:0;font-size:12px;">${lines}</ul>`;
   }
 
-  // Async run in progress: offer live streaming (same SSE view as remote commands)
-  if (status === 'Running' && data.postCommandRequestId) {
+  // Streaming/replay entry point. The event buffer is kept server-side for a while
+  // after completion, so this also works for runs that already finished.
+  if (data.postCommandRequestId) {
     window._postCmdStreamCtx = { infraId: data.id || data.name, xRequestId: data.postCommandRequestId };
-    detail = `
+    if (status === 'Running') {
+      detail = `
       <div style="margin-top:6px;font-size:12px;color:#334155;">
         Nodes are ready and billing has started; bootstrap continues in the background.
         <div style="margin-top:6px;">
@@ -3963,6 +3965,16 @@ function buildPostCommandStatusHtml(data) {
           <span style="color:#64748b;margin-left:8px;">or re-open this Infra later to see the result</span>
         </div>
       </div>`;
+    } else {
+      // Already finished: the per-node detail above is the result; offer the log view
+      detail += `
+      <div style="margin-top:6px;">
+        <button type="button" onclick="watchPostCommandStream()"
+          style="padding:4px 10px;font-size:12px;background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer;">
+          📜 View command output
+        </button>
+      </div>`;
+    }
   }
 
   return `
@@ -18367,7 +18379,13 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
       return;
     }
     const elapsed = (Date.now() - session.startTime) / 1000;
-    // After 60 seconds with no events and no VMs, treat as connection issue
+    // No events yet: the run may already have finished before we subscribed
+    // (short bootstrap commands complete in seconds). Fall back to the stored
+    // result instead of leaving the user with a scary timeout message.
+    if (elapsed > 8 && Object.keys(session.nodeState).length === 0 && !session._fallbackTried) {
+      session._fallbackTried = true;
+      tryPostCommandResultFallback(session);
+    }
     if (elapsed > 60 && Object.keys(session.nodeState).length === 0) {
       session.error = 'No events received within 60 seconds. The command may have failed silently.';
       removeSpinnerTask(session.spinnerId);
@@ -18379,6 +18397,39 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
 
   // Open modal immediately
   openStreamingSessionModal(xRequestId);
+}
+
+/**
+ * Late-subscriber fallback: when a stream produces no events, the run has usually
+ * already finished. Read the Infra and render its stored post-deployment result so
+ * the user sees the outcome instead of an empty stream.
+ */
+function tryPostCommandResultFallback(session) {
+  if (!session || !session.infraId) return;
+  const cfg = getConfig();
+  axios({ method: 'get', url: `${tbApiBase()}/ns/${configNamespace}/infra/${session.infraId}`,
+          auth: { username: cfg.username, password: cfg.password } })
+    .then((res) => {
+      const data = res.data || {};
+      const status = data.postCommandStatus;
+      if (!status || status === 'Running' || status === 'None') return; // still running: keep waiting
+      Swal.close();
+      Swal.fire({
+        title: `Post-deployment result: ${data.id || session.infraId}`,
+        width: 800,
+        html: `${POPUP_STYLES}
+          <div class="popup-container" style="text-align:left;">
+            <div style="font-size:0.82rem;color:#475569;margin-bottom:8px;">
+              The bootstrap had already finished when the stream was opened, so the recorded result is shown.
+            </div>
+            ${buildPostCommandStatusHtml(data)}
+          </div>`,
+        showConfirmButton: false, showCancelButton: true, cancelButtonText: '✕ Close',
+      });
+      removeSpinnerTask(session.spinnerId);
+      if (session._waitingTimer) clearInterval(session._waitingTimer);
+    })
+    .catch(() => { /* keep the stream waiting; the 60s message still applies */ });
 }
 
 /**
