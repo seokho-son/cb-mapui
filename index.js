@@ -22228,7 +22228,7 @@ function addNewRuleToSg(sgId, sgName) {
 
       axios({
         method: "post",
-        url: `http://${hostname}:${portVal}/tumblebug/ns/${nsId}/resources/securityGroup/${sgId}/rules`,
+        url: `${tbApiBase()}/ns/${nsId}/resources/securityGroup/${sgId}/rules`,
         headers: { "Content-Type": "application/json" },
         data: JSON.stringify({
           firewallRules: [newRule]
