@@ -4145,11 +4145,9 @@ function getInfra() {
           
           // Load VPN data (feeds the always-visible map icons).
           loadVpnDataFromInfras();
-          // NLB data feeds only the "Net" graph, so fetch it per refresh cycle ONLY
-          // while that view is visible — otherwise we'd poll /nlb for every Infra
-          // constantly. The NLB manager fetches its own fresh data when opened.
-          const _netEl = document.getElementById('network-graph-container');
-          if (_netEl && _netEl.style.display !== 'none') loadNlbDataFromInfras();
+          // NLBs come from one namespace-wide call, so they are refreshed every cycle
+          // for the Net graph, the NLB manager and the Board table alike.
+          loadNlbData();
 
           // Update running cost display
           updateRunningCostDisplay(obj.infra);
@@ -24501,43 +24499,31 @@ function loadK8sClusterData() {
     });
 }
 
-// Load VPN data from all Infras (reusing existing Infra data)
-// Load NLB (regional CSP NLB) data from each Infra into the central store so both
-// the NLB manager and the Net graph can consume window.cloudBaristaCentralData.nlb.
-async function loadNlbDataFromInfras() {
+// Load NLB (regional CSP NLB) data into the central store so the NLB manager, the Net
+// graph and the Board table can consume window.cloudBaristaCentralData.nlb.
+// One namespace-wide call; each item already carries its parent infraId.
+async function loadNlbData() {
   try {
     const config = getConfig();
-    const { hostname, port, username, password } = config;
+    const { username, password } = config;
     const namespace = configNamespace || config.username;
 
-    const infraData = (window.cloudBaristaCentralData && window.cloudBaristaCentralData.infraData) || [];
-    if (!infraData.length) {
-      window.cloudBaristaCentralData.nlb = [];
-      return;
-    }
-
-    const all = [];
-    for (const infra of infraData) {
-      try {
-        const res = await axios({
-          method: "get",
-          url: `${tbApiBase()}/ns/${namespace}/infra/${infra.id}/nlb`,
-          auth: { username, password },
-          timeout: 5000,
-        });
-        const list = (res.data && res.data.nlb) || [];
-        list.forEach((nlb) => { nlb.infraId = infra.id; all.push(nlb); });
-      } catch (e) {
-        // Per-Infra NLB fetch failure is non-fatal.
-      }
-    }
-    window.cloudBaristaCentralData.nlb = all;
+    const res = await axios({
+      method: "get",
+      url: `${tbApiBase()}/ns/${namespace}/resources/nlb`,
+      auth: { username, password },
+      timeout: 10000,
+    });
+    window.cloudBaristaCentralData.nlb = (res.data && res.data.nlb) || [];
     notifyDataSubscribers();
   } catch (e) {
-    console.log("loadNlbDataFromInfras error:", e && e.message);
+    console.log("loadNlbData error:", e && e.message);
+    window.cloudBaristaCentralData.nlb = [];
   }
 }
-window.loadNlbDataFromInfras = loadNlbDataFromInfras;
+window.loadNlbData = loadNlbData;
+// Kept for callers written against the previous per-Infra loader
+window.loadNlbDataFromInfras = loadNlbData;
 
 async function loadVpnDataFromInfras() {
   try {
