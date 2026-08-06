@@ -970,6 +970,15 @@ limitations under the License.
               </div>
             </div>
             <div class="col-3">
+              <div class="text-center p-2" style="cursor: pointer;" onclick="scrollToSection('nlbSection')" title="Click to view details">
+                <i class="fas fa-balance-scale text-success" style="font-size: 1.5rem;"></i>
+                <div class="mt-1">
+                  <strong id="nlbCount">0</strong>
+                  <div class="text-muted small">Load Balancers</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-3">
               <div class="text-center p-2" style="opacity: 0.5;" title="API not yet available">
                 <i class="fas fa-cube text-muted" style="font-size: 1.5rem;"></i>
                 <div class="mt-1">
@@ -1620,6 +1629,41 @@ limitations under the License.
                 </tr>
               </thead>
               <tbody id="customImageTableBody">
+                <!-- Data will be populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NLB Table -->
+    <div class="row" id="nlbSection">
+      <div class="col-12">
+        <div class="content-card">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5><i class="fas fa-balance-scale"></i> Load Balancers (NLB) <span class="badge badge-secondary ml-2" id="nlbCountBadge">0</span></h5>
+            <div>
+              <button class="btn btn-primary btn-sm" onclick="refreshResourceList('nlb')">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive table-container">
+            <table class="table table-hover" id="nlbTable">
+              <thead>
+                <tr>
+                  <th>NLB ID</th>
+                  <th>Infra</th>
+                  <th>Type</th>
+                  <th>Listener</th>
+                  <th>Target Group</th>
+                  <th>Provider</th>
+                  <th>Region</th>
+                  <th>Endpoint</th>
+                </tr>
+              </thead>
+              <tbody id="nlbTableBody">
                 <!-- Data will be populated by JavaScript -->
               </tbody>
             </table>

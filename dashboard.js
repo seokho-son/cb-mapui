@@ -1107,21 +1107,26 @@ async function loadInfraData() {
     });
     
     infraData = response.data.infra || [];
-    
-    // Extract Node data from Infra data
-    nodeData = [];
-    infraData.forEach(infra => {
-      if (infra.node && Array.isArray(infra.node)) {
-        infra.node.forEach(nd => {
-          nodeData.push({
-            ...nd,
-            infraId: infra.id,
-            infraStatus: infra.status
-          });
-        });
-      }
-    });
-    
+
+    // Nodes come from the namespace-wide listing: one call, each item already carries
+    // its parent infraId (no per-Infra aggregation on the client)
+    const nodeUrl = `http://${parentConfig.hostname}:${parentConfig.port}/tumblebug/ns/${dashboardConfig.namespace}/resources/node`;
+    const infraStatusById = {};
+    infraData.forEach(infra => { infraStatusById[infra.id] = infra.status; });
+    try {
+      const nodeRes = await axios.get(nodeUrl, {
+        auth: { username: parentConfig.username, password: parentConfig.password },
+        timeout: 600000
+      });
+      nodeData = (nodeRes.data.node || []).map(nd => ({
+        ...nd,
+        infraStatus: infraStatusById[nd.infraId]
+      }));
+    } catch (nodeError) {
+      console.error('Error loading Node data:', nodeError);
+      nodeData = [];
+    }
+
     console.log(`Loaded ${infraData.length} Infras with ${nodeData.length} Nodes`);
   } catch (error) {
     console.error('Error loading Infra data:', error);
@@ -1417,6 +1422,10 @@ function updateResourceCounts() {
     const dataDiskCount = centralData.dataDisk ? centralData.dataDisk.length : 0;
     const dataDiskElement = document.getElementById('dataDiskCount');
     if (dataDiskElement) dataDiskElement.textContent = dataDiskCount;
+
+    const nlbCount = centralData.nlb ? centralData.nlb.length : 0;
+    const nlbElement = document.getElementById('nlbCount');
+    if (nlbElement) nlbElement.textContent = nlbCount;
 
     // Update Object Storage count (API not yet available)
     const objectStorageCount = 0; // TODO: API not yet implemented in CB-Tumblebug
@@ -2668,6 +2677,7 @@ function updateAllResourceTables() {
   updateConnectionTable();
   updateCustomImageTable();
   updateDataDiskTable();
+  updateNlbTable();
   updateVpnTable();
 }
 
@@ -3646,6 +3656,62 @@ function updateDataDiskTable() {
   // Restore selection state and reinitialize
   restoreSelectionState('dataDisk');
   initDataTable('dataDiskTable');
+}
+
+function updateNlbTable() {
+  let centralData = {};
+  if (window.parent && window.parent.cloudBaristaCentralData) {
+    centralData = window.parent.cloudBaristaCentralData;
+  }
+
+  // Each item carries its parent infraId (namespace-wide NLB listing)
+  let nlbList = centralData.nlb || [];
+  if (selectedInfraId) {
+    nlbList = nlbList.filter(nlb => nlb.infraId === selectedInfraId);
+  }
+
+  const tableBody = document.getElementById('nlbTableBody');
+  if (!tableBody) return;
+
+  destroyDataTable('nlbTable');
+  tableBody.innerHTML = '';
+
+  const countBadge = document.getElementById('nlbCountBadge');
+  if (countBadge) {
+    countBadge.textContent = nlbList.length;
+  }
+
+  nlbList.forEach(nlb => {
+    const listener = nlb.listener
+      ? `${nlb.listener.protocol || ''}:${nlb.listener.port || ''}`
+      : 'N/A';
+    const tg = nlb.targetGroup || {};
+    const targetGroup = nlb.targetGroup
+      ? `${tg.protocol || ''}:${tg.port || ''}` +
+        (tg.nodeGroupId ? ` (${tg.nodeGroupId}${Array.isArray(tg.nodes) ? `, ${tg.nodes.length} nodes` : ''})` : '')
+      : 'N/A';
+    const endpoint = (nlb.listener && (nlb.listener.dnsName || nlb.listener.ip)) || 'N/A';
+    // Stored NLBs may carry only connectionName (e.g. "aws-ap-northeast-2"),
+    // so fall back to deriving provider/region from it
+    const connParts = (nlb.connectionName || '').split('-');
+    const provider = nlb.connectionConfig?.providerName || connParts[0] || 'N/A';
+    const region = nlb.connectionConfig?.regionDetail?.regionName || connParts.slice(1).join('-') || 'N/A';
+
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td title="${nlb.id}">${smartTruncate(nlb.id || 'N/A', 'id')}</td>
+      <td title="${nlb.infraId || 'N/A'}">${smartTruncate(nlb.infraId || 'N/A', 'name')}</td>
+      <td>${_escapeHtml(nlb.Type || nlb.type || 'N/A')}</td>
+      <td title="${listener}">${_escapeHtml(listener)}</td>
+      <td title="${targetGroup}">${_escapeHtml(targetGroup)}</td>
+      <td title="${provider}">${smartTruncate(provider, 'provider')}</td>
+      <td title="${region}">${smartTruncate(region, 'region')}</td>
+      <td title="${endpoint}">${smartTruncate(endpoint, 'default')}</td>
+    `;
+    tableBody.appendChild(row);
+  });
+
+  initDataTable('nlbTable');
 }
 
 function updateVpnTable() {
