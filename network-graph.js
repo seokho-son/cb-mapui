@@ -236,6 +236,21 @@ function buildElements(centralData) {
     });
   });
 
+  // Every {infraId|nodeId} registered as a bastion anywhere, and the per-subnet lists.
+  // Both are keyed by identity rather than by position in the graph so a bastion living
+  // in another Infra/vNet resolves the same way as a local one.
+  const bastionRefs = new Set();
+  const bastionRefsBySubnet = new Map(); // subnetId -> [{infraId, nodeId, assigned}]
+  vNetList.forEach((v) => {
+    (v.subnetInfoList || []).forEach((s) => {
+      const refs = (s.bastionNodes || []).map((b) => ({
+        infraId: b.infraId, nodeId: b.nodeId, assigned: b.assigned || '',
+      }));
+      refs.forEach((r) => bastionRefs.add(`${r.infraId}|${r.nodeId}`));
+      if (refs.length) bastionRefsBySubnet.set(s.id, refs);
+    });
+  });
+
   let hasPublic = false;
 
   // ── VM nodes placed into the skeleton ──
@@ -266,16 +281,12 @@ function buildElements(centralData) {
       }
     }
 
-    // Bastion check: subnet.bastionNodes lists {infraId, nodeId}
-    let isBastion = false;
-    if (vnet && vnet.subnetInfoList) {
-      vnet.subnetInfoList.forEach((s) => {
-        (s.bastionNodes || []).forEach((b) => {
-          if (b.infraId === e.infraId && b.nodeId === n.id) isBastion = true;
-        });
-      });
-    }
-    e.isBastion = isBastion;
+    // Bastion check: subnet.bastionNodes lists {nsId, infraId, nodeId}.
+    // Look across EVERY vNet, not just this node's own: a bastion is regularly a node of
+    // a different Infra on a different cloud (a VM whose OpenStack hosts the targets, for
+    // instance). Matching only within the drawn Infra hid those entirely, so the graph
+    // showed no path at all for nodes served that way.
+    e.isBastion = bastionRefs.has(`${e.infraId}|${n.id}`);
 
     // Active remote-command state (same source the map view uses):
     // marks the node label and animates the command-path edges below.
@@ -322,9 +333,9 @@ function buildElements(centralData) {
     addOnce({
       data: {
         id: e.vmId, type: 'vm', parent: parentId,
-        label: `${isBastion ? '◆ ' : ''}${cmdMark}${n.id}`,
+        label: `${e.isBastion ? '◆ ' : ''}${cmdMark}${n.id}`,
         statusColor: nodeStatusColor(n.status),
-        isBastion, infraId: e.infraId, raw: n,
+        isBastion: e.isBastion, infraId: e.infraId, raw: n,
       },
     });
 
@@ -492,14 +503,20 @@ function buildElements(centralData) {
   }
 
   // Bastion SSH paths + CB-TB command path (independently toggleable).
-  // CB-Tumblebug delivers remote commands over SSH to the bastion's PUBLIC IP;
-  // from the bastion, other VMs in the SAME SUBNET are reached over their PRIVATE IPs
-  // (bastions are assigned per subnet, so each node is served by its own subnet's bastion).
-  // Edges land on the corresponding IP chips (when shown) to make that visible.
+  // CB-Tumblebug delivers remote commands over SSH to the bastion's PUBLIC IP; from
+  // there each VM is reached over the address its bastion can actually route to.
+  // Bastions are registered per subnet, and the registered node may belong to another
+  // Infra entirely. Edges land on the corresponding IP chips (when shown) to make the
+  // real path visible.
   if (netOptions.bastion || netOptions.cbtb) {
     // Endpoint helpers: prefer the IP chip, fall back to the VM node itself
     const privEnd = (e) => (netOptions.ipLabels && e.node.privateIP ? `ng-ippriv-${e.vmId}` : e.vmId);
     const pubEnd = (e) => (netOptions.ipLabels && e.node.publicIP ? `ng-ippub-${e.vmId}` : e.vmId);
+
+    // Identity index over every rendered VM: bastion refs name {infraId, nodeId} and the
+    // referenced node often sits in a different vNet group than the member it serves.
+    const entryByIdentity = new Map();
+    vmEntries.forEach((e) => entryByIdentity.set(`${e.infraId}|${e.node.id}`, e));
 
     const byVnet = new Map();
     vmEntries.forEach((e) => {
@@ -547,14 +564,27 @@ function buildElements(centralData) {
 
     let hasCbtb = false;
     byVnet.forEach((entry) => {
-      // Assign each non-bastion member to the single bastion that serves it,
-      // choosing only among bastions in the member's OWN subnet.
+      // Assign each non-bastion member to the single bastion that serves it, resolved from
+      // the member's OWN subnet registration. Candidates are looked up by identity, so a
+      // bastion in another Infra/vNet is eligible - which is the normal case for a VM
+      // inside a self-hosted OpenStack, reached through the machine hosting it.
       const bastionForMember = new Map(); // member.vmId -> serving bastion entry
       entry.members.forEach((m) => {
         if (m.isBastion) return; // a bastion is entered directly (its own public IP), not via a peer
-        const candidates = entry.bastions.filter(
-          (b) => b.vmId !== m.vmId && (!m.subnetId || !b.subnetId || m.subnetId === b.subnetId),
-        );
+        const refs = (m.subnetId && bastionRefsBySubnet.get(m.subnetId)) || [];
+        let candidates = refs
+          .map((r) => entryByIdentity.get(`${r.infraId}|${r.nodeId}`))
+          .filter((b) => b && b.vmId !== m.vmId);
+
+        // Match pickBastion in remoteCommand.go: an operator-registered bastion wins over
+        // an auto-assigned one outright. Without this the picture can show a stale auto
+        // entry serving a node the backend actually reaches through the manual bastion.
+        const manual = candidates.filter((b) => {
+          const ref = refs.find((r) => `${r.infraId}|${r.nodeId}` === `${b.infraId}|${b.node.id}`);
+          return ref && ref.assigned === 'manual';
+        });
+        if (manual.length) candidates = manual;
+
         const chosen = hrwPickBastion(candidates, m.node.id);
         if (chosen) bastionForMember.set(m.vmId, chosen);
       });
@@ -590,9 +620,15 @@ function buildElements(centralData) {
         bastionForMember.forEach((b, memberVmId) => {
           const m = entry.members.find((x) => x.vmId === memberVmId);
           if (!m) return;
+          // Which of the member's addresses the bastion dials, mirroring
+          // resolveTargetIpForBastion: a bastion in the same Infra reaches the private
+          // IP directly, but one in another Infra cannot rely on that being routable
+          // and uses the public IP instead - for an OpenStack VM, its floating IP.
+          const crossInfra = b.infraId !== m.infraId;
+          const targetEnd = crossInfra && m.node.publicIP ? pubEnd(m) : privEnd(m);
           addOnce({
             data: {
-              id: `ng-ssh-${b.vmId}-${m.vmId}`, source: privEnd(b), target: privEnd(m), type: 'ssh', label: 'ssh',
+              id: `ng-ssh-${b.vmId}-${m.vmId}`, source: privEnd(b), target: targetEnd, type: 'ssh', label: 'ssh',
               flowActive: m.cmdHandling === true,
             },
           });
