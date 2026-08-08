@@ -14768,6 +14768,12 @@ defaultRemoteCommand.push("hostname -I");
 defaultRemoteCommand.push("echo $SSH_CLIENT");
 defaultRemoteCommand.push("");
 
+// Recommended timeout (minutes) for the selected usecase. A few of them run far past
+// the 30-minute popup default -- a DevStack install takes 20-40 minutes, and hitting
+// the timeout mid-install leaves the node in a half-configured state.
+// 0 means "leave the popup value alone".
+var defaultRemoteCommandTimeout = 0;
+
 /**
  * Sets default remote commands based on application type
  * 
@@ -14777,6 +14783,7 @@ defaultRemoteCommand.push("");
 function setDefaultRemoteCommandsByApp(appName) {
   // Reset array to ensure clean state (prevent leftover elements from previous selections)
   defaultRemoteCommand.length = 0;
+  defaultRemoteCommandTimeout = 0;
 
   switch (appName) {
     case "Xonotic":
@@ -15322,6 +15329,8 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[0] = "curl -fsSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/usecases/openstack/1.installDevStack.sh -o /tmp/installDevStack.sh && bash /tmp/installDevStack.sh --csp-name openstack-$$Func(GetInfraId())-$$Func(GetNodeId()) --latitude $$Func(GetLocationLatitude()) --longitude $$Func(GetLocationLongitude()) --location \"$$Func(GetLocationDisplay())\"";
       defaultRemoteCommand[1] = "echo 'DevStack installed. Horizon: $$Func(GetPublicIP(target=this, prefix=http://, postfix=/dashboard))'";
       defaultRemoteCommand[2] = "";
+      // stack.sh alone takes 20-40 minutes with Octavia/Manila enabled
+      defaultRemoteCommandTimeout = 120;
       break;
     case "DevStack-Info":
       // Get registration info from installed DevStack
@@ -17600,6 +17609,17 @@ window.loadPredefinedScript = function () {
   const newCommands = [...defaultRemoteCommand].filter(cmd => cmd && cmd.trim());
   console.log("New commands from script:", newCommands);
 
+  // Raise the timeout for long-running usecases. Only ever raises it, so a value the
+  // user typed themselves is never cut down.
+  const timeoutField = document.getElementById("timeoutMinutes");
+  if (timeoutField && defaultRemoteCommandTimeout > 0) {
+    const current = parseInt(timeoutField.value, 10) || 0;
+    if (defaultRemoteCommandTimeout > current) {
+      timeoutField.value = defaultRemoteCommandTimeout;
+      console.log("Raised command timeout to", defaultRemoteCommandTimeout, "min for", scriptType);
+    }
+  }
+
   if (isAppendMode) {
     // Append mode: compact existing commands (remove empty gaps), then append new commands
     // Step 1: Collect all existing non-empty commands
@@ -19692,7 +19712,7 @@ async function executeRemoteCmd() {
             <div class="popup-field">
               <label class="popup-label">Timeout</label>
               <div class="popup-inline">
-                <input type="number" id="timeoutMinutes" class="popup-input" style="width: 60px;" value="30" min="1" max="120">
+                <input type="number" id="timeoutMinutes" class="popup-input" style="width: 60px;" value="${defaultRemoteCommandTimeout > 0 ? defaultRemoteCommandTimeout : 30}" min="1" max="120">
                 <span style="font-size: 0.75rem; color: #666;">min</span>
               </div>
             </div>
@@ -21373,7 +21393,20 @@ function updateFirewallRules(opts) {
         { direction: "inbound", protocol: "UDP", port: "1-65535", cidr: "0.0.0.0/0", label: "All UDP Ports" },
         { direction: "inbound", protocol: "ICMP", port: "", cidr: "0.0.0.0/0", label: "ICMP" },
         { direction: "inbound", protocol: "ALL", port: "", cidr: "0.0.0.0/0", label: "All Protocols" },
+        // Outbound presets. This dialog REPLACES every rule on the selected security
+        // groups, so a rule set with no outbound entry removes egress entirely. On
+        // clouds that deny egress by default when a security group carries no egress
+        // rule (OpenStack/Neutron), that silently cuts the node off: inbound SSH keeps
+        // working because the groups are stateful, and the loss only surfaces later as
+        // DNS or download failures from the node.
+        { direction: "outbound", protocol: "ALL", port: "", cidr: "0.0.0.0/0", label: "↗ All Outbound" },
+        { direction: "outbound", protocol: "TCP", port: "1-65535", cidr: "0.0.0.0/0", label: "↗ Outbound TCP" },
+        { direction: "outbound", protocol: "UDP", port: "1-65535", cidr: "0.0.0.0/0", label: "↗ Outbound UDP" },
       ];
+      // Index of the "all outbound" preset, used to seed the editor below.
+      const outboundAllPresetIdx = presetRules.findIndex(
+        (p) => p.direction === "outbound" && p.protocol === "ALL"
+      );
       let presetHtml = presetRules.map((p, i) =>
         `<button class="btn btn-outline-secondary btn-sm" style="margin:3px; font-size:11px; padding:4px 8px; border-radius:4px;" onclick="insertPresetRule(${i})">${p.label}</button>`
       ).join("");
@@ -21584,6 +21617,14 @@ function updateFirewallRules(opts) {
               portInput.style.backgroundColor = "#f8f9fa";
             }
           };
+
+          // Start the editor with egress already allowed. Since applying replaces the
+          // whole rule set, an editor that starts empty makes "add the inbound ports I
+          // need" quietly drop outbound access. Seeding it keeps the common case safe;
+          // the row can still be deleted for a deliberately egress-restricted group.
+          if (outboundAllPresetIdx >= 0) {
+            window.insertPresetRule(outboundAllPresetIdx);
+          }
         },
         preConfirm: () => {
 
@@ -21607,6 +21648,21 @@ function updateFirewallRules(opts) {
                 CIDR: cidr
               });
             }
+          }
+          if (rules.length === 0) {
+            Swal.showValidationMessage("Add at least one rule before applying.");
+            return false;
+          }
+          // Applying replaces every existing rule, so a set without an outbound entry
+          // takes egress away. Say so rather than letting the node lose outbound access
+          // silently — inbound SSH keeps working, so the loss is easy to miss.
+          if (!rules.some(r => String(r.Direction).toLowerCase() === "outbound")) {
+            Swal.showValidationMessage(
+              "No outbound rule defined. Applying would remove outbound access from these Security Groups " +
+              "(inbound SSH would still work, so this is easy to miss). Add an outbound rule, " +
+              "or use the \"↗ All Outbound\" preset."
+            );
+            return false;
           }
           return sgList.map(sg => ({ id: sg.id, name: sg.name, firewallRules: rules }));
         }
