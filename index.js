@@ -3870,7 +3870,7 @@ function displayAccessInfoGui(data, infraId) {
           <tbody>`;
     nodeList.forEach((nd, i) => {
       const bg = i % 2 === 0 ? '#0d1b2a' : '#0a1520';
-      const user = nd.nodeUserName || 'ubuntu';
+      const user = nd.nodeUserName || 'cb-user'; // platform default when the key carries no account
       const port = nd.sshPort || 22;
       let sshCmd = '-';
       if (nd.publicIP) {
