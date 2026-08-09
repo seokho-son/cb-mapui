@@ -4091,6 +4091,113 @@ function handleInfraWithoutNodes(infraItem) {
   infraRenderMap.set(infraItem.id, infraEntry);
 }
 
+// ---------------------------------------------------------------------------
+// External-request banner
+//
+// CB-Tumblebug records every request it serves, including the headers. The MCP server
+// stamps X-Request-Source: mcp on its calls, so the banner can show work arriving from an
+// agent while nobody is touching the map - which is the whole point during a demonstration.
+//
+// Only method, URL and status are shown. requestInfo.body is deliberately never rendered:
+// a credential registration carries its secret there.
+// ---------------------------------------------------------------------------
+
+const MCP_BANNER_MAX = 6;          // entries kept on screen
+const MCP_BANNER_LIFETIME_MS = 20000;
+const mcpBannerSeen = new Set();   // startTime+url, so a request is shown once
+
+function mcpBannerContainer() {
+  let el = document.getElementById('mcp-activity-banner');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'mcp-activity-banner';
+  el.style.cssText = [
+    'position:fixed', 'top:84px', 'right:16px', 'z-index:9998',
+    'width:340px', 'display:flex', 'flex-direction:column', 'gap:8px',
+    'pointer-events:none', 'font-family:system-ui,-apple-system,sans-serif',
+  ].join(';');
+  document.body.appendChild(el);
+  return el;
+}
+
+// Destructive work should not look like everything else on the way past.
+const MCP_METHOD_COLOR = { POST: '#61dafb', PUT: '#f0b429', DELETE: '#ff6b6b' };
+
+function mcpBannerAdd(entry) {
+  const box = mcpBannerContainer();
+  const card = document.createElement('div');
+  const ok = String(entry.status).toLowerCase() !== 'error';
+  const accent = ok ? (MCP_METHOD_COLOR[entry.method] || '#61dafb') : '#ff6b6b';
+  card.style.cssText = [
+    'background:rgba(13,27,42,.94)', 'border:1px solid ' + (ok ? '#2a5c8a' : '#8a2a2a'),
+    'border-left:4px solid ' + accent,
+    'border-radius:8px', 'padding:10px 12px', 'color:#e8eef6', 'font-size:12px',
+    'box-shadow:0 4px 14px rgba(0,0,0,.45)', 'opacity:0',
+    'transition:opacity .25s ease, transform .25s ease', 'transform:translateX(12px)',
+  ].join(';');
+  card.innerHTML =
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">' +
+      '<span style="background:' + accent + ';color:#0d1b2a;font-weight:700;border-radius:4px;' +
+      'padding:1px 6px;font-size:10px;letter-spacing:.04em;">MCP</span>' +
+      '<span style="color:' + accent + ';font-weight:600;">' + window.escapeHtml(entry.method) + '</span>' +
+      '<span style="margin-left:auto;color:' + (ok ? '#7fd6a0' : '#ff9b9b') + ';">' +
+      window.escapeHtml(entry.status) + '</span>' +
+    '</div>' +
+    '<div style="color:#c3cfe2;word-break:break-all;line-height:1.35;">' +
+      window.escapeHtml(entry.url) + '</div>';
+  box.appendChild(card);
+  requestAnimationFrame(() => { card.style.opacity = '1'; card.style.transform = 'translateX(0)'; });
+
+  while (box.children.length > MCP_BANNER_MAX) box.removeChild(box.firstChild);
+  setTimeout(() => {
+    card.style.opacity = '0';
+    card.style.transform = 'translateX(12px)';
+    setTimeout(() => card.remove(), 300);
+  }, MCP_BANNER_LIFETIME_MS);
+}
+
+const MCP_BANNER_METHODS = ['POST', 'PUT', 'DELETE'];   // the ones that change something
+
+async function pollExternalRequests() {
+  try {
+    // The filters are not optional. Without method and time this endpoint returns every
+    // tracked request with its full body and response - measured at 13.5 MB. The endpoint
+    // takes one method per call, so this is three requests of ~18 bytes each.
+    const responses = await Promise.all(MCP_BANNER_METHODS.map((m) =>
+      axios.get(`${tbApiBase()}/requests?method=${m}&time=2`, {
+        auth: { username: configUsername, password: configPassword }, timeout: 5000,
+      }).catch(() => null)));
+
+    let items = [];
+    responses.filter(Boolean).forEach((resp) => {
+      let part = resp.data?.requests ?? resp.data ?? [];
+      if (!Array.isArray(part)) part = Object.values(part);
+      items = items.concat(part);
+    });
+
+    items
+      .filter((r) => {
+        const h = r?.requestInfo?.header || {};
+        return (h['X-Request-Source'] || h['x-request-source']) === 'mcp';
+      })
+      .sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)))
+      .forEach((r) => {
+        const info = r.requestInfo || {};
+        const key = `${r.startTime}|${info.url}`;
+        if (mcpBannerSeen.has(key)) return;
+        mcpBannerSeen.add(key);
+        if (mcpBannerSeen.size > 500) mcpBannerSeen.clear();  // bounded, order is not needed
+        mcpBannerAdd({
+          method: String(info.method || 'POST').toUpperCase(),
+          url: String(info.url || '').replace(/^\/tumblebug/, ''),
+          status: r.status || 'Handling',
+        });
+      });
+  } catch (e) {
+    // A demo aid must never interfere with the map it sits on.
+  }
+}
+
 function getInfra() {
   var hostname = configHostname;
   var port = configPort;
@@ -4103,6 +4210,7 @@ function getInfra() {
     ? refreshInterval
     : 5;
   setTimeout(() => getInfra(), filteredRefreshInterval * 1000);
+  pollExternalRequests();
 
   // Show refresh indicator
   showMapRefreshIndicator(true);
