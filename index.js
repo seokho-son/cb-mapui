@@ -4091,6 +4091,113 @@ function handleInfraWithoutNodes(infraItem) {
   infraRenderMap.set(infraItem.id, infraEntry);
 }
 
+// ---------------------------------------------------------------------------
+// External-request banner
+//
+// CB-Tumblebug records every request it serves, including the headers. The MCP server
+// stamps X-Request-Source: mcp on its calls, so the banner can show work arriving from an
+// agent while nobody is touching the map - which is the whole point during a demonstration.
+//
+// Only method, URL and status are shown. requestInfo.body is deliberately never rendered:
+// a credential registration carries its secret there.
+// ---------------------------------------------------------------------------
+
+const MCP_BANNER_MAX = 6;          // entries kept on screen
+const MCP_BANNER_LIFETIME_MS = 20000;
+const mcpBannerSeen = new Set();   // startTime+url, so a request is shown once
+
+function mcpBannerContainer() {
+  let el = document.getElementById('mcp-activity-banner');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'mcp-activity-banner';
+  el.style.cssText = [
+    'position:fixed', 'top:84px', 'right:16px', 'z-index:9998',
+    'width:340px', 'display:flex', 'flex-direction:column', 'gap:8px',
+    'pointer-events:none', 'font-family:system-ui,-apple-system,sans-serif',
+  ].join(';');
+  document.body.appendChild(el);
+  return el;
+}
+
+// Destructive work should not look like everything else on the way past.
+const MCP_METHOD_COLOR = { POST: '#61dafb', PUT: '#f0b429', DELETE: '#ff6b6b' };
+
+function mcpBannerAdd(entry) {
+  const box = mcpBannerContainer();
+  const card = document.createElement('div');
+  const ok = String(entry.status).toLowerCase() !== 'error';
+  const accent = ok ? (MCP_METHOD_COLOR[entry.method] || '#61dafb') : '#ff6b6b';
+  card.style.cssText = [
+    'background:rgba(13,27,42,.94)', 'border:1px solid ' + (ok ? '#2a5c8a' : '#8a2a2a'),
+    'border-left:4px solid ' + accent,
+    'border-radius:8px', 'padding:10px 12px', 'color:#e8eef6', 'font-size:12px',
+    'box-shadow:0 4px 14px rgba(0,0,0,.45)', 'opacity:0',
+    'transition:opacity .25s ease, transform .25s ease', 'transform:translateX(12px)',
+  ].join(';');
+  card.innerHTML =
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">' +
+      '<span style="background:' + accent + ';color:#0d1b2a;font-weight:700;border-radius:4px;' +
+      'padding:1px 6px;font-size:10px;letter-spacing:.04em;">MCP</span>' +
+      '<span style="color:' + accent + ';font-weight:600;">' + window.escapeHtml(entry.method) + '</span>' +
+      '<span style="margin-left:auto;color:' + (ok ? '#7fd6a0' : '#ff9b9b') + ';">' +
+      window.escapeHtml(entry.status) + '</span>' +
+    '</div>' +
+    '<div style="color:#c3cfe2;word-break:break-all;line-height:1.35;">' +
+      window.escapeHtml(entry.url) + '</div>';
+  box.appendChild(card);
+  requestAnimationFrame(() => { card.style.opacity = '1'; card.style.transform = 'translateX(0)'; });
+
+  while (box.children.length > MCP_BANNER_MAX) box.removeChild(box.firstChild);
+  setTimeout(() => {
+    card.style.opacity = '0';
+    card.style.transform = 'translateX(12px)';
+    setTimeout(() => card.remove(), 300);
+  }, MCP_BANNER_LIFETIME_MS);
+}
+
+const MCP_BANNER_METHODS = ['POST', 'PUT', 'DELETE'];   // the ones that change something
+
+async function pollExternalRequests() {
+  try {
+    // The filters are not optional. Without method and time this endpoint returns every
+    // tracked request with its full body and response - measured at 13.5 MB. The endpoint
+    // takes one method per call, so this is three requests of ~18 bytes each.
+    const responses = await Promise.all(MCP_BANNER_METHODS.map((m) =>
+      axios.get(`${tbApiBase()}/requests?method=${m}&time=2`, {
+        auth: { username: configUsername, password: configPassword }, timeout: 5000,
+      }).catch(() => null)));
+
+    let items = [];
+    responses.filter(Boolean).forEach((resp) => {
+      let part = resp.data?.requests ?? resp.data ?? [];
+      if (!Array.isArray(part)) part = Object.values(part);
+      items = items.concat(part);
+    });
+
+    items
+      .filter((r) => {
+        const h = r?.requestInfo?.header || {};
+        return (h['X-Request-Source'] || h['x-request-source']) === 'mcp';
+      })
+      .sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)))
+      .forEach((r) => {
+        const info = r.requestInfo || {};
+        const key = `${r.startTime}|${info.url}`;
+        if (mcpBannerSeen.has(key)) return;
+        mcpBannerSeen.add(key);
+        if (mcpBannerSeen.size > 500) mcpBannerSeen.clear();  // bounded, order is not needed
+        mcpBannerAdd({
+          method: String(info.method || 'POST').toUpperCase(),
+          url: String(info.url || '').replace(/^\/tumblebug/, ''),
+          status: r.status || 'Handling',
+        });
+      });
+  } catch (e) {
+    // A demo aid must never interfere with the map it sits on.
+  }
+}
+
 function getInfra() {
   var hostname = configHostname;
   var port = configPort;
@@ -4103,6 +4210,7 @@ function getInfra() {
     ? refreshInterval
     : 5;
   setTimeout(() => getInfra(), filteredRefreshInterval * 1000);
+  pollExternalRequests();
 
   // Show refresh indicator
   showMapRefreshIndicator(true);
@@ -14996,6 +15104,14 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
+    case "K8sGetKubeconfigExternal":
+      // Kubeconfig for an address the cluster never saw (nested cloud / NAT / port-forward).
+      // kubeadm bakes the SAN list at init time, so an address added later needs the
+      // apiserver cert re-issued; the CA is unchanged, so nothing else has to be touched.
+      defaultRemoteCommand[0] = "ADDR=\"<K8S_EXTERNAL_IP>\"; PORT=\"<K8S_API_PORT>\"; [ -z \"$PORT\" ] && PORT=6443; if [ -z \"$ADDR\" ]; then echo 'ERROR: K8S_EXTERNAL_IP is required'; exit 1; fi; SANS=$(sudo openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -ext subjectAltName | tr ',' '\\n' | sed -n -e 's/.*DNS://p' -e 's/.*IP Address://p' | tr -d ' ' | paste -sd, -); case \",$SANS,\" in *\",$ADDR,\"*) echo \"API server cert already covers $ADDR\";; *) echo \"Re-issuing API server cert with SAN $ADDR ...\"; ADV=$(sudo sed -n 's/.*--advertise-address=\\([0-9.]*\\).*/\\1/p' /etc/kubernetes/manifests/kube-apiserver.yaml | head -1); TS=$(date +%s); sudo mv /etc/kubernetes/pki/apiserver.crt /etc/kubernetes/pki/apiserver.crt.bak.$TS; sudo mv /etc/kubernetes/pki/apiserver.key /etc/kubernetes/pki/apiserver.key.bak.$TS; sudo kubeadm init phase certs apiserver --apiserver-advertise-address \"$ADV\" --apiserver-cert-extra-sans \"$SANS,$ADDR\" || { echo 'ERROR: cert re-issue failed'; exit 1; }; sudo mv /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/kube-apiserver.yaml; sleep 8; sudo mv /tmp/kube-apiserver.yaml /etc/kubernetes/manifests/kube-apiserver.yaml; for i in $(seq 1 60); do kubectl get --raw /healthz >/dev/null 2>&1 && break; sleep 3; done; echo 'API server restarted with the new cert';; esac; KC=$HOME/kubeconfig-external.yaml; cp $HOME/.kube/config $KC; kubectl --kubeconfig=$KC config set-cluster \"$(kubectl --kubeconfig=$KC config view -o jsonpath='{.clusters[0].name}')\" --server=\"https://$ADDR:$PORT\" >/dev/null; chmod 600 $KC; kubectl --kubeconfig=$KC get nodes >/dev/null 2>&1 && echo \"Verified: https://$ADDR:$PORT is reachable from this node\" || echo \"NOTE: https://$ADDR:$PORT not reachable from this node - expected when the address is a NAT/port-forward entry point; forward $PORT to this node's :6443 and open it in the security group\"; echo ''; echo '[K8S_KUBECONFIG_BASE64]'; base64 -w 0 $KC; echo ''; printf '$$FILEPATH[Kubeconfig for %s:%s](%s)\\n' \"$ADDR\" \"$PORT\" \"$KC\"";
+      defaultRemoteCommand[1] = "";
+      defaultRemoteCommand[2] = "";
+      break;
     case "K8sClusterStatus":
       // Check K8s cluster status (run on control plane)
       defaultRemoteCommand[0] = "echo '=== Nodes ===' && kubectl get nodes -o wide && echo '' && echo '=== Pods ===' && kubectl get pods -A";
@@ -15626,6 +15742,17 @@ window.PLACEHOLDER_METADATA = {
   'K8S_CNI': {
     description: 'CNI plugin — empty/flannel (default) or cilium (enables the optional Hubble UI step)',
     hint: 'flannel',
+    secret: false,
+  },
+  'K8S_EXTERNAL_IP': {
+    description: 'Externally reachable API server address (IP or DNS) — added to the cert SAN and written into the kubeconfig',
+    hint: '15.161.132.237',
+    secret: false,
+  },
+  'K8S_API_PORT': {
+    description: 'External API server port — must be forwarded to :6443 on the control plane',
+    hint: '6443',
+    default: '6443',
     secret: false,
   },
   'HF_TOKEN': {
@@ -16639,6 +16766,7 @@ window.predefinedScriptCategories = {
       { value: 'K8sLlmdControlPlane',    label: '1-alt. Deploy Control Plane (llm-d)',             step: 1,  targetLabel: 'role=control', optional: true },
       { value: 'K8sGetJoinCommand',      label: '2. Get Join Command',                             step: 2,  targetLabel: 'role=control', syncMode: true },
       { value: 'K8sGetKubeconfig',       label: '3. Get Kubeconfig (Base64)',                      step: 3,  targetLabel: 'role=control', syncMode: true },
+      { value: 'K8sGetKubeconfigExternal', label: '3-alt. Get Kubeconfig for a designated IP (nested/NAT — re-issues cert SAN)', step: 3, targetLabel: 'role=control', optional: true, syncMode: true },
       { value: 'Nvidia',                 label: '4. Install GPU Driver — NVIDIA/AMD auto-detect (GPU worker only)', step: 4,  targetLabel: 'accelerator=gpu', optional: true },
       { value: 'RebootVM',               label: '5. Reboot Node (GPU worker only)',                step: 5,  targetLabel: 'role=node', optional: true },
       { value: 'Nvidia-Status',          label: '6. Check GPU Driver — NVIDIA/AMD (GPU worker only)', step: 6,  targetLabel: 'accelerator=gpu', optional: true, syncMode: true },
