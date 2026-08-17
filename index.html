@@ -198,6 +198,45 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       overflow: hidden;
     }
 
+    /* Left panel hidden state */
+    body.left-panel-hidden .col-md-3 {
+      display: none !important;
+    }
+
+    body.left-panel-hidden .col-md-9 {
+      max-width: 100vw !important;
+      width: 100vw !important;
+    }
+
+    /* Left panel hide/show toggle button */
+    #leftPanelToggle {
+      position: fixed;
+      top: 50%;
+      left: 385px;
+      transform: translateY(-50%);
+      z-index: 1050; /* above map controls (1000), below swal2 popups (1060) */
+      width: 16px;
+      height: 56px;
+      padding: 0;
+      border: 1px solid rgba(0, 0, 0, 0.15);
+      border-left: none;
+      border-radius: 0 8px 8px 0;
+      background: rgba(255, 255, 255, 0.95);
+      color: #6c757d;
+      font-size: 10px;
+      cursor: pointer;
+      box-shadow: 2px 0 6px rgba(0, 0, 0, 0.08);
+    }
+
+    #leftPanelToggle:hover {
+      background: #e9ecef;
+      color: #212529;
+    }
+
+    body.left-panel-hidden #leftPanelToggle {
+      left: 0;
+    }
+
     /* Remove Bootstrap default margins and paddings */
     .container-fluid {
       padding-left: 0 !important;
@@ -434,6 +473,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 <body>
   <div class="container-fluid">
     <!-- <h3 class="my-1">CB-Tumblebug Map Dashboard</h3> -->
+
+    <!-- Left panel hide/show toggle -->
+    <button type="button" id="leftPanelToggle" onclick="toggleLeftPanel()" title="Hide/show left panel"
+      aria-label="Hide/show left panel">&#10094;</button>
 
     <div class="row">
       <!-- Left Column for Tabs -->
@@ -1624,8 +1667,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         var windowHeight = window.innerHeight;
         var windowWidth = window.innerWidth;
 
-        // Fixed left panel dimensions
-        var leftPanelWidth = 385;
+        // Fixed left panel dimensions (0 when hidden)
+        var leftPanelWidth = document.body.classList.contains('left-panel-hidden') ? 0 : 385;
 
         // Set left panel height (fixed width, responsive height)
         var leftPanel = document.querySelector('.scrollable-column');
@@ -1678,6 +1721,25 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           }
         }
       }
+
+      // Toggle left panel visibility (state persisted in localStorage)
+      function toggleLeftPanel() {
+        var hidden = document.body.classList.toggle('left-panel-hidden');
+        var btn = document.getElementById('leftPanelToggle');
+        if (btn) btn.innerHTML = hidden ? '&#10095;' : '&#10094;';
+        try { localStorage.setItem('leftPanelHidden', hidden ? '1' : '0'); } catch (e) { }
+        // Trigger resize so map, graphs, and dashboard adjust to the new width
+        window.dispatchEvent(new Event('resize'));
+      }
+
+      // Restore left panel state from previous session
+      try {
+        if (localStorage.getItem('leftPanelHidden') === '1') {
+          document.body.classList.add('left-panel-hidden');
+          var leftPanelToggleBtn = document.getElementById('leftPanelToggle');
+          if (leftPanelToggleBtn) leftPanelToggleBtn.innerHTML = '&#10095;';
+        }
+      } catch (e) { }
 
       // Initial setup
       setLayoutSizes();
