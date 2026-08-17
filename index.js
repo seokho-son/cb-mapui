@@ -4121,7 +4121,7 @@ function mcpBannerContainer() {
 }
 
 // Destructive work should not look like everything else on the way past.
-const MCP_METHOD_COLOR = { POST: '#61dafb', PUT: '#f0b429', DELETE: '#ff6b6b' };
+const MCP_METHOD_COLOR = { GET: '#9fb3c8', POST: '#61dafb', PUT: '#f0b429', DELETE: '#ff6b6b' };
 
 function mcpBannerAdd(entry) {
   const box = mcpBannerContainer();
@@ -4156,24 +4156,18 @@ function mcpBannerAdd(entry) {
   }, MCP_BANNER_LIFETIME_MS);
 }
 
-const MCP_BANNER_METHODS = ['POST', 'PUT', 'DELETE'];   // the ones that change something
-
 async function pollExternalRequests() {
   try {
-    // The filters are not optional. Without method and time this endpoint returns every
-    // tracked request with its full body and response - measured at 13.5 MB. The endpoint
-    // takes one method per call, so this is three requests of ~18 bytes each.
-    const responses = await Promise.all(MCP_BANNER_METHODS.map((m) =>
-      axios.get(`${tbApiBase()}/requests?method=${m}&time=2`, {
-        auth: { username: configUsername, password: configPassword }, timeout: 5000,
-      }).catch(() => null)));
+    // The filters are not optional. Without them this endpoint returns every tracked
+    // request with its full body and response - measured at 13.5 MB. source=mcp keeps
+    // only agent-origin requests (GET included) and brief=true drops the bodies.
+    const resp = await axios.get(`${tbApiBase()}/requests?source=mcp&time=2&brief=true`, {
+      auth: { username: configUsername, password: configPassword }, timeout: 5000,
+    }).catch(() => null);
+    if (!resp) return;
 
-    let items = [];
-    responses.filter(Boolean).forEach((resp) => {
-      let part = resp.data?.requests ?? resp.data ?? [];
-      if (!Array.isArray(part)) part = Object.values(part);
-      items = items.concat(part);
-    });
+    let items = resp.data?.requests ?? resp.data ?? [];
+    if (!Array.isArray(items)) items = Object.values(items);
 
     items
       .filter((r) => {
