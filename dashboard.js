@@ -171,6 +171,19 @@ async function deleteResourceAsync(resourceType, resourceId, additionalParams = 
       timeout: 600000
     });
 
+    // 202: deletion accepted but not yet confirmed on the CSP; the record is retained
+    if (response.status === 202) {
+      await Swal.fire({
+        title: 'Deletion In Progress',
+        text: (response.data && response.data.message) ||
+          `Deletion of ${resourceType} "${resourceId}" is in progress. The record is kept until the CSP confirms removal — refresh or retry later.`,
+        icon: 'info',
+        confirmButtonText: 'OK'
+      });
+      refreshResourceData(resourceType, additionalParams);
+      return true;
+    }
+
     // Show success message
     await Swal.fire({
       title: successTitle,
@@ -191,14 +204,19 @@ async function deleteResourceAsync(resourceType, resourceId, additionalParams = 
     // Extract detailed error message from server response
     let errorMessage = `Failed to delete ${resourceType}`;
     let errorTitle = 'Delete Failed';
-    
+    let errorIcon = 'error';
+
     if (error.response && error.response.data) {
       // If server returns structured error with message
       if (error.response.data.message) {
         errorMessage = error.response.data.message;
-        
+
         // Parse specific error types for better user experience
-        if (errorMessage.includes('Deleting the last nodegroup is not supported')) {
+        if (error.response.status === 409 || errorMessage.includes('record is retained')) {
+          // Fail-closed deletion: the record is kept because CSP-side removal is unconfirmed
+          errorTitle = 'Deletion Unconfirmed';
+          errorIcon = 'warning';
+        } else if (errorMessage.includes('Deleting the last nodegroup is not supported')) {
           errorTitle = 'Cannot Delete Last Node Group';
           errorMessage = 'Cannot delete the last node group in a K8s cluster. You must have at least one node group remaining.\n\nTo delete this cluster completely, delete the entire K8s cluster instead.';
         } else if (errorMessage.includes('Bad request')) {
@@ -225,7 +243,7 @@ async function deleteResourceAsync(resourceType, resourceId, additionalParams = 
     await Swal.fire({
       title: errorTitle,
       text: errorMessage,
-      icon: 'error',
+      icon: errorIcon,
       confirmButtonText: 'OK',
       customClass: {
         popup: 'swal-wide'
@@ -3644,7 +3662,7 @@ function updateDataDiskTable() {
       <td class="select-cell"><input type="checkbox" class="row-select-checkbox select-checkbox" data-item-id="${_escapeHtml(disk.id)}" onchange="toggleRowSelect('dataDisk', '${_escapeHtml(disk.id)}', this)"></td>
       <td title="${disk.id}"><a class="item-id-link" onclick="viewResourceDetails('dataDisk', '${_escapeHtml(disk.id)}')">${smartTruncate(disk.id, 'id')}</a></td>
       <td title="${disk.name || 'N/A'}">${smartTruncate(disk.name || 'N/A', 'name')}</td>
-      <td><span class="status-badge status-${(disk.status || 'unknown').toLowerCase()}">${disk.status || 'Unknown'}</span></td>
+      <td title="${_escapeHtml(disk.systemMessage || '')}"><span class="status-badge status-${(disk.status || 'unknown').toLowerCase()}">${disk.status || 'Unknown'}</span></td>
       <td title="${disk.connectionConfig?.providerName || 'N/A'}">${smartTruncate(disk.connectionConfig?.providerName || 'N/A', 'provider')}</td>
       <td title="${disk.connectionConfig?.regionDetail?.regionName || 'N/A'}">${smartTruncate(disk.connectionConfig?.regionDetail?.regionName || 'N/A', 'region')}</td>
       <td title="${disk.diskSize || 'N/A'}">${smartTruncate(disk.diskSize || 'N/A', 'default')}</td>
