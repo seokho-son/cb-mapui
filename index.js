@@ -3487,7 +3487,13 @@ window.copyGuiSshCommand = function(idx) {
   const cmd = window._guiSshCommands[idx] || '';
   navigator.clipboard.writeText(cmd).then(() => {
     const el = document.getElementById('gui-ssh-cmd-' + idx);
-    if (el) { const orig = el.style.background; el.style.background = '#155724'; setTimeout(() => el.style.background = orig, 1500); }
+    if (el) {
+      // Blink once; re-clicks reset the timer so the highlight never sticks
+      if (el._blinkOrig === undefined) el._blinkOrig = el.style.background;
+      clearTimeout(el._blinkTimer);
+      el.style.background = '#155724';
+      el._blinkTimer = setTimeout(() => { el.style.background = el._blinkOrig; el._blinkOrig = undefined; }, 1500);
+    }
   }).catch(err => console.error('copy failed:', err));
 };
 
@@ -3833,6 +3839,12 @@ function displayAccessInfoGui(data, infraId) {
   const groups = data.InfraNodeGroupAccessInfo || [];
   let cmdIdx = 0;
 
+  // Same sanitization/naming as downloadAllSshKeys so copied commands match the ZIP key files
+  const safeName = (name) => String(name).replace(/[\\/]/g, "_").replace(/\.\./g, "_").replace(/[^a-zA-Z0-9._-]/g, "_") || "unknown";
+  const infraForKey = safeName(infraId || data.InfraId || "unknown");
+  // "/path/to/" is a placeholder the user replaces with the extracted key location
+  const pemFileFor = (nodeId) => `/path/to/${safeName(configNamespace)}-${infraForKey}-${safeName(nodeId || "unknown")}.pem`;
+
   let html = `<div style="text-align:left;color:#e0e0e0;font-family:sans-serif;">`;
   html += `
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
@@ -3874,9 +3886,9 @@ function displayAccessInfoGui(data, infraId) {
       const port = nd.sshPort || 22;
       let sshCmd = '-';
       if (nd.publicIP) {
-        sshCmd = `ssh -i ${nd.nodeId || 'key'}.pem -p ${port} ${user}@${nd.publicIP}`;
+        sshCmd = `ssh -i ${pemFileFor(nd.nodeId)} -p ${port} ${user}@${nd.publicIP}`;
       } else if (nd.bastionPublicIp) {
-        sshCmd = `ssh -J ${user}@${nd.bastionPublicIp}:${nd.bastionSshPort || 22} -i key.pem -p ${port} ${user}@${nd.privateIP}`;
+        sshCmd = `ssh -J ${user}@${nd.bastionPublicIp}:${nd.bastionSshPort || 22} -i ${pemFileFor(nd.nodeId)} -p ${port} ${user}@${nd.privateIP}`;
       }
       const thisIdx = cmdIdx++;
       window._guiSshCommands.push(sshCmd);
