@@ -237,6 +237,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       left: 0;
     }
 
+    /* Hide the toggle while a SweetAlert2 popup is open (swal2-shown is added to
+       body/html) so it never renders over the dialog, regardless of z-index. */
+    body.swal2-shown #leftPanelToggle {
+      display: none;
+    }
+
     /* Remove Bootstrap default margins and paddings */
     .container-fluid {
       padding-left: 0 !important;
