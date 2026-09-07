@@ -2319,53 +2319,6 @@ function getK8sStatusColor(status) {
   
   let fillColor;
   
-  // Active/Running states - Green (healthy)
-  if (status === "Active" || statusStr.includes("active") || 
-      status === "Running" || statusStr.includes("running")) {
-    fillColor = "#10b981"; // emerald-500
-  }
-  // Creating/Provisioning states - Blue (in progress)
-  else if (status === "Creating" || statusStr.includes("creating") ||
-           status === "Provisioning" || statusStr.includes("provisioning")) {
-    fillColor = "#3b82f6"; // blue-500
-  }
-  // Updating/Upgrading states - Orange (maintenance)
-  else if (status === "Updating" || statusStr.includes("updating") ||
-           status === "Upgrading" || statusStr.includes("upgrading")) {
-    fillColor = "#f97316"; // orange-500
-  }
-  // Error/Failed states - Red (critical)
-  else if (status === "Error" || statusStr.includes("error") ||
-           status === "Failed" || statusStr.includes("failed")) {
-    fillColor = "#ef4444"; // red-500
-  }
-  // Deleting/Terminating states - Dark red (destructive)
-  else if (status === "Deleting" || statusStr.includes("deleting") ||
-           status === "Terminating" || statusStr.includes("terminating")) {
-    fillColor = "#dc2626"; // red-600
-  }
-  // Suspended/Stopped states - Yellow (paused)
-  else if (status === "Suspended" || statusStr.includes("suspended") ||
-           status === "Stopped" || statusStr.includes("stopped")) {
-    fillColor = "#f59e0b"; // amber-500
-  }
-  // Unknown/Default states - Gray
-  else {
-    fillColor = "#6b7280"; // gray-500
-  }
-  
-  return {
-    fill: fillColor,
-    stroke: getContrastColor(fillColor)
-  };
-}
-
-// K8s Cluster Status Color Mapping
-function getK8sStatusColor(status) {
-  const statusStr = status?.toString().toLowerCase() || '';
-  
-  let fillColor;
-  
   // Active/Running states - Green
   if (status === "Active" || statusStr.includes("active") || 
       status === "Running" || statusStr.includes("running")) {

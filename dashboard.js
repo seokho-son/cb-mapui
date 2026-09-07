@@ -274,14 +274,14 @@ function refreshResourceData(resourceType, additionalParams) {
         break;
         
       case 'node':
-        if (typeof loadNodeData === 'function') {
-          loadNodeData();
+        if (typeof window.loadNodeData === 'function') {
+          window.loadNodeData();
         }
         break;
         
       case 'k8sCluster':
-        if (typeof loadK8sClusterData === 'function') {
-          loadK8sClusterData();
+        if (typeof window.loadK8sClusterData === 'function') {
+          window.loadK8sClusterData();
         }
         break;
         
@@ -292,32 +292,32 @@ function refreshResourceData(resourceType, additionalParams) {
         break;
         
       case 'vNet':
-        if (typeof loadvNetData === 'function') {
-          loadvNetData();
+        if (typeof window.loadvNetData === 'function') {
+          window.loadvNetData();
         }
         break;
         
       case 'securityGroup':
-        if (typeof loadSecurityGroupData === 'function') {
-          loadSecurityGroupData();
+        if (typeof window.loadSecurityGroupData === 'function') {
+          window.loadSecurityGroupData();
         }
         break;
         
       case 'sshKey':
-        if (typeof loadSshKeyData === 'function') {
-          loadSshKeyData();
+        if (typeof window.loadSshKeyData === 'function') {
+          window.loadSshKeyData();
         }
         break;
         
       case 'customImage':
-        if (typeof loadCustomImageData === 'function') {
-          loadCustomImageData();
+        if (typeof window.loadCustomImageData === 'function') {
+          window.loadCustomImageData();
         }
         break;
         
       case 'dataDisk':
-        if (typeof loadDataDiskData === 'function') {
-          loadDataDiskData();
+        if (typeof window.loadDataDiskData === 'function') {
+          window.loadDataDiskData();
         }
         break;
         
@@ -385,17 +385,22 @@ async function deleteVpn(infraId, vpnId) {
   }
 
   try {
-    const config = window.parent?.getConfig() || {};
-    const nsId = config.namespace || 'default';
+    const parentConfig = window.parent?.getConfig?.() || {};
+    const nsId = parentConfig.namespace || 'default';
+    const credentialHolder = parentConfig.credentialHolder || 'admin';
     
-    const response = await fetch(`${getApiUrl()}/tumblebug/ns/${nsId}/infra/${infraId}/vpn/${vpnId}`, {
+    await axios({
       method: 'DELETE',
-      headers: getAuthHeaders()
+      url: `${tbApiBase()}/ns/${nsId}/infra/${infraId}/vpn/${vpnId}`,
+      headers: {
+        'X-Credential-Holder': credentialHolder
+      },
+      auth: {
+        username: parentConfig.username,
+        password: parentConfig.password
+      },
+      timeout: 60000
     });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
 
     console.log(`VPN ${vpnId} deleted successfully from Infra ${infraId}`);
     showSuccessMessage(`VPN ${vpnId} deleted successfully`);
@@ -410,19 +415,24 @@ async function deleteVpn(infraId, vpnId) {
 
 async function viewVpnDetails(infraId, vpnId) {
   try {
-    const config = window.parent?.getConfig() || {};
-    const nsId = config.namespace || 'default';
+    const parentConfig = window.parent?.getConfig?.() || {};
+    const nsId = parentConfig.namespace || 'default';
+    const credentialHolder = parentConfig.credentialHolder || 'admin';
     
-    const response = await fetch(`${getApiUrl()}/tumblebug/ns/${nsId}/infra/${infraId}/vpn/${vpnId}`, {
+    const response = await axios({
       method: 'GET',
-      headers: getAuthHeaders()
+      url: `${tbApiBase()}/ns/${nsId}/infra/${infraId}/vpn/${vpnId}`,
+      headers: {
+        'X-Credential-Holder': credentialHolder
+      },
+      auth: {
+        username: parentConfig.username,
+        password: parentConfig.password
+      },
+      timeout: 30000
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const vpnData = await response.json();
+    const vpnData = response.data;
     showVpnDetailsModal(vpnData);
   } catch (error) {
     console.error('Error fetching VPN details:', error);
@@ -1076,7 +1086,7 @@ async function refreshDashboard() {
 }
 
 // Test connection to CB-Tumblebug
-async function testConnection() {
+async function testTbConnection() {
   // Get config from parent window (index.js) - same as delete functions
   const parentConfig = window.parent?.getConfig?.() || { 
     hostname: 'localhost', 
@@ -2669,23 +2679,32 @@ function showInfoMessage(message) {
 
 // Setup event listeners
 function setupEventListeners() {
-  // Handle namespace change
-  document.getElementById('namespace').addEventListener('change', function() {
-    dashboardConfig.namespace = this.value;
-    refreshDashboard();
-  });
+  // Handle namespace change if present
+  const nsEl = document.getElementById('namespace');
+  if (nsEl) {
+    nsEl.addEventListener('change', function() {
+      dashboardConfig.namespace = this.value;
+      refreshDashboard();
+    });
+  }
   
-  // Handle refresh interval change in settings
-  document.getElementById('refreshInterval').addEventListener('change', function() {
-    dashboardConfig.refreshInterval = parseInt(this.value) * 1000;
-    startAutoRefresh();
-  });
+  // Handle refresh interval change in settings if present
+  const refreshEl = document.getElementById('refreshInterval');
+  if (refreshEl) {
+    refreshEl.addEventListener('change', function() {
+      dashboardConfig.refreshInterval = parseInt(this.value) * 1000;
+      startAutoRefresh();
+    });
+  }
   
-  // Handle settings form submission with Enter key
-  document.getElementById('settingsForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    saveSettings();
-  });
+  // Handle settings form submission with Enter key if present
+  const settingsEl = document.getElementById('settingsForm');
+  if (settingsEl) {
+    settingsEl.addEventListener('submit', function(e) {
+      e.preventDefault();
+      saveSettings();
+    });
+  }
   
   // Add keyboard shortcuts
   document.addEventListener('keydown', function(e) {

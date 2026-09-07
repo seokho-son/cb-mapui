@@ -648,6 +648,24 @@ function buildElements(centralData) {
 // CYTOSCAPE STYLES
 // ============================================================================
 
+// Helper to calculate node dimensions without triggering Cytoscape 'label' deprecation warnings
+function calcLabelWidth(node) {
+  const text = node.data('label') || '';
+  const lines = String(text).split('\n');
+  let maxLen = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].length > maxLen) maxLen = lines[i].length;
+  }
+  return Math.max(Math.round(maxLen * 10 + 24), 70);
+}
+
+function calcLabelHeight(node) {
+  const text = node.data('label') || '';
+  const lines = String(text).split('\n');
+  const lineCount = Math.max(lines.length, 1);
+  return Math.max(Math.round(lineCount * 22 + 16), 36);
+}
+
 const NET_STYLE = [
   {
     selector: 'node[type="conn"]',
@@ -690,7 +708,7 @@ const NET_STYLE = [
   {
     selector: 'node[type="vm"]:childless',
     style: {
-      shape: 'round-rectangle', width: 'label', height: 'label',
+      shape: 'round-rectangle', width: calcLabelWidth, height: calcLabelHeight,
       'background-color': 'data(statusColor)', 'background-opacity': 0.9,
       label: 'data(label)', 'text-wrap': 'wrap', 'text-valign': 'center', 'text-halign': 'center',
       'font-size': 16, 'font-family': 'monospace', 'font-weight': 'bold', color: '#fff',
@@ -747,7 +765,7 @@ const NET_STYLE = [
   {
     selector: 'node[type="rules"]',
     style: {
-      shape: 'round-rectangle', width: 'label', height: 'label',
+      shape: 'round-rectangle', width: calcLabelWidth, height: calcLabelHeight,
       'background-color': '#ffffff', 'border-width': 1.5, 'border-color': '#dc3545',
       label: 'data(label)', 'text-wrap': 'wrap', 'text-valign': 'center', 'text-halign': 'center',
       'font-size': 15, 'font-family': 'monospace', 'font-weight': 'bold', color: '#8b1a26', padding: 8,
@@ -791,7 +809,7 @@ const NET_STYLE = [
   {
     selector: 'node[type="cbtb"]',
     style: {
-      shape: 'round-rectangle', width: 'label', height: 50,
+      shape: 'round-rectangle', width: calcLabelWidth, height: 50,
       'background-color': NET_COLORS.cbtb, label: 'data(label)',
       'text-valign': 'center', 'text-halign': 'center', 'font-size': 18,
       'font-weight': 'bold', color: '#fff', 'text-outline-color': '#000', 'text-outline-width': 1.5, padding: 12,
@@ -811,7 +829,7 @@ const NET_STYLE = [
   {
     selector: 'node[type="nlb"]',
     style: {
-      shape: 'round-rectangle', width: 'label', height: 'label',
+      shape: 'round-rectangle', width: calcLabelWidth, height: calcLabelHeight,
       'background-color': '#7c3aed', 'background-opacity': 0.92,
       'border-width': 1.5, 'border-color': '#c4b5fd',
       label: 'data(label)', 'text-wrap': 'wrap', 'text-valign': 'center', 'text-halign': 'center',
@@ -831,7 +849,7 @@ const NET_STYLE = [
   {
     selector: 'node[type="mcnlb"]',
     style: {
-      shape: 'round-hexagon', width: 'label', height: 'label',
+      shape: 'round-hexagon', width: calcLabelWidth, height: calcLabelHeight,
       'background-color': '#3b1e6e', 'background-opacity': 0.96,
       'border-width': 2.5, 'border-color': '#8257e6',
       label: 'data(label)', 'text-wrap': 'wrap', 'text-valign': 'center', 'text-halign': 'center',
@@ -852,7 +870,7 @@ const NET_STYLE = [
   {
     selector: 'node[type="vpn"]',
     style: {
-      shape: 'cut-rectangle', width: 'label', height: 'label',
+      shape: 'cut-rectangle', width: calcLabelWidth, height: calcLabelHeight,
       'background-color': '#111827', 'background-opacity': 0.97,
       'border-width': 2, 'border-color': '#5eead4', 'border-style': 'dashed',
       label: 'data(label)', 'text-wrap': 'wrap', 'text-valign': 'center', 'text-halign': 'center',
@@ -917,7 +935,6 @@ function initNetworkGraph() {
     container,
     elements: [],
     style: NET_STYLE,
-    wheelSensitivity: 0.2,
   });
   netCy.on('tap', 'node', (evt) => showDetail(evt.target));
   // Right-click a node → bastion management menu (set / unset).
