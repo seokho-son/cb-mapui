@@ -1,7 +1,6 @@
 {
   "name": "cb-mapui",
   "dependencies": {
-    "@parcel/watcher": "^2.5.1",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "axios": "^1.18.0",
@@ -15,22 +14,25 @@
     "json-formatter-js": "^2.3.4",
     "jszip": "^3.10.1",
     "ol": "^10.5.0",
-    "parcel": "^2.16.4",
     "process": "^0.11.10",
     "punycode": "^2.3.1",
     "querystring-es3": "^0.2.1",
     "stream-browserify": "^3.0.0",
     "stream-http": "^3.2.0",
     "sweetalert2": "^11.22.4",
-    "url": "^0.11.0"
+    "url": "^0.11.0",
+    "vite": "^5.4.21",
+    "vite-plugin-node-polyfills": "^0.22.0"
   },
   "devDependencies": {
     "https-browserify": "^1.0.0",
     "util": "^0.12.5"
   },
   "scripts": {
-    "start": "parcel -p 1324 --host 0.0.0.0 index.html",
-    "build": "echo 'Removing temporal cache files' && rm -rf dist/* .parcel-cache/* && mkdir -p dist/img/ && cp -r img/ dist/ && cp redoc-swagger.html dist/ && cp swagger.html dist/ && cp scalar.html dist/ && cp dashboard.html dist/ && cp dashboard.js dist/ && parcel build --public-url . index.html"
+    "dev": "vite --host 0.0.0.0 --port 1324",
+    "start": "vite --host 0.0.0.0 --port 1324",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 1324"
   },
   "description": "MapUI Client for CB-Tumblebug (display multi-cloud infra service)",
   "repository": {

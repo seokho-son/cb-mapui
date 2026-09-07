@@ -19,6 +19,8 @@ RUN --mount=type=cache,target=/root/.npm \
 # Copy only necessary source files
 COPY ./index.html ./
 COPY ./index.js ./
+COPY ./vite.config.js ./
+COPY ./src ./src
 COPY ./runtime-params.json ./
 COPY ./resource-graph.js ./
 COPY ./network-graph.js ./
@@ -30,9 +32,8 @@ COPY ./swagger.html ./
 COPY ./scalar.html ./
 COPY ./img ./img
 
-# Build with Parcel cache
-RUN --mount=type=cache,target=/app/.parcel-cache \
-    npm run build || true
+# Build with Vite
+RUN npm run build
 
 # Ensure dist directory exists (even if build failed)
 RUN mkdir -p dist
@@ -51,6 +52,8 @@ WORKDIR /app
 # Copy necessary files from builder
 COPY --from=builder /app/index.html ./
 COPY --from=builder /app/index.js ./
+COPY --from=builder /app/vite.config.js ./
+COPY --from=builder /app/src ./src
 COPY --from=builder /app/runtime-params.json ./
 COPY --from=builder /app/resource-graph.js ./
 COPY --from=builder /app/network-graph.js ./
@@ -74,5 +77,5 @@ EXPOSE 1324
 
 COPY ./docker-entrypoint.sh ./
 
-# Entrypoint collects MAPUI_PARAM_* envs into runtime-params.json, then starts parcel
+# Entrypoint collects MAPUI_PARAM_* envs into runtime-params.json, then starts vite
 ENTRYPOINT ["sh", "./docker-entrypoint.sh"]
