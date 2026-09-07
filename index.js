@@ -1411,10 +1411,6 @@ function removeSpinnerTask(taskId) {
 }
 
 // Display Icon for Cloud locations
-// npm i -s csv-parser
-const http = require("http");
-const csv = require("csv-parser");
-
 const csvPath =
   "https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/assets/cloudlocation.csv";
 var cloudLocation = [];
@@ -1431,44 +1427,55 @@ var geoResourceLocation = {
 var cspPoints = {};
 var geoCspPoints = {};
 
-function displayCSPListOn() {
-  if (cspListDisplayEnabled.checked) {
+async function displayCSPListOn() {
+  const checkbox = typeof cspListDisplayEnabled !== 'undefined' ? cspListDisplayEnabled : document.getElementById('cspListDisplayEnabled');
+  if (checkbox && checkbox.checked) {
     cloudLocation = [];
-    http.get(csvPath, (response) => {
-      response
-        .pipe(csv())
-        .on("data", (chunk) => cloudLocation.push(chunk))
-        .on("end", () => {
-          debugLog.resource('Loaded cloud location data:', cloudLocation.length, 'regions');
+    try {
+      const response = await fetch(csvPath);
+      if (!response.ok) {
+        debugLog.resource('Failed to load cloud location CSV:', response.status);
+        return;
+      }
+      const text = await response.text();
+      const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+      if (lines.length > 1) {
+        const headers = lines[0].split(",").map(h => h.trim());
+        for (let idx = 1; idx < lines.length; idx++) {
+          const values = lines[idx].split(",").map(v => v.trim());
+          const row = {};
+          headers.forEach((h, i) => { row[h] = values[i]; });
+          cloudLocation.push(row);
+        }
+      }
+      debugLog.resource('Loaded cloud location data:', cloudLocation.length, 'regions');
+      debugLog.mapOp("[Complete] Display Known Cloud Regions: " + cloudLocation.length);
 
-          debugLog.mapOp(
-            "[Complete] Display Known Cloud Regions: " +
-            cloudLocation.length
-          );
+      cloudLocation.forEach((location) => {
+        const { CloudType, Longitude, Latitude } = location;
+        if (!CloudType || !Longitude || !Latitude) return;
+        const cloudTypeLower = CloudType.toLowerCase();
+        if (!cspPoints[cloudTypeLower]) {
+          cspPoints[cloudTypeLower] = [];
+        }
+        if (!geoCspPoints[cloudTypeLower]) {
+          geoCspPoints[cloudTypeLower] = [];
+        }
 
-          cloudLocation.forEach((location) => {
-            const { CloudType, Longitude, Latitude } = location;
-            const cloudTypeLower = CloudType.toLowerCase();
-            if (!cspPoints[cloudTypeLower]) {
-              cspPoints[cloudTypeLower] = [];
-            }
-            if (!geoCspPoints[cloudTypeLower]) {
-              geoCspPoints[cloudTypeLower] = [];
-            }
+        cspPoints[cloudTypeLower].push([
+          parseFloat(Longitude),
+          parseFloat(Latitude),
+        ]);
+      });
 
-            cspPoints[cloudTypeLower].push([
-              parseFloat(Longitude),
-              parseFloat(Latitude),
-            ]);
-          });
-
-          Object.keys(cspPoints).forEach((csp) => {
-            if (cspPoints[csp].length > 0) {
-              geoCspPoints[csp][0] = new MultiPoint(cspPoints[csp]);
-            }
-          });
-        });
-    });
+      Object.keys(cspPoints).forEach((csp) => {
+        if (cspPoints[csp].length > 0) {
+          geoCspPoints[csp][0] = new MultiPoint(cspPoints[csp]);
+        }
+      });
+    } catch (err) {
+      debugLog.resource('Error loading cloud location CSV:', err);
+    }
   } else {
     Object.keys(cspPoints).forEach((csp) => {
       cspPoints[csp] = [];
