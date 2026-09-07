@@ -10,7 +10,7 @@
     "cytoscape-fcose": "^2.2.0",
     "events": "^3.3.0",
     "http": "^0.0.1-security",
-    "jquery": "^3.7.1",
+    "jquery": "^4.0.0",
     "json-formatter-js": "^2.3.4",
     "jszip": "^3.10.1",
     "ol": "^10.5.0",
