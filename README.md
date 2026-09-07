@@ -3,7 +3,7 @@
 
 [![License](https://img.shields.io/github/license/cloud-barista/cb-mapui?color=blue)](https://github.com/cloud-barista/cb-mapui/blob/main/LICENSE)
 [![Release Version](https://img.shields.io/github/v/release/cloud-barista/cb-mapui?color=blue)](https://github.com/cloud-barista/cb-mapui/releases/latest)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/cloud-barista/cb-mapui/docker-image.yml)](https://github.com/cloud-barista/cb-mapui/actions)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/cloud-barista/cb-mapui/publish-multi-arch-container-images.yaml)](https://github.com/cloud-barista/cb-mapui/actions/workflows/publish-multi-arch-container-images.yaml)
 [![Docker Pulls](https://img.shields.io/docker/pulls/cloudbaristaorg/cb-mapui)](https://hub.docker.com/r/cloudbaristaorg/cb-mapui)
 [![Vite](https://img.shields.io/badge/bundler-Vite%205-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 
@@ -13,28 +13,29 @@
 
 **CB-MapUI** is an **interactive visual management console** for [CB-Tumblebug](https://github.com/cloud-barista/cb-tumblebug) that provides intuitive geographic map-based views, topology graphs, and dashboard-style interfaces for orchestrating multi-cloud infrastructures. As an official user-facing frontend of the Cloud-Barista project, CB-MapUI transforms complex multi-cloud operations into visual, point-and-click interactions across heterogeneous cloud service providers (AWS, Azure, GCP, Alibaba Cloud, Tencent Cloud, OpenStack, and more).
 
-```
- ┌────────────────────────────────────────────────────────────────────────┐
- │                     CB-MapUI Visual Console                            │
- ├───────────────────┬─────────────────────┬──────────────────────────────┤
- │  🗺️ Map View      │  🕸️ Topology Graph  │  📊 Multi-Cloud Dashboard    │
- │  (OpenLayers 10)  │  (Cytoscape.js)     │  (DataTables & Chart.js)     │
- └─────────┬─────────┴──────────┬──────────┴──────────────┬───────────────┘
-           │                    │                         │
-           ▼                    ▼                         ▼
- ┌────────────────────────────────────────────────────────────────────────┐
- │                 Unified Gateway / Reverse Proxy (:8080)               │
- └──────────────────────────────────┬─────────────────────────────────────┘
-                                    ▼
- ┌────────────────────────────────────────────────────────────────────────┐
- │               CB-Tumblebug REST API Backend (:1323)                    │
- └──────────────────────────────────┬─────────────────────────────────────┘
-                                    ▼
- ┌────────────────────────────────────────────────────────────────────────┐
- │                 CB-Spider Multi-Cloud Driver Layer                     │
- └───────┬──────────────┬──────────────┬──────────────┬─────────────┬─────┘
-         ▼              ▼              ▼              ▼             ▼
-       [AWS]         [Azure]         [GCP]        [Alibaba]     [Others]
+```mermaid
+flowchart TD
+    subgraph UI ["CB-MapUI (Visual Frontend)"]
+        direction LR
+        MV["🗺️ Map View<br/>(OpenLayers)"]
+        TG["🕸️ Topology Graph<br/>(Cytoscape.js)"]
+        DB["📊 Multi-Cloud Dashboard<br/>(Charts & DataTables)"]
+    end
+
+    TB["⚙️ CB-Tumblebug (Multi-Cloud Orchestrator)"]
+
+    subgraph Clouds ["Integrated Cloud Service Providers"]
+        direction LR
+        AWS["AWS"]
+        AZ["Azure"]
+        GCP["GCP"]
+        ALI["Alibaba Cloud"]
+        Tencent["Tencent Cloud"]
+        ETC["OpenStack / Others..."]
+    end
+
+    UI ==>|"REST API (Direct :1323 or Ingress)"| TB
+    TB ==>|"Multi-Cloud Control"| Clouds
 ```
 
 ### 🎯 Key Features
@@ -314,22 +315,18 @@ docker run -d -p 1324:1324 \
 | **HTTP Client** | **Axios** (with BasicAuth and error handling) |
 | **API Docs** | **Swagger UI**, **ReDoc**, **Scalar** |
 
-### High-Level System Architecture
+### Communication & Access Paths
 
-```
-User Web Browser
-  │
-  ├──► http://localhost:8080/ (MapUI Static Files served via Vite / Nginx)
-  │
-  ├──► http://localhost:8080/tumblebug/* (Reverse Proxied to CB-Tumblebug API)
-  │      │
-  │      ├──► /ns/{nsId}/infra              # Multi-Cloud Infrastructure management
-  │      ├──► /ns/{nsId}/k8sCluster         # Kubernetes Cluster management
-  │      ├──► /ns/{nsId}/resources/*        # vNet, Spec, Image, SecurityGroup, KeyPair
-  │      └──► /ns/{nsId}/cmd/infra/{id}     # Remote Command Execution
-  │
-  └──► http://localhost:8080/mcp (CB-Tumblebug MCP Server)
-```
+CB-MapUI supports two flexible connection topologies:
+
+- **1. Direct Mode (Standard Docker Compose / Local Dev)**:
+  - **Frontend UI**: Served directly on `http://localhost:1324`
+  - **Backend API**: Directly calls CB-Tumblebug REST API on `http://localhost:1323/tumblebug/api`
+- **2. Unified Gateway Mode (Kubernetes / Kind Ingress)**:
+  - **Single Entrypoint**: A reverse proxy (Envoy / AgentGateway) routes traffic on `http://localhost:8080`:
+    - `/` ➔ CB-MapUI Web Console
+    - `/tumblebug/*` ➔ CB-Tumblebug REST API
+    - `/mcp` ➔ CB-Tumblebug Model Context Protocol (MCP) Server
 
 ---
 
