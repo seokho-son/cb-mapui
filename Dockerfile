@@ -2,7 +2,7 @@
 ## Stage 1 - Build static files
 #############################################################
 
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ RUN --mount=type=cache,target=/root/.npm \
     npm config set fetch-retries 5 \
     && npm config set fetch-retry-mintimeout 20000 \
     && npm config set fetch-retry-maxtimeout 120000 \
-    && npm ci --silent --no-audit --prefer-offline
+    && npm ci --no-audit --prefer-offline
 
 # Copy only necessary source files
 COPY ./index.html ./
@@ -45,7 +45,7 @@ RUN npm prune --production
 ## Stage 2 - Production Runtime
 #############################################################
 
-FROM node:18-alpine AS prod
+FROM node:20-alpine AS prod
 
 WORKDIR /app
 
