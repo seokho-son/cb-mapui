@@ -162,9 +162,30 @@ function getTargetActionColor(targetAction) {
 var infraRenderMap = new globalThis.Map();
 
 // Constants for positioning locationless Infras (preparing, prepared, failed, empty states)
-const LOCATIONLESS_Infra_LEFT_OFFSET = 0.12;    // 12% offset from left edge to prevent name clipping
-const LOCATIONLESS_Infra_TOP_OFFSET = 0.03;     // 3% offset from top edge
-const LOCATIONLESS_Infra_VERTICAL_SPACING = 0.05; // 5% of map height between stacked Infras
+// Infra name/status label placement (all in screen pixels, so the clearance
+// from the Node icons is the same at every zoom level).
+// Located Infra: the label block sits BELOW the bottommost Node, centred on the
+// mean Node x. The VM icon's lower half (~19px) and the status badge (~18px)
+// end just under the icon centre, so 24px clears them with a margin. When a
+// NodeGroup label already hangs under that same Node, the block moves down by
+// the chip height so the two never overlap.
+const INFRA_LABEL_CLEARANCE_BELOW_PX = 24;
+const INFRA_LABEL_LINE_GAP_PX = 6;
+// Preferred placement is the centre of the Node cluster (mean x / mean y). It
+// is used only when no Node icon would be covered; otherwise the block falls
+// back to hanging below the bottommost Node. Icon box around a Node centre
+// (px): VM icon ±19, provider icon up to 27 above, status badge to 24 below.
+const NODE_ICON_HALF_W_PX = 19;
+const NODE_ICON_UP_PX = 27;
+const NODE_ICON_DOWN_PX = 24;
+const INFRA_LABEL_CENTER_MARGIN_PX = 4;
+// Infra without Node locations (Preparing/Prepared/Failed/Empty): docked in a
+// pixel-anchored list at the top-left of the map, to the right of the
+// OpenLayers zoom control (~50px wide), each with a placeholder marker.
+const LOCATIONLESS_DOCK_LEFT_PX = 64;
+const LOCATIONLESS_DOCK_TOP_PX = 22;
+const LOCATIONLESS_DOCK_GAP_PX = 14;
+const LOCATIONLESS_MARKER_RADIUS_PX = 9;
 
 var k8sName = new Array();
 var k8sStatus = new Array();
@@ -179,6 +200,62 @@ var infraClusterColors = new globalThis.Map();   // Map<infraId, Map<clusterId, 
 
 // Infra NodeGroup visualization storage
 var infraNodeGroupPolygons = new globalThis.Map(); // Map<infraId, Array<Polygon>>
+// Vertical gap (px) from a Node icon's center to the top of its NodeGroup label:
+// clears the icon's lower half (~19px) and the status badge (~18px) with margin.
+const NODEGROUP_LABEL_OFFSET_PX = 24;
+const NODEGROUP_LABEL_FONT = 'bold 13px sans-serif';
+const NODEGROUP_LABEL_FONT_PX = 13;
+const NODEGROUP_CHIP_PAD_X = 6;
+const NODEGROUP_CHIP_PAD_Y = 3;
+// Chip background behind each NodeGroup label. The immediate renderer used in
+// drawObjects ignores Text.backgroundFill/padding, so the chip is a cached
+// canvas drawn once per label text and handed to OpenLayers as an Icon.
+const nodeGroupChipCache = new globalThis.Map(); // "text|r,g,b" -> Icon
+function getNodeGroupLabelChip(text, borderRgb) {
+  const key = text + '|' + borderRgb.join(',');
+  let icon = nodeGroupChipCache.get(key);
+  if (icon) return icon;
+  if (nodeGroupChipCache.size > 500) nodeGroupChipCache.clear();
+
+  const ratio = 2; // render at 2x and scale down for crisp edges on HiDPI
+  const border = 1.5, radius = 6;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.font = NODEGROUP_LABEL_FONT;
+  const w = Math.ceil(ctx.measureText(text).width) + NODEGROUP_CHIP_PAD_X * 2;
+  const h = NODEGROUP_LABEL_FONT_PX + NODEGROUP_CHIP_PAD_Y * 2 + 2;
+  canvas.width = (w + border * 2) * ratio;
+  canvas.height = (h + border * 2) * ratio;
+  ctx.scale(ratio, ratio);
+  ctx.translate(border, border);
+  ctx.beginPath();
+  ctx.moveTo(radius, 0);
+  ctx.lineTo(w - radius, 0);
+  ctx.arcTo(w, 0, w, radius, radius);
+  ctx.lineTo(w, h - radius);
+  ctx.arcTo(w, h, w - radius, h, radius);
+  ctx.lineTo(radius, h);
+  ctx.arcTo(0, h, 0, h - radius, radius);
+  ctx.lineTo(0, radius);
+  ctx.arcTo(0, 0, radius, 0, radius);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  ctx.fill();
+  ctx.lineWidth = border;
+  ctx.strokeStyle = `rgba(${borderRgb[0]},${borderRgb[1]},${borderRgb[2]},0.9)`;
+  ctx.stroke();
+
+  icon = new Icon({
+    img: canvas,
+    scale: 1 / ratio,
+    anchor: [0.5, 0],          // top-centre of the chip sits on the anchor point...
+    anchorXUnits: 'fraction',
+    anchorYUnits: 'fraction',
+    displacement: [0, -NODEGROUP_LABEL_OFFSET_PX], // ...then shifted down below the Node icon
+  });
+  nodeGroupChipCache.set(key, icon);
+  return icon;
+}
 var infraNodeGroupNames = new globalThis.Map();    // Map<infraId, Array<nodeGroupId>>
 var infraNodeGroupColors = new globalThis.Map();   // Map<infraId, Map<nodeGroupId, color>>
 
@@ -1216,43 +1293,27 @@ function findNearestInfra(clickCoord) {
   
   const clickPixel = map.getPixelFromCoordinate(clickCoord);
   
-  // Search through all Infra entries in the render map
+  // Search through all Infra entries in the render map. Distance is measured to
+  // the centre of the label block exactly as drawObjects lays it out.
   for (const [infraId, data] of infraRenderMap) {
-    if (data.geometry && data.name) {
-      let infraCoord;
-      
-      if (data.geometry.getType() === 'Point') {
-        infraCoord = data.geometry.getCoordinates();
-      } else if (data.geometry.getType() === 'Polygon') {
-        // Use cached interior point to match OpenLayers text rendering anchor
-        infraCoord = data.anchorCoord || data.geometry.getInteriorPoint().getCoordinates();
-      }
-      
-      if (infraCoord) {
-        const infraPixel = map.getPixelFromCoordinate(infraCoord);
-        
-        const nameLines = splitInfraNameToLines(data.name);
-        const baseScale = changeSizeByName(data.name + data.status) + 0.1;
-        const baseOffsetY = 32 * changeSizeByName(data.name + data.status);
-        const lineHeight = 12 * baseScale;
-        
-        const textCenterY = infraPixel[1] + baseOffsetY + (nameLines.length * lineHeight / 2);
-        const textPixel = [infraPixel[0], textCenterY];
-        
-        const dx = clickPixel[0] - textPixel[0];
-        const dy = clickPixel[1] - textPixel[1];
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        if (distance < minDistance) {
-          minDistance = distance;
-          nearestInfra = {
-            name: data.name,
-            status: data.status,
-            id: infraId,
-            distance: distance
-          };
-        }
-      }
+    if (!data.name) continue;
+    const layout = getInfraLabelLayout(data);
+    if (!layout) continue;
+    const anchorPixel = map.getPixelFromCoordinate(layout.anchor);
+    if (!anchorPixel) continue;
+    const textPixel = [anchorPixel[0] + layout.center[0], anchorPixel[1] + layout.center[1]];
+    const dx = clickPixel[0] - textPixel[0];
+    const dy = clickPixel[1] - textPixel[1];
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearestInfra = {
+        name: data.name,
+        status: data.status,
+        id: infraId,
+        distance: distance
+      };
     }
   }
   
@@ -2798,6 +2859,166 @@ function makePolyArray(infraEntry, nodePoints) {
   // Cache interior point for fast lookup in findNearestInfra (avoids recomputing on every pointermove)
   const ip = infraEntry.geometry.getInteriorPoint().getCoordinates();
   infraEntry.anchorCoord = [ip[0], ip[1]];
+}
+
+// Label anchor for a located Infra: mean x of its Nodes, y of the bottommost
+// Node. Computed once from the render points (not from the hull polygon), so it
+// does not move with the zoom-dependent geometry simplification the immediate
+// renderer applies before it picks a polygon's interior point.
+function computeInfraLabelAnchor(nodePoints) {
+  if (!nodePoints || nodePoints.length === 0) return null;
+  let sumX = 0, minY = Infinity;
+  for (const p of nodePoints) {
+    sumX += p[0];
+    if (p[1] < minY) minY = p[1];
+  }
+  return [sumX / nodePoints.length, minY];
+}
+
+// Centre of the Node cluster (mean x / mean y) for the preferred label spot.
+function computeInfraLabelCentroid(nodePoints) {
+  if (!nodePoints || nodePoints.length === 0) return null;
+  let sumX = 0, sumY = 0;
+  for (const p of nodePoints) { sumX += p[0]; sumY += p[1]; }
+  return [sumX / nodePoints.length, sumY / nodePoints.length];
+}
+
+// Text width in px for the given font, cached (called every frame).
+const textWidthCache = new globalThis.Map();
+let textMeasureCtx = null;
+function measureTextWidth(text, font) {
+  const key = font + '|' + text;
+  let w = textWidthCache.get(key);
+  if (w !== undefined) return w;
+  if (textWidthCache.size > 2000) textWidthCache.clear();
+  if (!textMeasureCtx) textMeasureCtx = document.createElement('canvas').getContext('2d');
+  textMeasureCtx.font = font;
+  w = textMeasureCtx.measureText(text).width;
+  textWidthCache.set(key, w);
+  return w;
+}
+
+// True when a label block of blockW x blockH px centred on `centroid` would
+// cover any Node icon of this Infra (all in screen pixels, current view).
+function infraLabelCoversNodeIcon(data, centroid, blockW, blockH) {
+  const pts = data.geometryPoints && data.geometryPoints.nodePoints;
+  if (!pts || pts.length === 0) return true;
+  const c = map.getPixelFromCoordinate(centroid);
+  if (!c) return true;
+  const m = INFRA_LABEL_CENTER_MARGIN_PX;
+  const l = c[0] - blockW / 2 - m, r = c[0] + blockW / 2 + m;
+  const t = c[1] - blockH / 2 - m, b = c[1] + blockH / 2 + m;
+  // With NodeGroup labels on, a chip may hang under any Node: treat that
+  // strip as part of the icon so the centred block never covers a chip.
+  const down = showInfraNodeGroupLabels
+    ? NODEGROUP_LABEL_OFFSET_PX + NODEGROUP_LABEL_FONT_PX + NODEGROUP_CHIP_PAD_Y * 2 + 5
+    : NODE_ICON_DOWN_PX;
+  for (const p of pts) {
+    const px = map.getPixelFromCoordinate(p);
+    if (!px) continue;
+    if (px[0] + NODE_ICON_HALF_W_PX > l && px[0] - NODE_ICON_HALF_W_PX < r &&
+        px[1] + down > t && px[1] - NODE_ICON_UP_PX < b) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Extra downward clearance for an Infra label when a NodeGroup label (drawn
+// under each group's first Node) sits on the same bottom row as the anchor.
+function nodeGroupLabelClearance(data, anchor) {
+  if (!showInfraNodeGroupLabels || !data || !data.id) return 0;
+  const polys = infraNodeGroupPolygons.get(data.id);
+  if (!Array.isArray(polys)) return 0;
+  const sameRow = polys.some((poly) => {
+    const a = poly && poly.get('labelAnchor');
+    return a && Math.abs(a[1] - anchor[1]) < 1e-9;
+  });
+  if (!sameRow) return 0;
+  // chip: border + padding + font + padding + border, then a small gap
+  return NODEGROUP_LABEL_FONT_PX + NODEGROUP_CHIP_PAD_Y * 2 + 2 + 3 + INFRA_LABEL_LINE_GAP_PX;
+}
+
+// Shared label geometry for an Infra so drawing (drawObjects) and hit-testing
+// (findNearestInfra) agree. Offsets are screen pixels relative to `anchor`.
+//  - located: block centred on the Node cluster's centroid when that covers
+//    no Node icon; otherwise stacked downward below the bottommost Node
+//    (reading order top-down: the Node icons, then name lines, then status)
+//  - pinned locationless: stacked downward below the placeholder marker
+//  - docked (no location): block laid out downward to the right of the
+//    placeholder marker, left-aligned so long names never clip at the edge
+function getInfraLabelLayout(data) {
+  if (!data || !data.name) return null;
+  let anchor = null;
+  if (data.isLocationless) {
+    anchor = data.geometry ? data.geometry.getCoordinates() : null;
+  } else {
+    anchor = data.labelAnchor || data.anchorCoord ||
+      (data.geometry && data.geometry.getType() === 'Polygon'
+        ? data.geometry.getInteriorPoint().getCoordinates() : null);
+  }
+  if (!anchor) return null;
+
+  const nameLines = splitInfraNameToLines(data.name);
+  const nameScale = changeSizeByName(data.name + data.status) + 0.1;
+  const statusScale = changeSizeStatus(data.name + data.status);
+  const lineHeight = 12 * nameScale;
+  const statusHeight = 10 * statusScale;
+  const n = nameLines.length;
+
+  if (data.isLocationless && data.isDocked) {
+    const offsetX = LOCATIONLESS_MARKER_RADIUS_PX + 10;
+    const name = nameLines.map((text, k) => ({ text, offsetX, offsetY: k * lineHeight }));
+    const statusY = n * lineHeight + INFRA_LABEL_LINE_GAP_PX / 2;
+    const top = -Math.max(lineHeight / 2, LOCATIONLESS_MARKER_RADIUS_PX);
+    const bottom = statusY + statusHeight / 2;
+    return {
+      anchor, nameScale, statusScale,
+      textAlign: 'left', textBaseline: 'middle',
+      name, status: { offsetX, offsetY: statusY },
+      center: [offsetX + 40, (top + bottom) / 2],
+      top, height: bottom - top,
+    };
+  }
+
+  const blockH = n * lineHeight + INFRA_LABEL_LINE_GAP_PX + statusHeight;
+
+  // Preferred: centred on the Node cluster, if that covers no Node icon.
+  if (!data.isLocationless && data.labelCentroid) {
+    const nameFont = `bold ${10 * nameScale}px sans-serif`;
+    const statusFont = `bold ${10 * statusScale}px sans-serif`;
+    let blockW = measureTextWidth(data.status, statusFont);
+    for (const line of nameLines) blockW = Math.max(blockW, measureTextWidth(line, nameFont));
+    if (!infraLabelCoversNodeIcon(data, data.labelCentroid, blockW, blockH)) {
+      const top = -blockH / 2;
+      const name = nameLines.map((text, k) => ({ text, offsetX: 0, offsetY: top + k * lineHeight }));
+      const statusTop = top + n * lineHeight + INFRA_LABEL_LINE_GAP_PX;
+      return {
+        anchor: data.labelCentroid, nameScale, statusScale,
+        textAlign: 'center', textBaseline: 'top',
+        name, status: { offsetX: 0, offsetY: statusTop },
+        center: [0, 0],
+        top, height: blockH,
+      };
+    }
+  }
+
+  // Fallback: hang below the bottommost Node (or the placeholder marker).
+  const clearance = data.isLocationless
+    ? LOCATIONLESS_MARKER_RADIUS_PX + INFRA_LABEL_LINE_GAP_PX
+    : INFRA_LABEL_CLEARANCE_BELOW_PX + nodeGroupLabelClearance(data, anchor);
+  const name = nameLines.map((text, k) => ({
+    text, offsetX: 0, offsetY: clearance + k * lineHeight,
+  }));
+  const statusTop = clearance + n * lineHeight + INFRA_LABEL_LINE_GAP_PX;
+  const bottom = statusTop + statusHeight;
+  return {
+    anchor, nameScale, statusScale,
+    textAlign: 'center', textBaseline: 'top',
+    name, status: { offsetX: 0, offsetY: statusTop },
+    center: [0, (clearance + bottom) / 2],
+    top: clearance, height: bottom - clearance,
+  };
 }
 
 function cross(a, b, o) {
@@ -4619,47 +4840,28 @@ function displayInfraDynamicResultGui(data) {
 }
 
 // Handle Infra without Nodes (preparing, prepared, empty states)
+// The entry is docked in the top-left pixel list (position assigned every frame
+// in drawObjects) unless the Infra carries a `location: "lat,lon"` label, in
+// which case it is pinned to that geographic point like a located Infra.
 function handleInfraWithoutNodes(infraItem) {
-  // Get current map extent to position Infras in upper-left area
-  var mapView = map.getView();
-  var mapExtent = mapView.calculateExtent(map.getSize());
-  
-  var leftBound = mapExtent[0];
-  var rightBound = mapExtent[2];
-  var bottomBound = mapExtent[1];
-  var topBound = mapExtent[3];
-  
-  var defaultLon = leftBound + (rightBound - leftBound) * LOCATIONLESS_Infra_LEFT_OFFSET;
-  var defaultLat = topBound - (topBound - bottomBound) * LOCATIONLESS_Infra_TOP_OFFSET;
-
-  // If Infra has label with location info, try to extract it (optional override)
-  if (infraItem.label && typeof infraItem.label === 'object') {
-    if (infraItem.label.location) {
-      var locParts = infraItem.label.location.split(',');
-      if (locParts.length === 2) {
-        var labelLat = parseFloat(locParts[0].trim());
-        var labelLon = parseFloat(locParts[1].trim());
-        if (!isNaN(labelLat) && !isNaN(labelLon)) {
-          defaultLat = labelLat;
-          defaultLon = labelLon;
-        }
+  var pinned = null;
+  if (infraItem.label && typeof infraItem.label === 'object' && infraItem.label.location) {
+    var locParts = String(infraItem.label.location).split(',');
+    if (locParts.length === 2) {
+      var labelLat = parseFloat(locParts[0].trim());
+      var labelLon = parseFloat(locParts[1].trim());
+      if (!isNaN(labelLat) && !isNaN(labelLon)) {
+        pinned = [labelLon, labelLat];
       }
     }
   }
   
-  // Count existing locationless Infras for vertical stacking
-  var verticalSpacing = (topBound - bottomBound) * LOCATIONLESS_Infra_VERTICAL_SPACING;
-  var preparingInfraCount = 0;
-  for (const [, data] of infraRenderMap) {
-    if (data.isLocationless) {
-      preparingInfraCount++;
-    }
-  }
-  defaultLat -= verticalSpacing * preparingInfraCount;
-  
   // Keep the original Infra name/id (do NOT relabel "-nlb" to "NLB") so a Global
   // NLB host stays identifiable and operable as its own Infra on the map.
   var newName = infraItem.name;
+
+  // Docked entries start off-screen; drawObjects places them before drawing.
+  var initial = pinned || [0, 0];
 
   // Create Infra render entry and store in map
   var infraEntry = {
@@ -4668,10 +4870,11 @@ function handleInfraWithoutNodes(infraItem) {
     status: infraItem.status,
     targetAction: (infraItem.targetAction && infraItem.targetAction !== "None" && infraItem.targetAction !== "") 
       ? infraItem.targetAction : null,
-    geometry: new Point([defaultLon, defaultLat]),
+    geometry: new Point(initial),
     geometryPoints: null,
-    geo: new Point([defaultLon, defaultLat]),
-    isLocationless: true
+    geo: new Point(initial),
+    isLocationless: true,
+    isDocked: !pinned
   };
   infraRenderMap.set(infraItem.id, infraEntry);
 }
@@ -5182,6 +5385,10 @@ function getInfra() {
               // item.node order aligned with nodeProviders/nodeStatuses.
               const hullGeo = convexHull([...vmGeo]);
               makePolyArray(infraEntry, hullGeo);
+              // Name/status label anchor: below the bottommost Node, centred on the
+              // mean Node x (see getInfraLabelLayout).
+              infraEntry.labelAnchor = computeInfraLabelAnchor(vmGeo);
+              infraEntry.labelCentroid = computeInfraLabelCentroid(vmGeo);
 
               // Process cluster polygons (if cluster data exists)
               if (item.cluster && Array.isArray(item.cluster) && item.cluster.length > 0) {
@@ -5266,6 +5473,11 @@ function getInfra() {
                     if (ring && ring.length >= 4) {
                       const poly = new Polygon([ring]);
                       poly.set('clusterNodeCount', pts.length);
+                      poly.set('nodeGroupId', gid);
+                      // Label anchor: the group's first Node (API order). The render
+                      // point is shared by reference with nodePoints, so a locationless
+                      // Infra that moves at draw time keeps its label attached.
+                      poly.set('labelAnchor', pts[0]);
                       ngPolygons.push(poly);
                     }
                     ngIdx++;
@@ -24990,24 +25202,19 @@ function executeInfraScaleOut(namespace, infraId, nodeGroupName, nodeCountPerLoc
 // Draw Objects to the Map
 function drawObjects(event) {
 
-  // Update locationless Infra positions in real-time for smooth animation
-  // Calculate map view bounds once outside the loop to avoid redundant calculations per frame
-  var mapView = map.getView();
-  var mapExtent = mapView.calculateExtent(map.getSize());
-  var leftBound = mapExtent[0];
-  var rightBound = mapExtent[2];
-  var bottomBound = mapExtent[1];
-  var topBound = mapExtent[3];
-  var verticalSpacing = (topBound - bottomBound) * LOCATIONLESS_Infra_VERTICAL_SPACING;
-  var defaultLon = leftBound + (rightBound - leftBound) * LOCATIONLESS_Infra_LEFT_OFFSET;
-  var baseDefaultLat = topBound - (topBound - bottomBound) * LOCATIONLESS_Infra_TOP_OFFSET;
-
-  var locationlessIdx = 0;
-  for (const [, data] of infraRenderMap) {
-    if (data.isLocationless) {
-      var defaultLat = baseDefaultLat - verticalSpacing * locationlessIdx;
-      data.geometry.setCoordinates([defaultLon, defaultLat]);
-      locationlessIdx++;
+  // Place docked (locationless) Infras: a pixel-anchored list at the top-left,
+  // re-derived every frame so it stays put through pan/zoom/resize. Each slot
+  // is as tall as its own label block, so multi-line names never overlap.
+  {
+    let dockY = LOCATIONLESS_DOCK_TOP_PX;
+    for (const [, data] of infraRenderMap) {
+      if (!data.isLocationless || !data.isDocked) continue;
+      const layout = getInfraLabelLayout(data);
+      if (!layout) continue;
+      const markerY = dockY - layout.top; // layout.top is negative (block starts above the marker centre)
+      const coord = map.getCoordinateFromPixel([LOCATIONLESS_DOCK_LEFT_PX, markerY]);
+      if (coord) data.geometry.setCoordinates(coord);
+      dockY += layout.height + LOCATIONLESS_DOCK_GAP_PX;
     }
   }
 
@@ -25287,17 +25494,33 @@ function drawObjects(event) {
     }
   }
 
-  // Draw Infra name text
+  // Draw Infra name + status labels (layout shared with findNearestInfra)
   {
     let infraDrawIdx = 0;
     for (const [, data] of infraRenderMap) {
-      const nameLines = splitInfraNameToLines(data.name);
-      const baseScale = changeSizeByName(data.name + data.status) + 0.1;
-      const baseOffsetY = 32 * changeSizeByName(data.name + data.status);
-      const lineHeight = 12 * baseScale;
-      
-      nameLines.forEach((line, lineIndex) => {
-        let displayText = line;
+      const layout = getInfraLabelLayout(data);
+      if (!layout) { infraDrawIdx++; continue; }
+      const anchorPoint = new Point(layout.anchor);
+      const statusColors = getNodeStatusColor(data.status);
+
+      // Placeholder marker for an Infra that has no Node positions yet
+      if (data.isLocationless) {
+        vectorContext.setStyle(new Style({
+          image: new CircleStyle({
+            radius: LOCATIONLESS_MARKER_RADIUS_PX,
+            fill: new Fill({ color: [255, 255, 255, 0.85] }),
+            stroke: new Stroke({ color: statusColors.stroke, width: 2, lineDash: [4, 3] }),
+          }),
+        }));
+        vectorContext.drawGeometry(anchorPoint);
+        vectorContext.setStyle(new Style({
+          text: new Text({ text: '⏳', font: '11px sans-serif', textBaseline: 'middle' }),
+        }));
+        vectorContext.drawGeometry(anchorPoint);
+      }
+
+      layout.name.forEach((line, lineIndex) => {
+        let displayText = line.text;
         
         if (lineIndex === 0 && data.targetAction) {
           const spinChars = ['⠿', '⠷', '⠯', '⠟', '⠻', '⠽', '⠾', '⠷','⠿'];
@@ -25309,12 +25532,15 @@ function drawObjects(event) {
           ? getTargetActionColor(data.targetAction)
           : [0, 0, 0, 1];
         
-        var polyNameTextStyle = new Style({
+        vectorContext.setStyle(new Style({
           text: new Text({
             text: displayText,
             font: "bold 10px sans-serif",
-            scale: baseScale,
-            offsetY: baseOffsetY + (lineIndex * lineHeight),
+            scale: layout.nameScale,
+            textAlign: layout.textAlign,
+            textBaseline: layout.textBaseline,
+            offsetX: line.offsetX,
+            offsetY: line.offsetY,
             stroke: new Stroke({
               color: [255, 255, 255, 1],
               width: 1,
@@ -25323,42 +25549,31 @@ function drawObjects(event) {
               color: textColor,
             }),
           }),
-        });
-
-        vectorContext.setStyle(polyNameTextStyle);
-        vectorContext.drawGeometry(data.geometry);
+        }));
+        vectorContext.drawGeometry(anchorPoint);
       });
+
+      vectorContext.setStyle(new Style({
+        text: new Text({
+          text: data.status,
+          font: "bold 10px sans-serif",
+          scale: layout.statusScale,
+          textAlign: layout.textAlign,
+          textBaseline: layout.textBaseline,
+          offsetX: layout.status.offsetX,
+          offsetY: layout.status.offsetY,
+          stroke: new Stroke({
+            color: statusColors.stroke,
+            width: 2,
+          }),
+          fill: new Fill({
+            color: statusColors.fill,
+          }),
+        }),
+      }));
+      vectorContext.drawGeometry(anchorPoint);
       infraDrawIdx++;
     }
-  }
-
-  // Draw Infra status text
-  for (const [, data] of infraRenderMap) {
-    const statusColors = getNodeStatusColor(data.status);
-    
-    const nameLines = splitInfraNameToLines(data.name);
-    const baseScale = changeSizeByName(data.name + data.status) + 0.1;
-    const lineHeight = 12 * baseScale;
-    const nameHeight = nameLines.length * lineHeight;
-    const statusOffsetY = 32 * changeSizeByName(data.name + data.status) + nameHeight + 8;
-    
-    var polyStatusTextStyle = new Style({
-      text: new Text({
-        text: data.status,
-        font: "bold 10px sans-serif",
-        scale: changeSizeStatus(data.name + data.status),
-        offsetY: statusOffsetY,
-        stroke: new Stroke({
-          color: statusColors.stroke,
-          width: 2,
-        }),
-        fill: new Fill({
-          color: statusColors.fill,
-        }),
-      }),
-    });
-    vectorContext.setStyle(polyStatusTextStyle);
-    vectorContext.drawGeometry(data.geometry);
   }
 
   // Draw Infra NodeGroup labels
@@ -25368,22 +25583,37 @@ function drawObjects(event) {
         const ngNames = infraNodeGroupNames.get(infraId) || [];
         const ngColors = infraNodeGroupColors.get(infraId) || new globalThis.Map();
         polygons.forEach((polygon, idx) => {
-          if (polygon && ngNames[idx]) {
-            const extent = polygon.getExtent();
-            const centerX = (extent[0] + extent[2]) / 2;
-            const topY = extent[3];
-            const labelPoint = new Point([centerX, topY]);
-            const ngName = ngNames[idx];
+          const ngName = polygon && (polygon.get('nodeGroupId') || ngNames[idx]);
+          if (polygon && ngName) {
+            // Anchor the label to the group's first Node icon rather than the hull
+            // top: the hull is inflated in map units, so its top edge drifts
+            // relative to the icons as the zoom changes and ends up on top of them.
+            let anchor = polygon.get('labelAnchor');
+            if (!anchor) {
+              const extent = polygon.getExtent();
+              anchor = [(extent[0] + extent[2]) / 2, extent[3]];
+            }
+            const labelPoint = new Point(anchor);
             const ngColor = ngColors.get(ngName) || '#2196F3';
             const ngRgb = hexToRgb(ngColor);
             const nodeCount = polygon.get('clusterNodeCount') || 0;
+            const labelText = `${ngName} (${nodeCount})`;
+            // Readability over map tiles: black text on a translucent white chip.
+            // The group colour (not drawn anywhere else) survives only as the
+            // chip border so groups stay distinguishable.
+            // Icon is 52px * (2.4 * 0.3) ≈ 37px tall, centered on the point, and
+            // the status badge sits ~18px below center. Pixel offsets keep this
+            // clearance constant at every zoom level.
+            vectorContext.setStyle(new Style({ image: getNodeGroupLabelChip(labelText, ngRgb) }));
+            vectorContext.drawGeometry(labelPoint);
             vectorContext.setStyle(new Style({
               text: new Text({
-                text: `📦 ${ngName} (${nodeCount})`,
-                font: "bold 13px sans-serif",
-                offsetY: 12,
-                stroke: new Stroke({ color: [255, 255, 255, 1], width: 2 }),
-                fill: new Fill({ color: ngRgb }),
+                text: labelText,
+                font: NODEGROUP_LABEL_FONT,
+                textAlign: 'center',
+                textBaseline: 'top',
+                offsetY: NODEGROUP_LABEL_OFFSET_PX + 1.5 + NODEGROUP_CHIP_PAD_Y,
+                fill: new Fill({ color: [20, 20, 20, 1] }),
               }),
             }));
             vectorContext.drawGeometry(labelPoint);
