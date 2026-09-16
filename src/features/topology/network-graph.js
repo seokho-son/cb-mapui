@@ -288,12 +288,29 @@ function buildElements(centralData) {
     // showed no path at all for nodes served that way.
     e.isBastion = bastionRefs.has(`${e.infraId}|${n.id}`);
 
-    // Active remote-command state (same source the map view uses):
+    // Active remote-command state (from backend commandStatus AND active streaming sessions):
     // marks the node label and animates the command-path edges below.
     const cmdStatuses = Array.isArray(n.commandStatus) ? n.commandStatus : [];
-    e.cmdHandling = cmdStatuses.some((c) => c.status === 'Handling');
-    const cmdQueued = cmdStatuses.some((c) => c.status === 'Queued');
-    const cmdMark = e.cmdHandling ? '⚡ ' : (cmdQueued ? '⏳ ' : '');
+    let isHandling = cmdStatuses.some((c) => c.status === 'Handling');
+    let isQueued = cmdStatuses.some((c) => c.status === 'Queued');
+
+    if (window._cmdStreamSessions) {
+      Object.values(window._cmdStreamSessions).forEach((s) => {
+        if (!s || s.doneSummary || s.error || s.commandError) return;
+        if (!s.infraId || s.infraId === e.infraId) {
+          const ns = s.nodeState && s.nodeState[n.id];
+          if (ns) {
+            if (ns.status === 'Handling') isHandling = true;
+            else if (ns.status === 'Queued') isQueued = true;
+          } else if (!s.targetNodeId || s.targetNodeId === n.id) {
+            isHandling = true;
+          }
+        }
+      });
+    }
+
+    e.cmdHandling = isHandling;
+    const cmdMark = e.cmdHandling ? '⚡ ' : (isQueued ? '⏳ ' : '');
 
     // Surface meaningful user labels (role, accelerator) as chips inside the
     // node, one per label just like the IP chips (and after them), so they never
@@ -526,6 +543,18 @@ function buildElements(centralData) {
       const entry = byVnet.get(key);
       entry.members.push(e);
       if (e.isBastion) entry.bastions.push(e);
+    });
+
+    // Fallback: if a vNet has no explicit bastion registered, any VM with a public IP
+    // acts as an entrypoint for CB-TB remote commands
+    byVnet.forEach((entry) => {
+      if (entry.bastions.length === 0) {
+        entry.members.forEach((m) => {
+          if (m.node.publicIP && !entry.bastions.includes(m)) {
+            entry.bastions.push(m);
+          }
+        });
+      }
     });
 
     // Mirror the backend's bastion selection so the picture matches how a

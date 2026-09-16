@@ -21,16 +21,8 @@ COPY ./index.html ./
 COPY ./index.js ./
 COPY ./vite.config.js ./
 COPY ./src ./src
+COPY ./public ./public
 COPY ./runtime-params.json ./
-COPY ./resource-graph.js ./
-COPY ./network-graph.js ./
-COPY ./dashboard.html ./
-COPY ./dashboard.js ./
-COPY ./favicon.svg ./
-COPY ./redoc-swagger.html ./
-COPY ./swagger.html ./
-COPY ./scalar.html ./
-COPY ./img ./img
 
 # Build with Vite
 RUN npm run build
@@ -54,16 +46,8 @@ COPY --from=builder /app/index.html ./
 COPY --from=builder /app/index.js ./
 COPY --from=builder /app/vite.config.js ./
 COPY --from=builder /app/src ./src
+COPY --from=builder /app/public ./public
 COPY --from=builder /app/runtime-params.json ./
-COPY --from=builder /app/resource-graph.js ./
-COPY --from=builder /app/network-graph.js ./
-COPY --from=builder /app/dashboard.html ./
-COPY --from=builder /app/dashboard.js ./
-COPY --from=builder /app/favicon.svg ./
-COPY --from=builder /app/redoc-swagger.html ./
-COPY --from=builder /app/swagger.html ./
-COPY --from=builder /app/scalar.html ./
-COPY --from=builder /app/img ./img
 
 # Copy dependencies and configs
 COPY --from=builder /app/node_modules ./node_modules

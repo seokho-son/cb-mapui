@@ -18,6 +18,7 @@ $.extend = (...args) => (window.$ || window.jQuery).extend(...args);
 const clearCircle = (...args) => { if (window.clearCircle) window.clearCircle(...args); };
 const outputAlert = (...args) => { if (window.outputAlert) window.outputAlert(...args); };
 const updateNodeGroupReview = () => { if (window.updateNodeGroupReview) window.updateNodeGroupReview(); };
+const renderMapFromConfig = () => { if (window.renderMapFromConfig) window.renderMapFromConfig(); };
 const toggleWorkloadType = async (...args) => { if (window.toggleWorkloadType) return await window.toggleWorkloadType(...args); };
 
 const createInfraReqVmTmplt = new Proxy({}, {
@@ -33,7 +34,8 @@ const createInfraReqVmTmplt = new Proxy({}, {
 
 const nodeGroupRequestFromSpecList = new Proxy([], {
   get: (target, prop) => {
-    const arr = window.nodeGroupRequestFromSpecList || [];
+    if (!window.nodeGroupRequestFromSpecList) window.nodeGroupRequestFromSpecList = [];
+    const arr = window.nodeGroupRequestFromSpecList;
     const val = arr[prop];
     return typeof val === 'function' ? val.bind(arr) : val;
   },
@@ -52,7 +54,8 @@ const nodeGroupRequestFromSpecList = new Proxy([], {
 
 const recommendedSpecList = new Proxy([], {
   get: (target, prop) => {
-    const arr = window.recommendedSpecList || [];
+    if (!window.recommendedSpecList) window.recommendedSpecList = [];
+    const arr = window.recommendedSpecList;
     const val = arr[prop];
     return typeof val === 'function' ? val.bind(arr) : val;
   },
@@ -971,11 +974,27 @@ async function loadTemplateToInfraConfig(namespace, templateId) {
     specInfoList.forEach(function(specInfo) {
       recommendedSpecList.push(specInfo);
     });
+    renderMapFromConfig();
     updateNodeGroupReview();
 
     // Switch to Provision tab
-    var provisionTab = document.getElementById('provision-tab');
-    if (provisionTab) provisionTab.click();
+    try {
+      document.querySelectorAll('.nav-link').forEach(tab => tab.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('show', 'active'));
+      const provisionTab = document.getElementById('provision-tab');
+      const provisionPane = document.getElementById('provision');
+      if (provisionTab && provisionPane) {
+        provisionTab.classList.add('active');
+        provisionPane.classList.add('show', 'active');
+        if (typeof $ !== 'undefined' && $.fn && $.fn.tab) {
+          $(provisionTab).tab('show');
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to switch to provision tab:', e);
+      var provisionTab = document.getElementById('provision-tab');
+      if (provisionTab) provisionTab.click();
+    }
 
     Swal.fire({
       toast: true,
@@ -1111,10 +1130,27 @@ async function loadTemplateToK8sConfig(namespace, templateId) {
     specInfoList.forEach(function(specInfo) {
       recommendedSpecList.push(specInfo);
     });
+    renderMapFromConfig();
     updateNodeGroupReview();
 
-    var provisionTab = document.getElementById('provision-tab');
-    if (provisionTab) provisionTab.click();
+    // Switch to Provision tab
+    try {
+      document.querySelectorAll('.nav-link').forEach(tab => tab.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('show', 'active'));
+      const provisionTab = document.getElementById('provision-tab');
+      const provisionPane = document.getElementById('provision');
+      if (provisionTab && provisionPane) {
+        provisionTab.classList.add('active');
+        provisionPane.classList.add('show', 'active');
+        if (typeof $ !== 'undefined' && $.fn && $.fn.tab) {
+          $(provisionTab).tab('show');
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to switch to provision tab:', e);
+      var provisionTab = document.getElementById('provision-tab');
+      if (provisionTab) provisionTab.click();
+    }
 
     Swal.fire({
       toast: true,

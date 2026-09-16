@@ -130,6 +130,9 @@ function applyNamespace(newNs) {
   if (window.saveApiConfig) window.saveApiConfig();
   updateNsDisplays();
   updateInfraList();
+  if (typeof window.getInfra === 'function') {
+    window.getInfra();
+  }
 }
 
 // Change credential holder and reload connections + map

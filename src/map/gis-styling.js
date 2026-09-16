@@ -658,12 +658,107 @@ function changeSizeStatus(status) {
   }
 }
 
+// Check whether a node status is a transitional (~ing) state (e.g. Creating, Terminating, etc.)
+// Note: "Running" is excluded as it is a steady state.
+export function isTransitionalNodeStatus(status) {
+  if (!status) return false;
+  const s = status.toString().toLowerCase();
+  if (s === "running" || s.includes("running")) return false;
+  return (
+    s.includes("creating") ||
+    s.includes("registering") ||
+    s.includes("reconciling") ||
+    s.includes("resuming") ||
+    s.includes("preparing") ||
+    s.includes("suspending") ||
+    s.includes("rebooting") ||
+    s.includes("deleting") ||
+    s.includes("terminating")
+  );
+}
+
+// Cached OpenLayers styles for transitional node backdrop halos (zero allocation in render loop)
+const transitionalNodeHaloCache = {};
+
+export function getNodeTransitionalHaloStyle(nodeStatus) {
+  if (!isTransitionalNodeStatus(nodeStatus)) return null;
+
+  const s = nodeStatus.toString().toLowerCase();
+  let key = "unknown";
+  let strokeColor = "#3b82f6";
+  let fillColor = "rgba(59, 130, 246, 0.45)";
+
+  if (s.includes("creating")) {
+    key = "creating";
+    strokeColor = "#2563eb";
+    fillColor = "rgba(59, 130, 246, 0.45)";
+  } else if (s.includes("registering")) {
+    key = "registering";
+    strokeColor = "#0d9488";
+    fillColor = "rgba(20, 184, 166, 0.45)";
+  } else if (s.includes("reconciling")) {
+    key = "reconciling";
+    strokeColor = "#4f46e5";
+    fillColor = "rgba(99, 102, 241, 0.45)";
+  } else if (s.includes("resuming")) {
+    key = "resuming";
+    strokeColor = "#0891b2";
+    fillColor = "rgba(6, 182, 212, 0.45)";
+  } else if (s.includes("preparing")) {
+    key = "preparing";
+    strokeColor = "#ea580c";
+    fillColor = "rgba(249, 115, 22, 0.45)";
+  } else if (s.includes("suspending")) {
+    key = "suspending";
+    strokeColor = "#b45309";
+    fillColor = "rgba(217, 119, 6, 0.45)";
+  } else if (s.includes("rebooting")) {
+    key = "rebooting";
+    strokeColor = "#7c3aed";
+    fillColor = "rgba(139, 92, 246, 0.45)";
+  } else if (s.includes("deleting")) {
+    key = "deleting";
+    strokeColor = "#e11d48";
+    fillColor = "rgba(251, 113, 133, 0.45)";
+  } else if (s.includes("terminating")) {
+    key = "terminating";
+    strokeColor = "#dc2626";
+    fillColor = "rgba(239, 68, 68, 0.45)";
+  } else {
+    key = s;
+    const colorObj = getNodeStatusColor(nodeStatus);
+    const rgb = hexToRgb(colorObj.fill);
+    strokeColor = colorObj.fill;
+    fillColor = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.45)`;
+  }
+
+  if (!transitionalNodeHaloCache[key]) {
+    transitionalNodeHaloCache[key] = new Style({
+      image: new CircleStyle({
+        radius: 22,
+        fill: new Fill({ color: fillColor }),
+        stroke: new Stroke({ color: strokeColor, width: 3 }),
+      }),
+    });
+  }
+
+  return transitionalNodeHaloCache[key];
+}
+
 // Create Node icon style with status badge and provider icon
 function createNodeStyleWithStatusBadge(nodeStatus, providerName = null, baseScale = 1.0, nodeCoords = null, commandStatus = "None") {
   const statusColors = getNodeStatusColor(nodeStatus);
   
-  const styles = [
-    // Main Node icon (center)
+  const styles = [];
+
+  // Transitional halo: circular backdrop behind icon for ~ing states (like tombstone release resource)
+  const haloStyle = getNodeTransitionalHaloStyle(nodeStatus);
+  if (haloStyle) {
+    styles.push(haloStyle);
+  }
+
+  // Main Node icon (center)
+  styles.push(
     new Style({
       image: new Icon({
         crossOrigin: "anonymous",
@@ -674,8 +769,11 @@ function createNodeStyleWithStatusBadge(nodeStatus, providerName = null, baseSca
         anchorXUnits: 'fraction',
         anchorYUnits: 'fraction',
       }),
-    }),
-    // Status badge (bottom-right using displacement)
+    })
+  );
+
+  // Status badge (bottom-right using displacement)
+  styles.push(
     new Style({
       image: new CircleStyle({
         radius: 4,
@@ -689,7 +787,7 @@ function createNodeStyleWithStatusBadge(nodeStatus, providerName = null, baseSca
         displacement: [12, -13], // Move right and down (negative Y for down)
       }),
     })
-  ];
+  );
 
   // Add command status icon if there are active commands
   if (commandStatus === "Queued" || commandStatus === "Handling") {
@@ -766,3 +864,15 @@ window.splitInfraNameToLines = splitInfraNameToLines;
 window.splitK8sNameToLines = splitK8sNameToLines;
 window.changeSizeStatus = changeSizeStatus;
 window.createNodeStyleWithStatusBadge = createNodeStyleWithStatusBadge;
+window.isTransitionalNodeStatus = isTransitionalNodeStatus;
+window.getNodeTransitionalHaloStyle = getNodeTransitionalHaloStyle;
+window.cspGenericStyles = cspGenericStyles;
+window.nodeGenericCloudStyleCache = nodeGenericCloudStyleCache;
+window.cspDcStyles = cspDcStyles;
+window.nodeDcStyleCache = nodeDcStyleCache;
+window.clearCspStyleCaches = function() {
+  Object.keys(cspGenericStyles).forEach(k => delete cspGenericStyles[k]);
+  Object.keys(nodeGenericCloudStyleCache).forEach(k => delete nodeGenericCloudStyleCache[k]);
+  Object.keys(cspDcStyles).forEach(k => delete cspDcStyles[k]);
+  Object.keys(nodeDcStyleCache).forEach(k => delete nodeDcStyleCache[k]);
+};

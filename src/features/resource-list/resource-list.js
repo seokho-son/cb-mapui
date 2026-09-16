@@ -70,6 +70,9 @@ function updateNsList() {
     })
     .finally(function () {
       updateInfraList();
+      if (typeof window.getInfra === 'function') {
+        window.getInfra();
+      }
     });
 }
 
