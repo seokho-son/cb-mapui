@@ -583,297 +583,251 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
       }
     }
 
+    // Helper function to format an individual issue item (warning or error) as a compact card
+    function renderReviewIssueCard(issueText, type) {
+      if (!issueText) return '';
+      var isError = type === 'error';
+      var typeColor = isError ? '#dc3545' : '#f59e0b';
+      var icon = isError ? '❌' : '⚠️';
+
+      // 1. Separate source prefix (e.g., "Node 1 (g1-aws-af-south-1):" or "Infra Status Warning:")
+      var sourceTitle = "";
+      var content = String(issueText);
+      var prefixMatch = content.match(/^([^:]+):\s*(.*)$/s);
+      if (prefixMatch && (prefixMatch[1].startsWith('Node') || prefixMatch[1].startsWith('Infra Status') || prefixMatch[1].startsWith('Recommendation'))) {
+        sourceTitle = prefixMatch[1].trim();
+        content = prefixMatch[2].trim();
+      } else {
+        sourceTitle = isError ? "Configuration Error" : "Configuration Warning";
+      }
+
+      // 2. Separate recent failure examples / raw CSP error logs if present
+      var rawLog = null;
+      var logMatch = content.match(/Recent failure examples?:\s*(.*)$/is);
+      if (logMatch) {
+        content = content.substring(0, logMatch.index).trim();
+        rawLog = logMatch[1].trim();
+      }
+
+      // 3. Detect issue badges
+      var badges = [];
+      if (/AccountQuota|VcpuLimitExceeded/i.test(issueText)) {
+        badges.push(`<span style="display: inline-block; padding: 2px 7px; background: #fff3cd; color: #856404; border: 1px solid #ffeeba; border-radius: 10px; font-size: 0.73em; font-weight: 600;">Quota Limit</span>`);
+      }
+      if (/ZoneCapacity|RegionCapacity|InsufficientInstanceCapacity/i.test(issueText)) {
+        badges.push(`<span style="display: inline-block; padding: 2px 7px; background: #cce5ff; color: #004085; border: 1px solid #b8daff; border-radius: 10px; font-size: 0.73em; font-weight: 600;">Capacity</span>`);
+      }
+      if (/Throttling|RequestLimitExceeded/i.test(issueText)) {
+        badges.push(`<span style="display: inline-block; padding: 2px 7px; background: #e2e3e5; color: #383d41; border: 1px solid #d6d8db; border-radius: 10px; font-size: 0.73em; font-weight: 600;">Throttling</span>`);
+      }
+      if (/ImageSpecMismatch|InvalidRequest/i.test(issueText)) {
+        badges.push(`<span style="display: inline-block; padding: 2px 7px; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; border-radius: 10px; font-size: 0.73em; font-weight: 600;">Incompatible</span>`);
+      }
+      var rateMatch = content.match(/(\d+%\s*failure rate)/i);
+      if (rateMatch) {
+        badges.push(`<span style="display: inline-block; padding: 2px 7px; background: #fee2e2; color: #991b1b; border-radius: 10px; font-size: 0.73em; font-weight: 600;">${rateMatch[1]}</span>`);
+      }
+
+      // 4. Compact long region lists if present in Infra Status Warning
+      if (content.includes('Regions: [')) {
+        content = content.replace(/Regions:\s*\[([^\]]+)\]/g, function(match, regList) {
+          var regs = regList.trim().split(/\s+/);
+          if (regs.length > 4) {
+            return `Regions: <strong>${regs.length} regions</strong> <details style="display:inline-block; margin-left:4px;"><summary style="cursor:pointer; color:#007bff; font-size:0.85em; outline:none;">View list</summary><div style="display:flex; flex-wrap:wrap; gap:3px; margin-top:4px; max-width:600px;">${regs.map(r => `<span style="padding:1px 5px; background:#e9ecef; border-radius:3px; font-size:0.75em; color:#495057;">${r}</span>`).join('')}</div></details>`;
+          }
+          return match;
+        });
+      }
+
+      // Clean trailing punctuation
+      content = content.replace(/[;,\s]+$/, '');
+
+      // 5. Build raw log collapsible section
+      var rawLogHtml = '';
+      if (rawLog) {
+        var rawLogItems = rawLog.split('; ').filter(Boolean);
+        var exampleCount = rawLogItems.length > 1 ? ` (${rawLogItems.length} events)` : '';
+        rawLogHtml = `
+          <details style="margin-top: 6px; text-align: left;">
+            <summary style="cursor: pointer; font-size: 0.78em; color: #007bff; font-weight: 600; outline: none; user-select: none;">
+              🔍 View failure logs${exampleCount}
+            </summary>
+            <div style="margin-top: 5px; padding: 8px 10px; background: #1e1e1e; color: #d4d4d4; border-radius: 4px; font-family: SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.73em; line-height: 1.4; max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; border: 1px solid #333;">
+              ${escapeHtml(rawLog)}
+            </div>
+          </details>
+        `;
+      }
+
+      return `
+        <div style="margin-bottom: 8px; padding: 8px 12px; background: #ffffff; border-radius: 5px; border: 1px solid #e2e8f0; border-left: 4px solid ${typeColor}; box-shadow: 0 1px 2px rgba(0,0,0,0.03); text-align: left;">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-bottom: 4px;">
+            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+              <span style="font-size: 0.9em;">${icon}</span>
+              <strong style="font-size: 0.88em; color: #2d3748;">${sourceTitle}</strong>
+              ${badges.join(' ')}
+            </div>
+          </div>
+          <div style="font-size: 0.83em; color: #4a5568; line-height: 1.45; word-break: break-word;">
+            ${content}
+          </div>
+          ${rawLogHtml}
+        </div>
+      `;
+    }
+
+    // Top Dashboard KPI Summary Banner
+    var overallStatus = reviewData.overallStatus || "Unknown";
+    var isWarning = overallStatus.toLowerCase().includes("warning");
+    var isError = overallStatus.toLowerCase().includes("error") || validationStatus === "error";
+    var isSuccess = !isWarning && !isError;
+
+    var statusBg = isSuccess ? "#f0fdf4" : isWarning ? "#fffbeb" : "#fef2f2";
+    var statusBorder = isSuccess ? "#22c55e" : isWarning ? "#f59e0b" : "#ef4444";
+    var statusColor = isSuccess ? "#16a34a" : isWarning ? "#d97706" : "#dc2626";
+    var statusIcon = isSuccess ? "✅" : isWarning ? "⚠️" : "❌";
+
+    var isViable = reviewData.creationViable === true;
+    var viableText = reviewData.creationViable ? "Yes" : (reviewData.creationViable === false ? "No" : "N/A");
+    var viableBg = isViable ? "#f0fdf4" : "#fef2f2";
+    var viableBorder = isViable ? "#22c55e" : "#ef4444";
+    var viableColor = isViable ? "#16a34a" : "#dc2626";
+    var viableIcon = isViable ? "✅" : "❌";
+
+    var infraName = reviewData.infraName || (createInfraReq && createInfraReq.name) || "N/A";
+    var nodeScaleCount = reviewData.totalNodeCount || totalNodeScale || "N/A";
+    var estCost = reviewData.estimatedCost || (totalCost ? `$${totalCost.toFixed(4)}/hour` : "N/A");
+
+    var topDashboardHtml = `
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin: 4px 0 12px 0;">
+        <div style="padding: 8px 12px; background: ${statusBg}; border-radius: 6px; border-left: 4px solid ${statusBorder}; text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+          <div style="font-size: 0.72em; text-transform: uppercase; color: #6b7280; font-weight: 600;">Overall Status</div>
+          <div style="font-size: 0.95em; font-weight: 700; color: ${statusColor}; margin-top: 2px;">${statusIcon} ${overallStatus}</div>
+        </div>
+        <div style="padding: 8px 12px; background: ${viableBg}; border-radius: 6px; border-left: 4px solid ${viableBorder}; text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+          <div style="font-size: 0.72em; text-transform: uppercase; color: #6b7280; font-weight: 600;">Creation Viable</div>
+          <div style="font-size: 0.95em; font-weight: 700; color: ${viableColor}; margin-top: 2px;">${viableIcon} ${viableText}</div>
+        </div>
+        <div style="padding: 8px 12px; background: #f8fafc; border-radius: 6px; border-left: 4px solid #64748b; text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+          <div style="font-size: 0.72em; text-transform: uppercase; color: #6b7280; font-weight: 600;">Infra Name</div>
+          <div style="font-size: 0.95em; font-weight: 700; color: #1e293b; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(infraName)}">${escapeHtml(infraName)}</div>
+        </div>
+        <div style="padding: 8px 12px; background: #f8fafc; border-radius: 6px; border-left: 4px solid #3b82f6; text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+          <div style="font-size: 0.72em; text-transform: uppercase; color: #6b7280; font-weight: 600;">Scale</div>
+          <div style="font-size: 0.95em; font-weight: 700; color: #2563eb; margin-top: 2px;">🖥️ ${nodeScaleCount} NodeGroups</div>
+        </div>
+        <div style="padding: 8px 12px; background: #f8fafc; border-radius: 6px; border-left: 4px solid #10b981; text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+          <div style="font-size: 0.72em; text-transform: uppercase; color: #6b7280; font-weight: 600;">Estimated Cost</div>
+          <div style="font-size: 0.95em; font-weight: 700; color: #059669; margin-top: 2px;">💰 ${estCost}</div>
+        </div>
+      </div>
+    `;
+
+    // Extract issue category summary chips
+    var quotaCount = 0;
+    var capacityCount = 0;
+    var throttledCount = 0;
+    var incompCount = 0;
+    warnings.concat(errors).forEach(item => {
+      if (/AccountQuota|VcpuLimitExceeded/i.test(item)) quotaCount++;
+      if (/ZoneCapacity|RegionCapacity|InsufficientInstanceCapacity/i.test(item)) capacityCount++;
+      if (/Throttling|RequestLimitExceeded/i.test(item)) throttledCount++;
+      if (/ImageSpecMismatch|InvalidRequest/i.test(item)) incompCount++;
+    });
+    var issueChips = [];
+    if (quotaCount > 0) issueChips.push(`<span style="padding: 2px 7px; background: #fff3cd; color: #856404; border: 1px solid #ffeeba; border-radius: 10px; font-size: 0.74em; font-weight: 600;">📌 Quota: ${quotaCount}</span>`);
+    if (capacityCount > 0) issueChips.push(`<span style="padding: 2px 7px; background: #cce5ff; color: #004085; border: 1px solid #b8daff; border-radius: 10px; font-size: 0.74em; font-weight: 600;">📌 Capacity: ${capacityCount}</span>`);
+    if (throttledCount > 0) issueChips.push(`<span style="padding: 2px 7px; background: #e2e3e5; color: #383d41; border: 1px solid #d6d8db; border-radius: 10px; font-size: 0.74em; font-weight: 600;">📌 Throttling: ${throttledCount}</span>`);
+    if (incompCount > 0) issueChips.push(`<span style="padding: 2px 7px; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; border-radius: 10px; font-size: 0.74em; font-weight: 600;">📌 Incompatible: ${incompCount}</span>`);
+
     // Build validation summary HTML
     var validationSummaryHtml = "";
-    
     if (validationStatus === "success" && warnings.length === 0 && errors.length === 0) {
       validationSummaryHtml = `
-        <div style="margin: 15px 0; padding: 12px; background-color: #f0f8f0; border: 1px solid #28a745; border-radius: 5px;">
-          <h4 style="color: #28a745; margin: 0 0 8px 0; font-size: 1em;">✅ Configuration Valid</h4>
-          <p style="color: #666; margin: 0; font-size: 0.9em;">Your Infra configuration has been validated successfully. All resources can be provisioned as configured.</p>
+        <div style="margin: 12px 0; padding: 12px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; text-align: left;">
+          <h4 style="color: #16a34a; margin: 0 0 4px 0; font-size: 0.95em; font-weight: 700;">✅ Configuration Valid</h4>
+          <p style="color: #4b5563; margin: 0; font-size: 0.85em;">Your Infra configuration has been validated successfully. All resources can be provisioned as configured.</p>
         </div>
       `;
     } else {
       if (errors.length > 0) {
         validationSummaryHtml += `
-          <div style="margin: 15px 0; padding: 12px; background-color: #fff0f0; border: 1px solid #dc3545; border-radius: 5px;">
-            <h4 style="color: #dc3545; margin: 0 0 8px 0; font-size: 1em;">❌ Configuration Errors</h4>
-            <ul style="color: #666; margin: 0; padding-left: 20px; font-size: 0.9em;">
-              ${errors.map(error => `<li>${error}</li>`).join('')}
-            </ul>
+          <div style="margin: 10px 0; padding: 12px; background-color: #fff5f5; border: 1px solid #fed7d7; border-radius: 6px; text-align: left;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+              <h4 style="color: #dc3545; margin: 0; font-size: 0.95em; font-weight: 700;">❌ Configuration Errors (${errors.length})</h4>
+              <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                ${issueChips.join('')}
+              </div>
+            </div>
+            <div style="max-height: 240px; overflow-y: auto; padding-right: 4px;">
+              ${errors.map(err => renderReviewIssueCard(err, 'error')).join('')}
+            </div>
           </div>
         `;
       }
       
       if (warnings.length > 0) {
         validationSummaryHtml += `
-          <div style="margin: 15px 0; padding: 12px; background-color: #fff8f0; border: 1px solid #ffc107; border-radius: 5px;">
-            <h4 style="color: #ffc107; margin: 0 0 8px 0; font-size: 1em;">⚠️ Configuration Warnings</h4>
-            <ul style="color: #666; margin: 0; padding-left: 20px; font-size: 0.9em;">
-              ${warnings.map(warning => `<li>${warning}</li>`).join('')}
-            </ul>
+          <div style="margin: 10px 0; padding: 12px; background-color: #fffaf0; border: 1px solid #feebc8; border-radius: 6px; text-align: left;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+              <h4 style="color: #d97706; margin: 0; font-size: 0.95em; font-weight: 700;">⚠️ Configuration Warnings (${warnings.length})</h4>
+              <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                ${issueChips.join('')}
+              </div>
+            </div>
+            <div style="max-height: 260px; overflow-y: auto; padding-right: 4px;">
+              ${warnings.map(warn => renderReviewIssueCard(warn, 'warning')).join('')}
+            </div>
           </div>
         `;
       }
     }
 
-    // Build comprehensive information sections with structured layout
-    var infraInfoHtml = "";
-    if (infos.length > 0) {
-      // Parse structured information from the review response
-      var structuredInfo = {
-        basic: [],
-        status: [],
-        policy: [],
-        recommendations: []
-      };
-      
-      infos.forEach(info => {
-        if (info.includes('Infra Name:') || info.includes('Total Node Count:') || info.includes('Estimated Cost:')) {
-          // Special handling for estimated cost
-          if (info.includes('Estimated Cost:')) {
-            const costValue = info.split(': ')[1];
-            if (costValue && (costValue.includes('unavailable') || costValue.includes('Cost estimation'))) {
-              // Parse cost unavailability messages
-              if (costValue.includes('unavailable for all')) {
-                const ndCount = costValue.match(/\d+/);
-                structuredInfo.basic.push(`Estimated Cost: Not available (${ndCount ? ndCount[0] : 'all'} Nodes)`);
-              } else if (costValue.includes('unavailable')) {
-                structuredInfo.basic.push(`Estimated Cost: Not available`);
-              } else {
-                structuredInfo.basic.push(info);
-              }
-            } else {
-              structuredInfo.basic.push(info);
-            }
-          } else {
-            structuredInfo.basic.push(info);
+    // Overall Message & Policy notice (compact)
+    var infraNoticeHtml = "";
+    var noticeItems = [];
+    if (reviewData.overallMessage) {
+      var cleanMsg = reviewData.overallMessage;
+      if (cleanMsg.includes('Regions: [')) {
+        cleanMsg = cleanMsg.replace(/Regions:\s*\[([^\]]+)\]/g, function(match, regList) {
+          var regs = regList.trim().split(/\s+/);
+          if (regs.length > 4) {
+            return `Regions: <strong>${regs.length} regions</strong> <details style="display:inline-block; margin-left:4px;"><summary style="cursor:pointer; color:#007bff; font-size:0.85em; outline:none;">View list</summary><div style="display:flex; flex-wrap:wrap; gap:3px; margin-top:4px; max-width:600px;">${regs.map(r => `<span style="padding:1px 5px; background:#e9ecef; border-radius:3px; font-size:0.75em; color:#495057;">${r}</span>`).join('')}</div></details>`;
           }
-        } else if (info.includes('Message:')) {
-          structuredInfo.basic.push(info);
-        } else if (info.includes('Overall Status:') || info.includes('Creation Viable:')) {
-          structuredInfo.status.push(info);
-        } else if (info.includes('Failure Policy:') || info.includes('Policy Description:')) {
-          structuredInfo.policy.push(info);
-        } else if (info.includes('Recommendation:')) {
-          structuredInfo.recommendations.push(info.replace('Recommendation: ', ''));
-        } else {
-          structuredInfo.basic.push(info);
-        }
-      });
-      
-      infraInfoHtml = `
-        <div style="margin: 15px 0; padding: 0; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 5px; overflow: hidden;">
-          
-          <div style="padding: 16px;">
-            ${structuredInfo.status.length > 0 ? `
-              <div style="margin-bottom: 16px;">
-                <div style="margin-top: 8px;">
-                  ${(() => {
-                    // Separate status items
-                    let overallStatus = null;
-                    let creationViable = null;
-                    let otherStatus = [];
-                    
-                    structuredInfo.status.forEach(info => {
-                      const colonIndex = info.indexOf(': ');
-                      if (colonIndex !== -1) {
-                        const label = info.substring(0, colonIndex);
-                        const value = info.substring(colonIndex + 2);
-                        if (label === 'Overall Status') {
-                          overallStatus = { label, value };
-                        } else if (label === 'Creation Viable') {
-                          creationViable = { label, value };
-                        } else {
-                          otherStatus.push({ label, value });
-                        }
-                      }
-                    });
-                    
-                    let html = '';
-                    
-                    // Display Overall Status and Creation Viable in one row
-                    if (overallStatus || creationViable) {
-                      html += `
-                        <div style="display: flex; gap: 12px; margin: 6px 0; flex-wrap: wrap;">
-                      `;
-                      
-                      if (overallStatus) {
-                        let valueStyle = 'color: #666; font-size: 1em; font-weight: bold; line-height: 1.4;';
-                        let borderColor = '#007bff';
-                        let backgroundColor = '#f8f9fa';
-                        let statusIcon = '';
-                        
-                        if (overallStatus.value && overallStatus.value.toLowerCase().includes('ready')) {
-                          valueStyle = 'color: #28a745; font-size: 1em; font-weight: bold; line-height: 1.4;';
-                          borderColor = '#28a745';
-                          backgroundColor = '#f0f8f0';
-                          statusIcon = '✅ ';
-                        } else if (overallStatus.value && overallStatus.value.toLowerCase().includes('warning')) {
-                          valueStyle = 'color: #ffc107; font-size: 1em; font-weight: bold; line-height: 1.4;';
-                          borderColor = '#ffc107';
-                          backgroundColor = '#fff8f0';
-                          statusIcon = '⚠️ ';
-                        } else if (overallStatus.value && overallStatus.value.toLowerCase().includes('error')) {
-                          valueStyle = 'color: #dc3545; font-size: 1em; font-weight: bold; line-height: 1.4;';
-                          borderColor = '#dc3545';
-                          backgroundColor = '#fff0f0';
-                          statusIcon = '❌ ';
-                        }
-                        
-                        html += `
-                          <div style="flex: 1; min-width: 200px; padding: 8px 12px; background: ${backgroundColor}; border-radius: 4px; border-left: 3px solid ${borderColor};">
-                            <div style="font-weight: 600; color: #333; margin-bottom: 4px; font-size: 0.9em;">${overallStatus.label}:</div>
-                            <div style="${valueStyle}">${statusIcon}${overallStatus.value || 'N/A'}</div>
-                          </div>
-                        `;
-                      }
-                      
-                      if (creationViable) {
-                        let valueStyle = 'color: #666; font-size: 1em; font-weight: bold; line-height: 1.4;';
-                        let borderColor = '#007bff';
-                        let backgroundColor = '#f8f9fa';
-                        let statusIcon = '';
-                        
-                        if (creationViable.value === 'Yes') {
-                          valueStyle = 'color: #28a745; font-size: 1em; font-weight: bold; line-height: 1.4;';
-                          borderColor = '#28a745';
-                          backgroundColor = '#f0f8f0';
-                          statusIcon = '✅ ';
-                        } else if (creationViable.value === 'No') {
-                          valueStyle = 'color: #dc3545; font-size: 1em; font-weight: bold; line-height: 1.4;';
-                          borderColor = '#dc3545';
-                          backgroundColor = '#fff0f0';
-                          statusIcon = '❌ ';
-                        }
-                        
-                        html += `
-                          <div style="flex: 1; min-width: 200px; padding: 8px 12px; background: ${backgroundColor}; border-radius: 4px; border-left: 3px solid ${borderColor};">
-                            <div style="font-weight: 600; color: #333; margin-bottom: 4px; font-size: 0.9em;">${creationViable.label}:</div>
-                            <div style="${valueStyle}">${statusIcon}${creationViable.value || 'N/A'}</div>
-                          </div>
-                        `;
-                      }
-                      
-                      html += '</div>';
-                    }
-                    
-                    // Display other status items
-                    otherStatus.forEach(statusInfo => {
-                      html += `
-                        <div style="margin: 6px 0; padding: 8px 12px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #007bff;">
-                          <div style="font-weight: 600; color: #333; margin-bottom: 4px; font-size: 0.9em;">${statusInfo.label}:</div>
-                          <div style="color: #666; font-size: 0.9em; line-height: 1.4; word-wrap: break-word; white-space: normal;">${statusInfo.value || 'N/A'}</div>
-                        </div>
-                      `;
-                    });
-                    
-                    return html;
-                  })()}
-                </div>
-              </div>
-            ` : ''}
-          
-            ${structuredInfo.basic.length > 0 ? `
-              <div style="margin-bottom: 16px;">
-                
-                <div style="margin-top: 8px;">
-                  ${(() => {
-                    // Separate Message from other basic info but don't display it here
-                    const basicInfoWithoutMessage = [];
-                    let messageInfo = null;
-                    
-                    structuredInfo.basic.forEach(info => {
-                      const colonIndex = info.indexOf(': ');
-                      if (colonIndex !== -1) {
-                        const label = info.substring(0, colonIndex);
-                        const value = info.substring(colonIndex + 2);
-                        if (label === 'Message') {
-                          messageInfo = { label, value };
-                        } else {
-                          basicInfoWithoutMessage.push({ label, value });
-                        }
-                      }
-                    });
-                    
-                    // Sort basic info (excluding Message)
-                    basicInfoWithoutMessage.sort((a, b) => {
-                      const order = ['Infra Name', 'Total Node Count', 'Estimated Cost'];
-                      const indexA = order.indexOf(a.label);
-                      const indexB = order.indexOf(b.label);
-                      
-                      if (indexA !== -1 && indexB !== -1) {
-                        return indexA - indexB;
-                      } else if (indexA !== -1) {
-                        return -1;
-                      } else if (indexB !== -1) {
-                        return 1;
-                      } else {
-                        return a.label.localeCompare(b.label);
-                      }
-                    });
-                    
-                    let html = '';
-                    
-                    // Display basic info in grid (Message will be shown later)
-                    if (basicInfoWithoutMessage.length > 0) {
-                      html += `
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px;">
-                          ${basicInfoWithoutMessage.map(info => `
-                            <div style="display: flex; align-items: center; padding: 8px 10px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #007bff;">
-                              <span style="font-weight: 600; color: #333; margin-right: 8px; min-width: 80px; font-size: 0.9em;">${info.label}:</span>
-                              <span style="color: #666; font-size: 0.9em;">${info.value || 'N/A'}</span>
-                            </div>
-                          `).join('')}
-                        </div>
-                      `;
-                    }
-                    
-                    // Store messageInfo in a global variable to use later
-                    window.tempMessageInfo = messageInfo;
-                    
-                    return html;
-                  })()}
-                </div>
-              </div>
-            ` : ''}
+          return match;
+        });
+      }
+      noticeItems.push(`<div style="padding: 6px 10px; background: #eff6ff; border-radius: 4px; border-left: 3px solid #3b82f6; font-size: 0.84em; color: #1e3a8a;">💬 ${cleanMsg}</div>`);
+    }
+    if (reviewData.policyOnPartialFailure) {
+      noticeItems.push(`<div style="padding: 6px 10px; background: #f8fafc; border-radius: 4px; border-left: 3px solid #64748b; font-size: 0.82em; color: #475569;">⚙️ <strong>Failure Policy:</strong> ${reviewData.policyOnPartialFailure}${reviewData.policyDescription ? ` (${reviewData.policyDescription})` : ''}</div>`);
+    }
+    if (noticeItems.length > 0) {
+      infraNoticeHtml = `
+        <div style="display: flex; flex-direction: column; gap: 6px; margin: 8px 0; text-align: left;">
+          ${noticeItems.join('')}
+        </div>
+      `;
+    }
 
-
-            ${(() => {
-              // Display Message section after Status Information
-              const messageInfo = window.tempMessageInfo;
-              if (messageInfo) {
-                return `
-                  <div style="margin-bottom: 16px;">
-                    <div style="margin-top: 8px;">
-                      <div style="padding: 10px 12px; background: #f0f8ff; border-radius: 4px; border-left: 3px solid #007bff; border: 1px solid #e3f2fd; width: 100%; box-sizing: border-box;">
-                        <div style="color: #333; font-size: 0.9em; line-height: 1.6; background: white; padding: 8px; border-radius: 3px; border: 1px solid #dee2e6; word-wrap: break-word; overflow-wrap: break-word; white-space: normal;">💬 ${messageInfo.value || 'N/A'}</div>
-                      </div>
-                    </div>
-                  </div>
-                `;
-              }
-              return '';
-            })()}
-
-            ${structuredInfo.recommendations.length > 0 ? `
-              <div style="margin-bottom: 8px;">
-                <h6 style="margin: 0 0 8px 0; color: #007bff; font-size: 0.9em; font-weight: 600; border-bottom: 1px solid #ddd; padding-bottom: 4px;">💡 Recommendations</h6>
-                <div style="margin-top: 8px;">
-                  ${structuredInfo.recommendations.map(rec => {
-                    return `
-                      <div style="margin: 6px 0; padding: 8px 12px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #ffc107;">
-                        <div style="display: flex; align-items: flex-start;">
-                          <span style="margin-right: 8px;">💡</span>
-                          <span style="color: #666; font-size: 0.9em; line-height: 1.4;">${rec}</span>
-                        </div>
-                      </div>
-                    `;
-                  }).join('')}
+    // Recommendations HTML (compact card list)
+    var recommendationsHtml = "";
+    if (reviewData.recommendations && reviewData.recommendations.length > 0) {
+      recommendationsHtml = `
+        <div style="margin: 10px 0; text-align: left;">
+          <details ${reviewData.recommendations.length <= 3 ? 'open' : ''}>
+            <summary style="font-weight: 600; font-size: 0.9em; color: #334155; cursor: pointer; margin-bottom: 6px; outline: none;">
+              💡 Recommendations (${reviewData.recommendations.length})
+            </summary>
+            <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">
+              ${reviewData.recommendations.map(rec => `
+                <div style="padding: 6px 10px; background: #fffbeb; border-radius: 4px; border-left: 3px solid #f59e0b; font-size: 0.83em; color: #78350f; display: flex; align-items: flex-start; gap: 6px;">
+                  <span>💡</span>
+                  <span style="line-height: 1.4;">${escapeHtml(rec)}</span>
                 </div>
-              </div>
-            ` : ''}
-          </div>
+              `).join('')}
+            </div>
+          </details>
         </div>
       `;
     }
@@ -1155,8 +1109,10 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
       title: "Infra Configuration Review Results",
       width: 1000,
       html: `
+        ${topDashboardHtml}
+        ${infraNoticeHtml}
         ${validationSummaryHtml}
-        ${infraInfoHtml}
+        ${recommendationsHtml}
         <div style="text-align: left;">
           <details>
             <summary style="font-weight: bold; font-size: 1em; margin: 10px 0; cursor: pointer; color: #333;">📋 Configuration Summary</summary>
