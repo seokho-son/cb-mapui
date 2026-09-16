@@ -173,8 +173,15 @@ const isNormalInteger = (str) => {
 };
 window.isNormalInteger = isNormalInteger;
 
-var refreshInterval = 5;
+const REFRESH_INTERVAL_STORAGE_KEY = 'cb_mapui_refresh_interval';
+const savedRefreshInterval = typeof localStorage !== 'undefined' ? localStorage.getItem(REFRESH_INTERVAL_STORAGE_KEY) : null;
+var refreshInterval = (savedRefreshInterval && isNormalInteger(savedRefreshInterval)) ? parseInt(savedRefreshInterval, 10) : 5;
 window.refreshInterval = refreshInterval;
+
+let infraTimer = null;
+let isFetchingInfra = false;
+let isPollingPaused = false;
+window.infraTimer = infraTimer;
 
 var xRequestIds = [];
 window.xRequestIds = xRequestIds;
@@ -569,8 +576,8 @@ function showMapSettings() {
   // Get current refresh interval from global variable
   const currentRefreshInterval = refreshInterval.toString();
   
-  // Define available refresh intervals
-  const intervals = [1, 5, 10, 20, 30, 40, 50, 100];
+  // Define available refresh intervals (minimum 3s to prevent server 429 rate limit errors)
+  const intervals = [3, 5, 10, 20, 30, 40, 50, 100];
   
   // Generate interval pill options
   const intervalPills = intervals.map(interval => {
@@ -728,8 +735,17 @@ function showMapSettings() {
       const newRefreshInterval = parseInt(result.value.refreshInterval);
       const holderChanged = result.value.credentialHolder !== configCredentialHolder;
       
-      // Update global refresh interval variable
+      // Update global refresh interval variable and persist to localStorage
       refreshInterval = newRefreshInterval;
+      window.refreshInterval = newRefreshInterval;
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(REFRESH_INTERVAL_STORAGE_KEY, newRefreshInterval.toString());
+      }
+      isPollingPaused = false;
+      if (infraTimer) {
+        clearTimeout(infraTimer);
+        infraTimer = setTimeout(() => getInfra(), newRefreshInterval * 1000);
+      }
 
       // Update CSP icon mode
       cspIconMode = result.value.iconMode || 'logo';
@@ -846,6 +862,10 @@ function performMapFinalCleanup() {
   if (window.mapRenderTimeout) {
     clearTimeout(window.mapRenderTimeout);
   }
+  if (infraTimer) {
+    clearTimeout(infraTimer);
+    infraTimer = null;
+  }
   
   // Clear map properly
   clearMap();
@@ -865,6 +885,25 @@ function performMapFinalCleanup() {
 window.addEventListener('beforeunload', performMapFinalCleanup);
 window.addEventListener('unload', performMapFinalCleanup);
 window.addEventListener('pagehide', performMapFinalCleanup);
+
+// Resume polling immediately when tab becomes visible or network comes online
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && !isPollingPaused) {
+    if (!isFetchingInfra) {
+      if (infraTimer) clearTimeout(infraTimer);
+      getInfra();
+    }
+  }
+});
+
+window.addEventListener('online', () => {
+  if (!document.hidden && !isPollingPaused) {
+    if (!isFetchingInfra) {
+      if (infraTimer) clearTimeout(infraTimer);
+      getInfra();
+    }
+  }
+});
 
 // Periodic map performance monitoring
 setInterval(performMapCleanup, 300000); // Check every 5 minutes
@@ -2099,6 +2138,12 @@ function handleRequestIdSelection() {
 window.handleRequestIdSelection = handleRequestIdSelection;
 
 function getInfra() {
+  // Clear any existing scheduled timer to prevent duplicate timer leaks
+  if (infraTimer) {
+    clearTimeout(infraTimer);
+    infraTimer = null;
+  }
+
   var hostname = window.configHostname || configHostname;
   var port = window.configPort || configPort;
   var username = window.configUsername || configUsername;
@@ -2109,7 +2154,50 @@ function getInfra() {
   var filteredRefreshInterval = isNormalInteger(refreshInterval.toString())
     ? refreshInterval
     : 5;
-  setTimeout(() => getInfra(), filteredRefreshInterval * 1000);
+  var nextIntervalMs = filteredRefreshInterval * 1000;
+
+  const scheduleNext = (delayMs = nextIntervalMs) => {
+    if (infraTimer) {
+      clearTimeout(infraTimer);
+    }
+    if (!isPollingPaused && !document.hidden) {
+      infraTimer = setTimeout(() => getInfra(), delayMs);
+    }
+  };
+
+  // [Guard 1: Page hidden] Tab in background -> pause polling until tab becomes visible
+  if (document.hidden) {
+    debugLog.api('getInfra: tab hidden, polling paused');
+    return;
+  }
+
+  // [Guard 2: Offline] Browser offline -> wait for online event or next interval
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    debugLog.api('getInfra: network offline, skipping poll');
+    scheduleNext();
+    return;
+  }
+
+  // [Guard 3: Polling explicitly paused due to fatal auth error]
+  if (isPollingPaused) {
+    debugLog.api('getInfra: polling paused due to authentication error');
+    return;
+  }
+
+  // [Guard 4: Missing namespace]
+  if (!namespace || namespace.trim() === '') {
+    debugLog.api('getInfra: no namespace selected, skipping poll');
+    scheduleNext();
+    return;
+  }
+
+  // [Guard 5: In-flight request overlap]
+  if (isFetchingInfra) {
+    debugLog.api('getInfra: previous request still in flight, skipping overlapping call');
+    return;
+  }
+
+  isFetchingInfra = true;
   pollExternalRequests();
 
   // Show refresh indicator
@@ -2551,6 +2639,17 @@ function getInfra() {
 
         // Hide refresh indicator
         showMapRefreshIndicator(false);
+
+        const status = error.response ? error.response.status : null;
+        if (status === 401 || status === 403) {
+          console.error(`Authentication error (${status}): Polling paused. Please check credentials in settings.`);
+          isPollingPaused = true;
+          return;
+        }
+      })
+      .finally(function () {
+        isFetchingInfra = false;
+        scheduleNext();
       });
 
     // get vnet list and put them on the map
