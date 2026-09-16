@@ -2839,6 +2839,8 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
 
   window._cmdStreamSessions[xRequestId] = session;
   updateStreamingBadge();
+  if (window.notifyDataSubscribers) window.notifyDataSubscribers();
+  if (window.NetworkGraph?.refresh) window.NetworkGraph.refresh();
 
   // Best-effort lookup of each Node's public IP so $$ENDPOINT[…](http://0.0.0.0:…)
   // can be rewritten to the actual reachable URL in the live streaming view.
@@ -2879,6 +2881,8 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
       // commandIndex is required to build the per-Node taskId ({xRequestId}:{nodeId}:{index})
       // for the task cancel API
       if (typeof event.commandIndex === 'number' && event.commandIndex > 0) nd.commandIndex = event.commandIndex;
+      if (window.notifyDataSubscribers) window.notifyDataSubscribers();
+      if (window.NetworkGraph?.refresh) window.NetworkGraph.refresh();
     } else if (event.type === 'CommandLog' && event.nodeId && event.log) {
       const nd = getOrCreateNode(event.nodeId);
       if (typeof event.commandIndex === 'number' && event.commandIndex > 0) nd.commandIndex = event.commandIndex;
@@ -2896,10 +2900,14 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
         session.commandError = event.summary.error;
       }
       removeSpinnerTask(session.spinnerId);
+      if (window.notifyDataSubscribers) window.notifyDataSubscribers();
+      if (window.NetworkGraph?.refresh) window.NetworkGraph.refresh();
       // Auto-cleanup session after 5 minutes
       session.cleanupTimer = setTimeout(() => {
         delete window._cmdStreamSessions[xRequestId];
         updateStreamingBadge();
+        if (window.notifyDataSubscribers) window.notifyDataSubscribers();
+        if (window.NetworkGraph?.refresh) window.NetworkGraph.refresh();
       }, 5 * 60 * 1000);
     }
     updateStreamingBadge();
@@ -2911,6 +2919,8 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
       session.error = err.message || 'Connection failed';
       removeSpinnerTask(session.spinnerId);
       updateStreamingBadge();
+      if (window.notifyDataSubscribers) window.notifyDataSubscribers();
+      if (window.NetworkGraph?.refresh) window.NetworkGraph.refresh();
       if (session.rebuildCallback) session.rebuildCallback();
     }
   });
@@ -4622,6 +4632,17 @@ async function executeRemoteCmd() {
         if (useSyncMode) {
           // Sync mode: wait for full response and show formatted result
           console.log('[RemoteCmd] Using sync mode');
+          const syncSessionKey = 'sync-' + requestId;
+          window._cmdStreamSessions[syncSessionKey] = {
+            xRequestId: requestId,
+            infraId: selectedInfraId,
+            targetNodeId: (selectOption === 'Node' ? nodeid : null),
+            startTime: Date.now(),
+            nodeState: {},
+          };
+          if (window.notifyDataSubscribers) window.notifyDataSubscribers();
+          if (window.NetworkGraph?.refresh) window.NetworkGraph.refresh();
+
           axios({
             method: "post",
             url: url,
@@ -4633,9 +4654,15 @@ async function executeRemoteCmd() {
             },
           }).then((res) => {
             console.log('[RemoteCmd] Sync response:', 'status=' + res.status, res);
+            delete window._cmdStreamSessions[syncSessionKey];
+            if (window.notifyDataSubscribers) window.notifyDataSubscribers();
+            if (window.NetworkGraph?.refresh) window.NetworkGraph.refresh();
             showRemoteCmdResult(res.data, appliedDnsUrl, selectedInfraId);
             removeSpinnerTask(spinnerId);
           }).catch(function (error) {
+            delete window._cmdStreamSessions[syncSessionKey];
+            if (window.notifyDataSubscribers) window.notifyDataSubscribers();
+            if (window.NetworkGraph?.refresh) window.NetworkGraph.refresh();
             if (error.response) {
               console.log(error.response.data);
               console.log(error.response.status);

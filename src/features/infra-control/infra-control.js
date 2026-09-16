@@ -20,13 +20,14 @@ const displayInfraStatusGui = (...args) => { if (window.displayInfraStatusGui) w
 const map = new Proxy({}, {
   get: (target, prop) => {
     const m = window.map;
-    if (!m) return () => {};
-    const val = m[prop];
-    return typeof val === 'function' ? val.bind(m) : val;
+    if (m && typeof m[prop] === 'function') {
+      return m[prop].bind(m);
+    }
+    return () => {};
   }
 });
 
-const infraList = new Proxy([], {
+let infraList = new Proxy([], {
   get: (target, prop) => (window.infraList || [])[prop],
   set: (target, prop, val) => {
     if (!window.infraList) window.infraList = [];
@@ -35,7 +36,7 @@ const infraList = new Proxy([], {
   }
 });
 
-const infraHideList = new Proxy([], {
+let infraHideList = new Proxy([], {
   get: (target, prop) => (window.infraHideList || [])[prop],
   set: (target, prop, val) => {
     if (!window.infraHideList) window.infraHideList = [];
@@ -180,7 +181,8 @@ function hideInfra() {
     },
   }).then((res) => {
     if (res.data.output != null) {
-      infraList = res.data.output;
+      window.infraList = res.data.output;
+      infraList = window.infraList;
 
       Swal.fire({
         title: "Hide/Show a Infra from the Map",
@@ -207,9 +209,10 @@ function hideInfra() {
               confirmButtonText: "Show",
             }).then((result) => {
               if (result.isConfirmed) {
-                infraHideList = infraHideList.filter(
-                  (a) => a !== infraHideList[result.value]
+                window.infraHideList = (window.infraHideList || []).filter(
+                  (a) => a !== (window.infraHideList || [])[result.value]
                 );
+                infraHideList = window.infraHideList;
 
                 for (let i = 0; i < infraHideList.length; i++) {
                   var html =
@@ -251,7 +254,8 @@ function hideInfra() {
               if (result.isConfirmed) {
                 infraHideList.push(infraList[result.value]);
                 // remove duplicated items
-                infraHideList = [...new Set(infraHideList)];
+                window.infraHideList = [...new Set(window.infraHideList || infraHideList)];
+                infraHideList = window.infraHideList;
 
                 for (let i = 0; i < infraHideList.length; i++) {
                   var html =

@@ -388,5 +388,16 @@ async function loadVpnDataFromInfras() {
 
 // Make function available globally for Dashboard to call
 window.syncInfraSelectionFromDashboard = syncInfraSelectionFromDashboard;
+window.loadK8sClusterData = loadK8sClusterData;
+window.loadNlbData = loadNlbData;
+window.loadVpnDataFromInfras = loadVpnDataFromInfras;
+
+export {
+  syncInfraSelectionFromDashboard,
+  loadK8sClusterData,
+  loadNlbData,
+  loadVpnDataFromInfras
+};
+
 
 

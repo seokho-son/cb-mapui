@@ -22,13 +22,19 @@ const updateNsList = () => { if (window.updateNsList) window.updateNsList(); };
 const getInfra = () => { if (window.getInfra) window.getInfra(); };
 const resolveCloudPlatform = (p) => (window.resolveCloudPlatform ? window.resolveCloudPlatform(p) : p);
 const createIconStyle = (src) => (window.createIconStyle ? window.createIconStyle(src) : null);
+const updateMapConnectionStatus = (s) => (window.updateMapConnectionStatus ? window.updateMapConnectionStatus(s) : undefined);
+
+if (!window.nodeGroupRequestFromSpecList) window.nodeGroupRequestFromSpecList = [];
+if (!window.recommendedSpecList) window.recommendedSpecList = [];
+if (typeof window.latLonInputPairIdx === 'undefined') window.latLonInputPairIdx = 0;
 
 const map = new Proxy({}, {
   get: (target, prop) => {
     const m = window.map;
-    if (!m) return () => {};
-    const val = m[prop];
-    return typeof val === 'function' ? val.bind(m) : val;
+    if (m && typeof m[prop] === 'function') {
+      return m[prop].bind(m);
+    }
+    return () => {};
   }
 });
 
@@ -389,6 +395,7 @@ function checkConnectionWithRetry() {
 
         // Process the connection data (use existing logic)
         processConnectionData(connData);
+        updateMapConnectionStatus('connected');
 
         // Load namespace list and Infra data now that server is ready
         updateNsList();
@@ -412,6 +419,7 @@ function checkConnectionWithRetry() {
       currentStatus = CONNECTION_STATUS.CONNECTION_FAILED;
       const errorMsg = error.code || error.message || 'Unknown error';
       updateStatusUI(CONNECTION_STATUS.CONNECTION_FAILED, errorMsg);
+      updateMapConnectionStatus('disconnected');
       console.log('[Connection Check] Failed:', error);
 
       // Mark hostname/port as error in main UI
@@ -576,6 +584,8 @@ function checkConnectionWithRetry() {
     const portEl = document.getElementById('port');
     if (hostnameEl) hostnameEl.style.color = '';
     if (portEl) portEl.style.color = '';
+
+    updateMapConnectionStatus('connected');
   }
 
   // Setup event listeners for the popup
@@ -859,6 +869,7 @@ function getConnection() {
         setTimeout(() => map.render(), 500);
 
         infoAlert("Registered Cloud Regions: " + obj.connectionconfig.length);
+        updateMapConnectionStatus('connected');
       }
     })
     .catch(function (error) {
@@ -868,6 +879,7 @@ function getConnection() {
         document.getElementById("hostname").style.color = "#FF0000";
         document.getElementById("port").style.color = "#FF0000";
       }
+      updateMapConnectionStatus('disconnected');
       console.log('[getConnection] Error:', error);
     });
 }
