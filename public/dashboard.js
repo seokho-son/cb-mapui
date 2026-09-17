@@ -1143,7 +1143,12 @@ async function loadInfraData() {
       timeout: 600000
     });
     
-    infraData = response.data.infra || [];
+    infraData = (response.data.infra || []).map(inf => {
+      if ((!inf.node || inf.node.length === 0) && inf.nodeGroup && window.parent?.getInfraNodes) {
+        return { ...inf, node: window.parent.getInfraNodes(inf) };
+      }
+      return inf;
+    });
 
     // Nodes come from the namespace-wide listing: one call, each item already carries
     // its parent infraId (no per-Infra aggregation on the client)
@@ -2070,10 +2075,11 @@ function updateInfraTable() {
     
     // Get provider distribution for this Infra
     const providers = new Set();
+    const nodes = (window.getInfraNodes ? window.getInfraNodes(infra) : (infra.node || []));
     let nodeCount = 0;
-    if (infra.node && Array.isArray(infra.node)) {
-      nodeCount = infra.node.length;
-      infra.node.forEach(nd => {
+    if (nodes && Array.isArray(nodes)) {
+      nodeCount = nodes.length;
+      nodes.forEach(nd => {
         if (nd.connectionConfig && nd.connectionConfig.providerName) {
           providers.add(nd.connectionConfig.providerName);
         }

@@ -270,7 +270,7 @@ window.copyGuiSshCommand = function(idx) {
 // Builds the node-by-nodeGroup summary HTML block (shared by status + dynamic result views)
 function buildInfraNodeSummaryHtml(data) {
   const esc = window.escapeHtml || (s => String(s));
-  const nodes = data.node || [];
+  const nodes = (window.getInfraNodes ? window.getInfraNodes(data) : null) || data.node || [];
 
   // Group nodes by nodeGroupId
   const groups = {};
@@ -281,10 +281,18 @@ function buildInfraNodeSummaryHtml(data) {
   });
   const groupCount = Object.keys(groups).length;
 
-  // Unique providers
-  const providers = [...new Set(nodes.map(nd =>
+  // Unique providers (fallback to nodeGroup if nodes were compacted)
+  let providers = [...new Set(nodes.map(nd =>
     nd.connectionConfig?.providerName || nd.connectionName?.split('-')[0] || null
   ).filter(Boolean))];
+  if (providers.length === 0 && data.nodeGroup) {
+    providers = [...new Set(data.nodeGroup.map(ng => {
+      if (ng.connectionConfig?.providerName) return ng.connectionConfig.providerName;
+      if (ng.connectionName) return ng.connectionName.split('-')[0];
+      const parts = (ng.id || '').split('-');
+      return parts.length >= 2 ? parts[1] : null;
+    }).filter(Boolean))];
+  }
 
   // Node status counts
   const sc = data.statusCount || {};
@@ -292,9 +300,18 @@ function buildInfraNodeSummaryHtml(data) {
   const failedCount  = sc.countFailed  ?? nodes.filter(nd => (nd.status || '').toLowerCase().includes('fail')).length;
   const totalCount   = sc.countTotal   ?? nodes.length;
 
-  // Estimated hourly cost
+  // Estimated hourly cost (fallback to nodeGroup if nodes were compacted)
   let totalCost = 0, hasCost = false;
   nodes.forEach(nd => { if (nd.spec?.costPerHour > 0) { totalCost += nd.spec.costPerHour; hasCost = true; } });
+  if (!hasCost && data.nodeGroup) {
+    data.nodeGroup.forEach(ng => {
+      if (ng.spec?.costPerHour > 0) {
+        const sz = ng.nodes?.length || ng.nodeGroupSize || 0;
+        totalCost += (ng.spec.costPerHour * sz);
+        hasCost = true;
+      }
+    });
+  }
 
   // newNodeList set for quick lookup
   const newNodeSet = new Set(data.newNodeList || []);
@@ -380,16 +397,100 @@ function buildInfraNodeSummaryHtml(data) {
       </div>`;
   }
 
-  // ── System message ──
+  // ── System message (Structured & Collapsible) ──
   const sysMessages = Array.isArray(data.systemMessage) ? data.systemMessage.filter(Boolean) : (data.systemMessage ? [data.systemMessage] : []);
   if (sysMessages.length > 0) {
-    html += `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 14px;margin-bottom:10px;font-size:12px;color:#92400e;line-height:1.6;font-family:${SANS};">
-      ⚠️ ${sysMessages.map(m => esc(m)).join('<br>')}
-    </div>`;
+    if (sysMessages.length === 1) {
+      html += `<div style="background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #f59e0b;border-radius:6px;padding:8px 14px;margin-bottom:12px;font-size:12px;color:#92400e;line-height:1.5;font-family:${SANS};">
+        ⚠️ ${esc(sysMessages[0])}
+      </div>`;
+    } else {
+      const summaryMsg = sysMessages[0];
+      const detailMsgs = sysMessages.slice(1);
+      const detailCount = detailMsgs.length;
+
+      const parsedRows = detailMsgs.map((m, idx) => {
+        let ngName = '';
+        let provider = '';
+        let reason = m;
+
+        const ngMatch = m.match(/NodeGroup\s+'([^']+)'/i);
+        if (ngMatch) {
+          ngName = ngMatch[1];
+          const parts = ngName.split('-');
+          if (parts.length >= 2) provider = parts[1];
+        }
+
+        const connMatch = m.match(/connection\s+'([^']+)'/i);
+        if (connMatch && !provider) {
+          provider = connMatch[1].split('-')[0];
+        }
+
+        if (m.includes('Making Subnet Error')) {
+          reason = 'Subnet creation failed (CSP Quota / Network Error)';
+        } else if (m.includes('failed to create vNet') || m.includes('failed to create default VNet')) {
+          reason = 'VNet creation failed';
+        } else if (m.includes('quota') || m.includes('Quota')) {
+          reason = 'CSP Quota / Limit Exceeded';
+        } else {
+          const lastColon = m.lastIndexOf(':');
+          if (lastColon > 0 && lastColon < m.length - 10) {
+            reason = m.substring(lastColon + 1).trim();
+          }
+        }
+
+        const bg = idx % 2 === 0 ? '#ffffff' : '#fef2f2';
+        return `
+          <tr style="background:${bg};border-bottom:1px solid #fee2e2;">
+            <td style="padding:6px 10px;font-family:${MONO};font-size:11px;font-weight:600;color:#991b1b;white-space:nowrap;">${esc(ngName || '-')}</td>
+            <td style="padding:6px 10px;font-size:11px;font-weight:600;white-space:nowrap;">
+              <span style="background:#fee2e2;color:#b91c1c;padding:1px 6px;border-radius:4px;">${esc((provider || 'CSP').toUpperCase())}</span>
+            </td>
+            <td style="padding:6px 10px;font-size:12px;color:#7f1d1d;white-space:normal;line-height:1.4;">
+              ${esc(reason)}
+              <details style="margin-top:3px;font-size:11px;color:#64748b;">
+                <summary style="cursor:pointer;color:#dc2626;">Detail log</summary>
+                <div style="font-family:${MONO};font-size:10px;padding:5px;background:#fff;border:1px solid #fecaca;border-radius:4px;margin-top:3px;word-break:break-all;">${esc(m)}</div>
+              </details>
+            </td>
+          </tr>`;
+      }).join('');
+
+      html += `
+        <div style="background:#fff8f6;border:1px solid #fecaca;border-left:4px solid #ef4444;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-family:${SANS};">
+          <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;"
+            onclick="const el=document.getElementById('sys-msg-details-table');const btn=document.getElementById('sys-msg-toggle-btn');if(el.style.display==='none'){el.style.display='block';btn.textContent='▲ Hide Details';}else{el.style.display='none';btn.textContent='▼ Show ${detailCount} Details';}">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-weight:700;color:#991b1b;font-size:13px;">⚠️ ${esc(summaryMsg)}</span>
+              <span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">${detailCount} items</span>
+            </div>
+            <button type="button" id="sys-msg-toggle-btn"
+              style="background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">
+              ▼ Show ${detailCount} Details
+            </button>
+          </div>
+          <div id="sys-msg-details-table" style="display:none;margin-top:10px;max-height:260px;overflow-y:auto;border-top:1px solid #fecaca;padding-top:8px;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+              <thead>
+                <tr style="color:#64748b;border-bottom:1px solid #fecaca;text-align:left;">
+                  <th style="padding:4px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">NodeGroup</th>
+                  <th style="padding:4px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">Provider</th>
+                  <th style="padding:4px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">Failure Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${parsedRows}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    }
   }
 
-  // ── Infra labels ──
-  const labels = data.label && typeof data.label === 'object' ? Object.entries(data.label).filter(([k]) => k) : [];
+  // ── Infra labels (hide internal sys.* labels to keep view clean) ──
+  const labels = data.label && typeof data.label === 'object'
+    ? Object.entries(data.label).filter(([k]) => k && !k.startsWith('sys.'))
+    : [];
   if (labels.length > 0) {
     html += `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;">`;
     labels.forEach(([k, v]) => {
@@ -1208,7 +1309,7 @@ function displayInfraDynamicResultGui(data) {
   const esc = window.escapeHtml || (s => String(s));
   const infraId = data.id || data.name || 'Infra';
   window._currentInfraId = infraId;
-  const nodes = data.node || [];
+  const nodes = (window.getInfraNodes ? window.getInfraNodes(data) : null) || data.node || [];
   const runningCount = nodes.filter(nd => (nd.status || '').toLowerCase() === 'running').length;
 
   Swal.fire({

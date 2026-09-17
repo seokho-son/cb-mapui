@@ -532,6 +532,57 @@ function showMapRefreshIndicator(show) {
   }
 }
 
+// Helper to extract flattened/hydrated nodes from an Infra object, supporting both
+// the new nodeGroup[].nodes structure and the legacy infra.node array.
+export function getInfraNodes(infra) {
+  if (!infra) return [];
+  if (infra.nodeGroup && Array.isArray(infra.nodeGroup)) {
+    const nodes = [];
+    infra.nodeGroup.forEach(ng => {
+      if (ng.nodes && Array.isArray(ng.nodes)) {
+        const { nodes: _unused, ...groupProps } = ng;
+        ng.nodes.forEach(nd => {
+          nodes.push({
+            ...groupProps,
+            ...nd,
+            nodeGroupId: nd.nodeGroupId || ng.id,
+            label: { ...(ng.label || {}), ...(nd.label || {}) },
+            infraId: infra.id,
+            infraName: infra.name,
+          });
+        });
+      }
+    });
+    if (nodes.length > 0) return nodes;
+  }
+  if (infra.node && Array.isArray(infra.node)) {
+    return infra.node.map(nd => ({
+      ...nd,
+      infraId: infra.id,
+      infraName: infra.name,
+    }));
+  }
+  return [];
+}
+window.getInfraNodes = getInfraNodes;
+
+// Automatically normalize any Infra object with nodeGroup[].nodes into infra.node
+axios.interceptors.response.use((response) => {
+  if (response && response.data) {
+    const data = response.data;
+    if (Array.isArray(data.infra)) {
+      data.infra.forEach(inf => {
+        if ((!inf.node || inf.node.length === 0) && inf.nodeGroup) {
+          inf.node = getInfraNodes(inf);
+        }
+      });
+    } else if (data.nodeGroup && (!data.node || data.node.length === 0)) {
+      data.node = getInfraNodes(data);
+    }
+  }
+  return response;
+});
+
 function updateRunningCostDisplay(infraList) {
   hudChipsContainer(); // adopt the cost pill into the shared bottom-right chip stack
   const el = document.getElementById('running-cost-display');
@@ -544,7 +595,7 @@ function updateRunningCostDisplay(infraList) {
   let unknownCount = 0;
 
   (infraList || []).forEach(infra => {
-    (infra.node || []).forEach(nd => {
+    getInfraNodes(infra).forEach(nd => {
       if (nd.status !== 'Running') return;
       runningCount++;
       const cost = nd.spec?.costPerHour;
@@ -2229,15 +2280,9 @@ function getInfra() {
           // Extract Node data from Infra data
           const allNodes = [];
           obj.infra.forEach(infra => {
-            if (infra.node && Array.isArray(infra.node)) {
-              infra.node.forEach(nd => {
-                allNodes.push({
-                  ...nd,
-                  infraId: infra.id,
-                  infraName: infra.name
-                });
-              });
-            }
+            getInfraNodes(infra).forEach(nd => {
+              allNodes.push(nd);
+            });
           });
           window.cloudBaristaCentralData.nodeData = allNodes;
           

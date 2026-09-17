@@ -215,8 +215,9 @@ function updateNodeAndIpListsFromInfra() {
       },
     })
       .then((res) => {
-        if (res.data && res.data.node) {
-          res.data.node.forEach(nd => {
+        const nodes = (window.getInfraNodes ? window.getInfraNodes(res.data) : null) || res.data?.node || [];
+        if (nodes.length > 0) {
+          nodes.forEach(nd => {
             // Add Node option with NodeGroup info
             var nodeOption = document.createElement("option");
             nodeOption.value = nd.id;
