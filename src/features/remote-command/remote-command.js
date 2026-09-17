@@ -1583,14 +1583,15 @@ window.extractLabelsFromInfra = function(infraId) {
   const infraData = window.cloudBaristaCentralData?.infraData || [];
   const infra = infraData.find(m => m.id === infraId || m.name === infraId);
   
-  if (!infra || !infra.node || infra.node.length === 0) {
+  const infraNodes = (window.getInfraNodes ? window.getInfraNodes(infra) : (infra.node || []));
+  if (!infra || !infraNodes || infraNodes.length === 0) {
     return { labels: {}, ndCount: 0, nodes: [] };
   }
   
   const labelMap = {}; // key -> Set of values
   const nodes = [];
   
-  infra.node.forEach(nd => {
+  infraNodes.forEach(nd => {
     nodes.push({
       id: nd.id,
       name: nd.name || nd.id,
@@ -1613,7 +1614,7 @@ window.extractLabelsFromInfra = function(infraId) {
     labels[key] = Array.from(valueSet);
   });
   
-  return { labels, ndCount: infra.node.length, nodes };
+  return { labels, ndCount: infraNodes.length, nodes };
 };
 
 // Update available labels display when Infra is selected

@@ -1353,7 +1353,8 @@ export function infraDataToGraph(infraList, namespace) {
     });
 
     // Process Nodes
-    if (infra.node && Array.isArray(infra.node)) {
+    const infraNodes = (window.getInfraNodes ? window.getInfraNodes(infra) : (infra.node || []));
+    if (infraNodes && infraNodes.length > 0) {
       // Build cluster lookup: nodeGroupId -> clusterId
       const nodeGroupToCluster = {};
       if (infra.cluster && Array.isArray(infra.cluster)) {
@@ -1386,7 +1387,7 @@ export function infraDataToGraph(infraList, namespace) {
       // Group Nodes by nodeGroupId
       const nodeGroups = {};
       
-      infra.node.forEach(nd => {
+      infraNodes.forEach(nd => {
         const sgId = nd.nodeGroupId || 'default';
         if (!nodeGroups[sgId]) {
           nodeGroups[sgId] = [];

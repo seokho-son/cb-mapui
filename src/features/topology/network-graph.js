@@ -185,7 +185,8 @@ function buildElements(centralData) {
   infraList.forEach((infra) => {
     if (selectedInfraId !== 'all' && infra.id !== selectedInfraId) return;
     if (mcnlbHostIds.has(infra.id)) return; // drawn as a Global NLB node instead
-    (infra.node || []).forEach((n) => {
+    const nodes = (window.getInfraNodes ? window.getInfraNodes(infra) : (infra.node || []));
+    nodes.forEach((n) => {
       const vnetInfo = vNetMap.get(n.vNetId);
       vmEntries.push({
         infraId: infra.id,
