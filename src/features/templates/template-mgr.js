@@ -84,6 +84,36 @@ function extractRegionFromSpecId(specId) {
   return parts.length > 1 ? parts[1] : 'Unknown';
 }
 
+function findLocationCoordinates(connectionName, provider, region) {
+  const connections = window.cloudBaristaCentralData?.connection || [];
+  if (!connections.length) return null;
+
+  if (connectionName) {
+    const matched = connections.find(c => c.configName === connectionName);
+    if (matched?.regionDetail?.location) {
+      const lon = parseFloat(matched.regionDetail.location.longitude);
+      const lat = parseFloat(matched.regionDetail.location.latitude);
+      if (Number.isFinite(lon) && Number.isFinite(lat)) return { lon, lat };
+    }
+  }
+
+  const prov = (provider || '').toLowerCase();
+  const reg = (region || '').toLowerCase();
+  if (prov && reg) {
+    const matched = connections.find(c =>
+      (c.providerName || '').toLowerCase() === prov &&
+      (c.regionDetail?.regionName || '').toLowerCase() === reg
+    );
+    if (matched?.regionDetail?.location) {
+      const lon = parseFloat(matched.regionDetail.location.longitude);
+      const lat = parseFloat(matched.regionDetail.location.latitude);
+      if (Number.isFinite(lon) && Number.isFinite(lat)) return { lon, lat };
+    }
+  }
+
+  return null;
+}
+
 // ==================== Template Management Functions ====================
 
 // Template type registry — add new types here for extensibility
@@ -915,10 +945,18 @@ async function loadTemplateToInfraConfig(namespace, templateId) {
       return axios.get(specUrl, { auth: { username, password } })
         .then(function(specRes) {
           const s = specRes.data;
+          const prov = s.providerName || extractProviderFromSpecId(sg.specId);
+          const reg = s.regionName || extractRegionFromSpecId(sg.specId);
+          let lat = s.regionLatitude ?? s.location?.latitude ?? '';
+          let lon = s.regionLongitude ?? s.location?.longitude ?? '';
+          if (!Number.isFinite(parseFloat(lat)) || !Number.isFinite(parseFloat(lon))) {
+            const coords = findLocationCoordinates(sg.connectionName, prov, reg);
+            if (coords) { lon = coords.lon; lat = coords.lat; }
+          }
           return {
             id:                  sg.specId,
-            providerName:        s.providerName         || extractProviderFromSpecId(sg.specId),
-            regionName:          s.regionName           || extractRegionFromSpecId(sg.specId),
+            providerName:        prov,
+            regionName:          reg,
             cspSpecName:         s.cspSpecName          || sg.specId,
             vCPU:                s.vCPU                 ?? 'N/A',
             memoryGiB:           s.memoryGiB            ?? 'N/A',
@@ -928,15 +966,20 @@ async function loadTemplateToInfraConfig(namespace, templateId) {
             acceleratorCount:    s.acceleratorCount     || 0,
             acceleratorMemoryGB: s.acceleratorMemoryGB  || '',
             connectionName:      sg.connectionName      || '',
-            rootDiskType:        sg.rootDiskType        || 'default'
+            rootDiskType:        sg.rootDiskType        || 'default',
+            regionLatitude:      lat,
+            regionLongitude:     lon
           };
         })
         .catch(function() {
           // Fallback to parsed values if spec fetch fails
+          const prov = extractProviderFromSpecId(sg.specId);
+          const reg = extractRegionFromSpecId(sg.specId);
+          const coords = findLocationCoordinates(sg.connectionName, prov, reg);
           return {
             id:                  sg.specId,
-            providerName:        extractProviderFromSpecId(sg.specId),
-            regionName:          extractRegionFromSpecId(sg.specId),
+            providerName:        prov,
+            regionName:          reg,
             cspSpecName:         sg.specId,
             vCPU:                'N/A',
             memoryGiB:           'N/A',
@@ -946,10 +989,13 @@ async function loadTemplateToInfraConfig(namespace, templateId) {
             acceleratorCount:    0,
             acceleratorMemoryGB: '',
             connectionName:      sg.connectionName || '',
-            rootDiskType:        sg.rootDiskType   || 'default'
+            rootDiskType:        sg.rootDiskType   || 'default',
+            regionLatitude:      coords ? coords.lat : '',
+            regionLongitude:     coords ? coords.lon : ''
           };
         });
     } else {
+      const coords = findLocationCoordinates(sg.connectionName, '', '');
       return Promise.resolve({
         id:                  '',
         providerName:        '',
@@ -963,7 +1009,9 @@ async function loadTemplateToInfraConfig(namespace, templateId) {
         acceleratorCount:    0,
         acceleratorMemoryGB: '',
         connectionName:      sg.connectionName || '',
-        rootDiskType:        sg.rootDiskType   || 'default'
+        rootDiskType:        sg.rootDiskType   || 'default',
+        regionLatitude:      coords ? coords.lat : '',
+        regionLongitude:     coords ? coords.lon : ''
       });
     }
   });
@@ -1073,10 +1121,18 @@ async function loadTemplateToK8sConfig(namespace, templateId) {
       return axios.get(specUrl, { auth: { username, password } })
         .then(function(specRes) {
           const s = specRes.data;
+          const prov = s.providerName || extractProviderFromSpecId(cluster.specId);
+          const reg = s.regionName || extractRegionFromSpecId(cluster.specId);
+          let lat = s.regionLatitude ?? s.location?.latitude ?? '';
+          let lon = s.regionLongitude ?? s.location?.longitude ?? '';
+          if (!Number.isFinite(parseFloat(lat)) || !Number.isFinite(parseFloat(lon))) {
+            const coords = findLocationCoordinates(cluster.connectionName, prov, reg);
+            if (coords) { lon = coords.lon; lat = coords.lat; }
+          }
           return {
             id:                  cluster.specId,
-            providerName:        s.providerName         || extractProviderFromSpecId(cluster.specId),
-            regionName:          s.regionName           || extractRegionFromSpecId(cluster.specId),
+            providerName:        prov,
+            regionName:          reg,
             cspSpecName:         s.cspSpecName          || cluster.specId,
             vCPU:                s.vCPU                 ?? 'N/A',
             memoryGiB:           s.memoryGiB            ?? 'N/A',
@@ -1086,14 +1142,19 @@ async function loadTemplateToK8sConfig(namespace, templateId) {
             acceleratorCount:    s.acceleratorCount     || 0,
             acceleratorMemoryGB: s.acceleratorMemoryGB  || '',
             connectionName:      cluster.connectionName || '',
-            rootDiskType:        cluster.rootDiskType   || 'default'
+            rootDiskType:        cluster.rootDiskType   || 'default',
+            regionLatitude:      lat,
+            regionLongitude:     lon
           };
         })
         .catch(function() {
+          const prov = extractProviderFromSpecId(cluster.specId);
+          const reg = extractRegionFromSpecId(cluster.specId);
+          const coords = findLocationCoordinates(cluster.connectionName, prov, reg);
           return {
             id:                  cluster.specId,
-            providerName:        extractProviderFromSpecId(cluster.specId),
-            regionName:          extractRegionFromSpecId(cluster.specId),
+            providerName:        prov,
+            regionName:          reg,
             cspSpecName:         cluster.specId,
             vCPU:                'N/A',
             memoryGiB:           'N/A',
@@ -1103,10 +1164,13 @@ async function loadTemplateToK8sConfig(namespace, templateId) {
             acceleratorCount:    0,
             acceleratorMemoryGB: '',
             connectionName:      cluster.connectionName || '',
-            rootDiskType:        cluster.rootDiskType   || 'default'
+            rootDiskType:        cluster.rootDiskType   || 'default',
+            regionLatitude:      coords ? coords.lat : '',
+            regionLongitude:     coords ? coords.lon : ''
           };
         });
     } else {
+      const coords = findLocationCoordinates(cluster.connectionName, '', '');
       return Promise.resolve({
         id:                  '',
         providerName:        '',
@@ -1120,7 +1184,9 @@ async function loadTemplateToK8sConfig(namespace, templateId) {
         acceleratorCount:    0,
         acceleratorMemoryGB: '',
         connectionName:      cluster.connectionName || '',
-        rootDiskType:        cluster.rootDiskType   || 'default'
+        rootDiskType:        cluster.rootDiskType   || 'default',
+        regionLatitude:      coords ? coords.lat : '',
+        regionLongitude:     coords ? coords.lon : ''
       });
     }
   });
