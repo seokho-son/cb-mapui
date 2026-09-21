@@ -1777,6 +1777,40 @@ function getInfraLocationOffset(infraIndex, totalInfras) {
   };
 }
 
+/**
+ * Generate a consistent coordinate key for grouping resources at the same location.
+ * Uses 3 decimal places (~100m) to preserve distinct CSP region coordinates (e.g. AWS vs Azure Seoul)
+ * while correctly clustering resources and nodes that share the exact same region.
+ */
+function getLocationCoordKey(lon, lat) {
+  if (lon === undefined || lat === undefined || lon === null || lat === null) return "0,0";
+  return Number(lon).toFixed(3) + ',' + Number(lat).toFixed(3);
+}
+
+/**
+ * Compute inter-NodeGroup offset for NodeGroups within the same Infra sharing the exact same region.
+ * The primary NodeGroup (ngIndex === 0) remains anchored at the exact base location (0, 0),
+ * perfectly centered among vNet, SG, SSHKey, and CSP icons.
+ * Subsequent NodeGroups (ngIndex > 0) receive a modest offset so their clusters do not collide.
+ * @param {number} ngIndex - This NodeGroup's index at the shared location (0-based)
+ * @param {number} totalNg - Total NodeGroups sharing this location in the Infra
+ * @returns {{ox: number, oy: number}} offset in coordinate units
+ */
+function getNodeGroupLocationOffset(ngIndex, totalNg) {
+  if (totalNg <= 1 || ngIndex === 0) return { ox: 0, oy: 0 };
+  if (totalNg === 2) {
+    return { ox: 0.6, oy: 0 };
+  }
+  const ringRadius = 0.6;
+  const angleStep = 2 * Math.PI / (totalNg - 1);
+  const startAngle = 0;
+  const angle = startAngle + angleStep * (ngIndex - 1);
+  return {
+    ox: ringRadius * Math.cos(angle),
+    oy: ringRadius * Math.sin(angle) * 0.78
+  };
+}
+
 function returnAdjustmentPoint(index, totalNodes) {
   // Initialize coordinates
   let ax = 0.0;
@@ -2460,8 +2494,8 @@ function getInfra() {
             const seenLocations = new Set();
             for (const nd of item.node) {
               if (!nd.location || nd.location.longitude === undefined || nd.location.latitude === undefined) continue;
-              // Round to ~0.5 degree to group nearby regions
-              const locKey = Math.round(nd.location.longitude * 2) / 2 + ',' + Math.round(nd.location.latitude * 2) / 2;
+              // Group by precise coordinates (~100m) to keep distinct CSP regions separate
+              const locKey = getLocationCoordKey(nd.location.longitude, nd.location.latitude);
               if (!seenLocations.has(locKey)) {
                 seenLocations.add(locKey);
                 const idx = locationInfraCounter.get(locKey) || 0;
@@ -2494,21 +2528,45 @@ function getInfra() {
 
             var vmGeo = [];
 
-            // Build intra-Infra location groups: VMs within same ~0.5° grid get spread out
-            // Key: "roundedLon,roundedLat" → array of Node indices in that cell
-            const intraLocGroups = new globalThis.Map();
+            // Build per-NodeGroup location groups within this Infra:
+            // Key: gid (nodeGroupId) -> { nodeIndices: number[], locKey: string }
+            const ngMap = new globalThis.Map();
             for (let vi = 0; vi < item.node.length; vi++) {
               const v = item.node[vi];
               if (!v.location || v.location.longitude === undefined || v.location.latitude === undefined) continue;
-              const gKey = Math.round(v.location.longitude * 2) / 2 + ',' + Math.round(v.location.latitude * 2) / 2;
-              if (!intraLocGroups.has(gKey)) intraLocGroups.set(gKey, []);
-              intraLocGroups.get(gKey).push(vi);
+              const locKey = getLocationCoordKey(v.location.longitude, v.location.latitude);
+              const gid = v.nodeGroupId || ('default_' + locKey);
+              if (!ngMap.has(gid)) {
+                ngMap.set(gid, { nodeIndices: [], locKey: locKey });
+              }
+              ngMap.get(gid).nodeIndices.push(vi);
             }
-            // Build per-Node lookup: nodeIndex → { indexInGroup, groupSize }
+
+            // Group NodeGroups in this Infra by their location to offset overlapping NodeGroups
+            // locKey -> [gid1, gid2, ...]
+            const locToNgList = new globalThis.Map();
+            for (const [gid, data] of ngMap) {
+              if (!locToNgList.has(data.locKey)) locToNgList.set(data.locKey, []);
+              locToNgList.get(data.locKey).push(gid);
+            }
+
+            // Build per-Node lookup: nodeIndex -> { indexInGroup, groupSize, ngOffsetIndex, totalNgAtLoc, nodeGroupId }
             const vmGroupInfo = new globalThis.Map();
-            for (const [, indices] of intraLocGroups) {
-              for (let gi = 0; gi < indices.length; gi++) {
-                vmGroupInfo.set(indices[gi], { indexInGroup: gi, groupSize: indices.length });
+            for (const [gid, data] of ngMap) {
+              const ngList = locToNgList.get(data.locKey);
+              const ngOffsetIndex = ngList.indexOf(gid);
+              const totalNgAtLoc = ngList.length;
+              const groupSize = data.nodeIndices.length;
+
+              for (let gi = 0; gi < data.nodeIndices.length; gi++) {
+                const nodeIdx = data.nodeIndices[gi];
+                vmGroupInfo.set(nodeIdx, {
+                  indexInGroup: gi,
+                  groupSize: groupSize,
+                  ngOffsetIndex: ngOffsetIndex,
+                  totalNgAtLoc: totalNgAtLoc,
+                  nodeGroupId: gid
+                });
               }
             }
 
@@ -2516,8 +2574,8 @@ function getInfra() {
             const nodeRenderPointById = new globalThis.Map();
 
             const limit = window.maxVisibleNodes || maxVisibleNodes || 20;
-            const groupFirstCoordMap = new globalThis.Map(); // gKey -> [x, y] of first rendered node
-            const groupRightmostCoordMap = new globalThis.Map(); // gKey -> { coord: [x, y], totalCount: number }
+            const groupFirstCoordMap = new globalThis.Map(); // gid -> [x, y] of first rendered node
+            const groupRightmostCoordMap = new globalThis.Map(); // gid -> { coord: [x, y], totalCount: number }
             var nodeStatuses = [];
             var nodeProviders = [];
             var nodeCommandStatuses = [];
@@ -2533,31 +2591,42 @@ function getInfra() {
               }
               validateNum++;
 
-              // Compute inter-Infra offset for this Node's location
-              const nodeLocKey2 = Math.round(nd.location.longitude * 2) / 2 + ',' + Math.round(nd.location.latitude * 2) / 2;
+              // 1. Inter-Infra offset: separate overlapping Infras at shared location
+              const nodeLocKey2 = getLocationCoordKey(nd.location.longitude, nd.location.latitude);
               const infraIdx2 = infraLocationIndex.get(item.id + ':' + nodeLocKey2) || 0;
               const totalInfras2 = locationInfraCounter.get(nodeLocKey2) || 1;
               const infraOff2 = getInfraLocationOffset(infraIdx2, totalInfras2);
               const infraOffX2 = (infraOff2.ox / zoomLevel) * radius;
               const infraOffY2 = (infraOff2.oy / zoomLevel) * radius;
 
+              // 2. NodeGroup info for this node
               const gInfo2 = vmGroupInfo.get(nodeIndex);
+              const gid = gInfo2 ? gInfo2.nodeGroupId : (nd.nodeGroupId || 'default');
               const groupSize = gInfo2 ? gInfo2.groupSize : 1;
               const indexInGroup = gInfo2 ? gInfo2.indexInGroup : 0;
+              const ngOffsetIndex = gInfo2 ? gInfo2.ngOffsetIndex : 0;
+              const totalNgAtLoc = gInfo2 ? gInfo2.totalNgAtLoc : 1;
+
+              // 3. Inter-NodeGroup offset: separate multiple NodeGroups of this Infra at the same location
+              const ngOff = getNodeGroupLocationOffset(ngOffsetIndex, totalNgAtLoc);
+              const ngOffX = (ngOff.ox / zoomLevel) * radius;
+              const ngOffY = (ngOff.oy / zoomLevel) * radius;
+
+              // 4. Intra-NodeGroup circular layout
               const isOverLimit = groupSize > limit;
               const effectiveGroupSize = isOverLimit ? limit : groupSize;
               const isCenterNode = (indexInGroup === 0);
 
-              // If this group exceeds limit and we've already reached the limit, omit rendering
+              // If this NodeGroup exceeds limit and we've already reached the limit, omit rendering
               if (isOverLimit && indexInGroup >= limit) {
-                const repPt = groupFirstCoordMap.get(nodeLocKey2);
+                const repPt = groupFirstCoordMap.get(gid);
                 if (nd.id && repPt) {
                   nodeRenderPointById.set(nd.id, repPt);
                 }
                 continue;
               }
 
-              // Compute intra-Infra offset: spread VMs sharing the same location group
+              // Compute intra-NodeGroup offset: spread VMs belonging to this NodeGroup around its center
               let intraOffX2 = 0, intraOffY2 = 0;
               if (effectiveGroupSize > 1 && indexInGroup > 0) {
                 const adj2 = returnAdjustmentPoint(indexInGroup, effectiveGroupSize);
@@ -2566,19 +2635,19 @@ function getInfra() {
               }
 
               const coords = [
-                nd.location.longitude * 1 + infraOffX2 + intraOffX2,
-                nd.location.latitude * 1 + infraOffY2 + intraOffY2,
+                nd.location.longitude * 1 + infraOffX2 + ngOffX + intraOffX2,
+                nd.location.latitude * 1 + infraOffY2 + ngOffY + intraOffY2,
               ];
 
-              if (!groupFirstCoordMap.has(nodeLocKey2)) {
-                groupFirstCoordMap.set(nodeLocKey2, coords);
+              if (!groupFirstCoordMap.has(gid)) {
+                groupFirstCoordMap.set(gid, coords);
               }
 
-              // Track rightmost node for over-limit groups to place "(count)" label
+              // Track rightmost node for over-limit groups to place "(count)" label per NodeGroup
               if (isOverLimit) {
-                const currentRightmost = groupRightmostCoordMap.get(nodeLocKey2);
+                const currentRightmost = groupRightmostCoordMap.get(gid);
                 if (!currentRightmost || coords[0] > currentRightmost.coord[0]) {
-                  groupRightmostCoordMap.set(nodeLocKey2, { coord: coords, totalCount: groupSize });
+                  groupRightmostCoordMap.set(gid, { coord: coords, totalCount: groupSize });
                 }
               }
 

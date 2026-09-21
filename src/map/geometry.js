@@ -25,6 +25,16 @@ function changeSizeByName(status) {
 }
 
 /**
+ * Generate a consistent coordinate key for grouping resources at the same location.
+ * Uses 3 decimal places (~100m) to preserve distinct CSP region coordinates (e.g. AWS vs Azure Seoul)
+ * while correctly clustering resources and nodes that share the exact same region.
+ */
+function getLocationCoordKey(lon, lat) {
+  if (lon === undefined || lat === undefined || lon === null || lat === null) return "0,0";
+  return Number(lon).toFixed(3) + ',' + Number(lat).toFixed(3);
+}
+
+/**
  * Compute inter-Infra offset for Nodes at shared locations.
  * When multiple Infras have Nodes at the same region, each Infra gets a directional
  * offset so their Node icons don't fully overlap.
@@ -42,6 +52,28 @@ function getInfraLocationOffset(infraIndex, totalInfras) {
   return {
     ox: ringRadius * Math.cos(angle),
     oy: ringRadius * Math.sin(angle) * 0.78 // compress Y for map projection
+  };
+}
+
+/**
+ * Compute inter-NodeGroup offset for NodeGroups within the same Infra sharing the same region.
+ * Prevents multiple NodeGroups (e.g., AWS Seoul and Azure Seoul) from overlapping.
+ * @param {number} ngIndex - This NodeGroup's index at the shared location (0-based)
+ * @param {number} totalNg - Total NodeGroups sharing this location in the Infra
+ * @returns {{ox: number, oy: number}} offset in coordinate units
+ */
+function getNodeGroupLocationOffset(ngIndex, totalNg) {
+  if (totalNg <= 1 || ngIndex === 0) return { ox: 0, oy: 0 };
+  if (totalNg === 2) {
+    return { ox: 0.6, oy: 0 };
+  }
+  const ringRadius = 0.6;
+  const angleStep = 2 * Math.PI / (totalNg - 1);
+  const startAngle = 0;
+  const angle = startAngle + angleStep * (ngIndex - 1);
+  return {
+    ox: ringRadius * Math.cos(angle),
+    oy: ringRadius * Math.sin(angle) * 0.78
   };
 }
 
@@ -265,7 +297,9 @@ window.refreshInterval = window.refreshInterval || refreshInterval;
 // Attach to window object for inter-module & map rendering access
 window.createNodePointWithOffset = createNodePointWithOffset;
 window.changeSizeByName = changeSizeByName;
+window.getLocationCoordKey = getLocationCoordKey;
 window.getInfraLocationOffset = getInfraLocationOffset;
+window.getNodeGroupLocationOffset = getNodeGroupLocationOffset;
 window.returnAdjustmentPoint = returnAdjustmentPoint;
 window.makeTria = makeTria;
 window.makePolyDot = makePolyDot;
@@ -284,7 +318,9 @@ export {
   p,
   createNodePointWithOffset,
   changeSizeByName,
+  getLocationCoordKey,
   getInfraLocationOffset,
+  getNodeGroupLocationOffset,
   returnAdjustmentPoint,
   makeTria,
   makePolyDot,
