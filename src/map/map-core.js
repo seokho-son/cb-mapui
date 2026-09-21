@@ -178,6 +178,11 @@ const savedRefreshInterval = typeof localStorage !== 'undefined' ? localStorage.
 var refreshInterval = (savedRefreshInterval && isNormalInteger(savedRefreshInterval)) ? parseInt(savedRefreshInterval, 10) : 5;
 window.refreshInterval = refreshInterval;
 
+const MAX_VISIBLE_NODES_STORAGE_KEY = 'cb_mapui_max_visible_nodes';
+const savedMaxVisibleNodes = typeof localStorage !== 'undefined' ? localStorage.getItem(MAX_VISIBLE_NODES_STORAGE_KEY) : null;
+var maxVisibleNodes = (savedMaxVisibleNodes && isNormalInteger(savedMaxVisibleNodes)) ? parseInt(savedMaxVisibleNodes, 10) : 20;
+window.maxVisibleNodes = maxVisibleNodes;
+
 let infraTimer = null;
 let isFetchingInfra = false;
 let isPollingPaused = false;
@@ -334,6 +339,24 @@ function getNodeGroupLabelChip(text, borderRgb) {
   nodeGroupChipCache.set(key, icon);
   return icon;
 }
+
+// Style for displaying node count suffix "(totalCount)" to the right of the rightmost node icon
+function createNodeCountSuffixStyle(text) {
+  return new Style({
+    text: new Text({
+      text: text,
+      font: "bold 13px sans-serif",
+      textAlign: "left",
+      textBaseline: "middle",
+      offsetX: 24, // spaced comfortably to the right of the node icon
+      fill: new Fill({ color: [30, 41, 59, 1] }),
+      stroke: new Stroke({ color: [255, 255, 255, 0.95], width: 3 }),
+    }),
+    zIndex: 105
+  });
+}
+window.createNodeCountSuffixStyle = createNodeCountSuffixStyle;
+
 var infraNodeGroupNames = new globalThis.Map();    // Map<infraId, Array<nodeGroupId>>
 var infraNodeGroupColors = new globalThis.Map();   // Map<infraId, Map<nodeGroupId, color>>
 
@@ -642,6 +665,7 @@ function showMapSettings() {
   const curIconMode = window.cspIconMode || cspIconMode || 'logo';
   const infraClusterLabelChecked = showInfraClusterLabels ? 'checked' : '';
   const infraNodeGroupLabelChecked = showInfraNodeGroupLabels ? 'checked' : '';
+  const curMaxVisibleNodes = window.maxVisibleNodes || maxVisibleNodes || 20;
 
   // Build namespace options
   const activeNsList = (window.cachedNamespaceList && window.cachedNamespaceList.length > 0) ? window.cachedNamespaceList : (cachedNamespaceList || []);
@@ -751,6 +775,21 @@ function showMapSettings() {
       </label>
       <div class="settings-hint">Display nodegroup IDs above nodegroup boundaries</div>
     </div>
+
+    <hr class="settings-divider">
+
+    <div class="settings-section">
+      <div class="settings-label"><i class="fas fa-server"></i> Max Visible Nodes per Group</div>
+      <select id="maxVisibleNodesSelect" class="settings-select">
+        <option value="10" ${curMaxVisibleNodes === 10 ? 'selected' : ''}>10 nodes</option>
+        <option value="20" ${curMaxVisibleNodes === 20 ? 'selected' : ''}>20 nodes (default)</option>
+        <option value="30" ${curMaxVisibleNodes === 30 ? 'selected' : ''}>30 nodes</option>
+        <option value="50" ${curMaxVisibleNodes === 50 ? 'selected' : ''}>50 nodes</option>
+        <option value="100" ${curMaxVisibleNodes === 100 ? 'selected' : ''}>100 nodes</option>
+        <option value="99999" ${curMaxVisibleNodes >= 99999 ? 'selected' : ''}>Unlimited (show all)</option>
+      </select>
+      <div class="settings-hint">Caps rendered node icons per group and displays a total count badge</div>
+    </div>
   `,
     showCancelButton: true,
     confirmButtonText: 'Apply',
@@ -770,6 +809,7 @@ function showMapSettings() {
       const selectedIconMode = document.getElementById('cspIconModeSelect')?.value || 'logo';
       const infraClusterLabelEnabled = document.getElementById('infraClusterLabelToggle')?.checked || false;
       const infraNodeGroupLabelEnabled = document.getElementById('infraNodeGroupLabelToggle')?.checked || false;
+      const selectedMaxVisible = parseInt(document.getElementById('maxVisibleNodesSelect')?.value || '20', 10);
       const selectedHolder = document.getElementById('settings-credentialHolder')?.value || configCredentialHolder;
       const selectedNs = document.getElementById('settings-namespace')?.value || configNamespace;
       return {
@@ -777,6 +817,7 @@ function showMapSettings() {
         iconMode: selectedIconMode,
         infraClusterLabels: infraClusterLabelEnabled,
         infraNodeGroupLabels: infraNodeGroupLabelEnabled,
+        maxVisibleNodes: selectedMaxVisible,
         credentialHolder: selectedHolder,
         namespace: selectedNs
       };
@@ -796,6 +837,15 @@ function showMapSettings() {
       if (infraTimer) {
         clearTimeout(infraTimer);
         infraTimer = setTimeout(() => getInfra(), newRefreshInterval * 1000);
+      }
+
+      // Update max visible nodes per group
+      const newMaxVisibleNodes = result.value.maxVisibleNodes || 20;
+      const maxVisibleChanged = newMaxVisibleNodes !== maxVisibleNodes;
+      maxVisibleNodes = newMaxVisibleNodes;
+      window.maxVisibleNodes = newMaxVisibleNodes;
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(MAX_VISIBLE_NODES_STORAGE_KEY, newMaxVisibleNodes.toString());
       }
 
       // Update CSP icon mode
@@ -832,6 +882,12 @@ function showMapSettings() {
         } else if (typeof window.applyNamespace === 'function') {
           window.applyNamespace(result.value.namespace);
         }
+        if (typeof getInfra === 'function') {
+          getInfra();
+        } else if (typeof window.getInfra === 'function') {
+          window.getInfra();
+        }
+      } else if (maxVisibleChanged) {
         if (typeof getInfra === 'function') {
           getInfra();
         } else if (typeof window.getInfra === 'function') {
@@ -1721,6 +1777,40 @@ function getInfraLocationOffset(infraIndex, totalInfras) {
   };
 }
 
+/**
+ * Generate a consistent coordinate key for grouping resources at the same location.
+ * Uses 3 decimal places (~100m) to preserve distinct CSP region coordinates (e.g. AWS vs Azure Seoul)
+ * while correctly clustering resources and nodes that share the exact same region.
+ */
+function getLocationCoordKey(lon, lat) {
+  if (lon === undefined || lat === undefined || lon === null || lat === null) return "0,0";
+  return Number(lon).toFixed(3) + ',' + Number(lat).toFixed(3);
+}
+
+/**
+ * Compute inter-NodeGroup offset for NodeGroups within the same Infra sharing the exact same region.
+ * The primary NodeGroup (ngIndex === 0) remains anchored at the exact base location (0, 0),
+ * perfectly centered among vNet, SG, SSHKey, and CSP icons.
+ * Subsequent NodeGroups (ngIndex > 0) receive a modest offset so their clusters do not collide.
+ * @param {number} ngIndex - This NodeGroup's index at the shared location (0-based)
+ * @param {number} totalNg - Total NodeGroups sharing this location in the Infra
+ * @returns {{ox: number, oy: number}} offset in coordinate units
+ */
+function getNodeGroupLocationOffset(ngIndex, totalNg) {
+  if (totalNg <= 1 || ngIndex === 0) return { ox: 0, oy: 0 };
+  if (totalNg === 2) {
+    return { ox: 0.6, oy: 0 };
+  }
+  const ringRadius = 0.6;
+  const angleStep = 2 * Math.PI / (totalNg - 1);
+  const startAngle = 0;
+  const angle = startAngle + angleStep * (ngIndex - 1);
+  return {
+    ox: ringRadius * Math.cos(angle),
+    oy: ringRadius * Math.sin(angle) * 0.78
+  };
+}
+
 function returnAdjustmentPoint(index, totalNodes) {
   // Initialize coordinates
   let ax = 0.0;
@@ -1785,7 +1875,7 @@ function makeTria(ip1, ip2, ip3) {
 }
 
 // Build Node dot geometry data for an Infra entry in infraRenderMap
-function makePolyDot(infraEntry, nodePoints, nodeStatuses = [], nodeProviders = [], nodeCommandStatuses = []) {
+function makePolyDot(infraEntry, nodePoints, nodeStatuses = [], nodeProviders = [], nodeCommandStatuses = [], overLimitLabels = [], nodeCenterFlags = []) {
   var resourcePoints = [];
   for (i = 0; i < nodePoints.length; i++) {
     resourcePoints.push(nodePoints[i]);
@@ -1795,7 +1885,9 @@ function makePolyDot(infraEntry, nodePoints, nodeStatuses = [], nodeProviders = 
     nodePoints: nodePoints,
     nodeStatuses: nodeStatuses,
     nodeProviders: nodeProviders,
-    nodeCommandStatuses: nodeCommandStatuses
+    nodeCommandStatuses: nodeCommandStatuses,
+    overLimitLabels: overLimitLabels,
+    nodeCenterFlags: nodeCenterFlags
   };
 }
 
@@ -2108,11 +2200,80 @@ window.range_change = range_change;
   });
 })();
 
+// Helper to reliably extract coordinates for an MC-Infra configuration nodeGroup
+function getCoordinatesForConfig(spec, nodeConfig) {
+  // 1. Direct check on spec region coordinates
+  let lon = parseFloat(spec?.regionLongitude);
+  let lat = parseFloat(spec?.regionLatitude);
+  if (Number.isFinite(lon) && Number.isFinite(lat)) {
+    return [lon, lat];
+  }
+
+  // 2. Direct check on location object if available
+  if (spec?.location) {
+    lon = parseFloat(spec.location.longitude);
+    lat = parseFloat(spec.location.latitude);
+    if (Number.isFinite(lon) && Number.isFinite(lat)) return [lon, lat];
+  }
+
+  // 3. Fallback: Lookup from registered connections in central store
+  const connections = window.cloudBaristaCentralData?.connection || [];
+  const connName = nodeConfig?.connectionName || spec?.connectionName;
+  const specId = nodeConfig?.specId || spec?.id || '';
+
+  const extractProvider = (id) => (id && id.includes('+') ? id.split('+')[0] : (spec?.providerName || ''));
+  const extractRegion = (id) => (id && id.includes('+') ? id.split('+')[1] : (spec?.regionName || ''));
+
+  const provider = (spec?.providerName || extractProvider(specId)).toLowerCase();
+  const region = (spec?.regionName || extractRegion(specId)).toLowerCase();
+
+  // Try matching by connectionName
+  if (connName && connections.length > 0) {
+    const matched = connections.find(c => c.configName === connName);
+    if (matched?.regionDetail?.location) {
+      lon = parseFloat(matched.regionDetail.location.longitude);
+      lat = parseFloat(matched.regionDetail.location.latitude);
+      if (Number.isFinite(lon) && Number.isFinite(lat)) return [lon, lat];
+    }
+  }
+
+  // Try matching by provider + region
+  if (provider && region && connections.length > 0) {
+    const matched = connections.find(c =>
+      (c.providerName || '').toLowerCase() === provider &&
+      (c.regionDetail?.regionName || '').toLowerCase() === region
+    );
+    if (matched?.regionDetail?.location) {
+      lon = parseFloat(matched.regionDetail.location.longitude);
+      lat = parseFloat(matched.regionDetail.location.latitude);
+      if (Number.isFinite(lon) && Number.isFinite(lat)) return [lon, lat];
+    }
+  }
+
+  return null;
+}
+
 function renderMapFromConfig() {
-  const specs = window.recommendedSpecList || recommendedSpecList;
-  cspPointsCircle = specs
-    .map(s => [parseFloat(s?.regionLongitude), parseFloat(s?.regionLatitude)])
-    .filter(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat));
+  const specs = window.recommendedSpecList || recommendedSpecList || [];
+  const nodeConfigs = window.nodeGroupRequestFromSpecList || nodeGroupRequestFromSpecList || [];
+  const totalItems = Math.max(specs.length, nodeConfigs.length);
+
+  const points = [];
+  for (let i = 0; i < totalItems; i++) {
+    const sp = specs[i];
+    const nc = nodeConfigs[i];
+    const coords = getCoordinatesForConfig(sp, nc);
+    if (coords) {
+      points.push(coords);
+      // Cache coordinates back to spec for subsequent operations
+      if (sp) {
+        if (!Number.isFinite(parseFloat(sp.regionLongitude))) sp.regionLongitude = coords[0];
+        if (!Number.isFinite(parseFloat(sp.regionLatitude))) sp.regionLatitude = coords[1];
+      }
+    }
+  }
+
+  cspPointsCircle = points;
   geoCspPointsCircle = cspPointsCircle.length
     ? [new MultiPoint(cspPointsCircle)]
     : [];
@@ -2333,8 +2494,8 @@ function getInfra() {
             const seenLocations = new Set();
             for (const nd of item.node) {
               if (!nd.location || nd.location.longitude === undefined || nd.location.latitude === undefined) continue;
-              // Round to ~0.5 degree to group nearby regions
-              const locKey = Math.round(nd.location.longitude * 2) / 2 + ',' + Math.round(nd.location.latitude * 2) / 2;
+              // Group by precise coordinates (~100m) to keep distinct CSP regions separate
+              const locKey = getLocationCoordKey(nd.location.longitude, nd.location.latitude);
               if (!seenLocations.has(locKey)) {
                 seenLocations.add(locKey);
                 const idx = locationInfraCounter.get(locKey) || 0;
@@ -2367,175 +2528,200 @@ function getInfra() {
 
             var vmGeo = [];
 
-            // Build intra-Infra location groups: VMs within same ~0.5° grid get spread out
-            // Key: "roundedLon,roundedLat" → array of Node indices in that cell
-            const intraLocGroups = new globalThis.Map();
+            // Build per-NodeGroup location groups within this Infra:
+            // Key: gid (nodeGroupId) -> { nodeIndices: number[], locKey: string }
+            const ngMap = new globalThis.Map();
             for (let vi = 0; vi < item.node.length; vi++) {
               const v = item.node[vi];
               if (!v.location || v.location.longitude === undefined || v.location.latitude === undefined) continue;
-              const gKey = Math.round(v.location.longitude * 2) / 2 + ',' + Math.round(v.location.latitude * 2) / 2;
-              if (!intraLocGroups.has(gKey)) intraLocGroups.set(gKey, []);
-              intraLocGroups.get(gKey).push(vi);
+              const locKey = getLocationCoordKey(v.location.longitude, v.location.latitude);
+              const gid = v.nodeGroupId || ('default_' + locKey);
+              if (!ngMap.has(gid)) {
+                ngMap.set(gid, { nodeIndices: [], locKey: locKey });
+              }
+              ngMap.get(gid).nodeIndices.push(vi);
             }
-            // Build per-Node lookup: nodeIndex → { indexInGroup, groupSize }
+
+            // Group NodeGroups in this Infra by their location to offset overlapping NodeGroups
+            // locKey -> [gid1, gid2, ...]
+            const locToNgList = new globalThis.Map();
+            for (const [gid, data] of ngMap) {
+              if (!locToNgList.has(data.locKey)) locToNgList.set(data.locKey, []);
+              locToNgList.get(data.locKey).push(gid);
+            }
+
+            // Build per-Node lookup: nodeIndex -> { indexInGroup, groupSize, ngOffsetIndex, totalNgAtLoc, nodeGroupId }
             const vmGroupInfo = new globalThis.Map();
-            for (const [, indices] of intraLocGroups) {
-              for (let gi = 0; gi < indices.length; gi++) {
-                vmGroupInfo.set(indices[gi], { indexInGroup: gi, groupSize: indices.length });
+            for (const [gid, data] of ngMap) {
+              const ngList = locToNgList.get(data.locKey);
+              const ngOffsetIndex = ngList.indexOf(gid);
+              const totalNgAtLoc = ngList.length;
+              const groupSize = data.nodeIndices.length;
+
+              for (let gi = 0; gi < data.nodeIndices.length; gi++) {
+                const nodeIdx = data.nodeIndices[gi];
+                vmGroupInfo.set(nodeIdx, {
+                  indexInGroup: gi,
+                  groupSize: groupSize,
+                  ngOffsetIndex: ngOffsetIndex,
+                  totalNgAtLoc: totalNgAtLoc,
+                  nodeGroupId: gid
+                });
               }
             }
 
             // Build per-Node render point lookup to keep cluster geometry aligned with node dots.
             const nodeRenderPointById = new globalThis.Map();
 
+            const limit = window.maxVisibleNodes || maxVisibleNodes || 20;
+            const groupFirstCoordMap = new globalThis.Map(); // gid -> [x, y] of first rendered node
+            const groupRightmostCoordMap = new globalThis.Map(); // gid -> { coord: [x, y], totalCount: number }
+            var nodeStatuses = [];
+            var nodeProviders = [];
+            var nodeCommandStatuses = [];
+            var nodePoints = [];
+            var nodeCenterFlags = [];
             var validateNum = 0;
-            for (j = 0; j < item.node.length; j++) {
-              const nd = item.node[j];
+
+            for (let nodeIndex = 0; nodeIndex < item.node.length; nodeIndex++) {
+              const nd = item.node[nodeIndex];
               if (!nd.location || nd.location.longitude === undefined || nd.location.latitude === undefined) {
-                console.warn(`Node ${nd.id || j}: missing location data, skipping`);
+                console.warn(`Node ${nd.id || nodeIndex}: missing location data, skipping`);
+                continue;
+              }
+              validateNum++;
+
+              // 1. Inter-Infra offset: separate overlapping Infras at shared location
+              const nodeLocKey2 = getLocationCoordKey(nd.location.longitude, nd.location.latitude);
+              const infraIdx2 = infraLocationIndex.get(item.id + ':' + nodeLocKey2) || 0;
+              const totalInfras2 = locationInfraCounter.get(nodeLocKey2) || 1;
+              const infraOff2 = getInfraLocationOffset(infraIdx2, totalInfras2);
+              const infraOffX2 = (infraOff2.ox / zoomLevel) * radius;
+              const infraOffY2 = (infraOff2.oy / zoomLevel) * radius;
+
+              // 2. NodeGroup info for this node
+              const gInfo2 = vmGroupInfo.get(nodeIndex);
+              const gid = gInfo2 ? gInfo2.nodeGroupId : (nd.nodeGroupId || 'default');
+              const groupSize = gInfo2 ? gInfo2.groupSize : 1;
+              const indexInGroup = gInfo2 ? gInfo2.indexInGroup : 0;
+              const ngOffsetIndex = gInfo2 ? gInfo2.ngOffsetIndex : 0;
+              const totalNgAtLoc = gInfo2 ? gInfo2.totalNgAtLoc : 1;
+
+              // 3. Inter-NodeGroup offset: separate multiple NodeGroups of this Infra at the same location
+              const ngOff = getNodeGroupLocationOffset(ngOffsetIndex, totalNgAtLoc);
+              const ngOffX = (ngOff.ox / zoomLevel) * radius;
+              const ngOffY = (ngOff.oy / zoomLevel) * radius;
+
+              // 4. Intra-NodeGroup circular layout
+              const isOverLimit = groupSize > limit;
+              const effectiveGroupSize = isOverLimit ? limit : groupSize;
+              const isCenterNode = (indexInGroup === 0);
+
+              // If this NodeGroup exceeds limit and we've already reached the limit, omit rendering
+              if (isOverLimit && indexInGroup >= limit) {
+                const repPt = groupFirstCoordMap.get(gid);
+                if (nd.id && repPt) {
+                  nodeRenderPointById.set(nd.id, repPt);
+                }
                 continue;
               }
 
-              // Compute inter-Infra offset for this Node's location
-              const nodeLocKey = Math.round(nd.location.longitude * 2) / 2 + ',' + Math.round(nd.location.latitude * 2) / 2;
-              const infraIdxAtLoc = infraLocationIndex.get(item.id + ':' + nodeLocKey) || 0;
-              const totalInfrasAtLoc = locationInfraCounter.get(nodeLocKey) || 1;
-              const infraOff = getInfraLocationOffset(infraIdxAtLoc, totalInfrasAtLoc);
-              const infraOffX = (infraOff.ox / zoomLevel) * radius;
-              const infraOffY = (infraOff.oy / zoomLevel) * radius;
-
-              // Compute intra-Infra offset: spread VMs sharing the same location group
-              const gInfo = vmGroupInfo.get(j);
-              let intraOffX = 0, intraOffY = 0;
-              if (gInfo && gInfo.groupSize > 1 && gInfo.indexInGroup > 0) {
-                const adj = returnAdjustmentPoint(gInfo.indexInGroup, gInfo.groupSize);
-                intraOffX = (adj.ax / zoomLevel) * radius;
-                intraOffY = (adj.ay / zoomLevel) * radius;
+              // Compute intra-NodeGroup offset: spread VMs belonging to this NodeGroup around its center
+              let intraOffX2 = 0, intraOffY2 = 0;
+              if (effectiveGroupSize > 1 && indexInGroup > 0) {
+                const adj2 = returnAdjustmentPoint(indexInGroup, effectiveGroupSize);
+                intraOffX2 = (adj2.ax / zoomLevel) * radius;
+                intraOffY2 = (adj2.ay / zoomLevel) * radius;
               }
 
-              vmGeo.push([
-                nd.location.longitude * 1 + infraOffX + intraOffX,
-                nd.location.latitude * 1 + infraOffY + intraOffY,
-              ]);
-              validateNum++;
-            }
-            if (item.node.length == 1 && item.node[0].location && item.node[0].location.longitude !== undefined && item.node[0].location.latitude !== undefined) {
-              const singleVm = item.node[0];
-              const sLocKey = Math.round(singleVm.location.longitude * 2) / 2 + ',' + Math.round(singleVm.location.latitude * 2) / 2;
-              const sIdx = infraLocationIndex.get(item.id + ':' + sLocKey) || 0;
-              const sTotal = locationInfraCounter.get(sLocKey) || 1;
-              const sOff = getInfraLocationOffset(sIdx, sTotal);
-              const sOffX = (sOff.ox / zoomLevel) * radius;
-              const sOffY = (sOff.oy / zoomLevel) * radius;
-              vmGeo.pop();
-              vmGeo.push([
-                singleVm.location.longitude * 1 + sOffX,
-                singleVm.location.latitude * 1 + sOffY,
-              ]);
-              vmGeo.push([
-                singleVm.location.longitude * 1 + sOffX + Math.random() * 0.001,
-                singleVm.location.latitude * 1 + sOffY + Math.random() * 0.001,
-              ]);
-              vmGeo.push([
-                singleVm.location.longitude * 1 + sOffX + Math.random() * 0.001,
-                singleVm.location.latitude * 1 + sOffY + Math.random() * 0.001,
-              ]);
-            }
-            if (validateNum == item.node.length) {
-              var nodeStatuses = [];
-              var nodeProviders = [];
-              var nodeCommandStatuses = [];
-              var nodePoints = [];
-              
-              for (let nodeIndex = 0; nodeIndex < item.node.length; nodeIndex++) {
-                const nd = item.node[nodeIndex];
-                
-                if (nodeIndex === 0) {
-                  debugLog.node(`Node ${nd.id || 'unknown'} structure:`, nd);
+              const coords = [
+                nd.location.longitude * 1 + infraOffX2 + ngOffX + intraOffX2,
+                nd.location.latitude * 1 + infraOffY2 + ngOffY + intraOffY2,
+              ];
+
+              if (!groupFirstCoordMap.has(gid)) {
+                groupFirstCoordMap.set(gid, coords);
+              }
+
+              // Track rightmost node for over-limit groups to place "(count)" label per NodeGroup
+              if (isOverLimit) {
+                const currentRightmost = groupRightmostCoordMap.get(gid);
+                if (!currentRightmost || coords[0] > currentRightmost.coord[0]) {
+                  groupRightmostCoordMap.set(gid, { coord: coords, totalCount: groupSize });
                 }
-                
-                nodeStatuses.push(nd.status || "Undefined");
-                
-                let commandStatus = "None";
-                if (nd.commandStatus) {
-                  const queuedCmd = nd.commandStatus.find(cmd => cmd.status === "Queued");
-                  const handlingCmd = nd.commandStatus.find(cmd => cmd.status === "Handling");
-                  
-                  if (handlingCmd) {
-                    commandStatus = "Handling";
-                  } else if (queuedCmd) {
-                    commandStatus = "Queued";
-                  }
+              }
+
+              if (nodeIndex === 0) {
+                debugLog.node(`Node ${nd.id || 'unknown'} structure:`, nd);
+              }
+
+              nodeStatuses.push(nd.status || "Undefined");
+
+              let commandStatus = "None";
+              if (nd.commandStatus) {
+                const queuedCmd = nd.commandStatus.find(cmd => cmd.status === "Queued");
+                const handlingCmd = nd.commandStatus.find(cmd => cmd.status === "Handling");
+                if (handlingCmd) {
+                  commandStatus = "Handling";
+                } else if (queuedCmd) {
+                  commandStatus = "Queued";
                 }
-                if (commandStatus === "None" && window._cmdStreamSessions) {
-                  Object.values(window._cmdStreamSessions).forEach((s) => {
-                    if (!s || s.doneSummary || s.error || s.commandError) return;
-                    if (!s.infraId || s.infraId === item.id) {
-                      const ns = s.nodeState && s.nodeState[nd.id];
-                      if (ns) {
-                        if (ns.status === 'Handling') commandStatus = 'Handling';
-                        else if (ns.status === 'Queued' && commandStatus !== 'Handling') commandStatus = 'Queued';
-                      } else if (!s.targetNodeId || s.targetNodeId === nd.id) {
-                        commandStatus = 'Handling';
-                      }
+              }
+              if (commandStatus === "None" && window._cmdStreamSessions) {
+                Object.values(window._cmdStreamSessions).forEach((s) => {
+                  if (!s || s.doneSummary || s.error || s.commandError) return;
+                  if (!s.infraId || s.infraId === item.id) {
+                    const ns = s.nodeState && s.nodeState[nd.id];
+                    if (ns) {
+                      if (ns.status === 'Handling') commandStatus = 'Handling';
+                      else if (ns.status === 'Queued' && commandStatus !== 'Handling') commandStatus = 'Queued';
+                    } else if (!s.targetNodeId || s.targetNodeId === nd.id) {
+                      commandStatus = 'Handling';
                     }
-                  });
-                }
-                nodeCommandStatuses.push(commandStatus);
-                
-                if (nodeIndex === 0 && nd.commandStatus) {
-                  debugLog.node(`Node ${nd.id || 'unknown'} commandStatus:`, nd.commandStatus);
-                  debugLog.node(`Node ${nd.id} command status:`, commandStatus);
-                }
-                
-                let provider = "unknown";
-                
-                if (nodeIndex === 0) {
-                  debugLog.node(`Node ${nd.id}: connectionName =`, nd.connectionName);
-                  debugLog.node(`Node ${nd.id}: connectionConfig =`, nd.connectionConfig);
-                }
-                
-                if (nd.connectionConfig && nd.connectionConfig.providerName) {
-                  provider = nd.connectionConfig.providerName;
-                  if (nodeIndex === 0) debugLog.node(`Node ${nd.id}: found provider in connectionConfig = ${provider}`);
-                } else if (nd.connectionName) {
-                  provider = nd.connectionName.split('-')[0];
-                  if (nodeIndex === 0) debugLog.node(`Node ${nd.id}: extracted provider from connectionName = ${provider}`);
-                } else {
-                  if (nodeIndex === 0) {
-                    debugLog.node(`Node ${nd.id}: no provider info found, using unknown`);
-                    debugLog.node(`Node ${nd.id}: available properties:`, Object.keys(nd));
                   }
-                }
-                
-                nodeProviders.push(provider);
-
-                // Compute inter-Infra offset for this Node's location
-                const nodeLocKey2 = Math.round(nd.location.longitude * 2) / 2 + ',' + Math.round(nd.location.latitude * 2) / 2;
-                const infraIdx2 = infraLocationIndex.get(item.id + ':' + nodeLocKey2) || 0;
-                const totalInfras2 = locationInfraCounter.get(nodeLocKey2) || 1;
-                const infraOff2 = getInfraLocationOffset(infraIdx2, totalInfras2);
-                const infraOffX2 = (infraOff2.ox / zoomLevel) * radius;
-                const infraOffY2 = (infraOff2.oy / zoomLevel) * radius;
-                
-                // Compute intra-Infra offset: spread VMs sharing the same location group
-                const gInfo2 = vmGroupInfo.get(nodeIndex);
-                let intraOffX2 = 0, intraOffY2 = 0;
-                if (gInfo2 && gInfo2.groupSize > 1 && gInfo2.indexInGroup > 0) {
-                  const adj2 = returnAdjustmentPoint(gInfo2.indexInGroup, gInfo2.groupSize);
-                  intraOffX2 = (adj2.ax / zoomLevel) * radius;
-                  intraOffY2 = (adj2.ay / zoomLevel) * radius;
-                }
-                nodePoints.push([
-                  nd.location.longitude * 1 + infraOffX2 + intraOffX2,
-                  nd.location.latitude * 1 + infraOffY2 + intraOffY2,
-                ]);
-
-                if (nd.id) {
-                  nodeRenderPointById.set(nd.id, nodePoints[nodePoints.length - 1]);
-                }
+                });
               }
+              nodeCommandStatuses.push(commandStatus);
 
+              let provider = "unknown";
+              if (nd.connectionConfig && nd.connectionConfig.providerName) {
+                provider = nd.connectionConfig.providerName;
+              } else if (nd.connectionName) {
+                provider = nd.connectionName.split('-')[0];
+              }
+              nodeProviders.push(provider);
+
+              vmGeo.push(coords);
+              nodePoints.push(coords);
+              nodeCenterFlags.push(isCenterNode);
+              if (nd.id) {
+                nodeRenderPointById.set(nd.id, coords);
+              }
+            }
+
+            // Build overLimitLabels: for each group that exceeded limit, place "(totalCount)" at the rightmost node
+            const overLimitLabels = [];
+            for (const [, info] of groupRightmostCoordMap) {
+              overLimitLabels.push({
+                coord: info.coord,
+                text: `(${info.totalCount})`
+              });
+            }
+
+            // Single node fallback to create minimal convex hull
+            if (vmGeo.length === 1) {
+              const singleCoord = vmGeo[0];
+              vmGeo.push([
+                singleCoord[0] + Math.random() * 0.001,
+                singleCoord[1] + Math.random() * 0.001,
+              ]);
+              vmGeo.push([
+                singleCoord[0] + Math.random() * 0.001,
+                singleCoord[1] + Math.random() * 0.001,
+              ]);
+            }
+
+            if (validateNum === item.node.length) {
               // Keep the original Infra name/id (no "-nlb" -> "NLB" relabel) so a
               // Global NLB host remains identifiable/operable as its own Infra.
               var newName = item.name;
@@ -2554,7 +2740,7 @@ function getInfra() {
               };
 
               // Build Node dots and polygon geometry into the entry
-              makePolyDot(infraEntry, vmGeo, nodeStatuses, nodeProviders, nodeCommandStatuses);
+              makePolyDot(infraEntry, vmGeo, nodeStatuses, nodeProviders, nodeCommandStatuses, overLimitLabels, nodeCenterFlags);
               // convexHull sorts in-place; pass a copy so vmGeo (stored in
               // geometryPoints.nodePoints by reference) keeps the original
               // item.node order aligned with nodeProviders/nodeStatuses.
@@ -3280,23 +3466,47 @@ function drawObjects(event) {
     
     // Check if geometryPoint has the new structure with Node data
     if (geometryPoint && typeof geometryPoint === 'object' && geometryPoint.geometry) {
-      const { geometry, nodePoints, nodeStatuses, nodeProviders, nodeCommandStatuses } = geometryPoint;
+      const { geometry, nodePoints, nodeStatuses, nodeProviders, nodeCommandStatuses, overLimitLabels, nodeCenterFlags } = geometryPoint;
       const vmBaseScale = changeSizeStatus(data.name + data.status);
       
       if (nodePoints && nodeStatuses) {
-        nodeStatuses.forEach((nodeStatus, nodeIndex) => {
+        const renderSingleNode = (nodeIndex) => {
           if (nodePoints[nodeIndex]) {
             const nodeCoords = nodePoints[nodeIndex];
+            const nodeStatus = nodeStatuses[nodeIndex];
+            const vmPoint = new Point(nodeCoords);
             const vmProvider = nodeProviders ? nodeProviders[nodeIndex] : null;
             const commandStatus = nodeCommandStatuses ? nodeCommandStatuses[nodeIndex] : "None";
             const vmStyles = createNodeStyleWithStatusBadge(nodeStatus, vmProvider, vmBaseScale, nodeCoords, commandStatus);
             
-            const vmPoint = new Point(nodeCoords);
             vmStyles.forEach(style => {
               vectorContext.setStyle(style);
               vectorContext.drawGeometry(vmPoint);
             });
           }
+        };
+
+        // 1. Draw outer ring nodes first
+        nodeStatuses.forEach((_, nodeIndex) => {
+          if (!nodeCenterFlags || !nodeCenterFlags[nodeIndex]) {
+            renderSingleNode(nodeIndex);
+          }
+        });
+
+        // 2. Draw center nodes last so they stay on top and are never covered when zoomed out
+        nodeStatuses.forEach((_, nodeIndex) => {
+          if (nodeCenterFlags && nodeCenterFlags[nodeIndex]) {
+            renderSingleNode(nodeIndex);
+          }
+        });
+      }
+
+      // If group exceeded maxVisibleNodes, display "(totalCount)" to the right of the rightmost node icon
+      if (overLimitLabels && overLimitLabels.length > 0) {
+        overLimitLabels.forEach(lbl => {
+          const lblPoint = new Point(lbl.coord);
+          vectorContext.setStyle(createNodeCountSuffixStyle(lbl.text));
+          vectorContext.drawGeometry(lblPoint);
         });
       }
     } else {

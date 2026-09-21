@@ -139,9 +139,7 @@ function updateInfraList() {
 }
 window.updateInfraList = updateInfraList;
 
-document.getElementById("infraid").onmouseover = function () {
-  updateInfraList();
-};
+// Remove aggressive onmouseover re-fetch that caused unnecessary re-rendering
 document.getElementById("infraid").onchange = function () {
   updateNodeAndIpListsFromInfra();
 };
@@ -152,17 +150,30 @@ function updateVmList() {
 }
 window.updateVmList = updateVmList;
 
+// Global maps for O(1) Node <-> IP synchronization
+let nodeToIpMap = new Map();
+let ipToNodeMap = new Map();
+
 document.getElementById("nodeid").addEventListener('change', function () {
-  // When Node is selected, auto-select corresponding IP
+  // When Node is selected, auto-select corresponding IP in O(1)
   var selectedNodeId = this.value;
   var pubipSelect = document.getElementById("pubip");
-  
-  // Find and select the IP option that contains this Node ID
-  for (let i = 0; i < pubipSelect.options.length; i++) {
-    var optionText = pubipSelect.options[i].text;
-    if (optionText.includes(`(${selectedNodeId},`)) {
-      pubipSelect.options[i].selected = true;
-      break;
+  if (pubipSelect && nodeToIpMap.has(selectedNodeId)) {
+    var mappedIp = nodeToIpMap.get(selectedNodeId);
+    if (mappedIp) {
+      pubipSelect.value = mappedIp;
+    }
+  }
+});
+
+document.getElementById("pubip").addEventListener('change', function () {
+  // When IP is selected, auto-select corresponding Node in O(1)
+  var selectedIp = this.value;
+  var nodeSelect = document.getElementById("nodeid");
+  if (nodeSelect && ipToNodeMap.has(selectedIp)) {
+    var mappedNodeId = ipToNodeMap.get(selectedIp);
+    if (mappedNodeId) {
+      nodeSelect.value = mappedNodeId;
     }
   }
 });
@@ -181,20 +192,23 @@ window.updateNodeGroupList = updateNodeGroupList;
 
 // NodeGroup selection element no longer exists in UI
 
+// Max number of nodes to render in the native select dropdown to prevent browser freezing
+const MAX_CONTROL_NODES_DISPLAY = 100;
+
 // New unified function to update Node and IP lists from Infra data
 function updateNodeAndIpListsFromInfra() {
   var nodeSelectElement = document.getElementById("nodeid");
   var ipSelectElement = document.getElementById("pubip");
+  if (!nodeSelectElement || !ipSelectElement) return;
+
   var previousNodeSelection = nodeSelectElement.value;
   var previousIpSelection = ipSelectElement.value;
   
-  // Clear existing options
-  while (nodeSelectElement.options.length > 0) {
-    nodeSelectElement.remove(0);
-  }
-  while (ipSelectElement.options.length > 0) {
-    ipSelectElement.remove(0);
-  }
+  // Clear existing options efficiently in single operation
+  nodeSelectElement.innerHTML = "";
+  ipSelectElement.innerHTML = "";
+  nodeToIpMap.clear();
+  ipToNodeMap.clear();
 
   var config = getConfig(); var hostname = config.hostname;
   var port = config.port;
@@ -217,35 +231,91 @@ function updateNodeAndIpListsFromInfra() {
       .then((res) => {
         const nodes = (window.getInfraNodes ? window.getInfraNodes(res.data) : null) || res.data?.node || [];
         if (nodes.length > 0) {
+          // Populate lookup maps for fast O(1) sync
           nodes.forEach(nd => {
-            // Add Node option with NodeGroup info
-            var nodeOption = document.createElement("option");
-            nodeOption.value = nd.id;
-            nodeOption.text = `${nd.id} (${nd.nodeGroupId || 'default'})`;
-            nodeSelectElement.appendChild(nodeOption);
-
-            // Add IP option with Node and NodeGroup info
-            if (nd.publicIP && nd.publicIP.trim() !== "") {
-              var ipOption = document.createElement("option");
-              ipOption.value = nd.publicIP;
-              ipOption.text = `${nd.publicIP} (${nd.id}, ${nd.nodeGroupId || 'default'})`;
-              ipSelectElement.appendChild(ipOption);
+            if (nd.id && nd.publicIP && nd.publicIP.trim() !== "") {
+              nodeToIpMap.set(nd.id, nd.publicIP);
+              ipToNodeMap.set(nd.publicIP, nd.id);
             }
           });
 
-          // Restore previous selections if they still exist
-          for (let i = 0; i < nodeSelectElement.options.length; i++) {
-            if (nodeSelectElement.options[i].value === previousNodeSelection) {
-              nodeSelectElement.options[i].selected = true;
-              break;
+          // Cap displayed nodes to MAX_CONTROL_NODES_DISPLAY to protect browser UI
+          const totalCount = nodes.length;
+          const displayLimit = Math.min(totalCount, MAX_CONTROL_NODES_DISPLAY);
+
+          const nodeFrag = document.createDocumentFragment();
+          const ipFrag = document.createDocumentFragment();
+
+          let previousNodeIncluded = false;
+          let previousIpIncluded = false;
+
+          for (let i = 0; i < displayLimit; i++) {
+            const nd = nodes[i];
+            const nodeOption = document.createElement("option");
+            nodeOption.value = nd.id;
+            nodeOption.text = `${nd.id} (${nd.nodeGroupId || 'default'})`;
+            if (nd.id === previousNodeSelection) {
+              nodeOption.selected = true;
+              previousNodeIncluded = true;
+            }
+            nodeFrag.appendChild(nodeOption);
+
+            if (nd.publicIP && nd.publicIP.trim() !== "") {
+              const ipOption = document.createElement("option");
+              ipOption.value = nd.publicIP;
+              ipOption.text = `${nd.publicIP} (${nd.id}, ${nd.nodeGroupId || 'default'})`;
+              if (nd.publicIP === previousIpSelection) {
+                ipOption.selected = true;
+                previousIpIncluded = true;
+              }
+              ipFrag.appendChild(ipOption);
             }
           }
-          for (let i = 0; i < ipSelectElement.options.length; i++) {
-            if (ipSelectElement.options[i].value === previousIpSelection) {
-              ipSelectElement.options[i].selected = true;
-              break;
+
+          // If previous selection was outside top 100, preserve it explicitly
+          if (previousNodeSelection && !previousNodeIncluded) {
+            const prevNode = nodes.find(n => n.id === previousNodeSelection);
+            if (prevNode) {
+              const nodeOption = document.createElement("option");
+              nodeOption.value = prevNode.id;
+              nodeOption.text = `${prevNode.id} (${prevNode.nodeGroupId || 'default'})`;
+              nodeOption.selected = true;
+              nodeFrag.appendChild(nodeOption);
             }
           }
+          if (previousIpSelection && !previousIpIncluded) {
+            const prevIpNode = nodes.find(n => n.publicIP === previousIpSelection);
+            if (prevIpNode) {
+              const ipOption = document.createElement("option");
+              ipOption.value = prevIpNode.publicIP;
+              ipOption.text = `${prevIpNode.publicIP} (${prevIpNode.id}, ${prevIpNode.nodeGroupId || 'default'})`;
+              ipOption.selected = true;
+              ipFrag.appendChild(ipOption);
+            }
+          }
+
+          // If total nodes exceed limit, append informational option
+          if (totalCount > displayLimit) {
+            const nodeNotice = document.createElement("option");
+            nodeNotice.disabled = true;
+            nodeNotice.value = "";
+            nodeNotice.text = `... (${totalCount - displayLimit} more nodes omitted, total: ${totalCount})`;
+            nodeNotice.style.color = "#888";
+            nodeNotice.style.fontStyle = "italic";
+            nodeFrag.appendChild(nodeNotice);
+
+            const ipNotice = document.createElement("option");
+            ipNotice.disabled = true;
+            ipNotice.value = "";
+            ipNotice.text = `... (omitted, total: ${totalCount} nodes)`;
+            ipNotice.style.color = "#888";
+            ipNotice.style.fontStyle = "italic";
+            ipFrag.appendChild(ipNotice);
+          }
+
+          // Single-shot DOM injection to avoid reflow spikes
+          nodeSelectElement.appendChild(nodeFrag);
+          ipSelectElement.appendChild(ipFrag);
         }
       })
       .catch(function (error) {

@@ -2159,6 +2159,7 @@ function updateNodeGroupReview() {
   
   if (nodeGroupRequestFromSpecList.length === 0) {
     reviewCard.style.display = 'none';
+    renderMapFromConfig();
     return;
   }
   
@@ -2277,6 +2278,9 @@ function updateNodeGroupReview() {
       console.log('Auto-scroll failed:', error);
     }
   }, 100);
+
+  // Synchronize map configuration pins and polygons with current review panel state
+  renderMapFromConfig();
 }
 
 function createNodeGroupItem(nodeConf, spec, index) {
