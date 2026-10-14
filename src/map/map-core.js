@@ -2412,7 +2412,7 @@ function getInfra() {
   }
 
   isFetchingInfra = true;
-  pollExternalRequests();
+  // Note: pollExternalRequests is now running independently on a dedicated 1s interval in infra-card.js
 
   // Show refresh indicator
   showMapRefreshIndicator(true);
