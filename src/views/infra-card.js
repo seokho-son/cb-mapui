@@ -1433,8 +1433,9 @@ function handleInfraWithoutNodes(infraItem) {
 const ACTIVITY_MAX = 6;                 // cards kept on screen
 const ACTIVITY_MCP_LIFETIME_MS = 20000; // MCP event card auto-expire
 const ACTIVITY_GUI_DONE_MS = 2500;      // GUI card lingers after it completes
-const mcpBannerSeen = new Set();        // startTime+url, so an MCP request is shown once
+const mcpBannerSeen = new Set();        // startTime+url, so an MCP/API request is shown once
 const guiActivityCards = new window.Map(); // taskId -> live card
+const extActivityCards = new window.Map(); // key -> live card from CB-TB request log
 
 // Unified activity feed (top-right): API work in progress, whether triggered from
 // the map GUI (source 'gui') or arriving from an agent via MCP (source 'mcp').
@@ -1473,13 +1474,14 @@ const ACTIVITY_METHOD_COLOR = { GET: '#9fb3c8', POST: '#61dafb', PUT: '#f0b429',
 const ACTIVITY_SRC = {
   mcp: { tag: 'MCP', badge: '#61dafb' },
   gui: { tag: 'GUI', badge: '#7fd6a0' },
+  api: { tag: 'API', badge: '#c084fc' },
 };
 
 // Build and mount a feed card. Returns the element so live (GUI) cards can be updated.
 // opts: { source, method?, text, status, ok?, live? }
 function activityCardAdd(opts) {
   const box = activityFeedContainer();
-  const src = ACTIVITY_SRC[opts.source] || ACTIVITY_SRC.gui;
+  const src = ACTIVITY_SRC[opts.source] || ACTIVITY_SRC.api;
   const ok = opts.ok !== false;
   const accent = !ok ? '#ff6b6b'
     : (opts.method ? (ACTIVITY_METHOD_COLOR[opts.method] || src.badge) : src.badge);
@@ -1592,27 +1594,37 @@ function reconcileGuiActivity() {
 }
 setInterval(reconcileGuiActivity, 3000);
 
-// MCP: an agent-origin request observed in the TB request log (point-in-time event).
-// Kept named mcpBannerAdd so pollExternalRequests is unchanged.
+// MCP / API: a request observed in the TB request log.
 function mcpBannerAdd(entry) {
   const ok = String(entry.status).toLowerCase() !== 'error';
   const card = activityCardAdd({
-    source: 'mcp',
+    source: entry.source || (entry.isMcp ? 'mcp' : 'api'),
     method: String(entry.method || '').toUpperCase(),
     text: entry.url,
     status: entry.status,
+    live: entry.live,
     ok,
   });
-  activityCardExpire(card, ACTIVITY_MCP_LIFETIME_MS);
+  if (!entry.live) {
+    activityCardExpire(card, ACTIVITY_MCP_LIFETIME_MS);
+  }
+  return card;
 }
 
+let isPollingExternal = false;
+
 async function pollExternalRequests() {
+  if (typeof document !== 'undefined' && document.hidden) return;
+  if (isPollingExternal) return;
+  const username = window.configUsername;
+  const password = window.configPassword;
+  if (!username || !password) return;
+
+  isPollingExternal = true;
   try {
-    // The filters are not optional. Without them this endpoint returns every tracked
-    // request with its full body and response - measured at 13.5 MB. source=mcp keeps
-    // only agent-origin requests (GET included) and brief=true drops the bodies.
-    const resp = await axios.get(`${tbApiBase()}/requests?source=mcp&time=2&brief=true`, {
-      auth: { username: window.configUsername, password: window.configPassword }, timeout: 5000,
+    // Poll tracked requests from CB-TB (brief=true drops large bodies, time=2 limits to last 2 mins)
+    const resp = await axios.get(`${tbApiBase()}/requests?time=2&brief=true`, {
+      auth: { username, password }, timeout: 3000,
     }).catch(() => null);
     if (!resp) return;
 
@@ -1620,26 +1632,72 @@ async function pollExternalRequests() {
     if (!Array.isArray(items)) items = Object.values(items);
 
     items
-      .filter((r) => {
-        const h = r?.requestInfo?.header || {};
-        return (h['X-Request-Source'] || h['x-request-source']) === 'mcp';
-      })
       .sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)))
       .forEach((r) => {
         const info = r.requestInfo || {};
+        const h = info.header || {};
+        const isMcp = (h['X-Request-Source'] || h['x-request-source']) === 'mcp';
+        const source = isMcp ? 'mcp' : 'api';
+
         const key = `${r.startTime}|${info.url}`;
+        const statusLower = String(r.status || '').toLowerCase();
+        const isHandling = statusLower === 'handling' || statusLower === 'in progress';
+        const ok = statusLower !== 'error';
+
+        // Check if there is already an active live card for this request
+        let card = extActivityCards.get(key);
+        if (card) {
+          if (!isHandling && card.dataset.live === '1') {
+            settleGuiCard(card, ok);
+            extActivityCards.delete(key);
+          }
+          return;
+        }
+
         if (mcpBannerSeen.has(key)) return;
         mcpBannerSeen.add(key);
-        if (mcpBannerSeen.size > 500) mcpBannerSeen.clear();  // bounded, order is not needed
-        mcpBannerAdd({
+        if (mcpBannerSeen.size > 500) mcpBannerSeen.clear(); // bounded, order is not needed
+
+        card = activityCardAdd({
+          source: source,
           method: String(info.method || 'POST').toUpperCase(),
-          url: String(info.url || '').replace(/^\/tumblebug/, ''),
-          status: r.status || 'Handling',
+          text: String(info.url || '').replace(/^\/tumblebug/, ''),
+          status: isHandling ? 'in progress' : r.status,
+          live: isHandling,
+          ok,
         });
+
+        if (isHandling) {
+          card.dataset.live = '1';
+          extActivityCards.set(key, card);
+          // Safety timeout in case completion is not polled
+          setTimeout(() => {
+            if (extActivityCards.has(key)) {
+              settleGuiCard(card, true);
+              extActivityCards.delete(key);
+            }
+          }, 180000);
+        } else {
+          activityCardExpire(card, ACTIVITY_MCP_LIFETIME_MS);
+        }
       });
   } catch (e) {
     // A demo aid must never interfere with the map it sits on.
+  } finally {
+    isPollingExternal = false;
   }
+}
+
+// Dedicated 1-second poller for near-real-time activity tracking
+setInterval(pollExternalRequests, 1000);
+
+// Immediate refresh when tab becomes visible
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      pollExternalRequests();
+    }
+  });
 }
 
 
