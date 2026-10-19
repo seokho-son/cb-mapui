@@ -481,6 +481,7 @@ window.cloudBaristaCentralData = {
   dataDisk: [],
   objectStorage: [],
   sqlDb: [],
+  rdbms: [],
   lastUpdated: null,
   subscribers: [],
   // API status tracking for better error handling
@@ -507,6 +508,7 @@ function notifyDataSubscribers() {
     }
   });
 }
+window.notifyDataSubscribers = notifyDataSubscribers;
 
 // Initialize map's Last Updated display (no-op: timestamp removed from banner)
 function initializeMapLastUpdated() {
@@ -3060,6 +3062,7 @@ function getInfra() {
       
       window.cloudBaristaCentralData.customImage = customImages;
       debugLog.resource('Custom Image data stored:', customImages.length, 'items');
+      notifyDataSubscribers();
     }).catch(function (error) {
       console.log("Custom Image API error:", error);
       // Set empty array on error to prevent undefined issues
@@ -3092,6 +3095,7 @@ function getInfra() {
       
       window.cloudBaristaCentralData.dataDisk = dataDisks;
       debugLog.resource('Data Disk data stored:', dataDisks.length, 'items');
+      notifyDataSubscribers();
     }).catch(function (error) {
       console.log("Data Disk API error:", error);
       // Set empty array on error to prevent undefined issues
@@ -3117,30 +3121,36 @@ function getInfra() {
       } else {
         window.cloudBaristaCentralData.objectStorage = [];
       }
+      notifyDataSubscribers();
     }).catch(function (error) {
       console.log("Object Storage API error:", error);
       window.cloudBaristaCentralData.objectStorage = [];
     });
 
-    // TODO: SQL Database API not yet available in CB-Tumblebug
-    // Get SQL databases - DISABLED until API is implemented
-    // var sqlDbUrl = `${tbApiBase()}/ns/${namespace}/resources/sqlDb`;
-    // axios({
-    //   method: "get",
-    //   url: sqlDbUrl,
-    //   auth: {
-    //     username: `${username}`,
-    //     password: `${password}`,
-    //   },
-    //   timeout: 10000,
-    // }).then((res) => {
-    //   var obj = res.data;
-    //   if (obj && obj.sqlDbs) {
-    //     window.cloudBaristaCentralData.sqlDb = obj.sqlDbs;
-    //   }
-    // }).catch(function (error) {
-    //   console.log("SQL DB API error:", error);
-    // });
+    // Get RDBMS instances
+    var rdbmsUrl = `${tbApiBase()}/ns/${namespace}/resources/rdbms`;
+    axios({
+      method: "get",
+      url: rdbmsUrl,
+      auth: {
+        username: `${username}`,
+        password: `${password}`,
+      },
+      timeout: 10000,
+    }).then((res) => {
+      var obj = res.data;
+      if (obj && Array.isArray(obj.rdbms)) {
+        window.cloudBaristaCentralData.rdbms = obj.rdbms;
+      } else if (obj && Array.isArray(obj.rdbmss)) {
+        window.cloudBaristaCentralData.rdbms = obj.rdbmss;
+      } else {
+        window.cloudBaristaCentralData.rdbms = [];
+      }
+      notifyDataSubscribers();
+    }).catch(function (error) {
+      console.log("RDBMS API error:", error);
+      window.cloudBaristaCentralData.rdbms = [];
+    });
   }
 }
 

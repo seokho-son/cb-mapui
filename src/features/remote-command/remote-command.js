@@ -2384,6 +2384,7 @@ function _escAndLinkify(text, ctx = {}) {
     document.head.appendChild(s);
   }
   if (!text) return '';
+  text = maskSensitiveCmdText(text);
   const linkStyle = 'color:#64b5f6; text-decoration:underline;';
 
   // Attribute-safe escape (for use inside HTML attribute values that we emit directly)
@@ -2816,14 +2817,23 @@ window._cmdRevealToggle = function (xReqId, revealed) {
   if (s.rebuildCallback) s.rebuildCallback();
 };
 
-function startStreamingSession(streamUrl, username, password, xRequestId, infraId, spinnerId, appliedDnsUrl, templateCommands) {
+function maskSensitiveCmdText(str) {
+  if (!str || typeof str !== 'string') return str;
+  return str
+    .replace(/(^|\s)(-p)(['"])(.*?)\3/g, '$1$2$3••••••••$3')
+    .replace(/(^|\s)(-p)([^\s'"&|;><]+)/g, '$1$2••••••••')
+    .replace(/(--password=)(['"]?)(.*?)\2(\s|$)/gi, '$1$2••••••••$2$4')
+    .replace(/(PGPASSWORD=|MYSQL_PWD=)(['"]?)(.*?)\2(\s|$)/gi, '$1$2••••••••$2$4');
+}
+
+function startStreamingSession(streamUrl, username, password, xRequestId, infraId, spinnerId, appliedDnsUrl, templateCommands, onClose) {
   const session = {
     xRequestId,
     infraId,
     spinnerId,
     streamUrl,
     appliedDnsUrl: appliedDnsUrl || null,
-    templateCommands: templateCommands || [],  // pre-substitution command text (no real secrets)
+    templateCommands: (templateCommands || []).map(maskSensitiveCmdText),  // pre-substitution command text (secrets masked)
     commandRevealed: false,                    // blur/reveal toggle state — survives rebuildModal() calls
     startTime: Date.now(),
     nodeState: {},        // { nodeId: { status, stdoutLines: [], stderrLines: [], statusInfo: null } }
@@ -2836,6 +2846,7 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
     commandError: null,   // Server-side command execution error (from CommandDone summary)
     cancelArmed: {},      // { nodeId: expiryTs } — two-click confirm state for per-Node cancel
     cancelPending: {},    // { nodeId: true } — cancel API request in flight
+    onClose: typeof onClose === 'function' ? onClose : null,
   };
 
   window._cmdStreamSessions[xRequestId] = session;
@@ -2887,7 +2898,8 @@ function startStreamingSession(streamUrl, username, password, xRequestId, infraI
     } else if (event.type === 'CommandLog' && event.nodeId && event.log) {
       const nd = getOrCreateNode(event.nodeId);
       if (typeof event.commandIndex === 'number' && event.commandIndex > 0) nd.commandIndex = event.commandIndex;
-      const line = event.log.line || '';
+      const rawLine = event.log.line || '';
+      const line = maskSensitiveCmdText(rawLine);
       if (event.log.stream === 'stdout') {
         nd.stdoutLines.push(line);
       } else if (event.log.stream === 'stderr') {
@@ -3447,6 +3459,15 @@ function openStreamingSessionModal(xRequestId) {
       removeSpinnerTask(session.spinnerId);
       session.error = 'Stopped by user';
       updateStreamingBadge();
+    }
+    if (typeof session.onClose === 'function') {
+      const cb = session.onClose;
+      session.onClose = null; // One-shot callback: prevents triggering if re-opened from history
+      try {
+        cb(result);
+      } catch (e) {
+        console.warn('Error in streaming session onClose callback', e);
+      }
     }
   });
 }

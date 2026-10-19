@@ -774,6 +774,19 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                     </div>
                   </div>
 
+                  <!-- Resource Provisioning Field -->
+                  <div class="form-group dropdown">
+                    <button class="btn btn-outline-primary dropdown-toggle w-100" type="button" id="resourceProvisioningDropdown"
+                      data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                      📦 Resource Provisioning
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="resourceProvisioningDropdown">
+                      <a class="dropdown-item" href="javascript:void(0)" onClick="showObjectStorageModal();">🪣 Object Storage</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onClick="showRdbmsModal();">🗄️ Relational DB</a>
+                      <a class="dropdown-item" href="javascript:void(0)" onClick="showSnapshotManagementModal();">📸 Snapshot</a>
+                    </div>
+                  </div>
+
                   <!-- Schedule Resource Registration Field -->
                   <div class="form-group">
                     <button type="button" id="scheduleJobsBtn" onClick="showScheduleJobManagement();"
@@ -917,12 +930,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                       class="btn btn-warning w-100">💾 Remote File Transfer</button>
                   </div>
 
-                  <!-- Snapshot Management Field (Info) -->
-                  <div class="form-group">
-                    <button type="button" id="snapshotManagement" onClick="showSnapshotManagementModal();"
-                      class="btn btn-warning w-100">📸 Snapshot Management</button>
-                  </div>
-
                   <!-- Scale Out NodeGroup Field -->
                   <div class="form-group">
                     <button type="button" id="scaleOutBtn" onClick="scaleOutNodeGroupWithSelection();"
@@ -966,7 +973,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
                   <!-- Resource Control Field -->
-                  <div class="form-group col dropdown">
+                  <div class="form-group col-12 dropdown">
                     <button class="btn btn-info dropdown-toggle w-100" type="button" id="resourceControlDropdown"
                       data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                       🔧 Resource Control
@@ -979,15 +986,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                       <a class="dropdown-item" href="javascript:void(0)" onClick="registerCspResource();">📝 Register
                         Existing
                         Resources</a>
-                      <a class="dropdown-item" href="javascript:void(0)" onClick="showObjectStorageModal();">🪣 Object
-                        Storage</a>
                     </div>
-                  </div>
-
-                  <!-- Object Storage Field -->
-                  <div class="form-group col-12">
-                    <button type="button" id="objectStorageBtn" onClick="showObjectStorageModal();"
-                      class="btn btn-outline-primary w-100">🪣 Object Storage</button>
                   </div>
 
 
