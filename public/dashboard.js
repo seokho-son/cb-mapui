@@ -1484,10 +1484,21 @@ function updateResourceCounts() {
     const objectStorageElement = document.getElementById('objectStorageCount');
     if (objectStorageElement) objectStorageElement.textContent = objectStorageCount;
 
-    // Update SQL Database count (API not yet available)
-    const sqlDbCount = 0; // TODO: API not yet implemented in CB-Tumblebug
+    // Update Relational Database (RDBMS) count
+    let rdbmsList = centralData.rdbms || centralData.sqlDb;
+    if (!rdbmsList && window.parent?.cloudBaristaCentralData?.rdbms) {
+      rdbmsList = window.parent.cloudBaristaCentralData.rdbms;
+    }
+    const rdbmsCount = Array.isArray(rdbmsList) ? rdbmsList.length : 0;
+    const rdbmsElement = document.getElementById('rdbmsCount');
+    if (rdbmsElement) rdbmsElement.textContent = rdbmsCount;
     const sqlDbElement = document.getElementById('sqlDbCount');
-    if (sqlDbElement) sqlDbElement.textContent = sqlDbCount;
+    if (sqlDbElement) sqlDbElement.textContent = rdbmsCount;
+
+    // If RDBMS data hasn't been populated in central store yet, fetch it asynchronously
+    if (rdbmsList === undefined && typeof fetchRdbmsCountAsync === 'function') {
+      fetchRdbmsCountAsync();
+    }
 
     debugLog('Resource counts updated:', {
       vNet: vNetCount,
@@ -1499,7 +1510,8 @@ function updateResourceCounts() {
       customImage: customImageCount,
       dataDisk: dataDiskCount,
       objectStorage: objectStorageCount,
-      sqlDb: sqlDbCount
+      rdbms: rdbmsCount,
+      sqlDb: rdbmsCount
     });
   } catch (error) {
     console.error('Error updating resource counts:', error);
@@ -5976,3 +5988,40 @@ function openObjectStorageModal() {
   }
 }
 window.openObjectStorageModal = openObjectStorageModal;
+
+// Relational Database (RDBMS) modal launcher (delegates to parent window)
+function openRdbmsModal() {
+  if (window.parent && typeof window.parent.showRdbmsModal === 'function') {
+    window.parent.showRdbmsModal();
+  } else if (typeof window.showRdbmsModal === 'function') {
+    window.showRdbmsModal();
+  } else {
+    console.warn('[Dashboard] showRdbmsModal function not found in parent window');
+  }
+}
+window.openRdbmsModal = openRdbmsModal;
+
+// Asynchronous fetch fallback for RDBMS instance count
+async function fetchRdbmsCountAsync() {
+  try {
+    const parentConfig = window.parent?.getConfig?.() || { username: 'default', password: 'default' };
+    const ns = window.parent?.configNamespace || dashboardConfig.namespace || 'default';
+    const res = await axios.get(`${tbApiBase()}/ns/${ns}/resources/rdbms`, {
+      auth: { username: parentConfig.username, password: parentConfig.password },
+      timeout: 10000
+    });
+    const list = res.data?.rdbms || res.data?.rdbmss || (Array.isArray(res.data) ? res.data : []);
+    const count = Array.isArray(list) ? list.length : 0;
+    const rdbmsElement = document.getElementById('rdbmsCount');
+    if (rdbmsElement) rdbmsElement.textContent = count;
+    const sqlDbElement = document.getElementById('sqlDbCount');
+    if (sqlDbElement) sqlDbElement.textContent = count;
+    if (window.parent?.cloudBaristaCentralData) {
+      window.parent.cloudBaristaCentralData.rdbms = list;
+    }
+  } catch (err) {
+    debugLog('Error fetching RDBMS count in dashboard:', err);
+  }
+}
+window.fetchRdbmsCountAsync = fetchRdbmsCountAsync;
+
