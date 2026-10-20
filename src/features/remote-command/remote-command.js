@@ -1253,7 +1253,7 @@ window.predefinedScriptCategories = {
   },
   'platform': {
     label: '🏗️ Platform',
-    description: 'Cloud-Barista platform deployment',
+    description: 'Cloud-Barista & M-CMP platform deployment — M-CMP requires Security Group inbound TCP ports: 80, 443, 3000, 3001 (Web/IAM), 3300, 7780, 9000, 9090, 18081, 18083, 18084, 33002 (Service UIs/APIs), 1024, 1323, 1324 (Infra/MapUI)',
     scripts: [
       { value: 'CB-TB-Deploy',  label: 'Deploy CB-Tumblebug',         step: 1 },
       { value: 'M-CMP-Install', label: '1. M-CMP: Install (Stage 1)', step: 2 },
