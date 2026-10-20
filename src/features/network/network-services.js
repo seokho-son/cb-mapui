@@ -1613,7 +1613,7 @@ function setDefaultRemoteCommandsByApp(appName) {
     case "M-CMP-Install":
       // Stage 1: clone repo, configure env/certs, do NOT start containers
       defaultRemoteCommand[0] = "curl -sSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/set-tb.sh | bash";
-      defaultRemoteCommand[1] = "curl -sSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/set-mcmp.sh | sudo bash -s -- install";
+      defaultRemoteCommand[1] = "curl -sSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/set-mcmp.sh | sudo bash -s -- install --domain $$Func(GetPublicIP(target=this))";
       defaultRemoteCommand[2] = "";
       break;
     case "M-CMP-Pull":
@@ -1623,9 +1623,9 @@ function setDefaultRemoteCommandsByApp(appName) {
       defaultRemoteCommand[2] = "";
       break;
     case "M-CMP-Run":
-      // Stage 2: start all M-CMP containers in background (detached)
+      // Stage 2: start all M-CMP containers in staged waves (detached)
       defaultRemoteCommand[0] = "curl -sSL https://raw.githubusercontent.com/cloud-barista/cb-tumblebug/main/scripts/set-mcmp.sh | sudo bash -s -- run";
-      defaultRemoteCommand[1] = "echo '$$Func(GetPublicIP(target=this, prefix=http://, postfix=:3001))'";
+      defaultRemoteCommand[1] = "";
       defaultRemoteCommand[2] = "";
       break;
     case "M-CMP-Info":
