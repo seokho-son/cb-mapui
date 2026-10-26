@@ -274,17 +274,116 @@ export function showInModalDialog({
   });
 }
 
-// --- Provider Metadata ---
+// --- Provider Metadata & Empirical Duration Estimates ---
 const PROVIDER_META = {
-  aws: { name: 'AWS', icon: '/img/csp-aws.png', badge: 'Amazon RDS' },
-  azure: { name: 'Azure', icon: '/img/csp-azure.png', badge: 'Azure MySQL Flexible' },
-  gcp: { name: 'GCP', icon: '/img/csp-gcp.png', badge: 'Cloud SQL' },
-  alibaba: { name: 'Alibaba', icon: '/img/csp-alibaba.png', badge: 'ApsaraDB RDS' },
-  tencent: { name: 'Tencent', icon: '/img/csp-tencent.png', badge: 'TencentDB' },
-  ibm: { name: 'IBM', icon: '/img/csp-ibm.png', badge: 'Cloud Databases' },
-  ncp: { name: 'NCP', icon: '/img/csp-ncp.png', badge: 'Cloud DB for MySQL' },
-  nhn: { name: 'NHN', icon: '/img/csp-nhn.png', badge: 'NHN Cloud RDS' },
-  openstack: { name: 'OpenStack', icon: '/img/csp-openstack.png', badge: 'OpenStack Trove' },
+  aws: {
+    name: 'AWS',
+    icon: '/img/csp-aws.png',
+    badge: 'Amazon RDS',
+    estBastion: '~2–2.5m',
+    estCreate: '~4.5–6m',
+    estDelete: '~1.5–2m',
+    bastionMin: 2, bastionMax: 2.5,
+    createMin: 4.5, createMax: 6,
+    deleteMin: 1.5, deleteMax: 2,
+    deleteNote: '',
+  },
+  azure: {
+    name: 'Azure',
+    icon: '/img/csp-azure.png',
+    badge: 'Azure MySQL Flexible',
+    estBastion: '~1.5–2m',
+    estCreate: '~6.5–8m',
+    estDelete: '~1–1.5m',
+    bastionMin: 1.5, bastionMax: 2,
+    createMin: 6.5, createMax: 8,
+    deleteMin: 1, deleteMax: 1.5,
+    deleteNote: '',
+  },
+  gcp: {
+    name: 'GCP',
+    icon: '/img/csp-gcp.png',
+    badge: 'Cloud SQL',
+    estBastion: '~2.5m',
+    estCreate: '~3–6m',
+    estDelete: '~2.5m',
+    bastionMin: 2, bastionMax: 3,
+    createMin: 3, createMax: 6,
+    deleteMin: 2, deleteMax: 3,
+    deleteNote: '',
+  },
+  alibaba: {
+    name: 'Alibaba',
+    icon: '/img/csp-alibaba.png',
+    badge: 'ApsaraDB RDS',
+    estBastion: '~1m',
+    estCreate: '~2–3.5m',
+    estDelete: '~8.5–9m',
+    bastionMin: 1, bastionMax: 1.5,
+    createMin: 2, createMax: 3.5,
+    deleteMin: 8.5, deleteMax: 9,
+    deleteNote: 'Includes 8m 30s VPC ENI stabilization wait',
+  },
+  tencent: {
+    name: 'Tencent',
+    icon: '/img/csp-tencent.png',
+    badge: 'TencentDB',
+    estBastion: '~1.5m',
+    estCreate: '~3–3.5m',
+    estDelete: '~2.5m',
+    bastionMin: 1.5, bastionMax: 2,
+    createMin: 3, createMax: 3.5,
+    deleteMin: 2, deleteMax: 2.5,
+    deleteNote: 'Includes 2m network stabilization wait',
+  },
+  ibm: {
+    name: 'IBM',
+    icon: '/img/csp-ibm.png',
+    badge: 'Cloud Databases',
+    estBastion: '~1.5–2m',
+    estCreate: '~12–18m',
+    estDelete: '~30s',
+    bastionMin: 1.5, bastionMax: 2,
+    createMin: 12, createMax: 18,
+    deleteMin: 0.5, deleteMax: 1,
+    deleteNote: '',
+  },
+  ncp: {
+    name: 'NCP',
+    icon: '/img/csp-ncp.png',
+    badge: 'Cloud DB for MySQL',
+    estBastion: '~3–3.5m',
+    estCreate: '~6–11m',
+    estDelete: '~4–4.5m',
+    bastionMin: 3, bastionMax: 3.5,
+    createMin: 6, createMax: 11,
+    deleteMin: 4, deleteMax: 4.5,
+    deleteNote: '',
+  },
+  nhn: {
+    name: 'NHN',
+    icon: '/img/csp-nhn.png',
+    badge: 'NHN Cloud RDS',
+    estBastion: '~2–2.5m',
+    estCreate: '~7–8.5m',
+    estDelete: '~1–1.5m',
+    bastionMin: 2, bastionMax: 2.5,
+    createMin: 7, createMax: 8.5,
+    deleteMin: 1, deleteMax: 1.5,
+    deleteNote: '',
+  },
+  openstack: {
+    name: 'OpenStack',
+    icon: '/img/csp-openstack.png',
+    badge: 'OpenStack Trove',
+    estBastion: '~3–3.5m',
+    estCreate: '~3–4.5m',
+    estDelete: '~1–1.5m',
+    bastionMin: 3, bastionMax: 3.5,
+    createMin: 3, createMax: 4.5,
+    deleteMin: 1, deleteMax: 1.5,
+    deleteNote: '',
+  },
 };
 
 function getProviderMeta(providerName) {
@@ -294,6 +393,63 @@ function getProviderMeta(providerName) {
     name: providerName || 'Unknown',
     icon: `/img/csp-${p}.png`,
     badge: 'Managed RDBMS',
+    estBastion: '~2–3m',
+    estCreate: '~4–8m',
+    estDelete: '~1–3m',
+    bastionMin: 2, bastionMax: 3,
+    createMin: 4, createMax: 8,
+    deleteMin: 1, deleteMax: 3,
+    deleteNote: '',
+  };
+}
+
+function getParallelProvisionEstimate(csps = [], includeBastion = true) {
+  if (!Array.isArray(csps) || csps.length === 0) return { label: '~4–8 min', slowestCsp: '' };
+  let maxBastionMin = 0, maxBastionMax = 0;
+  let maxCreateMin = 0, maxCreateMax = 0;
+  let slowestCsp = '';
+  csps.forEach(c => {
+    const m = getProviderMeta(c);
+    if (m.bastionMin > maxBastionMin) maxBastionMin = m.bastionMin;
+    if (m.bastionMax > maxBastionMax) maxBastionMax = m.bastionMax;
+    if (m.createMax > maxCreateMax) {
+      maxCreateMin = m.createMin;
+      maxCreateMax = m.createMax;
+      slowestCsp = m.name;
+    }
+  });
+  const totalMin = Math.round((includeBastion ? maxBastionMin : 0) + maxCreateMin);
+  const totalMax = Math.round((includeBastion ? maxBastionMax : 0) + maxCreateMax);
+  return {
+    label: totalMin === totalMax ? `~${totalMin} min` : `~${totalMin}–${totalMax} min`,
+    dbOnlyLabel: maxCreateMin === maxCreateMax ? `~${maxCreateMin} min` : `~${maxCreateMin}–${maxCreateMax} min`,
+    bastionLabel: maxBastionMin === maxBastionMax ? `~${maxBastionMin} min` : `~${maxBastionMin}–${maxBastionMax} min`,
+    slowestCsp,
+  };
+}
+
+function getParallelDeleteEstimate(csps = [], includeBastion = false) {
+  if (!Array.isArray(csps) || csps.length === 0) return { label: '~1–3 min', slowestCsp: '', hasAlibaba: false };
+  let maxDelMin = 0, maxDelMax = 0;
+  let slowestCsp = '';
+  let hasAlibaba = false;
+  csps.forEach(c => {
+    const p = (c || '').toLowerCase().trim();
+    if (p === 'alibaba') hasAlibaba = true;
+    const m = getProviderMeta(p);
+    if (m.deleteMax > maxDelMax) {
+      maxDelMin = m.deleteMin;
+      maxDelMax = m.deleteMax;
+      slowestCsp = m.name;
+    }
+  });
+  const bastionAdd = includeBastion ? 1 : 0;
+  const totalMin = Math.max(1, Math.round((maxDelMin + bastionAdd) * 10) / 10);
+  const totalMax = Math.max(1, Math.round((maxDelMax + bastionAdd) * 10) / 10);
+  return {
+    label: totalMin === totalMax ? `~${totalMin} min` : `~${totalMin}–${totalMax} min`,
+    slowestCsp,
+    hasAlibaba,
   };
 }
 
@@ -821,14 +977,136 @@ function attachActiveOperationsEvents() {
   });
 }
 
-async function refreshRdbmsInstancesSilently() {
+function computeInstanceListSignature(list) {
+  return (list || [])
+    .map(i => `${i.id || ''}:${i.status || ''}:${i.endpoint || ''}:${Boolean(i.publicAccess)}:${i.dbEngineVersion || ''}:${i.storageSize || ''}`)
+    .sort()
+    .join('|');
+}
+
+function renderCspInfoBoxHtml(provider, totalCount) {
+  if (!provider || provider === 'all') {
+    return `
+      <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: center;">
+        <div><strong>Scope:</strong> <span class="rdbms-badge rdbms-badge-info" style="padding: 2px 6px;">All Supported Clouds (9 Providers)</span></div>
+        <div><strong>Supported Engines:</strong> MySQL, MariaDB</div>
+        <div><strong>Total Instances:</strong> ${totalCount} Instance${totalCount === 1 ? '' : 's'}</div>
+      </div>
+      <div style="margin-top: 5px; font-size: 12px; color: #334155;">
+        <strong>⏱️ Typical DB Create Time:</strong>
+        <span style="color:#15803d; font-weight:600;">Fast (~3–4.5m):</span> Alibaba, Tencent, GCP, OpenStack ·
+        <span style="color:#b45309; font-weight:600;">Medium (~5–8.5m):</span> AWS, Azure, NHN ·
+        <span style="color:#0369a1; font-weight:600;">Long (~6–18m):</span> NCP, IBM
+      </div>
+      <div style="margin-top: 3px; color: #64748b; font-size: 12px;">ℹ️ Showing RDBMS instances across all cloud providers. Select a specific cloud above to filter instances and inspect provider-native capabilities and duration estimates.</div>
+    `;
+  }
+
+  const cspSup = rdbmsState.supportMatrix?.[provider] || {};
+  const meta = getProviderMeta(provider);
+  const enginesStr = (cspSup.supportedDBEngines || ['mysql']).join(', ');
+  const opMethod = cspSup.dbOperationMethod || 'cspNativeApi';
+  const tagStr = cspSup.supportsTag ? '✅ Supported' : '❌ Unsupported';
+  const storageSelectStr = cspSup.storageTypeSelectable ? '✅ User Selectable' : '⚙️ Auto-managed';
+  const cspNote = cspSup.note ? `<div style="margin-top:4px;color:#64748b;font-size:12px;">ℹ️ ${escapeHtml(cspSup.note)}</div>` : '';
+  const delNote = meta.deleteNote ? ` <span style="color:#64748b; font-size:11px;">(${escapeHtml(meta.deleteNote)})</span>` : '';
+
+  return `
+    <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: center;">
+      <div><strong>Engines:</strong> <span class="rdbms-badge rdbms-badge-info" style="padding: 2px 6px;">${escapeHtml(enginesStr)}</span></div>
+      <div><strong>DB Op Method:</strong> <code>${escapeHtml(opMethod)}</code></div>
+      <div><strong>Tag Support:</strong> ${tagStr}</div>
+      <div><strong>Storage Type:</strong> ${storageSelectStr}</div>
+      <div><strong>⏱️ Est. Time:</strong> Create <code style="color:#0369a1;font-weight:700;">${escapeHtml(meta.estCreate)}</code> · Delete <code style="color:#b91c1c;font-weight:700;">${escapeHtml(meta.estDelete)}</code>${delNote}</div>
+    </div>
+    ${cspNote}
+  `;
+}
+
+function syncRdbmsSummaryDom() {
+  const list = rdbmsState.instanceList || [];
+  const totalCount = list.length;
+
+  // 1. Update top header total badge
+  const totalBadge = document.getElementById('rdbmsTotalCountBadge');
+  if (totalBadge) {
+    totalBadge.textContent = `${totalCount} Total Instance${totalCount === 1 ? '' : 's'}`;
+  }
+
+  // 2. Update per-CSP tile counts in-place
+  const instancesByProvider = {};
+  list.forEach(inst => {
+    const prov = (inst.connectionConfig?.providerName || inst.connectionName?.split('-')[0] || 'other').toLowerCase();
+    instancesByProvider[prov] = (instancesByProvider[prov] || 0) + 1;
+  });
+
+  const cspContainer = document.getElementById('rdbmsCspContainer');
+  if (cspContainer) {
+    cspContainer.querySelectorAll('.rdbms-csp-tile').forEach(tile => {
+      const p = tile.dataset.provider;
+      const countEl = tile.querySelector('.rdbms-csp-count');
+      if (!p || !countEl) return;
+      if (p === 'all') {
+        countEl.textContent = String(totalCount);
+        tile.title = `All Clouds (${totalCount} instances)`;
+      } else {
+        const count = instancesByProvider[p] || 0;
+        countEl.textContent = String(count);
+        const meta = getProviderMeta(p);
+        tile.title = `${meta.name} (${count} instances · Est. Create ${meta.estCreate})`;
+      }
+    });
+  }
+
+  // 3. Update CSP info box if 'all' is selected
+  if (!rdbmsState.selectedProvider || rdbmsState.selectedProvider === 'all') {
+    const infoBox = document.getElementById('rdbmsCspInfoBox');
+    if (infoBox) {
+      infoBox.innerHTML = renderCspInfoBoxHtml('all', totalCount);
+    }
+  }
+}
+
+let rdbmsAutoSyncTimerId = null;
+
+function startModalAutoSync() {
+  stopModalAutoSync();
+  rdbmsAutoSyncTimerId = setInterval(() => {
+    const modalContent = document.getElementById('rdbmsModalContent');
+    if (!modalContent) {
+      stopModalAutoSync();
+      return;
+    }
+    if (document.hidden) return;
+    if (rdbmsState.view === 'instances') {
+      refreshRdbmsInstancesSilently({ onlyIfChanged: true });
+    }
+  }, 8000);
+}
+
+function stopModalAutoSync() {
+  if (rdbmsAutoSyncTimerId) {
+    clearInterval(rdbmsAutoSyncTimerId);
+    rdbmsAutoSyncTimerId = null;
+  }
+}
+
+async function refreshRdbmsInstancesSilently({ onlyIfChanged = false } = {}) {
   const config = getConfig();
   try {
+    const prevSig = computeInstanceListSignature(rdbmsState.instanceList);
     const res = await axios.get(`${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms`, {
       auth: { username: config.username, password: config.password },
     });
-    rdbmsState.instanceList = res.data?.rdbms || res.data || [];
-    if (!Array.isArray(rdbmsState.instanceList)) rdbmsState.instanceList = [];
+    let nextList = res.data?.rdbms || res.data || [];
+    if (!Array.isArray(nextList)) nextList = [];
+
+    const nextSig = computeInstanceListSignature(nextList);
+    if (onlyIfChanged && prevSig === nextSig) {
+      return;
+    }
+
+    rdbmsState.instanceList = nextList;
     if (!rdbmsState.selectedInstanceIds) rdbmsState.selectedInstanceIds = new Set();
     const liveIds = new Set(rdbmsState.instanceList.map(i => i.id));
     for (const selId of rdbmsState.selectedInstanceIds) {
@@ -840,6 +1118,7 @@ async function refreshRdbmsInstancesSilently() {
         window.notifyDataSubscribers();
       }
     }
+    syncRdbmsSummaryDom();
     const tbody = document.getElementById('rdbmsTableBody');
     if (tbody) {
       tbody.innerHTML = renderInstanceRows();
@@ -1195,10 +1474,14 @@ export async function showRdbmsModal(initialRdbmsId = null) {
     },
     didOpen: async () => {
       await renderModalView();
+      startModalAutoSync();
       if (rdbmsState.pendingNotice) {
         showModalNotice(rdbmsState.pendingNotice.message, rdbmsState.pendingNotice.type);
         rdbmsState.pendingNotice = null;
       }
+    },
+    willClose: () => {
+      stopModalAutoSync();
     },
   });
 }
@@ -1308,7 +1591,7 @@ async function renderInstanceListView(container) {
     const isActive = rdbmsState.selectedProvider === p ? 'active' : '';
     const isSupported = rdbmsState.supportMatrix?.[p]?.supported !== false;
     return `
-      <div class="rdbms-csp-tile ${isActive}" data-provider="${p}" title="${escapeHtml(meta.name)} (${count} instances)">
+      <div class="rdbms-csp-tile ${isActive}" data-provider="${p}" title="${escapeHtml(meta.name)} (${count} instances · Est. Create ${meta.estCreate})">
         <img src="${meta.icon}" class="rdbms-csp-logo" onerror="this.src='/img/circle.png';">
         <span class="rdbms-csp-name">${escapeHtml(meta.name)}</span>
         <span class="rdbms-csp-count">${count}</span>
@@ -1318,34 +1601,7 @@ async function renderInstanceListView(container) {
   }).join('');
 
   // CSP Info Box
-  let infoBoxContent = '';
-  if (!rdbmsState.selectedProvider || rdbmsState.selectedProvider === 'all') {
-    infoBoxContent = `
-      <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-        <div><strong>Scope:</strong> <span class="rdbms-badge rdbms-badge-info" style="padding: 2px 6px;">All Supported Clouds (9 Providers)</span></div>
-        <div><strong>Supported Engines:</strong> MySQL, MariaDB</div>
-        <div><strong>Total Instances:</strong> ${totalCount} Instance${totalCount === 1 ? '' : 's'}</div>
-      </div>
-      <div style="margin-top: 4px; color: #64748b; font-size: 12px;">ℹ️ Showing RDBMS instances across all cloud providers. Select a specific cloud above to filter instances and inspect provider-native capabilities and constraints.</div>
-    `;
-  } else {
-    const selCsp = rdbmsState.selectedProvider;
-    const cspSup = rdbmsState.supportMatrix?.[selCsp] || {};
-    const enginesStr = (cspSup.supportedDBEngines || ['mysql']).join(', ');
-    const opMethod = cspSup.dbOperationMethod || 'cspNativeApi';
-    const tagStr = cspSup.supportsTag ? '✅ Supported' : '❌ Unsupported';
-    const storageSelectStr = cspSup.storageTypeSelectable ? '✅ User Selectable' : '⚙️ Auto-managed';
-    const cspNote = cspSup.note ? `<div style="margin-top:4px;color:#64748b;font-size:12px;">ℹ️ ${escapeHtml(cspSup.note)}</div>` : '';
-    infoBoxContent = `
-      <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-        <div><strong>Engines:</strong> <span class="rdbms-badge rdbms-badge-info" style="padding: 2px 6px;">${escapeHtml(enginesStr)}</span></div>
-        <div><strong>DB Op Method:</strong> <code>${escapeHtml(opMethod)}</code></div>
-        <div><strong>Tag Support:</strong> ${tagStr}</div>
-        <div><strong>Storage Type:</strong> ${storageSelectStr}</div>
-      </div>
-      ${cspNote}
-    `;
-  }
+  const infoBoxContent = renderCspInfoBoxHtml(rdbmsState.selectedProvider, totalCount);
 
   container.innerHTML = `
     <!-- Top Header Bar -->
@@ -1353,7 +1609,7 @@ async function renderInstanceListView(container) {
       <div class="rdbms-header-title">
         <span>🗄️ Managed RDBMS</span>
         <span class="rdbms-badge rdbms-badge-info">Namespace: ${escapeHtml(rdbmsState.namespace)}</span>
-        <span class="rdbms-badge rdbms-badge-secondary">${totalCount} Total Instance${totalCount === 1 ? '' : 's'}</span>
+        <span class="rdbms-badge rdbms-badge-secondary" id="rdbmsTotalCountBadge">${totalCount} Total Instance${totalCount === 1 ? '' : 's'}</span>
       </div>
       <div style="display: flex; gap: 8px;">
         <button type="button" class="rdbms-btn rdbms-btn-secondary" id="rdbmsClearCredsBtn" title="Purge saved DB passwords from browser storage" style="color: #dc2626;">
@@ -1424,10 +1680,11 @@ async function renderInstanceListView(container) {
                 const meta = getProviderMeta(p);
                 const checked = rdbmsState.multiCspSelected.includes(p) ? 'checked' : '';
                 return `
-                  <label style="display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                  <label style="display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;" title="Bastion: ${escapeHtml(meta.estBastion)} · DB Create: ${escapeHtml(meta.estCreate)} · Delete: ${escapeHtml(meta.estDelete)}">
                     <input type="checkbox" class="rdbms-csp-check" value="${p}" ${checked} style="accent-color: #0284c7; width: 15px; height: 15px;">
                     <img src="${meta.icon}" style="width: 16px; height: 16px; object-fit: contain;" onerror="this.src='/img/circle.png';">
-                    ${meta.name}
+                    <span>${meta.name}</span>
+                    <span style="font-size: 11px; color: #64748b; font-weight: 500;">(${escapeHtml(meta.estCreate)})</span>
                   </label>
                 `;
               }).join('')}
@@ -1665,11 +1922,13 @@ function renderInstanceRows() {
   if (rdbmsState.filterText) {
     const q = rdbmsState.filterText.toLowerCase();
     list = list.filter(inst => {
+      const accessLabel = inst.publicAccess ? 'public' : 'private';
       return (inst.name && inst.name.toLowerCase().includes(q)) ||
         (inst.id && inst.id.toLowerCase().includes(q)) ||
         (inst.endpoint && inst.endpoint.toLowerCase().includes(q)) ||
         (inst.dbEngine && inst.dbEngine.toLowerCase().includes(q)) ||
-        (inst.status && inst.status.toLowerCase().includes(q));
+        (inst.status && inst.status.toLowerCase().includes(q)) ||
+        accessLabel.includes(q);
     });
   }
 
@@ -1712,12 +1971,22 @@ function renderInstanceRows() {
       ? `<span class="rdbms-badge rdbms-badge-danger"><span class="rdbms-spinner rdbms-spinner-danger rdbms-spinner-sm" style="margin-right: 4px;"></span> Terminating...</span>`
       : `<span class="rdbms-badge ${statusBadge}">${escapeHtml(status)}</span>`;
 
+    const accessBadgeHtml = inst.publicAccess
+      ? `<span class="rdbms-badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-size: 10.5px; padding: 1px 6px;" title="Public Access Enabled (External IP / FQDN)">🌐 Public</span>`
+      : `<span class="rdbms-badge" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; font-size: 10.5px; padding: 1px 6px;" title="Private VPC Only (Internal Access)">🔒 Private</span>`;
+
     const endpointStr = inst.endpoint
-      ? `<span style="font-family: monospace; font-size: 12px;">${escapeHtml(inst.endpoint)}</span>
-         <button type="button" class="btn btn-sm btn-link p-0 text-primary copy-btn" data-copy="${escapeHtml(inst.endpoint)}" title="Copy endpoint">
-           <i class="far fa-copy"></i>
-         </button>`
-      : '<span class="text-muted" style="font-size: 12px;">Pending</span>';
+      ? `<div style="display: flex; align-items: center; gap: 5px; flex-wrap: wrap;">
+           ${accessBadgeHtml}
+           <span style="font-family: monospace; font-size: 12px;">${escapeHtml(inst.endpoint)}</span>
+           <button type="button" class="btn btn-sm btn-link p-0 text-primary copy-btn" data-copy="${escapeHtml(inst.endpoint)}" title="Copy endpoint">
+             <i class="far fa-copy"></i>
+           </button>
+         </div>`
+      : `<div style="display: flex; align-items: center; gap: 5px;">
+           ${accessBadgeHtml}
+           <span class="text-muted" style="font-size: 12px;">Pending</span>
+         </div>`;
 
     const specStorageStr = `${escapeHtml(inst.dbInstanceSpec || 'default')}` +
       (inst.storageSize ? ` · ${inst.storageSize}GB ${escapeHtml(inst.storageType || '')}` : '');
@@ -1903,8 +2172,9 @@ function renderCspUserPreviewHtml(selectedCsps = [], userInput = 'dbadmin') {
 
 // --- Public Access & Network Policy Adaptation ---
 // IBM Cloud Databases requires public access (service-endpoints: public) to be provisioned via Spider.
+// GCP Cloud SQL Private IP requires pre-configured Service Networking VPC Peering; adapt to publicAccess=true.
 // NCP Cloud DB only supports VPC-private mode (publicAccess=false) and rejects publicAccess=true.
-// AWS, Azure, GCP, Alibaba, Tencent, OpenStack, NHN support both private VPC and public access.
+// AWS, Azure, Alibaba, Tencent, OpenStack, NHN support both private VPC and public access.
 function getCspPublicAccessDetail(csp, userPublicAccess = false) {
   const c = (csp || '').toLowerCase();
   const userRequested = !!userPublicAccess;
@@ -1915,6 +2185,15 @@ function getCspPublicAccessDetail(csp, userPublicAccess = false) {
       isAdapted: !userRequested,
       ruleType: 'fixed-public',
       reason: 'IBM strictly requires publicAccess=true (service-endpoints)',
+    };
+  }
+
+  if (c === 'gcp') {
+    return {
+      effective: true,
+      isAdapted: !userRequested,
+      ruleType: 'fixed-public',
+      reason: 'GCP Private IP requires Service Networking VPC Peering; adapted to publicAccess=true',
     };
   }
 
@@ -1944,13 +2223,14 @@ function renderCspPublicAccessPreviewHtml(selectedCsps = [], userPublicAccess = 
   }));
 
   const hasAdapted = details.some(d => d.isAdapted);
+  const provEst = getParallelProvisionEstimate(selectedCsps, true);
 
   return `
     <div style="margin-top: 6px; padding: 8px 10px; background: ${hasAdapted ? '#eff6ff' : '#f8fafc'}; border: 1px solid ${hasAdapted ? '#bfdbfe' : '#e2e8f0'}; border-radius: 6px; font-size: 11.5px; line-height: 1.5;">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; font-weight: 600; color: #334155;">
         <span><i class="fas fa-network-wired" style="color: #0284c7; margin-right: 4px;"></i> CSP Network Access Policy Preview:</span>
         ${hasAdapted 
-          ? '<span style="color: #2563eb; font-size: 11px;"><i class="fas fa-info-circle"></i> Provider rules adapt access mode (e.g. IBM requires public endpoint)</span>' 
+          ? '<span style="color: #2563eb; font-size: 11px;"><i class="fas fa-info-circle"></i> Provider rules adapt access mode (e.g. GCP/IBM use public endpoint)</span>' 
           : '<span style="color: #16a34a; font-size: 11px;"><i class="fas fa-check-circle"></i> All selected clouds accept ' + (userPublicAccess ? 'Public Access' : 'Private VPC mode') + '</span>'}
       </div>
       <div style="display: flex; flex-wrap: wrap; gap: 6px;">
@@ -1973,6 +2253,16 @@ function renderCspPublicAccessPreviewHtml(selectedCsps = [], userPublicAccess = 
           }
         }).join('')}
       </div>
+      <div style="margin-top: 7px; padding-top: 6px; border-top: 1px dashed #cbd5e1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; color: #334155;">
+        <span>
+          <i class="fas fa-clock" style="color: #0284c7; margin-right: 4px;"></i>
+          <strong>Estimated Parallel Provisioning Time:</strong>
+          <span style="color: #0369a1; font-weight: 700; margin-left: 4px;">${escapeHtml(provEst.label)}</span>
+        </span>
+        <span style="font-size: 11px; color: #64748b;">
+          (Bastion VM: ${escapeHtml(provEst.bastionLabel)} + Managed RDBMS: ${escapeHtml(provEst.dbLabel)} · Parallel Execution)
+        </span>
+      </div>
     </div>
   `;
 }
@@ -1984,14 +2274,14 @@ function updatePublicAccessControl() {
   if (!chk) return;
 
   const selectedCsps = rdbmsState.multiCspSelected || [];
-  const onlyIbm = selectedCsps.length === 1 && selectedCsps[0] === 'ibm';
+  const onlyFixedPublic = selectedCsps.length > 0 && selectedCsps.every(c => c === 'ibm' || c === 'gcp');
   const onlyNcp = selectedCsps.length === 1 && selectedCsps[0] === 'ncp';
 
-  if (onlyIbm) {
+  if (onlyFixedPublic) {
     chk.checked = true;
     chk.disabled = true;
     if (lockNote) {
-      lockNote.innerHTML = `<span class="rdbms-badge rdbms-badge-warning" style="font-size: 11px;"><i class="fas fa-lock"></i> Locked to ON: IBM Cloud Databases requires public access</span>`;
+      lockNote.innerHTML = `<span class="rdbms-badge rdbms-badge-warning" style="font-size: 11px;"><i class="fas fa-lock"></i> Locked to ON: ${selectedCsps.map(c => c.toUpperCase()).join('/')} requires public access</span>`;
     }
   } else if (onlyNcp) {
     chk.checked = false;
@@ -2015,7 +2305,8 @@ function updatePublicAccessControl() {
 // - IBM: 15~72 characters, NO special characters (letters and numbers only)
 // - NCP: at least 1 special character required, 8~20 characters
 // - Tencent: 8~64 characters, at least 2 character types from letters, digits, and symbols (_+&=!@#$%^*())
-// - Azure/AWS/GCP/NHN/Alibaba/OpenStack: standard 8+ characters
+// - AWS: 8~41 printable ASCII characters EXCEPT '/', '@', '"', ' '
+// - Azure/GCP/NHN/Alibaba/OpenStack: standard 8+ characters
 function getCspCompliantAdminPassword(csp, userInput) {
   const c = (csp || '').toLowerCase();
   let p = (userInput || '').trim();
@@ -2046,6 +2337,13 @@ function getCspCompliantAdminPassword(csp, userInput) {
       clean = clean.slice(0, 72);
     }
     return clean;
+  }
+
+  if (c === 'aws') {
+    // AWS RDS forbids '/', '@', '"', and spaces
+    let clean = p.replace(/[@/"\s]/g, '');
+    if (clean.length < 8) clean = clean + '1234!';
+    return clean.slice(0, 41);
   }
 
   if (c === 'ncp') {
@@ -2138,6 +2436,7 @@ async function handleBastionSetCreate(baseName, selectedCsps, engine, adminUser,
   const config = getConfig();
   const template = rdbmsState.bastionTemplate || DEFAULT_BASTION_TEMPLATE;
   const isMulti = selectedCsps.length > 1;
+  const provEst = getParallelProvisionEstimate(selectedCsps, true);
 
   // Build target list: one dedicated Infra per NodeGroup/CSP (Track 2 multi-region ready)
   const targets = selectedCsps.map(csp => {
@@ -2170,10 +2469,12 @@ async function handleBastionSetCreate(baseName, selectedCsps, engine, adminUser,
   });
 
   const accountBreakdownRows = targets.map(t => {
+    const meta = getProviderMeta(t.csp);
     const userDetail = getCspAdminUserDetail(t.csp, adminUser);
     const netDetail = getCspPublicAccessDetail(t.csp, userPublicAccess);
     let passNote = 'Standard';
     if (t.csp === 'ibm') passNote = 'Alphanumeric only (15+ chars)';
+    else if (t.csp === 'aws') passNote = 'No @, /, ", space';
     else if (t.csp === 'ncp') passNote = 'Special character required';
     else if (t.csp === 'tencent') passNote = '2+ character categories required';
     else if (t.csp === 'alibaba') passNote = '8–32 chars, 3+ categories';
@@ -2194,6 +2495,10 @@ async function handleBastionSetCreate(baseName, selectedCsps, engine, adminUser,
         <td style="padding: 6px 10px;">${userBadge}</td>
         <td style="padding: 6px 10px; font-size: 11.5px; color: #64748b;">${escapeHtml(passNote)}</td>
         <td style="padding: 6px 10px;">${netBadge}</td>
+        <td style="padding: 6px 10px; font-size: 11.5px; color: #0369a1; white-space: nowrap;">
+          <div>Bastion: <strong>${escapeHtml(meta.estBastion || '~2m')}</strong></div>
+          <div>RDBMS: <strong>${escapeHtml(meta.estCreate || '~4–6m')}</strong></div>
+        </td>
       </tr>
     `;
   }).join('');
@@ -2211,6 +2516,10 @@ async function handleBastionSetCreate(baseName, selectedCsps, engine, adminUser,
         <div><strong>Selected CSP(s):</strong> ${selectedCsps.map(c => `<span class="rdbms-badge rdbms-badge-info">${escapeHtml(c.toUpperCase())}</span>`).join(' ')}</div>
         <div><strong>Database Engine:</strong> <span class="rdbms-badge rdbms-badge-secondary">${escapeHtml(engine)}</span></div>
         <div><strong>Target Plan:</strong> ${targets.length}× Dedicated Bastion Infras &amp; ${targets.length}× Managed RDBMS Instances</div>
+        <div style="margin-top: 8px; padding: 7px 10px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; font-size: 12.5px; color: #0369a1;">
+          <i class="fas fa-clock"></i> <strong>Estimated Parallel Total Time:</strong> <strong>${escapeHtml(provEst.label)}</strong>
+          <span style="color: #475569; font-size: 11.5px; margin-left: 6px;">(Step 1 Bastion: ${escapeHtml(provEst.bastionLabel)} ➔ Step 3 RDBMS: ${escapeHtml(provEst.dbLabel)})</span>
+        </div>
         <div style="margin-top: 10px; margin-bottom: 6px; font-weight: 700; color: #1e293b; font-size: 13px;">
           <i class="fas fa-cubes" style="color: #0284c7;"></i> Dedicated Bastion Infras &amp; Credential Plan:
         </div>
@@ -2224,6 +2533,7 @@ async function handleBastionSetCreate(baseName, selectedCsps, engine, adminUser,
                 <th style="padding: 6px 10px;">Effective Admin User</th>
                 <th style="padding: 6px 10px;">Password Rule</th>
                 <th style="padding: 6px 10px;">Network Mode</th>
+                <th style="padding: 6px 10px;">Est. Time</th>
               </tr>
             </thead>
             <tbody>
@@ -2231,7 +2541,7 @@ async function handleBastionSetCreate(baseName, selectedCsps, engine, adminUser,
             </tbody>
           </table>
         </div>
-        <small class="text-muted">Each cloud operates in an isolated Bastion Infra container (Track 2 multi-region ready). Provisioning typically takes 3 to 10 minutes.</small>
+        <small class="text-muted">Each cloud operates in an isolated Bastion Infra container in parallel. Overall wall-clock time is bounded by the slowest selected cloud (${escapeHtml(provEst.label)}).</small>
       </div>
     `,
     icon: 'info',
@@ -2252,7 +2562,7 @@ async function handleBastionSetCreate(baseName, selectedCsps, engine, adminUser,
   const op = {
     id: `op-deploy-${Date.now()}`,
     type: 'deploy-bastion-set',
-    title: isMulti ? `Deploy Multi-Cloud DB & Bastion Sets (${selectedCsps.map(c => c.toUpperCase()).join(', ')})` : `Deploy DB & Bastion Set (${selectedCsps[0].toUpperCase()})`,
+    title: isMulti ? `Deploy Multi-Cloud DB & Bastion Sets (${selectedCsps.map(c => c.toUpperCase()).join(', ')}) [Est. ${provEst.label}]` : `Deploy DB & Bastion Set (${selectedCsps[0].toUpperCase()}) [Est. ${provEst.label}]`,
     baseName,
     targets,
     infraNames: targets.map(t => t.infraName),
@@ -2263,21 +2573,21 @@ async function handleBastionSetCreate(baseName, selectedCsps, engine, adminUser,
     status: 'running',
     steps: [
       {
-        title: 'Step 1: Provisioning Dedicated Bastion VM Infras',
+        title: `Step 1: Provisioning Dedicated Bastion VM Infras (Est. ${provEst.bastionLabel})`,
         desc: `Provisioning ${targets.length} dedicated Bastion Infra(s) (${targets.map(t => t.csp.toUpperCase()).join(', ')})...`,
         status: 'running',
         descHtml: '',
         detailsHtml: '',
       },
       {
-        title: 'Step 2: Resolving In-VPC Networking & Subnets',
+        title: 'Step 2: Resolving In-VPC Networking & Subnets (Est. ~1–3s)',
         desc: 'Waiting for Bastion VM provisioning...',
         status: 'pending',
         descHtml: '',
         detailsHtml: '',
       },
       {
-        title: 'Step 3: Creating Managed RDBMS Instance(s)',
+        title: `Step 3: Creating Managed RDBMS Instance(s) (Est. ${provEst.dbLabel})`,
         desc: 'Waiting for network resolution...',
         status: 'pending',
         descHtml: '',
@@ -2295,7 +2605,7 @@ async function handleBastionSetCreate(baseName, selectedCsps, engine, adminUser,
   const container = document.getElementById('rdbmsModalContent');
   if (container) {
     await renderInstanceListView(container);
-    showModalNotice(`🚀 Deployment of ${targets.length} dedicated Bastion Infra(s) started in background. You can track live progress here or freely navigate other tabs.`, 'info', 7000);
+    showModalNotice(`🚀 Deployment of ${targets.length} dedicated Bastion Infra(s) started in background (Est. ${provEst.label}). You can track live progress here or freely navigate other tabs.`, 'info', 7000);
   }
 
   runBastionSetDeployInBackground(op, targets, selectedCsps, engine, adminUser, adminPass, userPublicAccess, baseName, isMulti);
@@ -2314,13 +2624,14 @@ async function runBastionSetDeployInBackground(op, targets, selectedCsps, engine
     const updateStep1Details = () => {
       op.steps[0].detailsHtml = targets.map(t => {
         const cUpper = t.csp.toUpperCase();
+        const meta = getProviderMeta(t.csp);
         if (t.infraStatus === 'running') {
           return `
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 5px 8px; border-bottom: 1px solid #f1f5f9; background: #f8fafc; border-radius: 4px; margin-top: 3px;">
               <div style="display: flex; align-items: center; gap: 6px;">
                 <span class="rdbms-spinner rdbms-spinner-sm"></span>
                 <strong style="color: #0369a1;">${escapeHtml(cUpper)}:</strong>
-                <span style="color: #475569; font-size: 11.5px;">Checking / provisioning dedicated Infra <code>${escapeHtml(t.infraName)}</code>...</span>
+                <span style="color: #475569; font-size: 11.5px;">Checking / provisioning dedicated Infra <code>${escapeHtml(t.infraName)}</code> <span style="color: #0284c7;">(Est. ${escapeHtml(meta.estBastion || '~2m')})</span>...</span>
               </div>
             </div>
           `;
@@ -2611,13 +2922,14 @@ async function dispatchParallelRdbmsCreation(op, cspsToDeploy) {
   const updateDetailsHtml = () => {
     op.steps[2].detailsHtml = Object.entries(op.cspStatuses).map(([csp, st]) => {
       const cUpper = csp.toUpperCase();
+      const meta = getProviderMeta(csp);
       if (st.status === 'running') {
         return `
           <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid #f1f5f9; background: #f8fafc; border-radius: 4px; margin-top: 4px;">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span class="rdbms-spinner rdbms-spinner-sm"></span>
               <strong style="color: #0369a1;">${escapeHtml(cUpper)}:</strong>
-              <span style="color: #475569; font-size: 12px;">Creating <code>${escapeHtml(st.dbInstanceName)}</code> (Initializing on cloud)...</span>
+              <span style="color: #475569; font-size: 12px;">Creating <code>${escapeHtml(st.dbInstanceName)}</code> <span style="color: #0284c7;">(Est. ${escapeHtml(meta.estCreate || '~4–6m')})</span>...</span>
             </div>
           </div>
         `;
@@ -2678,6 +2990,7 @@ async function dispatchParallelRdbmsCreation(op, cspsToDeploy) {
       subnetIds: targetSubnetIds,
       securityGroupIds: csp === 'ibm' ? undefined : net.securityGroupIds,
       dbEngine: engine,
+      dbEngineVersion: csp === 'openstack' ? (engine === 'mariadb' ? '11.4' : '8.4') : undefined,
       autoFillDefaults: true,
       adminUserName: effectiveAdminUser,
       adminUserPassword: effectiveAdminPass,
@@ -2687,6 +3000,18 @@ async function dispatchParallelRdbmsCreation(op, cspsToDeploy) {
       highAvailability: false,
       deletionProtection: false,
     };
+
+    // 0. If retrying a previously failed instance with the same name, purge the failed record first
+    try {
+      const existingInst = (rdbmsState.instanceList || []).find(i => (i.id || i.name) === dbInstanceName);
+      if (existingInst && ((existingInst.status || '').toLowerCase().includes('fail') || (existingInst.status || '').toLowerCase().includes('error'))) {
+        await axios.delete(`${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms/${encodeURIComponent(dbInstanceName)}?force=true`, {
+          auth: { username: config.username, password: config.password },
+        });
+      }
+    } catch (purgeErr) {
+      console.warn(`Purge check for ${dbInstanceName} before create:`, purgeErr);
+    }
 
     // 1. Pre-flight Validation
     try {
@@ -2969,11 +3294,13 @@ function getVisibleInstances() {
   if (rdbmsState.filterText) {
     const q = rdbmsState.filterText.toLowerCase();
     list = list.filter(inst => {
+      const accessLabel = inst.publicAccess ? 'public' : 'private';
       return (inst.name && inst.name.toLowerCase().includes(q)) ||
         (inst.id && inst.id.toLowerCase().includes(q)) ||
         (inst.endpoint && inst.endpoint.toLowerCase().includes(q)) ||
         (inst.dbEngine && inst.dbEngine.toLowerCase().includes(q)) ||
-        (inst.status && inst.status.toLowerCase().includes(q));
+        (inst.status && inst.status.toLowerCase().includes(q)) ||
+        accessLabel.includes(q);
     });
   }
   return list;
@@ -3156,6 +3483,13 @@ async function showBatchTestModal() {
               </div>
             </label>
             <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer; margin: 0;">
+              <input type="radio" name="rdbmsBatchScenario" value="crud" style="accent-color: #0284c7;">
+              <div>
+                <strong>Full DB & Table CRUD Lifecycle</strong> <span class="badge" style="background:#dcfce7; color:#15803d; font-size:10px; padding:1px 5px; border-radius:4px; margin-left:4px;">E2E</span>
+                <div style="font-size: 11.5px; color: #64748b;">Create DB (<code>tb_crud_test</code>) ➔ Verify DB ➔ Create Table & Data CRUD (INSERT/SELECT/UPDATE/DELETE) ➔ Drop Table ➔ Drop DB.</div>
+              </div>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer; margin: 0;">
               <input type="radio" name="rdbmsBatchScenario" value="custom" style="accent-color: #0284c7;">
               <div>
                 <strong>Custom Command Template (Shell / SQL)</strong>
@@ -3214,11 +3548,11 @@ async function showBatchTestModal() {
 
       const updateSections = () => {
         const scenario = document.querySelector('input[name="rdbmsBatchScenario"]:checked')?.value;
-        if (authSec) authSec.style.display = (scenario === 'mysql' || scenario === 'custom') ? 'block' : 'none';
+        if (authSec) authSec.style.display = (scenario === 'mysql' || scenario === 'crud' || scenario === 'custom') ? 'block' : 'none';
         if (customSec) {
           customSec.style.display = scenario === 'custom' ? 'block' : 'none';
           if (scenario === 'custom' && customInput && !customInput.value.trim()) {
-            customInput.value = '$(which mysql 2>/dev/null || which mariadb 2>/dev/null || echo mysql) -h ${HOST} -P ${PORT} -u ${USER} -p\'${PASSWORD}\' -e "SELECT VERSION(); SHOW DATABASES;"';
+            customInput.value = '$(which mysql 2>/dev/null || which mariadb 2>/dev/null || echo mysql) --defaults-extra-file=<(printf "[client]\\npassword=%s\\n" \'${PASSWORD}\') -h ${HOST} -P ${PORT} -u ${USER} -e "SELECT VERSION(); SHOW DATABASES;"';
           }
         }
       };
@@ -3257,6 +3591,37 @@ async function showBatchTestModal() {
   }
 }
 
+function buildCrudLifecycleSqlScript(includeSqlDbCreateDrop = false, dbName = 'tb_crud_test', tblName = 'tb_crud_items') {
+  const parts = [];
+  if (includeSqlDbCreateDrop) {
+    parts.push(`SELECT '=== [1/5] CREATE DATABASE (${dbName}) ===' AS step;`);
+    parts.push(`CREATE DATABASE IF NOT EXISTS ${dbName};`);
+  }
+  parts.push(`SELECT '=== [2/5] VERIFY DATABASE (SHOW DATABASES) ===' AS step;`);
+  parts.push(`SHOW DATABASES LIKE '${dbName}';`);
+  parts.push(`USE ${dbName};`);
+  parts.push(`SELECT '=== [3/5] CREATE TABLE & DATA CRUD (${tblName}) ===' AS step;`);
+  parts.push(`DROP TABLE IF EXISTS ${tblName};`);
+  parts.push(`CREATE TABLE ${tblName} (id INT AUTO_INCREMENT PRIMARY KEY, item_name VARCHAR(64) NOT NULL, status VARCHAR(32) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
+  parts.push(`INSERT INTO ${tblName} (item_name, status) VALUES ('cb-alpha', 'CREATED'), ('cb-beta', 'PENDING');`);
+  parts.push(`SELECT '--- [READ AFTER INSERT] ---' AS phase;`);
+  parts.push(`SELECT id, item_name, status FROM ${tblName} ORDER BY id;`);
+  parts.push(`UPDATE ${tblName} SET status = 'VERIFIED' WHERE item_name = 'cb-beta';`);
+  parts.push(`DELETE FROM ${tblName} WHERE item_name = 'cb-alpha';`);
+  parts.push(`SELECT '--- [READ AFTER UPDATE & DELETE] ---' AS phase;`);
+  parts.push(`SELECT id, item_name, status FROM ${tblName} ORDER BY id;`);
+  parts.push(`SELECT '=== [4/5] DROP TABLE (${tblName}) ===' AS step;`);
+  parts.push(`DROP TABLE ${tblName};`);
+  parts.push(`SHOW TABLES;`);
+  if (includeSqlDbCreateDrop) {
+    parts.push(`SELECT '=== [5/5] DROP DATABASE (${dbName}) ===' AS step;`);
+    parts.push(`DROP DATABASE ${dbName};`);
+    parts.push(`SHOW DATABASES LIKE '${dbName}';`);
+  }
+  parts.push(`SELECT '=== [CRUD LIFECYCLE COMPLETE] ===' AS result;`);
+  return parts.join(' ');
+}
+
 async function runBatchTestInBackground(testable, scenario, customPass, customCmd = '') {
   const config = getConfig();
   const op = {
@@ -3271,7 +3636,9 @@ async function runBatchTestInBackground(testable, scenario, customPass, customCm
       return {
         id: t.instance.id,
         title: `${t.instance.name || t.instance.id} (${meta.name})`,
-        desc: scenario === 'custom' ? `Running custom command from Bastion ${t.bastionNode.nodeId}...` : `Testing connection from Bastion ${t.bastionNode.nodeId}...`,
+        desc: scenario === 'crud'
+          ? `Running full DB & Table CRUD lifecycle via Bastion ${t.bastionNode.nodeId}...`
+          : (scenario === 'custom' ? `Running custom command from Bastion ${t.bastionNode.nodeId}...` : `Testing connection from Bastion ${t.bastionNode.nodeId}...`),
         status: 'running',
         descHtml: '',
         detailsHtml: '',
@@ -3305,6 +3672,136 @@ async function runBatchTestInBackground(testable, scenario, customPass, customCm
     const effectivePass = getCspCompliantAdminPassword(prov, customPass || savedPass);
     const safePass = effectivePass.replace(/'/g, "'\\''");
 
+    if (scenario === 'crud') {
+      const dbName = 'tb_crud_test';
+      const tblName = 'tb_crud_items';
+      const isDirectSqlDbManage = prov === 'aws' || prov === 'ibm';
+      const logLines = [];
+      let dbCreatedViaApi = false;
+      let stepError = null;
+
+      try {
+        if (!isDirectSqlDbManage) {
+          step.desc = `[1/5] Creating DB '${dbName}' via Control Plane API...`;
+          renderActiveOperationsPanelIfOpen();
+          try {
+            await axios.post(
+              `${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms/${encodeURIComponent(inst.id)}/database`,
+              { databaseName: dbName },
+              {
+                auth: { username: config.username, password: config.password },
+                headers: {
+                  'X-Admin-User-Name': effectiveUser,
+                  'X-Admin-User-Password': effectivePass,
+                },
+              }
+            );
+            dbCreatedViaApi = true;
+            logLines.push(`=== [1/5] CREATE DATABASE (Control Plane API): '${dbName}' created ===`);
+          } catch (createErr) {
+            const msg = createErr.response?.data?.message || createErr.message || '';
+            if (msg.toLowerCase().includes('already exists') || msg.toLowerCase().includes('duplicate') || createErr.response?.status === 409) {
+              dbCreatedViaApi = true;
+              logLines.push(`=== [1/5] CREATE DATABASE (Control Plane API): '${dbName}' already exists (reusing) ===`);
+            } else {
+              throw new Error(`Create DB '${dbName}' failed: ${msg}`);
+            }
+          }
+
+          step.desc = `[2/5] Verifying DB '${dbName}' via Control Plane API...`;
+          renderActiveOperationsPanelIfOpen();
+          const listRes = await axios.get(
+            `${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms/${encodeURIComponent(inst.id)}/database`,
+            {
+              auth: { username: config.username, password: config.password },
+              headers: {
+                'X-Admin-User-Name': effectiveUser,
+                'X-Admin-User-Password': effectivePass,
+              },
+            }
+          );
+          const dbList = listRes.data?.databases || [];
+          logLines.push(`=== [2/5] LIST DATABASES (Control Plane API): [${dbList.join(', ')}] ===`);
+        }
+
+        step.desc = `[3/5] Running Table DDL & Row CRUD via Bastion ${t.bastionNode.nodeId}...`;
+        renderActiveOperationsPanelIfOpen();
+        const sqlScript = buildCrudLifecycleSqlScript(isDirectSqlDbManage, dbName, tblName);
+        const clientCheck = 'which mysql >/dev/null 2>&1 || which mariadb >/dev/null 2>&1 || (sudo apt-get update -y >/dev/null 2>&1 && (sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-client >/dev/null 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mariadb-client >/dev/null 2>&1) || (sudo yum install -y mariadb >/dev/null 2>&1)) || true; ';
+        const clientBin = '$(which mysql 2>/dev/null || which mariadb 2>/dev/null || echo mysql)';
+        const crudCmd = `${clientCheck}${clientBin} --defaults-extra-file=<(printf "[client]\\npassword=%s\\n" '${safePass}') -h ${host} -P ${port} -u ${effectiveUser} -e "${sqlScript}"`;
+
+        const cmdUrl = `${tbApiBase()}/ns/${rdbmsState.namespace}/cmd/infra/${encodeURIComponent(t.bastionNode.infraId)}?nodeId=${encodeURIComponent(t.bastionNode.nodeId)}`;
+        const cmdRes = await axios.post(cmdUrl, {
+          command: [crudCmd],
+          timeoutMinutes: 2,
+        }, {
+          auth: { username: config.username, password: config.password },
+        });
+
+        const resData = cmdRes.data?.results?.[0] || cmdRes.data?.result?.[0] || {};
+        const stdout = typeof resData.stdout === 'object' ? Object.values(resData.stdout).join('\n') : (resData.stdout || '');
+        const stderr = typeof resData.stderr === 'object' ? Object.values(resData.stderr).join('\n') : (resData.stderr || '');
+        const error = resData.error || '';
+        const combinedOutput = (stdout + (stdout && stderr ? '\n' : '') + stderr).trim();
+        logLines.push(combinedOutput || error || '(No SQL output)');
+
+        if (error || !combinedOutput.includes('cb-alpha') || !combinedOutput.includes('VERIFIED') || !combinedOutput.includes('[4/5] DROP TABLE')) {
+          throw new Error(error || stderr.split('\n').find(l => !l.toLowerCase().includes('warning')) || 'SQL CRUD verification failed');
+        }
+      } catch (err) {
+        stepError = err;
+      } finally {
+        if (!isDirectSqlDbManage && dbCreatedViaApi) {
+          step.desc = `[5/5] Dropping DB '${dbName}' via Control Plane API...`;
+          renderActiveOperationsPanelIfOpen();
+          try {
+            await axios.delete(
+              `${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms/${encodeURIComponent(inst.id)}/database/${encodeURIComponent(dbName)}`,
+              {
+                auth: { username: config.username, password: config.password },
+                headers: {
+                  'X-Admin-User-Name': effectiveUser,
+                  'X-Admin-User-Password': effectivePass,
+                },
+              }
+            );
+            logLines.push(`=== [5/5] DROP DATABASE (Control Plane API): '${dbName}' dropped ===`);
+          } catch (dropErr) {
+            const dropMsg = dropErr.response?.data?.message || dropErr.message || '';
+            logLines.push(`=== [5/5] DROP DATABASE ERROR: ${dropMsg} ===`);
+            if (!stepError) {
+              stepError = new Error(`Drop DB '${dbName}' failed: ${dropMsg}`);
+            }
+          }
+        }
+      }
+
+      step.rawOutput = logLines.join('\n').trim() || '(No output returned)';
+      const outputToggleHtml = `
+        <div style="margin-top: 5px;">
+          <a href="javascript:void(0)" class="btn-toggle-test-output" style="font-size: 11.5px; color: #0284c7; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; font-weight: 600;">
+            <i class="fas fa-terminal"></i> <span>View Output</span> <i class="fas fa-chevron-down" style="font-size: 10px;"></i>
+          </a>
+          <pre class="test-output-box" style="display: none; margin: 5px 0 0 0; padding: 7px 10px; background: #0f172a; color: #38bdf8; border-radius: 5px; font-size: 11.5px; font-family: monospace; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow-y: auto;">${escapeHtml(step.rawOutput)}</pre>
+        </div>
+      `;
+
+      if (!stepError) {
+        passedCount++;
+        step.status = 'success';
+        step.descHtml = `<span style="color: #16a34a; font-weight: 600;">✓ Full DB & Table CRUD lifecycle verified via ${escapeHtml(t.bastionNode.nodeId)} (${escapeHtml(t.bastionLabel)})</span>`;
+        step.detailsHtml = outputToggleHtml;
+      } else {
+        failedCount++;
+        step.status = 'error';
+        step.descHtml = `<span style="color: #dc2626; font-weight: 600;">✗ CRUD test failed: ${escapeHtml(stepError.message || String(stepError))}</span>`;
+        step.detailsHtml = outputToggleHtml;
+      }
+      renderActiveOperationsPanelIfOpen();
+      return;
+    }
+
     let cmd = '';
     if (scenario === 'nc') {
       const ncCheck = 'which nc >/dev/null 2>&1 || (sudo apt-get update -y >/dev/null 2>&1 && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y netcat-openbsd >/dev/null 2>&1) || (sudo yum install -y nc >/dev/null 2>&1) || true; ';
@@ -3312,7 +3809,7 @@ async function runBatchTestInBackground(testable, scenario, customPass, customCm
     } else if (scenario === 'mysql') {
       const clientCheck = 'which mysql >/dev/null 2>&1 || which mariadb >/dev/null 2>&1 || (sudo apt-get update -y >/dev/null 2>&1 && (sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-client >/dev/null 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mariadb-client >/dev/null 2>&1) || (sudo yum install -y mariadb >/dev/null 2>&1)) || true; ';
       const clientBin = '$(which mysql 2>/dev/null || which mariadb 2>/dev/null || echo mysql)';
-      cmd = `${clientCheck}${clientBin} -h ${host} -P ${port} -u ${effectiveUser} -p'${safePass}' -e "SELECT VERSION(); SHOW DATABASES;"`;
+      cmd = `${clientCheck}${clientBin} --defaults-extra-file=<(printf "[client]\\npassword=%s\\n" '${safePass}') -h ${host} -P ${port} -u ${effectiveUser} -e "SELECT VERSION(); SHOW DATABASES;"`;
     } else {
       let templ = customCmd || '';
       templ = templ.replace(/\$\{HOST\}|\$HOST/g, host);
@@ -3434,6 +3931,8 @@ async function showBatchDeleteModal() {
     removeSpinnerTask(spinId);
   }
 
+  const delEst = getParallelDeleteEstimate(selected, associatedInfras.length > 0);
+
   let bastionHtml = '';
   if (associatedInfras.length > 0) {
     bastionHtml = `
@@ -3448,7 +3947,7 @@ async function showBatchDeleteModal() {
               Target Infra: <code>${associatedInfras.map(inf => escapeHtml(inf.id)).join(', ')}</code>
             </div>
             <div style="font-size: 11.5px; color: #64748b; margin-top: 3px;">
-              Terminates bastion VM nodes and frees CSP compute, EBS, and public IPv4 hourly costs.
+              Terminates bastion VM nodes (~15–25s in parallel) and frees CSP compute, EBS, and public IPv4 hourly costs.
             </div>
           </div>
         </label>
@@ -3467,6 +3966,11 @@ async function showBatchDeleteModal() {
           </div>
         </div>
 
+        <div style="margin-bottom: 10px; padding: 7px 10px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 6px; font-size: 12.5px; color: #9a3412;">
+          <i class="fas fa-clock"></i> <strong>Estimated Parallel Termination Time:</strong> <strong>${escapeHtml(delEst.label)}</strong>
+          ${delEst.hasAlibabaWait ? `<div style="font-size: 11.5px; color: #c2410c; margin-top: 2px;">ℹ️ Includes Alibaba Cloud RDS 8m 30s VPC ENI stabilization wait before VSwitch/VPC release.</div>` : ''}
+        </div>
+
         <div style="max-height: 180px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px; margin: 10px 0; background: #fff;">
           <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
             <thead>
@@ -3474,6 +3978,7 @@ async function showBatchDeleteModal() {
                 <th style="padding: 6px 10px; text-align: left;">Instance</th>
                 <th style="padding: 6px 10px; text-align: left;">CSP</th>
                 <th style="padding: 6px 10px; text-align: left;">Status</th>
+                <th style="padding: 6px 10px; text-align: left;">Est. Delete Time</th>
               </tr>
             </thead>
             <tbody>
@@ -3488,6 +3993,7 @@ async function showBatchDeleteModal() {
                       ${escapeHtml(meta.name)}
                     </td>
                     <td style="padding: 6px 10px;">${escapeHtml(inst.status || 'Unknown')}</td>
+                    <td style="padding: 6px 10px; color: #0369a1; font-weight: 600;">${escapeHtml(meta.estDelete || '~1–3 min')}</td>
                   </tr>
                 `;
               }).join('')}
@@ -3513,27 +4019,32 @@ async function showBatchDeleteModal() {
 async function runBatchDeleteInBackground(selectedInstances, shouldDeleteBastion, associatedInfras) {
   const config = getConfig();
   const instIds = selectedInstances.map(i => i.id);
+  const delEst = getParallelDeleteEstimate(selectedInstances, shouldDeleteBastion && associatedInfras.length > 0);
 
   const op = {
     id: `op-batch-del-${Date.now()}`,
     type: 'batch-delete',
-    title: `Batch Terminate: ${selectedInstances.length} Instance${selectedInstances.length === 1 ? '' : 's'}${shouldDeleteBastion && associatedInfras.length > 0 ? ' & Bastion' : ''}`,
+    title: `Batch Terminate: ${selectedInstances.length} Instance${selectedInstances.length === 1 ? '' : 's'}${shouldDeleteBastion && associatedInfras.length > 0 ? ' & Bastion' : ''} [Est. ${delEst.label}]`,
     instanceIds: instIds,
     startTime: Date.now(),
     endTime: null,
     status: 'running',
     steps: [
-      ...selectedInstances.map(inst => ({
-        id: inst.id,
-        title: `Delete DB: ${inst.name || inst.id}`,
-        desc: 'Sending termination request to CSP...',
-        status: 'running',
-        descHtml: '',
-        detailsHtml: '',
-      })),
+      ...selectedInstances.map(inst => {
+        const prov = (inst.connectionConfig?.providerName || inst.connectionName?.split('-')[0] || '').toLowerCase();
+        const meta = getProviderMeta(prov);
+        return {
+          id: inst.id,
+          title: `Delete DB: ${inst.name || inst.id} (${meta.name} · Est. ${meta.estDelete || '~1–3 min'})`,
+          desc: `Sending termination request to ${meta.name}${meta.deleteNote ? ` (${meta.deleteNote})` : ''}...`,
+          status: 'running',
+          descHtml: '',
+          detailsHtml: '',
+        };
+      }),
       ...(shouldDeleteBastion && associatedInfras.length > 0 ? associatedInfras.map(inf => ({
         id: inf.id,
-        title: `Delete Bastion Infra: ${inf.id}`,
+        title: `Delete Bastion Infra: ${inf.id} (Est. ~15–25s)`,
         desc: 'Waiting for database terminations to finalize...',
         status: 'pending',
         descHtml: '',
@@ -3553,7 +4064,7 @@ async function runBatchDeleteInBackground(selectedInstances, shouldDeleteBastion
   renderTableRowsAndSync();
   renderActiveOperationsPanelIfOpen();
 
-  showModalNotice(`🗑️ Batch termination of ${selectedInstances.length} instances initiated. Tracking progress in background operations.`, 'info', 7000);
+  showModalNotice(`🗑️ Batch termination of ${selectedInstances.length} instances initiated (Est. ${delEst.label}). Tracking progress in background operations.`, 'info', 7000);
 
   // 1. Delete RDBMS instances in parallel
   let successCount = 0;
@@ -3664,6 +4175,7 @@ async function handleBatchReconcile() {
 }
 
 async function showTestBastionModal(instanceId) {
+  const config = getConfig();
   const returnView = rdbmsState.view || 'instances';
   const returnToParent = () => {
     if (returnView === 'detail' && instanceId) {
@@ -3762,6 +4274,10 @@ async function showTestBastionModal(instanceId) {
               <strong>MySQL/MariaDB Version & DB List</strong> (Authenticates & queries system databases)
             </label>
             <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer;">
+              <input type="radio" name="rdbmsTestCmdType" value="crud" style="accent-color: #0284c7;">
+              <strong>Full DB & Table CRUD Lifecycle</strong> (Create DB ➔ List DB ➔ Table & Row CRUD ➔ Drop Table ➔ Drop DB)
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer;">
               <input type="radio" name="rdbmsTestCmdType" value="custom" style="accent-color: #0284c7;">
               <strong>Custom Command</strong>
             </label>
@@ -3801,7 +4317,7 @@ async function showTestBastionModal(instanceId) {
 
         <div class="form-group mb-2">
           <label style="font-weight: 700; color: #334155; margin-bottom: 4px;">Executed Shell Command:</label>
-          <textarea class="form-control" id="rdbmsTestCmdPreview" rows="2" style="font-family: monospace; font-size: 12px; background: #0f172a; color: #38bdf8;" readonly></textarea>
+          <textarea class="form-control" id="rdbmsTestCmdPreview" rows="3" style="font-family: monospace; font-size: 12px; background: #0f172a; color: #38bdf8;" readonly></textarea>
         </div>
       </div>
     `,
@@ -3855,8 +4371,25 @@ async function showTestBastionModal(instanceId) {
           const safeP = p.replace(/'/g, "'\\''");
           const clientCheck = 'which mysql >/dev/null 2>&1 || which mariadb >/dev/null 2>&1 || (sudo apt-get update -y >/dev/null 2>&1 && (sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-client >/dev/null 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mariadb-client >/dev/null 2>&1) || (sudo yum install -y mariadb >/dev/null 2>&1)) || true; ';
           const clientBin = '$(which mysql 2>/dev/null || which mariadb 2>/dev/null || echo mysql)';
-          actualCmd = `${clientCheck}${clientBin} -h ${host || '<host>'} -P ${port || 3306} -u ${u} -p'${safeP}' -e "SELECT VERSION(); SHOW DATABASES;"`;
-          displayCmd = `mysql -h ${host || '<host>'} -P ${port || 3306} -u ${u} -p'••••••••' -e "SELECT VERSION(); SHOW DATABASES;"`;
+          actualCmd = `${clientCheck}${clientBin} --defaults-extra-file=<(printf "[client]\\npassword=%s\\n" '${safeP}') -h ${host || '<host>'} -P ${port || 3306} -u ${u} -e "SELECT VERSION(); SHOW DATABASES;"`;
+          displayCmd = `mysql --defaults-extra-file=<(printf "[client]\\npassword=%s\\n" '••••••••') -h ${host || '<host>'} -P ${port || 3306} -u ${u} -e "SELECT VERSION(); SHOW DATABASES;"`;
+          if (preview) {
+            preview.readOnly = true;
+            preview.value = displayCmd;
+          }
+        } else if (type === 'crud') {
+          authSec.style.display = 'block';
+          const u = userEl?.value || effectiveTestUser;
+          const p = passEl?.value || effectiveTestPass;
+          const safeP = p.replace(/'/g, "'\\''");
+          const isDirectSqlDbManage = prov === 'aws' || prov === 'ibm';
+          const sqlScript = buildCrudLifecycleSqlScript(isDirectSqlDbManage, 'tb_crud_test', 'tb_crud_items');
+          const clientCheck = 'which mysql >/dev/null 2>&1 || which mariadb >/dev/null 2>&1 || (sudo apt-get update -y >/dev/null 2>&1 && (sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-client >/dev/null 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mariadb-client >/dev/null 2>&1) || (sudo yum install -y mariadb >/dev/null 2>&1)) || true; ';
+          const clientBin = '$(which mysql 2>/dev/null || which mariadb 2>/dev/null || echo mysql)';
+          actualCmd = `${clientCheck}${clientBin} --defaults-extra-file=<(printf "[client]\\npassword=%s\\n" '${safeP}') -h ${host || '<host>'} -P ${port || 3306} -u ${u} -e "${sqlScript}"`;
+          displayCmd = isDirectSqlDbManage
+            ? `mysql --defaults-extra-file=<(printf "[client]\\npassword=%s\\n" '••••••••') -h ${host || '<host>'} -P ${port || 3306} -u ${u} -e "CREATE DATABASE tb_crud_test; SHOW DATABASES; USE tb_crud_test; CREATE TABLE tb_crud_items (...); INSERT / SELECT / UPDATE / DELETE; DROP TABLE tb_crud_items; DROP DATABASE tb_crud_test;"`
+            : `[1/5 API] POST /database {tb_crud_test}\n[2-4/5 SQL] mysql --defaults-extra-file=<(printf "[client]\\npassword=%s\\n" '••••••••') -h ${host || '<host>'} -P ${port || 3306} -u ${u} -e "SHOW DATABASES; USE tb_crud_test; CREATE TABLE tb_crud_items (...); INSERT / SELECT / UPDATE / DELETE; DROP TABLE tb_crud_items;"\n[5/5 API] DELETE /database/tb_crud_test`;
           if (preview) {
             preview.readOnly = true;
             preview.value = displayCmd;
@@ -3888,11 +4421,13 @@ async function showTestBastionModal(instanceId) {
 
       window._rdbmsGetTestCmd = () => {
         const type = document.querySelector('input[name="rdbmsTestCmdType"]:checked')?.value;
+        const authUser = userEl?.value || effectiveTestUser;
+        const authPass = passEl?.value || effectiveTestPass;
         if (type === 'custom') {
           const val = preview?.value?.trim() || '';
-          return { cmd: val, templateCmd: val };
+          return { cmd: val, templateCmd: val, type, authUser, authPass };
         }
-        return { cmd: actualCmd, templateCmd: displayCmd };
+        return { cmd: actualCmd, templateCmd: displayCmd, type, authUser, authPass };
       };
     },
     preConfirm: () => {
@@ -3902,27 +4437,67 @@ async function showTestBastionModal(instanceId) {
         return false;
       }
       const [infraId, nodeId] = nodeVal.split('|');
-      const { cmd, templateCmd } = (typeof window._rdbmsGetTestCmd === 'function')
+      const { cmd, templateCmd, type, authUser, authPass } = (typeof window._rdbmsGetTestCmd === 'function')
         ? window._rdbmsGetTestCmd()
-        : { cmd: document.getElementById('rdbmsTestCmdPreview')?.value?.trim(), templateCmd: '' };
+        : { cmd: document.getElementById('rdbmsTestCmdPreview')?.value?.trim(), templateCmd: '', type: 'nc', authUser: effectiveTestUser, authPass: effectiveTestPass };
       if (!cmd) {
         showDialogValidationMessage('Command cannot be empty');
         return false;
       }
-      return { infraId, nodeId, cmd, templateCmd: templateCmd || cmd };
+      return { infraId, nodeId, cmd, templateCmd: templateCmd || cmd, type, authUser, authPass };
     },
   });
 
   if (!res.isConfirmed || !res.value) {
     return;
   }
-    const { infraId, nodeId, cmd, templateCmd } = res.value;
+    const { infraId, nodeId, cmd, templateCmd, type, authUser, authPass } = res.value;
+    const isDirectSqlDbManage = prov === 'aws' || prov === 'ibm';
+    const crudDbName = 'tb_crud_test';
 
     const spinId = addSpinnerTask(`Test RDBMS from ${nodeId}`);
+    let dbCreatedViaApi = false;
     try {
+      let finalCmd = cmd;
+      if (type === 'crud' && !isDirectSqlDbManage) {
+        try {
+          await axios.post(
+            `${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms/${encodeURIComponent(inst.id)}/database`,
+            { databaseName: crudDbName },
+            {
+              auth: { username: config.username, password: config.password },
+              headers: {
+                'X-Admin-User-Name': authUser,
+                'X-Admin-User-Password': authPass,
+              },
+            }
+          );
+          dbCreatedViaApi = true;
+        } catch (createErr) {
+          const msg = createErr.response?.data?.message || createErr.message || '';
+          if (msg.toLowerCase().includes('already exists') || msg.toLowerCase().includes('duplicate') || createErr.response?.status === 409) {
+            dbCreatedViaApi = true;
+          } else {
+            throw new Error(`Create DB '${crudDbName}' failed: ${msg}`);
+          }
+        }
+        const listRes = await axios.get(
+          `${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms/${encodeURIComponent(inst.id)}/database`,
+          {
+            auth: { username: config.username, password: config.password },
+            headers: {
+              'X-Admin-User-Name': authUser,
+              'X-Admin-User-Password': authPass,
+            },
+          }
+        );
+        const dbListStr = (listRes.data?.databases || []).join(', ');
+        finalCmd = `echo "=== [1/5] CREATE DATABASE (Control Plane API): '${crudDbName}' ready ==="; echo "=== [2/5] LIST DATABASES (Control Plane API): [${dbListStr.replace(/"/g, '')}] ==="; ${cmd}`;
+      }
+
       const asyncUrl = `${tbApiBase()}/ns/${rdbmsState.namespace}/cmd/infra/${encodeURIComponent(infraId)}?async=true&nodeId=${encodeURIComponent(nodeId)}`;
       const cmdReq = {
-        command: [cmd],
+        command: [finalCmd],
         timeoutMinutes: 5,
       };
 
@@ -3933,6 +4508,47 @@ async function showTestBastionModal(instanceId) {
       if (cmdRes.status === 202 && cmdRes.data?.xRequestId) {
         const xReqId = cmdRes.data.xRequestId;
         const streamUrl = `${tbApiBase()}/ns/${rdbmsState.namespace}/stream/cmd/infra/${encodeURIComponent(infraId)}?xRequestId=${encodeURIComponent(xReqId)}`;
+        let dropHandled = false;
+        const ensureCrudDbDropped = async () => {
+          if (dropHandled || type !== 'crud' || isDirectSqlDbManage || !dbCreatedViaApi) return;
+          dropHandled = true;
+          try {
+            await axios.delete(
+              `${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms/${encodeURIComponent(inst.id)}/database/${encodeURIComponent(crudDbName)}`,
+              {
+                auth: { username: config.username, password: config.password },
+                headers: {
+                  'X-Admin-User-Name': authUser,
+                  'X-Admin-User-Password': authPass,
+                },
+              }
+            );
+            const sess = window._cmdStreamSessions?.[xReqId];
+            if (sess?.nodeState?.[nodeId]?.stdoutLines) {
+              sess.nodeState[nodeId].stdoutLines.push(`=== [5/5] DROP DATABASE (Control Plane API): '${crudDbName}' dropped ===`);
+              if (typeof sess.rebuildCallback === 'function') sess.rebuildCallback();
+            }
+          } catch (dropErr) {
+            const sess = window._cmdStreamSessions?.[xReqId];
+            if (sess?.nodeState?.[nodeId]?.stdoutLines) {
+              sess.nodeState[nodeId].stdoutLines.push(`=== [5/5] DROP DATABASE ERROR: ${dropErr.response?.data?.message || dropErr.message} ===`);
+              if (typeof sess.rebuildCallback === 'function') sess.rebuildCallback();
+            }
+          }
+        };
+
+        if (type === 'crud' && !isDirectSqlDbManage && dbCreatedViaApi) {
+          let checks = 0;
+          const pollTimer = setInterval(() => {
+            checks++;
+            const sess = window._cmdStreamSessions?.[xReqId];
+            if (!sess || sess.doneSummary || sess.error || checks > 180) {
+              clearInterval(pollTimer);
+              ensureCrudDbDropped();
+            }
+          }, 1000);
+        }
+
         if (typeof window.startStreamingSession === 'function') {
           window.startStreamingSession(
             streamUrl,
@@ -3943,11 +4559,13 @@ async function showTestBastionModal(instanceId) {
             spinId,
             null,
             [templateCmd || cmd],
-            () => {
+            async () => {
+              await ensureCrudDbDropped();
               returnToParent();
             }
           );
         } else {
+          await ensureCrudDbDropped();
           rdbmsState.pendingNotice = {
             message: `Command dispatched (Request ID: ${xReqId}). Check Activity Card for real-time progress.`,
             type: 'success',
@@ -3955,6 +4573,18 @@ async function showTestBastionModal(instanceId) {
           returnToParent();
         }
       } else {
+        if (type === 'crud' && !isDirectSqlDbManage && dbCreatedViaApi) {
+          await axios.delete(
+            `${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms/${encodeURIComponent(inst.id)}/database/${encodeURIComponent(crudDbName)}`,
+            {
+              auth: { username: config.username, password: config.password },
+              headers: {
+                'X-Admin-User-Name': authUser,
+                'X-Admin-User-Password': authPass,
+              },
+            }
+          ).catch(() => {});
+        }
         rdbmsState.pendingNotice = {
           message: 'Command executed (sync): ' + JSON.stringify(cmdRes.data),
           type: 'info',
@@ -3962,6 +4592,18 @@ async function showTestBastionModal(instanceId) {
         returnToParent();
       }
     } catch (err) {
+      if (type === 'crud' && !isDirectSqlDbManage && dbCreatedViaApi) {
+        await axios.delete(
+          `${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms/${encodeURIComponent(inst.id)}/database/${encodeURIComponent(crudDbName)}`,
+          {
+            auth: { username: config.username, password: config.password },
+            headers: {
+              'X-Admin-User-Name': authUser,
+              'X-Admin-User-Password': authPass,
+            },
+          }
+        ).catch(() => {});
+      }
       rdbmsState.pendingNotice = {
         message: 'Remote test failed: ' + (err.response?.data?.message || err.message),
         type: 'error',
@@ -4133,35 +4775,7 @@ function attachInstanceListEvents() {
 
       const infoBox = document.getElementById('rdbmsCspInfoBox');
       if (infoBox) {
-        if (p === 'all') {
-          const totalCount = (rdbmsState.instanceList || []).length;
-          infoBox.innerHTML = `
-            <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-              <div><strong>Scope:</strong> <span class="rdbms-badge rdbms-badge-info" style="padding: 2px 6px;">All Supported Clouds (9 Providers)</span></div>
-              <div><strong>Supported Engines:</strong> MySQL, MariaDB</div>
-              <div><strong>Total Instances:</strong> ${totalCount} Instance${totalCount === 1 ? '' : 's'}</div>
-            </div>
-            <div style="margin-top: 4px; color: #64748b; font-size: 12px;">ℹ️ Showing RDBMS instances across all cloud providers. Select a specific cloud above to filter instances and inspect provider-native capabilities and constraints.</div>
-          `;
-        } else {
-          // Update info box
-          const cspSup = rdbmsState.supportMatrix?.[p] || {};
-          const enginesStr = (cspSup.supportedDBEngines || ['mysql']).join(', ');
-          const opMethod = cspSup.dbOperationMethod || 'cspNativeApi';
-          const tagStr = cspSup.supportsTag ? '✅ Supported' : '❌ Unsupported';
-          const storageSelectStr = cspSup.storageTypeSelectable ? '✅ User Selectable' : '⚙️ Auto-managed';
-          const cspNote = cspSup.note ? `<div style="margin-top:4px;color:#64748b;font-size:12px;">ℹ️ ${escapeHtml(cspSup.note)}</div>` : '';
-
-          infoBox.innerHTML = `
-            <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-              <div><strong>Engines:</strong> <span class="rdbms-badge rdbms-badge-info" style="padding: 2px 6px;">${escapeHtml(enginesStr)}</span></div>
-              <div><strong>DB Op Method:</strong> <code>${escapeHtml(opMethod)}</code></div>
-              <div><strong>Tag Support:</strong> ${tagStr}</div>
-              <div><strong>Storage Type:</strong> ${storageSelectStr}</div>
-            </div>
-            ${cspNote}
-          `;
-        }
+        infoBox.innerHTML = renderCspInfoBoxHtml(p, (rdbmsState.instanceList || []).length);
       }
 
       // Update create form if open
@@ -4305,6 +4919,7 @@ function attachInstanceListEvents() {
 
     const selectedConn = (window.cloudBaristaCentralData?.connConfig || []).find(c => (c.configName || c.name) === req.connectionName);
     const targetCsp = (selectedConn?.providerName || req.connectionName.split('-')[0] || '').toLowerCase();
+    const meta = getProviderMeta(targetCsp);
     const userDetail = getCspAdminUserDetail(targetCsp, document.getElementById('rdbmsAdminUserInput')?.value?.trim());
 
     let adaptNote = '';
@@ -4320,7 +4935,9 @@ function attachInstanceListEvents() {
         <div style="text-align: left; font-size: 13.5px; line-height: 1.6;">
           Deploy managed <strong>${escapeHtml(req.dbEngine)}</strong> instance <strong>${escapeHtml(req.name)}</strong> on <strong>${escapeHtml(req.connectionName)}</strong>?
           ${adaptNote}
-          <div style="margin-top: 8px;"><small class="text-muted">Cloud database creation typically takes 3 to 8 minutes.</small></div>
+          <div style="margin-top: 10px; padding: 7px 10px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; font-size: 12.5px; color: #0369a1;">
+            <i class="fas fa-clock"></i> <strong>Estimated Creation Time (${escapeHtml(meta.name)}):</strong> <strong>${escapeHtml(meta.estCreate || '~4–8 min')}</strong>
+          </div>
         </div>
       `,
       icon: 'info',
@@ -4332,9 +4949,9 @@ function attachInstanceListEvents() {
     saveRdbmsSessionCredentials(req.adminUserName, req.adminUserPassword, req.name);
 
     const config = getConfig();
-    const spinId = addSpinnerTask(`Create RDBMS: ${req.name}`);
+    const spinId = addSpinnerTask(`Create RDBMS: ${req.name} (Est. ${meta.estCreate || '~4–8m'})`);
     try {
-      showModalNotice(`Creating RDBMS "${req.name}"... request submitted to CB-Tumblebug.`, 'info', 6000);
+      showModalNotice(`Creating RDBMS "${req.name}" on ${meta.name} (Est. ${meta.estCreate || '~4–8 min'})... request submitted to CB-Tumblebug.`, 'info', 6000);
       await axios.post(`${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms`, req, {
         auth: { username: config.username, password: config.password },
       });
@@ -4565,6 +5182,11 @@ async function handleRetryFailedInstance(id) {
   const defaultUser = inst.adminUserName || inst.masterUserName || getCspCompliantAdminUser(prov, savedUser || rdbmsState.adminUser || 'dbadmin');
   const defaultPass = savedPass || rdbmsState.adminPassword || 'Admin1234!';
   const compliantPass = getCspCompliantAdminPassword(prov, defaultPass);
+  let defaultEngineVer = inst.dbEngineVersion || '';
+  if (prov === 'openstack') {
+    if (!defaultEngineVer || defaultEngineVer === '5.7.29') defaultEngineVer = '8.4';
+    else if (defaultEngineVer === '10.4') defaultEngineVer = '11.4';
+  }
 
   const res = await showInModalDialog({
     title: `<i class="fas fa-redo" style="color: #d97706;"></i> Retry RDBMS Provisioning`,
@@ -4587,6 +5209,11 @@ async function handleRetryFailedInstance(id) {
               <strong>Last Error:</strong> ${escapeHtml(inst.systemMessage)}
             </div>
           ` : ''}
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="font-weight: 600; display: block; margin-bottom: 4px;">DB Engine Version <small class="text-muted" style="font-weight: normal;">(Leave blank for CSP Auto-Default)</small></label>
+          <input type="text" id="rdbmsRetryEngineVersionInput" class="rdbms-form-control" value="${escapeHtml(defaultEngineVer)}" placeholder="e.g. 8.0 or 8.4" style="width: 100%;">
         </div>
 
         <div style="margin-bottom: 12px;">
@@ -4616,7 +5243,7 @@ async function handleRetryFailedInstance(id) {
         </div>
 
         <div style="font-size: 11.5px; color: #64748b; background: #f8fafc; border: 1px solid #e2e8f0; padding: 8px; border-radius: 4px;">
-          <i class="fas fa-info-circle" style="color: #0284c7;"></i> The failed record in Tumblebug will be safely purged, and a fresh provisioning job will start in the background.
+          <i class="fas fa-info-circle" style="color: #0284c7;"></i> The failed record in Tumblebug will be safely purged, and a fresh provisioning job will start in the background (Est. <strong>${escapeHtml(meta.estCreate || '~4–8 min')}</strong>).
         </div>
       </div>
     `,
@@ -4668,6 +5295,7 @@ async function handleRetryFailedInstance(id) {
 
   const rawUser = (document.getElementById('rdbmsRetryAdminUserInput')?.value || '').trim() || defaultUser;
   const rawPass = (document.getElementById('rdbmsRetryAdminPassInput')?.value || '').trim() || defaultPass;
+  const customEngineVer = (document.getElementById('rdbmsRetryEngineVersionInput')?.value || '').trim();
   const effectiveUser = getCspCompliantAdminUser(prov, rawUser);
   const effectivePass = getCspCompliantAdminPassword(prov, rawPass);
 
@@ -4677,7 +5305,7 @@ async function handleRetryFailedInstance(id) {
   const op = {
     id: `op-retry-single-${Date.now()}`,
     type: 'deploy-bastion-set',
-    title: `Retry Provisioning: ${inst.name || inst.id} (${prov.toUpperCase()})`,
+    title: `Retry Provisioning: ${inst.name || inst.id} (${prov.toUpperCase()} · Est. ${meta.estCreate || '~4–8m'})`,
     baseName: inst.name || inst.id,
     startTime: Date.now(),
     endTime: null,
@@ -4693,7 +5321,7 @@ async function handleRetryFailedInstance(id) {
 
   rdbmsActiveOperations.unshift(op);
   renderActiveOperationsPanelIfOpen();
-  showModalNotice(`Started re-provisioning for ${inst.name || inst.id} in background.`, 'info');
+  showModalNotice(`Started re-provisioning for ${inst.name || inst.id} in background (Est. ${meta.estCreate || '~4–8m'}).`, 'info');
 
   const config = getConfig();
   const spinId = addSpinnerTask(`Retry DB: ${inst.name || inst.id}`);
@@ -4713,7 +5341,7 @@ async function handleRetryFailedInstance(id) {
     }
 
     op.steps[1].status = 'running';
-    op.steps[1].descHtml = `<span class="rdbms-spinner rdbms-spinner-sm" style="margin-right: 4px;"></span> Creating <code>${escapeHtml(inst.name || inst.id)}</code> on ${escapeHtml(prov.toUpperCase())} (Provisioning takes ~5-15 mins)...`;
+    op.steps[1].descHtml = `<span class="rdbms-spinner rdbms-spinner-sm" style="margin-right: 4px;"></span> Creating <code>${escapeHtml(inst.name || inst.id)}</code> on ${escapeHtml(prov.toUpperCase())} <span style="color: #0284c7;">(Est. ${escapeHtml(meta.estCreate || '~4–8 min')})</span>...`;
     renderActiveOperationsPanelIfOpen();
 
     // Step 2: Create RDBMS request
@@ -4721,15 +5349,19 @@ async function handleRetryFailedInstance(id) {
       name: inst.name || inst.id,
       connectionName: inst.connectionName,
       vNetId: inst.vNetId,
+      subnetIds: Array.isArray(inst.subnetIds) && inst.subnetIds.length > 0 ? inst.subnetIds : undefined,
+      securityGroupIds: Array.isArray(inst.securityGroupIds) && inst.securityGroupIds.length > 0 ? inst.securityGroupIds : undefined,
       dbEngine: inst.dbEngine || 'mysql',
-      dbEngineVersion: inst.dbEngineVersion || '',
+      dbEngineVersion: customEngineVer || undefined,
       dbInstanceSpec: inst.dbInstanceSpec || '',
       storageSize: inst.storageSize ? parseInt(inst.storageSize, 10) : 0,
       highAvailability: !!inst.highAvailability,
       publicAccess: !!inst.publicAccess,
+      nhnDBSGToAllowAllInbound: (prov === 'nhn'),
+      ncpDBACGToAllowAllInbound: (prov === 'ncp'),
       adminUserName: effectiveUser,
       adminUserPassword: effectivePass,
-      autoFillDefaults: false,
+      autoFillDefaults: true,
     };
 
     const res = await axios.post(`${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms`, createReq, {
@@ -4764,6 +5396,9 @@ async function handleRetryFailedInstance(id) {
 async function handleDeleteInstance(id, name) {
   if (!id) return;
   const config = getConfig();
+  const targetInst = (rdbmsState.instanceList || []).find(i => i.id === id) || rdbmsState.currentInstance || {};
+  const prov = (targetInst.connectionConfig?.providerName || targetInst.connectionName?.split('-')[0] || '').toLowerCase();
+  const meta = getProviderMeta(prov);
 
   // 1. Check for associated Bastion Infra in the namespace
   let associatedInfra = null;
@@ -4805,6 +5440,13 @@ async function handleDeleteInstance(id, name) {
     removeSpinnerTask(lookupSpinId);
   }
 
+  const estTimingBox = `
+    <div style="margin-top: 10px; padding: 7px 10px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 6px; font-size: 12.5px; color: #9a3412;">
+      <i class="fas fa-clock"></i> <strong>Estimated Termination Time (${escapeHtml(meta.name)}):</strong> <strong>${escapeHtml(meta.estDelete || '~1–3 min')}</strong>
+      ${meta.deleteNote ? `<div style="font-size: 11.5px; color: #c2410c; margin-top: 2px;">ℹ️ ${escapeHtml(meta.deleteNote)}</div>` : ''}
+    </div>
+  `;
+
   // 2. Build confirmation dialog with cascading option if associated bastion exists
   let confirmHtml = '';
   if (associatedInfra) {
@@ -4816,6 +5458,7 @@ async function handleDeleteInstance(id, name) {
           <div style="color: #dc2626; font-size: 12.5px; margin-top: 4px;">
             <i class="fas fa-exclamation-triangle"></i> This will terminate the managed database on the CSP. All databases and data will be permanently destroyed.
           </div>
+          ${estTimingBox}
         </div>
 
         <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-top: 14px;">
@@ -4823,7 +5466,7 @@ async function handleDeleteInstance(id, name) {
             <input type="checkbox" id="rdbmsDeleteBastionCheck" checked style="width: 17px; height: 17px; margin-top: 2px; accent-color: #dc2626; cursor: pointer;">
             <div>
               <div style="font-weight: 700; color: #0f172a; font-size: 13.5px;">
-                <i class="fas fa-shield-alt" style="color: #0284c7;"></i> Also terminate & delete associated Bastion Infra
+                <i class="fas fa-shield-alt" style="color: #0284c7;"></i> Also terminate & delete associated Bastion Infra (Est. +15–25s)
               </div>
               <div style="font-size: 12.5px; color: #334155; margin-top: 2px;">
                 Target Infra: <code>${escapeHtml(associatedInfra.id)}</code> (${escapeHtml(nodeDesc)})
@@ -4838,8 +5481,11 @@ async function handleDeleteInstance(id, name) {
     `;
   } else {
     confirmHtml = `
-      Are you sure you want to permanently delete RDBMS instance <strong>${escapeHtml(name)}</strong>?<br>
-      <span style="color: #dc2626; font-size: 13px;">This will terminate the managed database on the CSP. All databases and data will be destroyed.</span>
+      <div style="text-align: left; font-size: 13.5px; line-height: 1.5;">
+        Are you sure you want to permanently delete RDBMS instance <strong>${escapeHtml(name)}</strong>?<br>
+        <span style="color: #dc2626; font-size: 13px;">This will terminate the managed database on the CSP. All databases and data will be destroyed.</span>
+        ${estTimingBox}
+      </div>
     `;
   }
 
@@ -4860,7 +5506,7 @@ async function handleDeleteInstance(id, name) {
   const op = {
     id: `op-del-${Date.now()}`,
     type: 'delete-instance',
-    title: shouldDeleteBastion ? `Cascading Termination: ${name} & Bastion` : `Terminating RDBMS: ${name}`,
+    title: `${shouldDeleteBastion ? `Cascading Termination: ${name} & Bastion` : `Terminating RDBMS: ${name}`} (${meta.name} · Est. ${meta.estDelete || '~1–3m'})`,
     instanceId: id,
     instanceName: name,
     associatedInfraId: associatedInfra?.id || null,
@@ -4870,14 +5516,14 @@ async function handleDeleteInstance(id, name) {
     status: 'running',
     steps: [
       {
-        title: 'Step 1: Terminating Managed Database on CSP',
-        desc: 'Sending deletion request to CSP and destroying database cluster/storage...',
+        title: `Step 1: Terminating Managed Database on ${meta.name} (Est. ${meta.estDelete || '~1–3 min'})`,
+        desc: `Sending deletion request to ${meta.name} and destroying database cluster/storage${meta.deleteNote ? ` (${meta.deleteNote})` : ''}...`,
         status: 'running',
         descHtml: '',
         detailsHtml: '',
       },
       ...(shouldDeleteBastion && associatedInfra ? [{
-        title: 'Step 2: Terminating Bastion VM Infra & Releasing Network',
+        title: 'Step 2: Terminating Bastion VM Infra & Releasing Network (Est. ~15–25s)',
         desc: 'Waiting for database termination...',
         status: 'pending',
         descHtml: '',
@@ -4895,7 +5541,7 @@ async function handleDeleteInstance(id, name) {
   const container = document.getElementById('rdbmsModalContent');
   if (container) {
     await renderInstanceListView(container);
-    showModalNotice(`🗑️ Deletion of "${name}" started in background. You can track live progress here or freely navigate other tabs.`, 'info', 7000);
+    showModalNotice(`🗑️ Deletion of "${name}" started in background (Est. ${meta.estDelete || '~1–3 min'}). You can track live progress here or freely navigate other tabs.`, 'info', 7000);
   }
 
   runDeleteInstanceInBackground(op, id, name, shouldDeleteBastion, associatedInfra);
@@ -5100,7 +5746,7 @@ function buildCreateRequestObject() {
 
   // Provider specific testing flags
   const prov = targetCsp || (rdbmsState.selectedProvider || '').toLowerCase();
-  if (prov === 'ibm') {
+  if (prov === 'ibm' || prov === 'gcp') {
     req.publicAccess = true;
   }
   if (prov === 'nhn') {
@@ -5121,7 +5767,7 @@ async function executeBastionDbQuery(inst, bastionNode, user, pass, sqlParam, ti
   const safePass = (pass || '').replace(/'/g, "'\\''");
   const clientCheck = 'which mysql >/dev/null 2>&1 || which mariadb >/dev/null 2>&1 || (sudo apt-get update -y >/dev/null 2>&1 && (sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-client >/dev/null 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mariadb-client >/dev/null 2>&1) || (sudo yum install -y mariadb >/dev/null 2>&1)) || true; ';
   const clientBin = '$(which mysql 2>/dev/null || which mariadb 2>/dev/null || echo mysql)';
-  const cmd = `${clientCheck}${clientBin} -h ${host} -P ${port} -u ${user} -p'${safePass}' ${sqlParam}`;
+  const cmd = `${clientCheck}${clientBin} --defaults-extra-file=<(printf "[client]\\npassword=%s\\n" '${safePass}') -h ${host} -P ${port} -u ${user} ${sqlParam}`;
 
   const config = getConfig();
   const cmdUrl = `${tbApiBase()}/ns/${rdbmsState.namespace}/cmd/infra/${encodeURIComponent(bastionNode.infraId)}?nodeId=${encodeURIComponent(bastionNode.nodeId)}`;
@@ -5185,7 +5831,7 @@ async function renderInstanceDetailView(container) {
   const isAwsOrIbm = prov === 'aws' || prov === 'ibm';
 
   let bastionMatch = null;
-  if (isAwsOrIbm) {
+  if (isAwsOrIbm || !inst.publicAccess) {
     const { allNodes } = await getNamespaceBastionNodes();
     bastionMatch = findBestBastionNodeForInstance(inst, allNodes);
   }
@@ -5696,9 +6342,67 @@ function attachInstanceDetailEvents() {
         return;
       }
 
+      const inst = rdbmsState.currentInstance;
+      const tlsContainer = document.getElementById('rdbmsTlsContainer');
+
+      const inspectTlsViaBastion = async (bastionNode) => {
+        const probeRes = await executeBastionDbQuery(
+          inst, bastionNode, user, pass,
+          `-s -N -e "SHOW STATUS LIKE 'Ssl_cipher'; SHOW VARIABLES LIKE 'require_secure_transport';"`
+        );
+        const lines = probeRes.stdout.split('\n');
+        let cipher = 'N/A';
+        let reqSec = 'OFF';
+        for (const line of lines) {
+          const parts = line.split('\t').map(p => p.trim());
+          if (parts[0] === 'Ssl_cipher') cipher = parts[1] || 'N/A';
+          if (parts[0] === 'require_secure_transport') reqSec = parts[1] || 'OFF';
+        }
+        const tlsInUse = Boolean(cipher && cipher !== 'N/A' && cipher !== '');
+        const enforced = reqSec.toUpperCase() === 'ON';
+        tlsContainer.innerHTML = `
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; font-size: 13px; margin-bottom: 12px;">
+            <div><strong>Require Secure Transport:</strong> <span class="rdbms-badge ${enforced ? 'rdbms-badge-success' : 'rdbms-badge-secondary'}">${escapeHtml(reqSec)}</span></div>
+            <div><strong>TLS in Use:</strong> ${tlsInUse ? '✅ Yes' : '❌ No'}</div>
+            <div><strong>Active Cipher:</strong> <code>${escapeHtml(cipher)}</code></div>
+            <div><strong>Probe Source:</strong> <span class="rdbms-badge rdbms-badge-info">In-VPC Bastion (${escapeHtml(bastionNode.nodeId)})</span></div>
+          </div>
+          <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 10px; font-size: 12.5px; color: #1e40af;">
+            ℹ️ TLS inspection completed directly via In-VPC Bastion node <strong>${escapeHtml(bastionNode.nodeId)}</strong>.
+          </div>
+        `;
+        showModalNotice(`TLS inspected successfully via In-VPC Bastion (${bastionNode.nodeId}).`, 'success');
+      };
+
+      // Private VPC instances cannot be reached by CB-Spider's direct TLS probe; query directly via In-VPC Bastion.
+      if (!inst?.publicAccess) {
+        let bastionNode = rdbmsState.currentBastionNode;
+        if (!bastionNode) {
+          const { allNodes } = await getNamespaceBastionNodes();
+          const retryMatch = findBestBastionNodeForInstance(inst, allNodes);
+          if (retryMatch?.node) {
+            rdbmsState.currentBastionNode = retryMatch.node;
+            rdbmsState.currentBastionLabel = retryMatch.label;
+            bastionNode = retryMatch.node;
+          }
+        }
+        if (!bastionNode) {
+          showModalNotice('Private VPC databases require a running In-VPC Bastion node to inspect TLS status.', 'error');
+          return;
+        }
+        const spinId = addSpinnerTask(`Inspect TLS via Bastion (${bastionNode.nodeId})`);
+        try {
+          await inspectTlsViaBastion(bastionNode);
+        } catch (bastionErr) {
+          showModalNotice('Inspect TLS failed (via In-VPC Bastion): ' + (bastionErr.message || bastionErr), 'error');
+        } finally {
+          removeSpinnerTask(spinId);
+        }
+        return;
+      }
+
       const config = getConfig();
       const spinId = addSpinnerTask('Inspect TLS');
-      const tlsContainer = document.getElementById('rdbmsTlsContainer');
       try {
         const res = await axios.get(`${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms/${rdbmsState.currentInstance.id}/secure-transport`, {
           auth: { username: config.username, password: config.password },
@@ -5747,38 +6451,19 @@ function attachInstanceDetailEvents() {
           };
         }
       } catch (err) {
-        const inst = rdbmsState.currentInstance;
-        const prov = (inst?.connectionConfig?.providerName || inst?.connectionName?.split('-')[0] || '').toLowerCase();
-        const isAwsOrIbm = prov === 'aws' || prov === 'ibm';
-        const bastionNode = rdbmsState.currentBastionNode;
-        if (isAwsOrIbm && bastionNode) {
+        let bastionNode = rdbmsState.currentBastionNode;
+        if (!bastionNode) {
+          const { allNodes } = await getNamespaceBastionNodes();
+          const retryMatch = findBestBastionNodeForInstance(inst, allNodes);
+          if (retryMatch?.node) {
+            rdbmsState.currentBastionNode = retryMatch.node;
+            rdbmsState.currentBastionLabel = retryMatch.label;
+            bastionNode = retryMatch.node;
+          }
+        }
+        if (bastionNode) {
           try {
-            const probeRes = await executeBastionDbQuery(
-              inst, bastionNode, user, pass,
-              `-s -N -e "SHOW STATUS LIKE 'Ssl_cipher'; SHOW VARIABLES LIKE 'require_secure_transport';"`
-            );
-            const lines = probeRes.stdout.split('\n');
-            let cipher = 'N/A';
-            let reqSec = 'OFF';
-            for (const line of lines) {
-              const parts = line.split('\t').map(p => p.trim());
-              if (parts[0] === 'Ssl_cipher') cipher = parts[1] || 'N/A';
-              if (parts[0] === 'require_secure_transport') reqSec = parts[1] || 'OFF';
-            }
-            const tlsInUse = Boolean(cipher && cipher !== 'N/A' && cipher !== '');
-            const enforced = reqSec.toUpperCase() === 'ON';
-            tlsContainer.innerHTML = `
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; font-size: 13px; margin-bottom: 12px;">
-                <div><strong>Require Secure Transport:</strong> <span class="rdbms-badge ${enforced ? 'rdbms-badge-success' : 'rdbms-badge-secondary'}">${escapeHtml(reqSec)}</span></div>
-                <div><strong>TLS in Use:</strong> ${tlsInUse ? '✅ Yes' : '❌ No'}</div>
-                <div><strong>Active Cipher:</strong> <code>${escapeHtml(cipher)}</code></div>
-                <div><strong>Probe Source:</strong> <span class="rdbms-badge rdbms-badge-info">In-VPC Bastion (${escapeHtml(bastionNode.nodeId)})</span></div>
-              </div>
-              <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 10px; font-size: 12.5px; color: #1e40af;">
-                ℹ️ TLS inspection completed via In-VPC Bastion node <strong>${escapeHtml(bastionNode.nodeId)}</strong>.
-              </div>
-            `;
-            showModalNotice(`TLS inspected successfully via In-VPC Bastion (${bastionNode.nodeId}).`, 'success');
+            await inspectTlsViaBastion(bastionNode);
             return;
           } catch (bastionErr) {
             showModalNotice('Inspect TLS failed: ' + (bastionErr.message || err.message), 'error');
