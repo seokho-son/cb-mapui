@@ -154,7 +154,9 @@ export function showModalConfirm({
       if (confirmResolver) { confirmResolver(false); confirmResolver = null; }
     };
     document.getElementById('rdbmsConfirmOkBtn').onclick = () => {
-      const isChecked = Boolean(document.getElementById('rdbmsDeleteBastionCheck')?.checked);
+      const singleCheck = document.getElementById('rdbmsDeleteBastionCheck');
+      const batchCheck = document.getElementById('rdbmsBatchDeleteBastionCheck');
+      const isChecked = Boolean((singleCheck && singleCheck.checked) || (batchCheck && batchCheck.checked));
       overlay.style.display = 'none';
       if (confirmResolver) { confirmResolver(isChecked ? { confirmed: true, deleteBastion: true } : true); confirmResolver = null; }
     };
@@ -386,12 +388,36 @@ const PROVIDER_META = {
   },
 };
 
-function getProviderMeta(providerName) {
-  const p = (providerName || '').toLowerCase().trim();
+function extractProviderKey(item) {
+  if (!item) return '';
+  if (typeof item === 'string') return item.toLowerCase().trim();
+  if (typeof item === 'object') {
+    const raw = item.connectionConfig?.providerName
+      || (typeof item.connectionName === 'string' ? item.connectionName.split('-')[0] : '')
+      || item.provider
+      || item.csp
+      || '';
+    return String(raw).toLowerCase().trim();
+  }
+  return String(item).toLowerCase().trim();
+}
+
+function isRdbmsCspMissing(inst) {
+  if (!inst || !Array.isArray(inst.conditions)) return false;
+  return inst.conditions.some(c =>
+    c.type === 'Synced' &&
+    c.status === 'False' &&
+    (c.reason === 'CSPResourceNotFound' || (c.message || '').toLowerCase().includes('not found'))
+  );
+}
+
+function getProviderMeta(providerOrInst) {
+  const p = extractProviderKey(providerOrInst);
   if (PROVIDER_META[p]) return PROVIDER_META[p];
+  const label = typeof providerOrInst === 'string' && providerOrInst ? providerOrInst : (p ? p.toUpperCase() : 'Unknown');
   return {
-    name: providerName || 'Unknown',
-    icon: `/img/csp-${p}.png`,
+    name: label,
+    icon: `/img/csp-${p || 'unknown'}.png`,
     badge: 'Managed RDBMS',
     estBastion: '~2–3m',
     estCreate: '~4–8m',
@@ -409,7 +435,8 @@ function getParallelProvisionEstimate(csps = [], includeBastion = true) {
   let maxCreateMin = 0, maxCreateMax = 0;
   let slowestCsp = '';
   csps.forEach(c => {
-    const m = getProviderMeta(c);
+    const p = extractProviderKey(c);
+    const m = getProviderMeta(p);
     if (m.bastionMin > maxBastionMin) maxBastionMin = m.bastionMin;
     if (m.bastionMax > maxBastionMax) maxBastionMax = m.bastionMax;
     if (m.createMax > maxCreateMax) {
@@ -429,12 +456,14 @@ function getParallelProvisionEstimate(csps = [], includeBastion = true) {
 }
 
 function getParallelDeleteEstimate(csps = [], includeBastion = false) {
-  if (!Array.isArray(csps) || csps.length === 0) return { label: '~1–3 min', slowestCsp: '', hasAlibaba: false };
+  if (!Array.isArray(csps) || csps.length === 0) {
+    return { label: '~1–3 min', slowestCsp: '', hasAlibaba: false, hasAlibabaWait: false };
+  }
   let maxDelMin = 0, maxDelMax = 0;
   let slowestCsp = '';
   let hasAlibaba = false;
   csps.forEach(c => {
-    const p = (c || '').toLowerCase().trim();
+    const p = extractProviderKey(c);
     if (p === 'alibaba') hasAlibaba = true;
     const m = getProviderMeta(p);
     if (m.deleteMax > maxDelMax) {
@@ -450,6 +479,7 @@ function getParallelDeleteEstimate(csps = [], includeBastion = false) {
     label: totalMin === totalMax ? `~${totalMin} min` : `~${totalMin}–${totalMax} min`,
     slowestCsp,
     hasAlibaba,
+    hasAlibabaWait: hasAlibaba && includeBastion,
   };
 }
 
@@ -1602,6 +1632,7 @@ async function renderInstanceListView(container) {
 
   // CSP Info Box
   const infoBoxContent = renderCspInfoBoxHtml(rdbmsState.selectedProvider, totalCount);
+  const missingCount = (rdbmsState.instanceList || []).filter(isRdbmsCspMissing).length;
 
   container.innerHTML = `
     <!-- Top Header Bar -->
@@ -1610,16 +1641,20 @@ async function renderInstanceListView(container) {
         <span>🗄️ Managed RDBMS</span>
         <span class="rdbms-badge rdbms-badge-info">Namespace: ${escapeHtml(rdbmsState.namespace)}</span>
         <span class="rdbms-badge rdbms-badge-secondary" id="rdbmsTotalCountBadge">${totalCount} Total Instance${totalCount === 1 ? '' : 's'}</span>
+        ${missingCount > 0 ? `<span class="rdbms-badge rdbms-badge-danger" id="rdbmsMissingCountBadge">⚠️ ${missingCount} CSP Missing</span>` : ''}
       </div>
-      <div style="display: flex; gap: 8px;">
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
         <button type="button" class="rdbms-btn rdbms-btn-secondary" id="rdbmsClearCredsBtn" title="Purge saved DB passwords from browser storage" style="color: #dc2626;">
           <i class="fas fa-trash-alt"></i> Clear Passwords
         </button>
         <button type="button" class="rdbms-btn rdbms-btn-secondary" id="rdbmsRefreshBtn" title="Refresh instances">
           <i class="fas fa-sync-alt"></i> Refresh
         </button>
-        <button type="button" class="rdbms-btn rdbms-btn-secondary" id="rdbmsReconcileAllBtn" title="Reconcile all RDBMS instances">
+        <button type="button" class="rdbms-btn rdbms-btn-secondary" id="rdbmsReconcileAllBtn" title="Reconcile all RDBMS instances against live CSP status">
           <i class="fas fa-tools"></i> Reconcile All
+        </button>
+        <button type="button" class="rdbms-btn rdbms-btn-warning" id="rdbmsPruneOrphansBtn" style="${missingCount > 0 ? 'background:#fef3c7;color:#b45309;border-color:#fde68a;' : 'display:none;'}" title="Purge Tumblebug metadata for RDBMS instances missing on CSP">
+          <i class="fas fa-broom"></i> Prune Orphans (${missingCount})
         </button>
         <button type="button" class="rdbms-btn rdbms-btn-primary" id="rdbmsToggleCreateFormBtn">
           <i class="fas fa-plus"></i> ${rdbmsState.isFormOpen ? 'Cancel' : 'New RDBMS Instance'}
@@ -1967,9 +2002,10 @@ function renderInstanceRows() {
       statusBadge = 'rdbms-badge-danger';
     }
 
+    const isMissingCsp = isRdbmsCspMissing(inst);
     const statusHtml = activeDeletion
       ? `<span class="rdbms-badge rdbms-badge-danger"><span class="rdbms-spinner rdbms-spinner-danger rdbms-spinner-sm" style="margin-right: 4px;"></span> Terminating...</span>`
-      : `<span class="rdbms-badge ${statusBadge}">${escapeHtml(status)}</span>`;
+      : `<span class="rdbms-badge ${statusBadge}">${escapeHtml(status)}</span>${isMissingCsp ? ` <span class="rdbms-badge rdbms-badge-danger" title="Diagnosed as missing on CSP during reconcile">⚠️ CSP Missing</span>` : ''}`;
 
     const accessBadgeHtml = inst.publicAccess
       ? `<span class="rdbms-badge" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-size: 10.5px; padding: 1px 6px;" title="Public Access Enabled (External IP / FQDN)">🌐 Public</span>`
@@ -4157,18 +4193,54 @@ async function handleBatchReconcile() {
   const spinId = addSpinnerTask(`Batch Reconcile (${selected.length})`);
   try {
     let successCount = 0;
+    let missingCount = 0;
     await Promise.allSettled(selected.map(async (inst) => {
       try {
-        await axios.put(`${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms/${encodeURIComponent(inst.id)}/reconcile`, {}, {
+        const res = await axios.put(`${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms/${encodeURIComponent(inst.id)}/reconcile`, {}, {
           auth: { username: config.username, password: config.password },
         });
         successCount++;
+        const conds = res.data?.conditions || [];
+        if (conds.some(c => c.type === 'Synced' && c.status === 'False')) {
+          missingCount++;
+        }
       } catch (e) {
         console.warn(`Reconcile failed for ${inst.id}`, e);
       }
     }));
-    showModalNotice(`Batch Reconcile completed: ${successCount}/${selected.length} instances updated.`, 'success');
-    await refreshRdbmsInstancesSilently();
+    await renderInstanceListView(document.getElementById('rdbmsModalContent'));
+    showModalNotice(
+      `Batch Reconcile completed: ${successCount}/${selected.length} checked${missingCount > 0 ? ` (${missingCount} Missing on CSP — click Prune Orphans to clean up)` : ' (All Synced)'}.`,
+      missingCount > 0 ? 'warning' : 'success',
+      6000
+    );
+  } finally {
+    removeSpinnerTask(spinId);
+  }
+}
+
+async function handlePruneOrphanRdbms() {
+  const missingList = (rdbmsState.instanceList || []).filter(isRdbmsCspMissing);
+  const ok = await showModalConfirm({
+    title: 'Prune Orphaned RDBMS Metadata?',
+    html: `Purge Tumblebug metadata for <strong>${missingList.length}</strong> RDBMS instance${missingList.length === 1 ? '' : 's'} diagnosed as missing on CSP?<br><small style="color:#64748b;">(${missingList.map(i => escapeHtml(i.id)).join(', ')})</small>`,
+    icon: 'warning',
+    confirmText: '🧹 Prune Orphans',
+    confirmButtonClass: 'rdbms-btn-primary',
+  });
+  if (!ok) return;
+
+  const config = getConfig();
+  const spinId = addSpinnerTask('Prune Orphaned RDBMS');
+  try {
+    const res = await axios.post(`${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms/reconcile/prune`, {}, {
+      auth: { username: config.username, password: config.password },
+    });
+    const pruned = res.data?.deleted ?? missingList.length;
+    await renderInstanceListView(document.getElementById('rdbmsModalContent'));
+    showModalNotice(`Pruned ${pruned} orphaned RDBMS record(s).`, 'success');
+  } catch (err) {
+    showModalNotice('Prune failed: ' + (err.response?.data?.message || err.message), 'error');
   } finally {
     removeSpinnerTask(spinId);
   }
@@ -4661,16 +4733,31 @@ function attachInstanceListEvents() {
       const config = getConfig();
       const spinId = addSpinnerTask('Reconcile All RDBMS');
       try {
-        await axios.put(`${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms/reconcile`, {}, {
+        const res = await axios.put(`${tbApiBase()}/ns/${rdbmsState.namespace}/resources/rdbms/reconcile`, {}, {
           auth: { username: config.username, password: config.password },
         });
-        showModalNotice('Reconciliation completed successfully.', 'success');
+        const total = res.data?.total ?? (rdbmsState.instanceList || []).length;
+        const synced = res.data?.synced ?? 0;
+        const missing = res.data?.cspResourceMissing ?? 0;
         await renderInstanceListView(document.getElementById('rdbmsModalContent'));
+        showModalNotice(
+          `Reconciliation complete: ${total} checked (${synced} Available, ${missing} Missing on CSP).`,
+          missing > 0 ? 'warning' : 'success',
+          6000
+        );
       } catch (err) {
         showModalNotice('Reconcile failed: ' + (err.response?.data?.message || err.message), 'error');
       } finally {
         removeSpinnerTask(spinId);
       }
+    };
+  }
+
+  // Prune Orphans Button
+  const pruneBtn = document.getElementById('rdbmsPruneOrphansBtn');
+  if (pruneBtn) {
+    pruneBtn.onclick = async () => {
+      await handlePruneOrphanRdbms();
     };
   }
 
