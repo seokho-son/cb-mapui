@@ -757,7 +757,7 @@ export async function showObjectStorageModal(initialBucketId = null) {
     title: '🪣 Object Storage Management (S3 / Blob / COS / OSS)',
     html: `
       <style>
-        .swal2-os-modal { max-width: 1320px !important; position: relative !important; overflow: hidden !important; }
+        .swal2-os-modal { max-width: 1460px !important; position: relative !important; overflow: hidden !important; }
         .os-modal-container { 
           text-align: left; 
           font-size: 14px; 
@@ -973,7 +973,7 @@ export async function showObjectStorageModal(initialBucketId = null) {
         </div>
       </div>
     `,
-    width: '88%',
+    width: '94%',
     showConfirmButton: false,
     showCancelButton: true,
     cancelButtonText: '✖ Close',

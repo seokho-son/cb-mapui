@@ -1218,7 +1218,7 @@ export async function showRdbmsModal(initialRdbmsId = null) {
     title: '🗄️ RDBMS Management (Relational DB)',
     html: `
       <style>
-        .swal2-rdbms-modal { max-width: 1250px !important; position: relative !important; overflow: hidden !important; }
+        .swal2-rdbms-modal { max-width: 1440px !important; position: relative !important; overflow: hidden !important; }
         .rdbms-modal-container { 
           text-align: left; 
           font-size: 14px; 
@@ -1495,7 +1495,7 @@ export async function showRdbmsModal(initialRdbmsId = null) {
         </div>
       </div>
     `,
-    width: '85%',
+    width: '94%',
     showConfirmButton: false,
     showCancelButton: true,
     cancelButtonText: '✖ Close',
