@@ -1065,6 +1065,20 @@ function clearMap() {
   geoResourceLocation.sshKey = [];
   geoResourceLocation.vnet = [];
   geoResourceLocation.vpn = [];
+  geoResourceLocation.nlb = [];
+  geoResourceLocation.rdbms = [];
+  geoResourceLocation.objectStorage = [];
+  geoResourceLocation.nlbTombstone = [];
+  geoResourceLocation.rdbmsTombstone = [];
+  geoResourceLocation.objectStorageTombstone = [];
+  geoResourceLocation.k8sByCsp = {};
+  geoResourceLocation.sgByCsp = {};
+  geoResourceLocation.sshKeyByCsp = {};
+  geoResourceLocation.vnetByCsp = {};
+  geoResourceLocation.vpnByCsp = {};
+  geoResourceLocation.nlbByCsp = {};
+  geoResourceLocation.rdbmsByCsp = {};
+  geoResourceLocation.objectStorageByCsp = {};
 
   // Remove all layers except the base tile layer to prevent memory leaks
   const layersToRemove = [];
@@ -1459,7 +1473,10 @@ var geoResourceLocation = {
   sg: [],
   k8s: [],
   vnet: [],
-  vpn: []
+  vpn: [],
+  nlb: [],
+  rdbms: [],
+  objectStorage: []
 };
 window.geoResourceLocation = geoResourceLocation;
 
@@ -1666,6 +1683,194 @@ var iconStyleKey = new Style({
     scale: 0.8,
   }),
 });
+addIconToMap("img/icon-rdbms.png", pnt, "001");
+var iconStyleRdbms = new Style({
+  image: new Icon({
+    crossOrigin: "anonymous",
+    src: "img/icon-rdbms.png",
+    opacity: 1.0,
+    scale: 0.8,
+  }),
+});
+addIconToMap("img/icon-os.png", pnt, "001");
+var iconStyleOS = new Style({
+  image: new Icon({
+    crossOrigin: "anonymous",
+    src: "img/icon-os.png",
+    opacity: 1.0,
+    scale: 0.8,
+  }),
+});
+
+// Extract [lon + dx, lat + dy] from resource item's connectionConfig.regionDetail.location
+// (with fallback lookup by connectionName in central connection store)
+function extractResourceCoords(item, dx, dy) {
+  let loc = item && item.connectionConfig && item.connectionConfig.regionDetail && item.connectionConfig.regionDetail.location;
+  if ((!loc || loc.longitude === undefined || loc.latitude === undefined) && item && item.connectionName) {
+    const conns = (window.cloudBaristaCentralData && (window.cloudBaristaCentralData.connection || window.cloudBaristaCentralData.connConfig)) || [];
+    const matched = conns.find((c) => (c.configName || c.name) === item.connectionName);
+    if (matched && matched.regionDetail && matched.regionDetail.location) {
+      loc = matched.regionDetail.location;
+    }
+  }
+  if (!loc || loc.longitude === undefined || loc.latitude === undefined) return null;
+  const lon = Number(loc.longitude);
+  const lat = Number(loc.latitude);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+  return [lon + dx, lat + dy];
+}
+
+// Extract normalized CSP provider key (e.g. 'aws', 'gcp', 'alibaba') from a resource item
+function extractResourceProvider(item) {
+  let raw =
+    (item && item.connectionConfig && item.connectionConfig.providerName) ||
+    (item && item.providerName) ||
+    "";
+  if (!raw && item && item.connectionName) {
+    const conns = (window.cloudBaristaCentralData && (window.cloudBaristaCentralData.connection || window.cloudBaristaCentralData.connConfig)) || [];
+    const matched = conns.find((c) => (c.configName || c.name) === item.connectionName);
+    raw = (matched && matched.providerName) || item.connectionName;
+  }
+  if (!raw) return "";
+  const lower = String(raw).toLowerCase();
+  if (cspIconImg[lower]) return lower;
+  for (const p of Object.keys(cspIconImg)) {
+    if (lower.startsWith(p + "-") || lower.startsWith(p + "_")) return p;
+  }
+  return lower;
+}
+window.extractResourceProvider = extractResourceProvider;
+
+// Group [{ pt, csp }] entries into per-CSP MultiPoint geometries (deduplicated per region)
+function groupCoordsByCsp(entries) {
+  const byCsp = {};
+  const seen = new Set();
+  for (const entry of entries || []) {
+    if (!entry || !entry.pt || !entry.csp) continue;
+    const { pt, csp } = entry;
+    const key = `${csp}:${pt[0].toFixed(4)},${pt[1].toFixed(4)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (!byCsp[csp]) byCsp[csp] = [];
+    byCsp[csp].push(pt);
+  }
+  const result = {};
+  for (const [csp, pts] of Object.entries(byCsp)) {
+    if (pts.length > 0) {
+      result[csp] = new MultiPoint(pts);
+    }
+  }
+  return result;
+}
+window.groupCoordsByCsp = groupCoordsByCsp;
+
+// Cached bottom-right CSP badge styles for non-VM resource icons (zero per-frame allocation)
+const resourceCspBadgeStyleCache = {};
+const RESOURCE_CSP_BADGE_DISPLACEMENT = [7.5, -7.5];
+const resourceCspBadgeBgStyle = new Style({
+  image: new CircleStyle({
+    radius: 6.5,
+    fill: new Fill({ color: "rgba(255, 255, 255, 0.92)" }),
+    stroke: new Stroke({ color: "rgba(100, 116, 139, 0.5)", width: 1.0 }),
+    displacement: RESOURCE_CSP_BADGE_DISPLACEMENT,
+  }),
+});
+const SMALL_CSP_ICON_SCALE = {
+  kt: 0.64,
+  ncp: 0.68,
+  nhn: 0.68,
+  openstack: 0.68,
+};
+function getResourceCspBadgeStyle(csp) {
+  if (!csp) return null;
+  if ((window.cspIconMode || "logo") !== "logo") return null;
+  if (!resourceCspBadgeStyleCache[csp]) {
+    const src = cspIconImg[csp] || (typeof getProviderIcon === "function" ? getProviderIcon(csp) : null);
+    if (!src) return null;
+    resourceCspBadgeStyleCache[csp] = new Style({
+      image: new Icon({
+        crossOrigin: "anonymous",
+        src: src,
+        opacity: 0.95,
+        scale: SMALL_CSP_ICON_SCALE[csp] || 0.52,
+        displacement: RESOURCE_CSP_BADGE_DISPLACEMENT,
+      }),
+    });
+  }
+  return resourceCspBadgeStyleCache[csp];
+}
+
+// Update NLB map icons at North-East diagonal (+0.045, +0.045)
+function updateNlbMapIcons(nlbList) {
+  if (Array.isArray(nlbList) && nlbList.length > 0) {
+    const normalLoc = [], tombLoc = [], cspEntries = [];
+    for (const item of nlbList) {
+      const pt = extractResourceCoords(item, 0.045, 0.045);
+      if (!pt) continue;
+      if (isTombstoneResource(item)) tombLoc.push(pt);
+      else normalLoc.push(pt);
+      const csp = extractResourceProvider(item);
+      if (csp) cspEntries.push({ pt, csp });
+    }
+    geoResourceLocation.nlb = normalLoc.length ? [new MultiPoint(normalLoc)] : [];
+    geoResourceLocation.nlbTombstone = tombLoc.length ? [new MultiPoint(tombLoc)] : [];
+    geoResourceLocation.nlbByCsp = groupCoordsByCsp(cspEntries);
+  } else {
+    geoResourceLocation.nlb = [];
+    geoResourceLocation.nlbTombstone = [];
+    geoResourceLocation.nlbByCsp = {};
+  }
+  if (map) map.render();
+}
+window.updateNlbMapIcons = updateNlbMapIcons;
+
+// Update RDBMS map icons at South-West diagonal (-0.045, -0.045)
+function updateRdbmsMapIcons(rdbmsList) {
+  if (Array.isArray(rdbmsList) && rdbmsList.length > 0) {
+    const normalLoc = [], tombLoc = [], cspEntries = [];
+    for (const item of rdbmsList) {
+      const pt = extractResourceCoords(item, -0.045, -0.045);
+      if (!pt) continue;
+      if (isTombstoneResource(item)) tombLoc.push(pt);
+      else normalLoc.push(pt);
+      const csp = extractResourceProvider(item);
+      if (csp) cspEntries.push({ pt, csp });
+    }
+    geoResourceLocation.rdbms = normalLoc.length ? [new MultiPoint(normalLoc)] : [];
+    geoResourceLocation.rdbmsTombstone = tombLoc.length ? [new MultiPoint(tombLoc)] : [];
+    geoResourceLocation.rdbmsByCsp = groupCoordsByCsp(cspEntries);
+  } else {
+    geoResourceLocation.rdbms = [];
+    geoResourceLocation.rdbmsTombstone = [];
+    geoResourceLocation.rdbmsByCsp = {};
+  }
+  if (map) map.render();
+}
+window.updateRdbmsMapIcons = updateRdbmsMapIcons;
+
+// Update Object Storage map icons at South-East diagonal (+0.045, -0.045)
+function updateObjectStorageMapIcons(osList) {
+  if (Array.isArray(osList) && osList.length > 0) {
+    const normalLoc = [], tombLoc = [], cspEntries = [];
+    for (const item of osList) {
+      const pt = extractResourceCoords(item, 0.045, -0.045);
+      if (!pt) continue;
+      if (isTombstoneResource(item)) tombLoc.push(pt);
+      else normalLoc.push(pt);
+      const csp = extractResourceProvider(item);
+      if (csp) cspEntries.push({ pt, csp });
+    }
+    geoResourceLocation.objectStorage = normalLoc.length ? [new MultiPoint(normalLoc)] : [];
+    geoResourceLocation.objectStorageTombstone = tombLoc.length ? [new MultiPoint(tombLoc)] : [];
+    geoResourceLocation.objectStorageByCsp = groupCoordsByCsp(cspEntries);
+  } else {
+    geoResourceLocation.objectStorage = [];
+    geoResourceLocation.objectStorageTombstone = [];
+    geoResourceLocation.objectStorageByCsp = {};
+  }
+  if (map) map.render();
+}
+window.updateObjectStorageMapIcons = updateObjectStorageMapIcons;
 
 // Tombstone marker: a rose halo drawn behind the resource's normal icon, flagging a
 // resource whose deletion was requested but is not yet confirmed gone on the CSP.
@@ -2909,7 +3114,7 @@ function getInfra() {
       }
       
       if (obj.vNet != null && obj.vNet.length > 0) {
-        var normalLoc = [], tombLoc = [], tombItems = [];
+        var normalLoc = [], tombLoc = [], tombItems = [], cspEntries = [];
         for (let item of obj.vNet) {
           var pt = [
             item.connectionConfig.regionDetail.location.longitude * 1,
@@ -2917,13 +3122,17 @@ function getInfra() {
           ];
           if (isTombstoneResource(item)) { tombLoc.push(pt); tombItems.push(item); }
           else normalLoc.push(pt);
+          const csp = extractResourceProvider(item);
+          if (csp) cspEntries.push({ pt, csp });
         }
         geoResourceLocation.vnet = normalLoc.length ? [new MultiPoint([normalLoc])] : [];
         geoResourceLocation.vnetTombstone = tombLoc.length ? [new MultiPoint([tombLoc])] : [];
+        geoResourceLocation.vnetByCsp = groupCoordsByCsp(cspEntries);
         window.tombstoneRegistry.vNet = tombItems;
       } else {
         geoResourceLocation.vnet = [];
         geoResourceLocation.vnetTombstone = [];
+        geoResourceLocation.vnetByCsp = {};
         window.tombstoneRegistry.vNet = [];
       }
       updateTombstoneBanner();
@@ -2958,7 +3167,7 @@ function getInfra() {
       }
       
       if (obj.securityGroup != null && obj.securityGroup.length > 0) {
-        var normalLoc = [], tombLoc = [], tombItems = [];
+        var normalLoc = [], tombLoc = [], tombItems = [], cspEntries = [];
         for (let item of obj.securityGroup) {
           var pt = [
             item.connectionConfig.regionDetail.location.longitude * 1 - 0.05,
@@ -2966,13 +3175,17 @@ function getInfra() {
           ];
           if (isTombstoneResource(item)) { tombLoc.push(pt); tombItems.push(item); }
           else normalLoc.push(pt);
+          const csp = extractResourceProvider(item);
+          if (csp) cspEntries.push({ pt, csp });
         }
         geoResourceLocation.sg = normalLoc.length ? [new MultiPoint([normalLoc])] : [];
         geoResourceLocation.sgTombstone = tombLoc.length ? [new MultiPoint([tombLoc])] : [];
+        geoResourceLocation.sgByCsp = groupCoordsByCsp(cspEntries);
         window.tombstoneRegistry.securityGroup = tombItems;
       } else {
         geoResourceLocation.sg = [];
         geoResourceLocation.sgTombstone = [];
+        geoResourceLocation.sgByCsp = {};
         window.tombstoneRegistry.securityGroup = [];
       }
       updateTombstoneBanner();
@@ -3008,7 +3221,7 @@ function getInfra() {
       }
       
       if (obj.sshKey != null && obj.sshKey.length > 0) {
-        var normalLoc = [], tombLoc = [], tombItems = [];
+        var normalLoc = [], tombLoc = [], tombItems = [], cspEntries = [];
         for (let item of obj.sshKey) {
           var pt = [
             item.connectionConfig.regionDetail.location.longitude * 1 + 0.05,
@@ -3016,13 +3229,17 @@ function getInfra() {
           ];
           if (isTombstoneResource(item)) { tombLoc.push(pt); tombItems.push(item); }
           else normalLoc.push(pt);
+          const csp = extractResourceProvider(item);
+          if (csp) cspEntries.push({ pt, csp });
         }
         geoResourceLocation.sshKey = normalLoc.length ? [new MultiPoint([normalLoc])] : [];
         geoResourceLocation.sshKeyTombstone = tombLoc.length ? [new MultiPoint([tombLoc])] : [];
+        geoResourceLocation.sshKeyByCsp = groupCoordsByCsp(cspEntries);
         window.tombstoneRegistry.sshKey = tombItems;
       } else {
         geoResourceLocation.sshKey = [];
         geoResourceLocation.sshKeyTombstone = [];
+        geoResourceLocation.sshKeyByCsp = {};
         window.tombstoneRegistry.sshKey = [];
       }
       updateTombstoneBanner();
@@ -3037,6 +3254,8 @@ function getInfra() {
 
     // Load VPN data from all Infras (reuses Infra data from central store)
     loadVpnDataFromInfras();
+    // Load NLB data for map icons and central store
+    loadNlbData();
 
     // Get custom images
     var customImageUrl = `${tbApiBase()}/ns/${namespace}/resources/customImage`;
@@ -3121,6 +3340,7 @@ function getInfra() {
       } else {
         window.cloudBaristaCentralData.objectStorage = [];
       }
+      updateObjectStorageMapIcons(window.cloudBaristaCentralData.objectStorage);
       notifyDataSubscribers();
     }).catch(function (error) {
       console.log("Object Storage API error:", error);
@@ -3143,9 +3363,12 @@ function getInfra() {
         window.cloudBaristaCentralData.rdbms = obj.rdbms;
       } else if (obj && Array.isArray(obj.rdbmss)) {
         window.cloudBaristaCentralData.rdbms = obj.rdbmss;
+      } else if (obj && Array.isArray(obj.sqlDb)) {
+        window.cloudBaristaCentralData.rdbms = obj.sqlDb;
       } else {
         window.cloudBaristaCentralData.rdbms = [];
       }
+      updateRdbmsMapIcons(window.cloudBaristaCentralData.rdbms);
       notifyDataSubscribers();
     }).catch(function (error) {
       console.log("RDBMS API error:", error);
@@ -3439,6 +3662,18 @@ function drawObjects(event) {
     }
   }
 
+  const drawResourceCspBadges = (byCsp) => {
+    if (!byCsp || (window.cspIconMode || "logo") !== "logo") return;
+    for (const [csp, geom] of Object.entries(byCsp)) {
+      const badgeStyle = getResourceCspBadgeStyle(csp);
+      if (!badgeStyle || !geom) continue;
+      vectorContext.setStyle(resourceCspBadgeBgStyle);
+      vectorContext.drawGeometry(geom);
+      vectorContext.setStyle(badgeStyle);
+      vectorContext.drawGeometry(geom);
+    }
+  };
+
   if (geoResourceLocation.vnet[0]) {
     vectorContext.setStyle(iconStyleVnet);
     vectorContext.drawGeometry(geoResourceLocation.vnet[0]);
@@ -3451,6 +3686,18 @@ function drawObjects(event) {
     vectorContext.setStyle(iconStyleKey);
     vectorContext.drawGeometry(geoResourceLocation.sshKey[0]);
   }
+  if (geoResourceLocation.nlb && geoResourceLocation.nlb[0]) {
+    vectorContext.setStyle(iconStyleNlb);
+    vectorContext.drawGeometry(geoResourceLocation.nlb[0]);
+  }
+  if (geoResourceLocation.rdbms && geoResourceLocation.rdbms[0]) {
+    vectorContext.setStyle(iconStyleRdbms);
+    vectorContext.drawGeometry(geoResourceLocation.rdbms[0]);
+  }
+  if (geoResourceLocation.objectStorage && geoResourceLocation.objectStorage[0]) {
+    vectorContext.setStyle(iconStyleOS);
+    vectorContext.drawGeometry(geoResourceLocation.objectStorage[0]);
+  }
   // Tombstoned resources: rose halo drawn behind the resource's normal icon.
   const drawTombstones = (geom, iconStyle) => {
     if (!geom) return;
@@ -3462,6 +3709,9 @@ function drawObjects(event) {
   drawTombstones(geoResourceLocation.vnetTombstone && geoResourceLocation.vnetTombstone[0], iconStyleVnet);
   drawTombstones(geoResourceLocation.sgTombstone && geoResourceLocation.sgTombstone[0], iconStyleSG);
   drawTombstones(geoResourceLocation.sshKeyTombstone && geoResourceLocation.sshKeyTombstone[0], iconStyleKey);
+  drawTombstones(geoResourceLocation.nlbTombstone && geoResourceLocation.nlbTombstone[0], iconStyleNlb);
+  drawTombstones(geoResourceLocation.rdbmsTombstone && geoResourceLocation.rdbmsTombstone[0], iconStyleRdbms);
+  drawTombstones(geoResourceLocation.objectStorageTombstone && geoResourceLocation.objectStorageTombstone[0], iconStyleOS);
   if (geoResourceLocation.k8s[0]) {
     vectorContext.setStyle(iconStyleK8s);
     vectorContext.drawGeometry(geoResourceLocation.k8s[0]);
@@ -3470,6 +3720,16 @@ function drawObjects(event) {
     vectorContext.setStyle(iconStyleVPN);
     vectorContext.drawGeometry(geoResourceLocation.vpn[0]);
   }
+
+  // Draw bottom-right CSP provider badges on all non-VM resource icons
+  drawResourceCspBadges(geoResourceLocation.vnetByCsp);
+  drawResourceCspBadges(geoResourceLocation.sgByCsp);
+  drawResourceCspBadges(geoResourceLocation.sshKeyByCsp);
+  drawResourceCspBadges(geoResourceLocation.nlbByCsp);
+  drawResourceCspBadges(geoResourceLocation.rdbmsByCsp);
+  drawResourceCspBadges(geoResourceLocation.objectStorageByCsp);
+  drawResourceCspBadges(geoResourceLocation.k8sByCsp);
+  drawResourceCspBadges(geoResourceLocation.vpnByCsp);
 
   // Draw Infra Points and Individual Node Status Badges
   for (const [, data] of infraRenderMap) {

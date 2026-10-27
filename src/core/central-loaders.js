@@ -157,6 +157,7 @@ function loadK8sClusterData() {
     // Update map icons and store name/status data
     if (k8sClusterData != null && k8sClusterData.length > 0) {
       var resourceLocation = [];
+      var cspEntries = [];
       
       // Clear previous K8s data
       k8sName.length = 0;
@@ -178,6 +179,10 @@ function loadK8sClusterData() {
             item.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
           ];
           resourceLocation.push(coords);
+          if (typeof window.extractResourceProvider === 'function') {
+            const csp = window.extractResourceProvider(item);
+            if (csp) cspEntries.push({ pt: coords, csp });
+          }
           
           // Store K8s cluster name, status, and coordinates
           k8sName.push(item.name || item.id);
@@ -215,12 +220,16 @@ function loadK8sClusterData() {
       if (resourceLocation.length > 0) {
         geoResourceLocation.k8s[0] = new MultiPoint(resourceLocation);
       }
+      if (typeof window.groupCoordsByCsp === 'function') {
+        geoResourceLocation.k8sByCsp = window.groupCoordsByCsp(cspEntries);
+      }
       
       // Trigger map re-render to display updated K8s cluster data
       map.render();
     } else {
       // Clear k8s icons when list is empty
       geoResourceLocation.k8s = [];
+      geoResourceLocation.k8sByCsp = {};
       k8sName.length = 0;
       k8sStatus.length = 0;
       k8sCoords.length = 0;
@@ -275,11 +284,29 @@ async function loadNlbData() {
       auth: { username, password },
       timeout: 10000,
     });
-    window.cloudBaristaCentralData.nlb = (res.data && res.data.nlb) || [];
+    const nlbList = (res.data && res.data.nlb) || [];
+    window.cloudBaristaCentralData.nlb = nlbList;
+    if (typeof window.updateNlbMapIcons === 'function') {
+      window.updateNlbMapIcons(nlbList);
+    } else {
+      const resourceLocation = [];
+      for (const item of nlbList) {
+        const loc = item?.connectionConfig?.regionDetail?.location;
+        if (loc && loc.longitude !== undefined && loc.latitude !== undefined) {
+          resourceLocation.push([
+            loc.longitude * 1 + 0.045,
+            loc.latitude * 1 + 0.045,
+          ]);
+        }
+      }
+      geoResourceLocation.nlb = resourceLocation.length ? [new MultiPoint(resourceLocation)] : [];
+      map.render();
+    }
     notifyDataSubscribers();
   } catch (e) {
     console.log("loadNlbData error:", e && e.message);
     window.cloudBaristaCentralData.nlb = [];
+    geoResourceLocation.nlb = [];
   }
 }
 window.loadNlbData = loadNlbData;
@@ -318,6 +345,7 @@ async function loadVpnDataFromInfras() {
     
     let allVpnData = [];
     let resourceLocation = [];
+    let cspEntries = [];
     
     // Load VPN data from each Infra
     for (const infra of infraData) {
@@ -340,21 +368,31 @@ async function loadVpnDataFromInfras() {
           vpn.infraId = infra.id;
           allVpnData.push(vpn);
           
-          // Extract location data for map display
+          // Extract location data for map display (North-West diagonal: -0.045, +0.045)
           if (vpn.vpnSites && vpn.vpnSites.length > 0) {
             for (let site of vpn.vpnSites) {
               if (site.connectionConfig?.regionDetail?.location) {
-                resourceLocation.push([
-                  site.connectionConfig.regionDetail.location.longitude * 1,
-                  site.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
-                ]);
+                const pt = [
+                  site.connectionConfig.regionDetail.location.longitude * 1 - 0.045,
+                  site.connectionConfig.regionDetail.location.latitude * 1 + 0.045,
+                ];
+                resourceLocation.push(pt);
+                if (typeof window.extractResourceProvider === 'function') {
+                  const csp = window.extractResourceProvider(site);
+                  if (csp) cspEntries.push({ pt, csp });
+                }
               }
             }
           } else if (vpn.connectionConfig?.regionDetail?.location) {
-            resourceLocation.push([
-              vpn.connectionConfig.regionDetail.location.longitude * 1,
-              vpn.connectionConfig.regionDetail.location.latitude * 1 + 0.05,
-            ]);
+            const pt = [
+              vpn.connectionConfig.regionDetail.location.longitude * 1 - 0.045,
+              vpn.connectionConfig.regionDetail.location.latitude * 1 + 0.045,
+            ];
+            resourceLocation.push(pt);
+            if (typeof window.extractResourceProvider === 'function') {
+              const csp = window.extractResourceProvider(vpn);
+              if (csp) cspEntries.push({ pt, csp });
+            }
           }
         });
         
@@ -373,16 +411,20 @@ async function loadVpnDataFromInfras() {
     
     // Update map display
     if (resourceLocation.length > 0) {
-      geoResourceLocation.vpn[0] = new MultiPoint([resourceLocation]);
+      geoResourceLocation.vpn[0] = new MultiPoint(resourceLocation);
+      geoResourceLocation.vpnByCsp = typeof window.groupCoordsByCsp === 'function' ? window.groupCoordsByCsp(cspEntries) : {};
       debugLog.mapOp("geoResourceLocation.vpn[0] updated with", resourceLocation.length, "locations");
     } else {
       geoResourceLocation.vpn = [];
+      geoResourceLocation.vpnByCsp = {};
     }
+    map.render();
     
   } catch (error) {
     debugLog.api("VPN data loading error:", error);
     window.cloudBaristaCentralData.vpn = [];
     geoResourceLocation.vpn = [];
+    geoResourceLocation.vpnByCsp = {};
   }
 }
 
