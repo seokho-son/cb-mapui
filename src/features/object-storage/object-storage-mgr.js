@@ -722,6 +722,15 @@ async function refreshBucketsSilently({ onlyIfChanged = false } = {}) {
     if (onlyIfChanged && prevSig === nextSig) return;
 
     osState.bucketList = nextList;
+    if (window.cloudBaristaCentralData) {
+      window.cloudBaristaCentralData.objectStorage = nextList;
+      if (typeof window.notifyDataSubscribers === 'function') {
+        window.notifyDataSubscribers();
+      }
+    }
+    if (typeof window.updateObjectStorageMapIcons === 'function') {
+      window.updateObjectStorageMapIcons(nextList);
+    }
     const liveIds = new Set(nextList.map(b => b.id));
     for (const id of osState.selectedBucketIds) {
       if (!liveIds.has(id)) osState.selectedBucketIds.delete(id);
@@ -1083,6 +1092,15 @@ async function renderBucketListView(container) {
       auth: { username: config.username, password: config.password },
     });
     osState.bucketList = (res.data && res.data.objectStorage) ? res.data.objectStorage : [];
+    if (window.cloudBaristaCentralData) {
+      window.cloudBaristaCentralData.objectStorage = osState.bucketList;
+      if (typeof window.notifyDataSubscribers === 'function') {
+        window.notifyDataSubscribers();
+      }
+    }
+    if (typeof window.updateObjectStorageMapIcons === 'function') {
+      window.updateObjectStorageMapIcons(osState.bucketList);
+    }
   } catch (err) {
     console.error('[ObjectStorage] List error:', err);
     osState.bucketList = [];

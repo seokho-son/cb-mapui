@@ -1148,6 +1148,9 @@ async function refreshRdbmsInstancesSilently({ onlyIfChanged = false } = {}) {
         window.notifyDataSubscribers();
       }
     }
+    if (typeof window.updateRdbmsMapIcons === 'function') {
+      window.updateRdbmsMapIcons(rdbmsState.instanceList);
+    }
     syncRdbmsSummaryDom();
     const tbody = document.getElementById('rdbmsTableBody');
     if (tbody) {
@@ -1583,6 +1586,9 @@ async function renderInstanceListView(container) {
       if (typeof window.notifyDataSubscribers === 'function') {
         window.notifyDataSubscribers();
       }
+    }
+    if (typeof window.updateRdbmsMapIcons === 'function') {
+      window.updateRdbmsMapIcons(rdbmsState.instanceList);
     }
   } catch (e) {
     console.error('Failed to load RDBMS instances:', e);
