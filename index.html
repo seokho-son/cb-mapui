@@ -732,14 +732,71 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
                         <span class="input-group-text">💽 Image</span>
                       </div>
                       <select id="osImage" name="osImage" class="form-control">
-                        <option value="">Any</option>
-                        <option value="Ubuntu 20.04">Ubuntu 20.04</option>
-                        <option value="Ubuntu 22.04" selected="selected">Ubuntu 22.04</option>
-                        <option value="Ubuntu 24.04">Ubuntu 24.04</option>
-                        <option value="Debian 10">Debian 10</option>
-                        <option value="Debian 11">Debian 11</option>
-                        <option value="Debian 12">Debian 12</option>
-                        <option value="Windows 2022">Windows 2022</option>
+                        <option value="">Any OS - All Images</option>
+                        <optgroup label="General Options (Any Version)">
+                          <option value="Ubuntu">Ubuntu - Any Version</option>
+                          <option value="Rocky Linux">Rocky Linux - Any Version</option>
+                          <option value="Debian">Debian - Any Version</option>
+                          <option value="Red Hat Enterprise Linux">RHEL - Any Version</option>
+                          <option value="AlmaLinux">AlmaLinux - Any Version</option>
+                          <option value="CentOS">CentOS - Any Version</option>
+                          <option value="Windows">Windows - Any Version</option>
+                        </optgroup>
+                        <optgroup label="Ubuntu (Canonical)">
+                          <option value="Ubuntu 24.04">Ubuntu 24.04 LTS (Noble)</option>
+                          <option value="Ubuntu 22.04" selected="selected">Ubuntu 22.04 LTS (Jammy)</option>
+                          <option value="Ubuntu 20.04">Ubuntu 20.04 LTS (Focal)</option>
+                          <option value="Ubuntu 18.04">Ubuntu 18.04 LTS (Bionic)</option>
+                        </optgroup>
+                        <optgroup label="Rocky Linux &amp; AlmaLinux">
+                          <option value="Rocky Linux 9">Rocky Linux 9</option>
+                          <option value="Rocky Linux 8">Rocky Linux 8</option>
+                          <option value="AlmaLinux 10">AlmaLinux 10</option>
+                          <option value="AlmaLinux 9">AlmaLinux 9</option>
+                          <option value="AlmaLinux 8">AlmaLinux 8</option>
+                        </optgroup>
+                        <optgroup label="Debian">
+                          <option value="Debian 13">Debian 13 (Trixie)</option>
+                          <option value="Debian 12">Debian 12 (Bookworm)</option>
+                          <option value="Debian 11">Debian 11 (Bullseye)</option>
+                          <option value="Debian 10">Debian 10 (Buster)</option>
+                        </optgroup>
+                        <optgroup label="RHEL &amp; CentOS">
+                          <option value="Red Hat Enterprise Linux 10">RHEL 10</option>
+                          <option value="Red Hat Enterprise Linux 9">RHEL 9</option>
+                          <option value="Red Hat Enterprise Linux 8">RHEL 8</option>
+                          <option value="Red Hat Enterprise Linux 7">RHEL 7</option>
+                          <option value="CentOS 9">CentOS Stream 9</option>
+                          <option value="CentOS 8">CentOS 8</option>
+                          <option value="CentOS 7">CentOS 7</option>
+                        </optgroup>
+                        <optgroup label="Enterprise &amp; Other Linux">
+                          <option value="SUSE Linux Enterprise Server">SUSE (SLES) - Any Version</option>
+                          <option value="SUSE Linux Enterprise Server 15">SUSE Linux Enterprise Server 15</option>
+                          <option value="SUSE Linux Enterprise Server 12">SUSE Linux Enterprise Server 12</option>
+                          <option value="Oracle Linux">Oracle Linux - Any Version</option>
+                          <option value="Oracle Linux 9">Oracle Linux 9</option>
+                          <option value="Oracle Linux 8">Oracle Linux 8</option>
+                          <option value="Fedora">Fedora - Any Version</option>
+                        </optgroup>
+                        <optgroup label="CSP-Optimized &amp; Container Linux">
+                          <option value="Amazon Linux">Amazon Linux - Any Version</option>
+                          <option value="Amazon Linux 2023">Amazon Linux 2023</option>
+                          <option value="Amazon Linux 2">Amazon Linux 2</option>
+                          <option value="Alibaba Cloud Linux">Alibaba Cloud Linux - Any Version</option>
+                          <option value="Tencent">TencentOS / Tencent Linux</option>
+                          <option value="Azure Linux">Azure Linux (CBL-Mariner)</option>
+                          <option value="Container-Optimized OS">Container-Optimized OS (COS)</option>
+                          <option value="Bottlerocket">Bottlerocket OS</option>
+                        </optgroup>
+                        <optgroup label="Microsoft Windows">
+                          <option value="Windows 2025">Windows Server 2025</option>
+                          <option value="Windows 2022">Windows Server 2022</option>
+                          <option value="Windows 2019">Windows Server 2019</option>
+                          <option value="Windows 2016">Windows Server 2016</option>
+                          <option value="Windows 11">Windows 11</option>
+                          <option value="Windows 10">Windows 10</option>
+                        </optgroup>
                       </select>
                     </div>
                   </div>

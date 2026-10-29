@@ -652,6 +652,139 @@ function subnetDistributionCspHint(providerName) {
 
 
 
+const specImageSummaryCache = new Map();
+
+/**
+ * Fetch and cache compatible image summary for a given spec via CB-Tumblebug searchImage API.
+ * Works uniformly across all CSPs (AWS, Azure, GCP, Alibaba, Tencent, IBM, NCP, NHN, KT, OpenStack).
+ * @param {Object} spec
+ * @returns {Promise<{ totalCount: number, osTypeCounts: Array<[string, number]>, images: Array }>}
+ */
+async function fetchSpecImageSummary(spec) {
+  if (!spec || !spec.id) {
+    return { totalCount: 0, osTypeCounts: [], images: [] };
+  }
+  if (specImageSummaryCache.has(spec.id)) {
+    return specImageSummaryCache.get(spec.id);
+  }
+
+  const searchImageURL = `${tbApiBase()}/ns/system/resources/searchImage`;
+  const username = window.configUsername || getConfig().username || '';
+  const password = window.configPassword || getConfig().password || '';
+
+  const pendingPromise = axios({
+    method: "post",
+    url: searchImageURL,
+    headers: { "Content-Type": "application/json" },
+    data: JSON.stringify({ matchedSpecId: spec.id, osType: "" }),
+    auth: { username, password },
+  }).then(res => {
+    const images = (res.data && Array.isArray(res.data.imageList)) ? res.data.imageList : [];
+    const countsMap = new Map();
+    images.forEach(img => {
+      const label = (img.osType && String(img.osType).trim()) ? String(img.osType).trim() : "Other";
+      countsMap.set(label, (countsMap.get(label) || 0) + 1);
+    });
+    const osTypeCounts = Array.from(countsMap.entries()).sort((a, b) =>
+      a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: 'base' })
+    );
+    const summary = { totalCount: images.length, osTypeCounts, images };
+    specImageSummaryCache.set(spec.id, summary);
+    return summary;
+  }).catch(err => {
+    console.warn(`Failed to fetch image summary for spec ${spec.id}:`, err);
+    specImageSummaryCache.delete(spec.id);
+    return { totalCount: 0, osTypeCounts: [], images: [], error: true };
+  });
+
+  specImageSummaryCache.set(spec.id, pendingPromise);
+  return pendingPromise;
+}
+
+/**
+ * Count how many images in summary match the selected OS filter tokens.
+ * @param {{ totalCount: number, osTypeCounts: Array<[string, number]>, images: Array }} summary
+ * @param {string} selectedOsType
+ * @returns {{ queryTokens: Array<string>, matchedCount: number }}
+ */
+function evaluateSpecImageMatch(summary, selectedOsType) {
+  const queryTokens = String(selectedOsType || "").toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (!summary || !Array.isArray(summary.images) || queryTokens.length === 0) {
+    return { queryTokens, matchedCount: summary ? summary.totalCount : 0 };
+  }
+  const matchedCount = summary.images.filter(img => {
+    const combined = `${img.osType || ""} ${img.osDistribution || ""} ${img.cspImageName || ""}`.toLowerCase();
+    return queryTokens.every(tok => combined.includes(tok));
+  }).length;
+  return { queryTokens, matchedCount };
+}
+
+/**
+ * Render compact badge for the 'Image Match' column in #specSelectionTable.
+ * @param {{ totalCount: number, osTypeCounts: Array<[string, number]>, images: Array, error?: boolean }} summary
+ * @param {string} selectedOsType
+ * @returns {string}
+ */
+function renderSpecTableImageCellHtml(summary, selectedOsType) {
+  if (!summary || summary.error) {
+    return `<span style="color:#adb5bd;">-</span>`;
+  }
+  if (summary.totalCount === 0) {
+    return `<span style="color:#dc3545;font-weight:600;" title="No compatible images available for this spec under any OS condition (0)">❌ (0)</span>`;
+  }
+
+  const fullOsTooltip = summary.osTypeCounts.map(([l, c]) => `${l} (${c})`).join(", ");
+  const { queryTokens, matchedCount } = evaluateSpecImageMatch(summary, selectedOsType);
+  if (queryTokens.length === 0) {
+    return `<span style="color:#198754;font-weight:600;" title="All available images (${summary.totalCount}): ${esc(fullOsTooltip)}">✅ (${summary.totalCount})</span>`;
+  }
+
+  if (matchedCount > 0) {
+    return `<span style="color:#198754;font-weight:600;" title="'${esc(selectedOsType)}' is available (${matchedCount} matched / ${summary.totalCount} total). Supported: ${esc(fullOsTooltip)}">✅ (${matchedCount})</span>`;
+  }
+
+  return `<span style="color:#d9480f;font-weight:600;" title="'${esc(selectedOsType)}' is NOT available, but ${summary.totalCount} other image(s) are supported: ${esc(fullOsTooltip)}">⚠️ (${summary.totalCount})</span>`;
+}
+
+/**
+ * Render HTML summary of compatible images and OS types for a spec against the pre-selected #osImage filter.
+ * @param {{ totalCount: number, osTypeCounts: Array<[string, number]>, images: Array, error?: boolean }} summary
+ * @param {string} selectedOsType
+ * @returns {string}
+ */
+function renderSpecImageSummaryHtml(summary, selectedOsType) {
+  if (!summary || summary.error) {
+    return `<span style="color:#6c757d;">Unable to load image compatibility info</span>`;
+  }
+  if (summary.totalCount === 0) {
+    return `<span style="color:#dc3545;font-weight:bold;">⚠️ 0 compatible images found in DB for this spec</span>`;
+  }
+
+  const { queryTokens, matchedCount } = evaluateSpecImageMatch(summary, selectedOsType);
+  let filterStatusHtml = "";
+  if (queryTokens.length > 0) {
+    if (matchedCount > 0) {
+      filterStatusHtml = `<span style="color:#198754;font-weight:bold;margin-right:6px;">✓ '${esc(selectedOsType)}' available (${matchedCount})</span> `;
+    } else {
+      filterStatusHtml = `<span style="color:#d9480f;background:#fff4e6;border:1px solid #ffd8a8;padding:1px 6px;border-radius:3px;font-weight:bold;margin-right:6px;">⚠️ '${esc(selectedOsType)}' NOT available (Click an OS badge below or change Target Image above)</span> `;
+    }
+  }
+
+  const badgesHtml = summary.osTypeCounts.map(([osLabel, count]) => {
+    const isMatched = queryTokens.length > 0 && queryTokens.every(tok => osLabel.toLowerCase().includes(tok));
+    const bg = isMatched ? "#d1e7dd" : "#e9ecef";
+    const border = isMatched ? "#a3cfbb" : "#dee2e6";
+    const color = isMatched ? "#0f5132" : "#212529";
+    const clickableAttr = osLabel !== "Other"
+      ? `class="spec-os-quick-badge" data-os-type="${esc(osLabel)}" title="Click to switch Target Image filter to '${esc(osLabel)}'"`
+      : "";
+    const cursorStyle = osLabel !== "Other" ? "cursor:pointer;" : "";
+    return `<span ${clickableAttr} style="display:inline-block;background:${bg};color:${color};border:1px solid ${border};padding:1px 6px;border-radius:3px;margin:1px 2px;font-size:0.73rem;font-weight:${isMatched ? '600' : '400'};${cursorStyle}">${esc(osLabel)} (${count})</span> `;
+  }).join("");
+
+  return `${filterStatusHtml}<span style="color:#495057;font-weight:600;margin-right:4px;">Total ${summary.totalCount} image${summary.totalCount > 1 ? 's' : ''}:</span> ${badgesHtml}`;
+}
+
 /**
  * Display a modal to select a specification from the recommendation list.
  * @param {Array} specs - List of spec objects
@@ -664,6 +797,12 @@ function openSpecSelectionDialog(specs, options = {}) {
     return Promise.resolve(null);
   }
 
+  const osTypeEl = document.getElementById("osImage");
+  let currentOsFilter = osTypeEl ? osTypeEl.value : "";
+  const osSelectOptionsHtml = osTypeEl
+    ? osTypeEl.innerHTML
+    : `<option value="">Any OS - All Images</option>`;
+
   return new Promise((resolve) => {
     Swal.fire({
       title: options.title || "Select a Spec from the Recommendation List",
@@ -672,6 +811,15 @@ function openSpecSelectionDialog(specs, options = {}) {
       html: `
         <div class="compact-datatable">
           ${options.subTitle ? `<div style="margin-bottom:8px;padding:6px 12px;background:#e8f4fd;border:1px solid #b6d4fe;border-radius:5px;font-size:0.85rem;color:#084298;font-weight:600;">${options.subTitle}</div>` : ''}
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;padding:6px 10px;background:#f8f9fa;border:1px solid #dee2e6;border-radius:5px;text-align:left;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <label for="modalOsImageSelect" style="margin:0;font-weight:600;font-size:0.82rem;color:#212529;">💽 Target Image (OS):</label>
+              <select id="modalOsImageSelect" style="font-size:0.8rem;padding:3px 8px;border:1px solid #ced4da;border-radius:4px;background:#fff;min-width:240px;color:#212529;">
+                ${osSelectOptionsHtml}
+              </select>
+              <span style="font-size:0.75rem;color:#6c757d;">Change target OS here (or click an OS badge in Details) to check compatibility across specs</span>
+            </div>
+          </div>
           <div class="table-responsive">
             <table id="specSelectionTable" class="display nowrap" style="width:100%">
               <thead>
@@ -684,6 +832,7 @@ function openSpecSelectionDialog(specs, options = {}) {
                   <th>vCPU</th>
                   <th>Mem(Gi)</th>
                   <th>Cost($/h)</th>
+                  <th>Image</th>
                   <th>Accelerator</th>
                 </tr>
               </thead>
@@ -710,6 +859,7 @@ function openSpecSelectionDialog(specs, options = {}) {
                       <td>${spec.vCPU}</td>
                       <td>${spec.memoryGiB}</td>
                       <td>${costPerHour}</td>
+                      <td class="text-left"><span class="spec-image-match-cell" data-spec-index="${index}" data-spec-id="${esc(spec.id)}"><span style="color:#adb5bd;">...</span></span></td>
                       <td class="text-left">${acceleratorInfo}</td>
                     </tr>
                   `;
@@ -737,9 +887,74 @@ function openSpecSelectionDialog(specs, options = {}) {
           #specSelectionTable tbody tr { cursor: pointer; }
           #specSelectionTable tbody tr:hover { background-color: rgba(0, 123, 255, 0.08) !important; }
           #specDetailsContent .row p { margin-bottom: 0.2rem; }
+          .spec-os-quick-badge:hover { filter: brightness(0.92); text-decoration: underline; }
         </style>
       `,
       didOpen: () => {
+        const modalOsSelect = document.getElementById("modalOsImageSelect");
+        if (modalOsSelect) {
+          modalOsSelect.value = currentOsFilter;
+        }
+
+        function setTargetOsFilter(newOsValue) {
+          currentOsFilter = newOsValue || "";
+          if (modalOsSelect) {
+            // Ensure option exists if user clicked an OS badge not yet in the dropdown
+            if (currentOsFilter && !Array.from(modalOsSelect.options).some(opt => opt.value === currentOsFilter)) {
+              const dynOpt = document.createElement("option");
+              dynOpt.value = currentOsFilter;
+              dynOpt.textContent = currentOsFilter;
+              modalOsSelect.appendChild(dynOpt);
+            }
+            modalOsSelect.value = currentOsFilter;
+          }
+          if (osTypeEl) {
+            if (currentOsFilter && !Array.from(osTypeEl.options).some(opt => opt.value === currentOsFilter)) {
+              const dynOpt = document.createElement("option");
+              dynOpt.value = currentOsFilter;
+              dynOpt.textContent = currentOsFilter;
+              osTypeEl.appendChild(dynOpt);
+            }
+            osTypeEl.value = currentOsFilter;
+            osTypeEl.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          refreshVisibleSpecImageCells();
+          const selInput = document.getElementById('selectedSpecIndex');
+          const curIdx = selInput ? parseInt(selInput.value, 10) : 0;
+          updateSpecDetails(isNaN(curIdx) ? 0 : curIdx);
+        }
+
+        if (modalOsSelect) {
+          modalOsSelect.addEventListener("change", () => {
+            setTargetOsFilter(modalOsSelect.value);
+          });
+        }
+
+        const detailsContainerEl = document.getElementById("specDetailsContainer");
+        if (detailsContainerEl) {
+          detailsContainerEl.addEventListener("click", (e) => {
+            const badge = e.target.closest(".spec-os-quick-badge");
+            if (badge) {
+              const osVal = badge.getAttribute("data-os-type");
+              if (osVal) setTargetOsFilter(osVal);
+            }
+          });
+        }
+
+        function refreshVisibleSpecImageCells() {
+          const cells = document.querySelectorAll('#specSelectionTable tbody .spec-image-match-cell');
+          cells.forEach(cell => {
+            const idx = parseInt(cell.getAttribute('data-spec-index'), 10);
+            const spec = specs[idx];
+            if (!spec) return;
+            fetchSpecImageSummary(spec).then(summary => {
+              if (cell.getAttribute('data-spec-id') === spec.id) {
+                cell.innerHTML = renderSpecTableImageCellHtml(summary, currentOsFilter);
+              }
+            });
+          });
+        }
+
         $('#specSelectionTable tbody').on('click', 'tr', function () {
           const index = $(this).data('index');
           selectSpecRow(index);
@@ -769,6 +984,7 @@ function openSpecSelectionDialog(specs, options = {}) {
               <div style="margin-bottom:3px; text-align: left;"><strong>Region:</strong> ${spec.regionName}</div>
               <div style="margin-bottom:3px; text-align: left;"><strong>Spec Name:</strong> ${spec.cspSpecName}</div>
               <div style="margin-bottom:3px; text-align: left;"><strong>Architecture:</strong> ${spec.architecture}</div>
+              <div style="margin-bottom:4px; text-align: left;"><strong>Available Images:</strong> <span id="specAvailableImagesSummary" data-spec-id="${esc(spec.id)}"><span style="color:#6c757d;">Checking compatible images...</span></span></div>
               <div style="margin-bottom:3px; text-align: left;"><strong>vCPU:</strong> ${spec.vCPU}</div>
               <div style="margin-bottom:3px; text-align: left;"><strong>Memory:</strong> ${spec.memoryGiB} GiB</div>
               <div style="margin-bottom:3px; text-align: left;"><strong>Storage:</strong> ${spec.storageGiB} GiB</div>
@@ -810,6 +1026,13 @@ function openSpecSelectionDialog(specs, options = {}) {
           const detailsHTML = specInfoHTML + detailsTableHTML;
           const container = document.getElementById('specDetailsContent');
           if (container) container.innerHTML = detailsHTML;
+
+          fetchSpecImageSummary(spec).then(summary => {
+            const summaryEl = document.getElementById('specAvailableImagesSummary');
+            if (summaryEl && summaryEl.getAttribute('data-spec-id') === spec.id) {
+              summaryEl.innerHTML = renderSpecImageSummaryHtml(summary, currentOsFilter);
+            }
+          });
         }
 
         $('#specSelectionTable').DataTable({
@@ -819,10 +1042,13 @@ function openSpecSelectionDialog(specs, options = {}) {
           "info": true,
           "responsive": true,
           "scrollX": true,
-          "pageLength": 5,
+          "pageLength": 10,
           "lengthMenu": [5, 10, 25, 50],
           "order": [[0, 'asc']],
           "columnDefs": [{ "targets": -1, "orderable": false }],
+          "drawCallback": function () {
+            refreshVisibleSpecImageCells();
+          },
           "language": {
             "search": "Filtering Keyword:",
             "lengthMenu": "Show _MENU_ entries",
@@ -855,13 +1081,15 @@ function openSpecSelectionDialog(specs, options = {}) {
 /**
  * Search available images and custom images for a given spec.
  * Returns an array of image objects sorted appropriately (with GPU prioritization if applicable).
+ * If the left-panel #osImage filter yields 0 standard images, automatically retries with osType=""
+ * and records `availableImages._fallbackFromOsType`.
  * @param {Object} selectedSpec
  * @returns {Promise<Array>}
  */
 async function fetchImagesForSpec(selectedSpec) {
   const searchImageURL = `${tbApiBase()}/ns/system/resources/searchImage`;
   const osTypeEl = document.getElementById("osImage");
-  const osType = osTypeEl ? osTypeEl.value : "ubuntu";
+  const osType = osTypeEl ? osTypeEl.value : "";
   const searchImageBody = {
     matchedSpecId: selectedSpec.id,
     osType: osType,
@@ -871,7 +1099,7 @@ async function fetchImagesForSpec(selectedSpec) {
   const password = window.configPassword || getConfig().password || '';
   const namespace = window.configNamespace || getConfig().namespace || '';
 
-  const [searchRes, customImageRes] = await Promise.all([
+  let [searchRes, customImageRes] = await Promise.all([
     axios({
       method: "post",
       url: searchImageURL,
@@ -892,6 +1120,24 @@ async function fetchImagesForSpec(selectedSpec) {
       return { data: { customImage: [] } };
     })
   ]);
+
+  let fallbackFromOsType = "";
+  if ((!searchRes.data || !searchRes.data.imageList || searchRes.data.imageList.length === 0) && osType && osType.trim() !== "") {
+    const fallbackRes = await axios({
+      method: "post",
+      url: searchImageURL,
+      headers: { "Content-Type": "application/json" },
+      data: JSON.stringify({ matchedSpecId: selectedSpec.id, osType: "" }),
+      auth: { username, password },
+    }).catch(err => {
+      console.warn("Fallback searchImage (all OS) failed:", err);
+      return { data: { imageList: [] } };
+    });
+    if (fallbackRes.data && fallbackRes.data.imageList && fallbackRes.data.imageList.length > 0) {
+      searchRes = fallbackRes;
+      fallbackFromOsType = osType;
+    }
+  }
 
   let availableImages = [];
   let customImages = [];
@@ -969,6 +1215,10 @@ async function fetchImagesForSpec(selectedSpec) {
     availableImages.sort((a, b) => gpuSortScore(b) - gpuSortScore(a));
   }
 
+  if (fallbackFromOsType) {
+    availableImages._fallbackFromOsType = fallbackFromOsType;
+  }
+
   return availableImages;
 }
 
@@ -1001,6 +1251,8 @@ async function openImageSelectionDialog(selectedSpec, preselectedImageId = null)
     return null;
   }
 
+  const fallbackFromOsType = availableImages._fallbackFromOsType || "";
+
   let initialIndex = 0;
   if (preselectedImageId) {
     const idx = availableImages.findIndex(img => (img.cspImageName === preselectedImageId || img.id === preselectedImageId));
@@ -1029,6 +1281,11 @@ async function openImageSelectionDialog(selectedSpec, preselectedImageId = null)
             <span style="color:#555;">| ${esc(specCost)}</span>
             ${specAccel}
           </div>
+          ${fallbackFromOsType ? `
+          <div style="margin-bottom:8px;padding:6px 10px;background:#fff4e6;border:1px solid #ffc078;border-radius:5px;font-size:0.8rem;color:#b45309;display:flex;align-items:center;gap:6px;">
+            <span style="font-size:1.1em;">⚠️</span>
+            <span>Pre-selected OS filter <b>${esc(fallbackFromOsType)}</b> is not supported by <b>${esc(selectedSpec.cspSpecName || selectedSpec.id)}</b>. Showing all compatible OS images for this spec instead.</span>
+          </div>` : ''}
           ${isGpuSpec ? `
           <div style="margin-bottom:8px;padding:6px 10px;background:linear-gradient(90deg,#fff3cd,#fff8e1);border:1px solid #ffc107;border-radius:5px;font-size:0.8rem;display:flex;align-items:center;gap:6px;">
             <span style="font-size:1.1em;">⚡</span>
