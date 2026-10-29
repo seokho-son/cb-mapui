@@ -488,18 +488,43 @@ async function populateZoneSelect(selectId, spinnerId, specId, currentZone, stat
     if (spinner) spinner.style.display = 'none';
     const result = await response.json();
     
-    if (response.ok && result.availableZones && result.availableZones.length > 0) {
-      result.availableZones.forEach(zone => {
-        const option = document.createElement('option');
-        option.value = zone;
-        option.textContent = zone;
-        if (zone === currentZone) option.selected = true;
-        zoneSelect.appendChild(option);
-      });
+    const availZones = Array.isArray(result.availableZones) ? result.availableZones : [];
+    const unavailZones = Array.isArray(result.unavailableZones) ? result.unavailableZones : [];
+
+    if (response.ok && (availZones.length > 0 || unavailZones.length > 0)) {
+      if (availZones.length > 0) {
+        const availGroup = unavailZones.length > 0 ? document.createElement('optgroup') : null;
+        if (availGroup) availGroup.label = `🟢 Available Zones (${availZones.length})`;
+        availZones.forEach(zone => {
+          const option = document.createElement('option');
+          option.value = zone;
+          option.textContent = unavailZones.length > 0 ? `🟢 ${zone}` : zone;
+          if (zone === currentZone) option.selected = true;
+          (availGroup || zoneSelect).appendChild(option);
+        });
+        if (availGroup) zoneSelect.appendChild(availGroup);
+      }
+
+      if (unavailZones.length > 0) {
+        const unavailGroup = document.createElement('optgroup');
+        unavailGroup.label = `🚫 Unavailable / SoldOut Zones (${unavailZones.length})`;
+        unavailZones.forEach(zone => {
+          const option = document.createElement('option');
+          option.value = zone;
+          option.textContent = `🔴 ${zone} (Unavailable / SoldOut)`;
+          option.disabled = true;
+          unavailGroup.appendChild(option);
+        });
+        zoneSelect.appendChild(unavailGroup);
+      }
       
       if (statusMessage) {
-        statusMessage.textContent = `${result.availableZones.length} verified zone(s) available`;
-        statusMessage.style.color = '#28a745';
+        if (unavailZones.length > 0) {
+          statusMessage.innerHTML = `<span style="color:#198754;font-weight:600;">${availZones.length} zone(s) available</span> · <span style="color:#dc3545;" title="Unavailable/SoldOut zones: ${esc(unavailZones.join(', '))}">${unavailZones.length} unavailable (${esc(unavailZones.join(', '))})</span>`;
+        } else {
+          statusMessage.textContent = `${availZones.length} verified zone(s) available`;
+          statusMessage.style.color = '#28a745';
+        }
       }
     } else if (result.hasZoneConcept === false) {
       if (statusMessage) {
@@ -786,6 +811,182 @@ function renderSpecImageSummaryHtml(summary, selectedOsType) {
 }
 
 /**
+ * Normalize model.AvailabilityStatus values from CB-Tumblebug.
+ * Supported values: "Available", "SoldOut", "QuotaExceeded", "Unsupported", "Unverified"
+ * @param {string} rawStatus
+ * @returns {string}
+ */
+function normalizeAvailabilityStatus(rawStatus) {
+  const s = String(rawStatus || "").trim();
+  if (s === "Available" || s === "SoldOut" || s === "QuotaExceeded" || s === "Unsupported" || s === "Unverified") {
+    return s;
+  }
+  return "Unverified";
+}
+
+/**
+ * Format relative timing between now and an ISO timestamp.
+ * @param {string|null|undefined} isoStr
+ * @param {boolean} isFuture - true for refreshAfter, false for checkedAt
+ * @returns {string}
+ */
+function formatAvailabilityRelativeTime(isoStr, isFuture = false) {
+  if (!isoStr) return "";
+  const ts = new Date(isoStr).getTime();
+  if (!Number.isFinite(ts)) return "";
+  const diffSec = Math.round((ts - Date.now()) / 1000);
+  const absSec = Math.abs(diffSec);
+  if (isFuture) {
+    if (diffSec <= 0) return "expired (ready to refresh)";
+    if (absSec < 60) return `in ${absSec}s`;
+    const mins = Math.floor(absSec / 60);
+    const secs = absSec % 60;
+    if (mins < 60) return secs > 0 ? `in ${mins}m ${secs}s` : `in ${mins}m`;
+    const hrs = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return remMins > 0 ? `in ${hrs}h ${remMins}m` : `in ${hrs}h`;
+  } else {
+    if (absSec < 5) return "just now";
+    if (absSec < 60) return `${absSec}s ago`;
+    const mins = Math.floor(absSec / 60);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    return `${hrs}h ${mins % 60}m ago`;
+  }
+}
+
+/**
+ * Compute UI metadata (badge colors, labels, sort order, filter category, tooltip) for a spec's availability.
+ * @param {Object} spec
+ * @returns {{ status: string, filterCategory: string, sortOrder: number, badgeHtml: string, searchToken: string }}
+ */
+function getSpecAvailabilityUiMeta(spec) {
+  const status = normalizeAvailabilityStatus(spec && spec.availabilityStatus);
+  const availZones = Array.isArray(spec && spec.availableZones) ? spec.availableZones : [];
+  const unavailZones = Array.isArray(spec && spec.unavailableZones) ? spec.unavailableZones : [];
+  const reason = (spec && spec.availabilityReason) ? String(spec.availabilityReason) : "";
+  const checkedRel = formatAvailabilityRelativeTime(spec && spec.availabilityCheckedAt, false);
+  const refreshRel = formatAvailabilityRelativeTime(spec && spec.availabilityRefreshAfter, true);
+
+  const tooltipLines = [`Status: ${status}`];
+  if (reason) tooltipLines.push(`Reason: ${reason}`);
+  if (availZones.length > 0) tooltipLines.push(`Available Zones (${availZones.length}): ${availZones.join(", ")}`);
+  if (unavailZones.length > 0) tooltipLines.push(`Unavailable/SoldOut Zones (${unavailZones.length}): ${unavailZones.join(", ")}`);
+  if (checkedRel) tooltipLines.push(`Checked: ${checkedRel}${refreshRel ? ` · Next refresh: ${refreshRel}` : ""}`);
+  const tooltipText = esc(tooltipLines.join(" | "));
+
+  let filterCategory = "unverified";
+  let sortOrder = 3;
+  let color = "#adb5bd";
+  let labelHtml = "Unverified";
+
+  if (status === "Available") {
+    filterCategory = "available";
+    color = "#198754";
+    if (unavailZones.length > 0 && availZones.length > 0) {
+      sortOrder = 2;
+      labelHtml = `Available <span style="font-size:0.74rem;color:#b45309;">(${availZones.length}/${availZones.length + unavailZones.length} AZ)</span>`;
+    } else if (availZones.length > 0) {
+      sortOrder = 1;
+      labelHtml = `Available <span style="font-size:0.74rem;color:#6c757d;">(${availZones.length} AZ)</span>`;
+    } else {
+      sortOrder = 1;
+      labelHtml = `Available`;
+    }
+  } else if (status === "QuotaExceeded") {
+    filterCategory = "unavailable";
+    sortOrder = 4;
+    color = "#d9480f";
+    labelHtml = `QuotaExceeded`;
+  } else if (status === "SoldOut") {
+    filterCategory = "unavailable";
+    sortOrder = 5;
+    color = "#dc3545";
+    labelHtml = `SoldOut`;
+  } else if (status === "Unsupported") {
+    filterCategory = "unavailable";
+    sortOrder = 6;
+    color = "#6c757d";
+    labelHtml = `Unsupported`;
+  }
+
+  const badgeHtml = `<span title="${tooltipText}" style="color:${color};white-space:nowrap;">${labelHtml}</span>`;
+  const searchToken = `AvailCat:${filterCategory} AvailStatus:${status} ${reason} ${availZones.join(" ")} ${unavailZones.join(" ")}`;
+
+  return { status, filterCategory, sortOrder, badgeHtml, searchToken };
+}
+
+/**
+ * Render inline Availability & Quota status line for the Selected Spec Details panel.
+ * @param {Object} spec
+ * @param {number} index
+ * @param {boolean} isChecking
+ * @returns {string}
+ */
+function renderSpecAvailabilityDetailsCardHtml(spec, index, isChecking = false) {
+  const meta = getSpecAvailabilityUiMeta(spec);
+  const availZones = Array.isArray(spec && spec.availableZones) ? spec.availableZones : [];
+  const unavailZones = Array.isArray(spec && spec.unavailableZones) ? spec.unavailableZones : [];
+  const reason = (spec && spec.availabilityReason) ? String(spec.availabilityReason) : "";
+  const checkedRel = formatAvailabilityRelativeTime(spec && spec.availabilityCheckedAt, false);
+  const refreshRel = formatAvailabilityRelativeTime(spec && spec.availabilityRefreshAfter, true);
+  const isGpu = spec && (spec.acceleratorType === "gpu" || (spec.acceleratorCount && spec.acceleratorCount > 0));
+
+  const ttlPolicyHint = isGpu
+    ? "GPU/Accel TTL Policy — Available: 15m · QuotaExceeded: 3m · SoldOut: 1m · Unsupported: 2h"
+    : "Standard TTL Policy — Available: 60m · QuotaExceeded: 5m · SoldOut: 1m · Unsupported: 2h";
+
+  const zoneParts = [];
+  if (availZones.length > 0) {
+    zoneParts.push(`<span style="color:#198754;">${availZones.map(esc).join(", ")}</span>`);
+  }
+  if (unavailZones.length > 0) {
+    zoneParts.push(`<span style="color:#dc3545;text-decoration:line-through;" title="Unavailable / SoldOut">${unavailZones.map(esc).join(", ")}</span>`);
+  }
+
+  return `
+    <div id="specDetailAvailabilityCard" style="margin-bottom:3px; text-align: left;">
+      <strong>Availability:</strong> ${meta.badgeHtml}
+      ${zoneParts.length > 0 ? `<span style="font-size:0.76rem;color:#6c757d;margin-left:4px;">[${zoneParts.join(" · ")}]</span>` : ""}
+      ${checkedRel ? `<span style="font-size:0.73rem;color:#6c757d;margin-left:6px;" title="${esc(ttlPolicyHint)}">(${esc(checkedRel)}${refreshRel ? `, next: ${esc(refreshRel)}` : ""})</span>` : ""}
+      <button type="button" id="btnRefreshSingleSpecAvail" data-spec-index="${index}" class="btn btn-outline-secondary btn-sm" style="padding:0px 6px;font-size:0.7rem;margin-left:6px;line-height:1.3;" ${isChecking ? "disabled" : ""} title="Force a live CSP SDK availability & quota check (bypasses cache)">
+        ${isChecking ? "Checking..." : "Refresh"}
+      </button>
+      ${reason ? `<div style="margin-top:2px;margin-left:12px;font-size:0.75rem;color:#6c757d;">↳ ${esc(reason)}</div>` : ""}
+    </div>
+  `;
+}
+
+/**
+ * Fetch live availability for a single spec from CB-Tumblebug GET /ns/system/resources/spec/{specId}
+ * and mutate the spec object in-place.
+ * @param {Object} spec
+ * @param {boolean} forceRefresh
+ * @returns {Promise<Object>}
+ */
+async function fetchLiveSpecAvailability(spec, forceRefresh = false) {
+  if (!spec || !spec.id) return spec;
+  const username = window.configUsername || getConfig().username || '';
+  const password = window.configPassword || getConfig().password || '';
+  const url = `${tbApiBase()}/ns/system/resources/spec/${encodeURIComponent(spec.id)}${forceRefresh ? '?forceRefresh=true' : ''}`;
+  const res = await axios({
+    method: "get",
+    url: url,
+    headers: { "Content-Type": "application/json" },
+    auth: { username, password },
+  });
+  if (res && res.data) {
+    spec.availabilityStatus = res.data.availabilityStatus || "Unverified";
+    spec.availabilityReason = res.data.availabilityReason || "";
+    spec.availableZones = res.data.availableZones || [];
+    spec.unavailableZones = res.data.unavailableZones || [];
+    spec.availabilityCheckedAt = res.data.availabilityCheckedAt || null;
+    spec.availabilityRefreshAfter = res.data.availabilityRefreshAfter || null;
+  }
+  return spec;
+}
+
+/**
  * Display a modal to select a specification from the recommendation list.
  * @param {Array} specs - List of spec objects
  * @param {Object} [options] - Optional title, subTitle
@@ -806,7 +1007,7 @@ function openSpecSelectionDialog(specs, options = {}) {
   return new Promise((resolve) => {
     Swal.fire({
       title: options.title || "Select a Spec from the Recommendation List",
-      width: 1200,
+      width: 1280,
       position: 'center',
       html: `
         <div class="compact-datatable">
@@ -814,10 +1015,21 @@ function openSpecSelectionDialog(specs, options = {}) {
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;padding:6px 10px;background:#f8f9fa;border:1px solid #dee2e6;border-radius:5px;text-align:left;">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <label for="modalOsImageSelect" style="margin:0;font-weight:600;font-size:0.82rem;color:#212529;">💽 Target Image (OS):</label>
-              <select id="modalOsImageSelect" style="font-size:0.8rem;padding:3px 8px;border:1px solid #ced4da;border-radius:4px;background:#fff;min-width:240px;color:#212529;">
+              <select id="modalOsImageSelect" style="font-size:0.8rem;padding:3px 8px;border:1px solid #ced4da;border-radius:4px;background:#fff;min-width:210px;color:#212529;">
                 ${osSelectOptionsHtml}
               </select>
-              <span style="font-size:0.75rem;color:#6c757d;">Change target OS here (or click an OS badge in Details) to check compatibility across specs</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <label for="modalAvailabilityFilterSelect" style="margin:0;font-weight:600;font-size:0.82rem;color:#212529;">Availability:</label>
+              <select id="modalAvailabilityFilterSelect" style="font-size:0.8rem;padding:3px 8px;border:1px solid #ced4da;border-radius:4px;background:#fff;color:#212529;">
+                <option value="all">All Statuses</option>
+                <option value="available">Available Only</option>
+                <option value="unavailable">SoldOut / Quota / Unsupported</option>
+                <option value="unverified">Unverified Only</option>
+              </select>
+              <button type="button" id="btnCheckVisibleSpecsAvailability" class="btn btn-outline-secondary btn-sm" style="padding:2px 8px;font-size:0.76rem;" title="Actively check CSP availability & quota for visible specs">
+                Check Visible
+              </button>
             </div>
           </div>
           <div class="table-responsive">
@@ -832,6 +1044,7 @@ function openSpecSelectionDialog(specs, options = {}) {
                   <th>vCPU</th>
                   <th>Mem(Gi)</th>
                   <th>Cost($/h)</th>
+                  <th>Availability</th>
                   <th>Image</th>
                   <th>Accelerator</th>
                 </tr>
@@ -849,6 +1062,8 @@ function openSpecSelectionDialog(specs, options = {}) {
                     acceleratorInfo = "None";
                   }
 
+                  const availMeta = getSpecAvailabilityUiMeta(spec);
+
                   return `
                     <tr id="spec-row-${index}" class="${index === 0 ? 'selected-spec' : ''}" data-index="${index}">
                       <td class="text-left">${index + 1}</td>
@@ -859,6 +1074,7 @@ function openSpecSelectionDialog(specs, options = {}) {
                       <td>${spec.vCPU}</td>
                       <td>${spec.memoryGiB}</td>
                       <td>${costPerHour}</td>
+                      <td class="text-left spec-avail-td" id="spec-avail-td-${index}" data-order="${availMeta.sortOrder}" data-search="${esc(availMeta.searchToken)}"><span class="spec-avail-cell" data-spec-index="${index}" data-spec-id="${esc(spec.id)}">${availMeta.badgeHtml}</span></td>
                       <td class="text-left"><span class="spec-image-match-cell" data-spec-index="${index}" data-spec-id="${esc(spec.id)}"><span style="color:#adb5bd;">...</span></span></td>
                       <td class="text-left">${acceleratorInfo}</td>
                     </tr>
@@ -867,7 +1083,7 @@ function openSpecSelectionDialog(specs, options = {}) {
               </tbody>
             </table>
           </div>
-          <div id="specDetailsContainer" style="margin-top:15px;padding:8px;border:1px solid #ddd;border-radius:5px;height:280px;overflow-y:auto;display:flex;flex-direction:column;">
+          <div id="specDetailsContainer" style="margin-top:15px;padding:8px;border:1px solid #ddd;border-radius:5px;height:300px;overflow-y:auto;display:flex;flex-direction:column;">
             <h5 style="font-size: 0.85rem;margin-bottom:5px;flex-shrink:0;">Selected Spec Details</h5>
             <div id="specDetailsContent" style="flex:1;overflow-y:auto;"></div>
           </div>
@@ -891,15 +1107,109 @@ function openSpecSelectionDialog(specs, options = {}) {
         </style>
       `,
       didOpen: () => {
+        let dtInstance = null;
         const modalOsSelect = document.getElementById("modalOsImageSelect");
         if (modalOsSelect) {
           modalOsSelect.value = currentOsFilter;
         }
 
+        const availFilterSelect = document.getElementById("modalAvailabilityFilterSelect");
+        function updateAvailabilityFilterCounts() {
+          if (!availFilterSelect) return;
+          let countAvail = 0, countUnavail = 0, countUnverified = 0;
+          specs.forEach(s => {
+            const m = getSpecAvailabilityUiMeta(s);
+            if (m.filterCategory === "available") countAvail++;
+            else if (m.filterCategory === "unavailable") countUnavail++;
+            else countUnverified++;
+          });
+          const opts = availFilterSelect.options;
+          if (opts[0]) opts[0].textContent = `All Statuses (${specs.length})`;
+          if (opts[1]) opts[1].textContent = `Available Only (${countAvail})`;
+          if (opts[2]) opts[2].textContent = `SoldOut / Quota / Unsupported (${countUnavail})`;
+          if (opts[3]) opts[3].textContent = `Unverified Only (${countUnverified})`;
+        }
+        updateAvailabilityFilterCounts();
+
+        function updateSpecAvailabilityRowDom(index) {
+          const spec = specs[index];
+          if (!spec) return;
+          const availMeta = getSpecAvailabilityUiMeta(spec);
+          let tdEl = document.getElementById(`spec-avail-td-${index}`);
+          if (!tdEl && dtInstance) {
+            try {
+              tdEl = dtInstance.cell(index, 8).node();
+            } catch (_) {
+              tdEl = null;
+            }
+          }
+          if (tdEl) {
+            tdEl.setAttribute('data-order', String(availMeta.sortOrder));
+            tdEl.setAttribute('data-search', availMeta.searchToken);
+            tdEl.innerHTML = `<span class="spec-avail-cell" data-spec-index="${index}" data-spec-id="${esc(spec.id)}">${availMeta.badgeHtml}</span>`;
+            if (dtInstance) {
+              dtInstance.cell(tdEl).invalidate();
+            }
+          }
+          updateAvailabilityFilterCounts();
+        }
+
+        if (availFilterSelect) {
+          availFilterSelect.addEventListener("change", () => {
+            if (!dtInstance) return;
+            const val = availFilterSelect.value;
+            if (val === "all") {
+              dtInstance.column(8).search("").draw();
+            } else {
+              dtInstance.column(8).search(`AvailCat:${val}`, false, false).draw();
+            }
+          });
+        }
+
+        const checkVisibleBtn = document.getElementById("btnCheckVisibleSpecsAvailability");
+        if (checkVisibleBtn) {
+          checkVisibleBtn.addEventListener("click", async () => {
+            const visibleCells = Array.from(document.querySelectorAll('#specSelectionTable tbody .spec-avail-cell'));
+            let targetIndices = visibleCells
+              .map(c => parseInt(c.getAttribute('data-spec-index'), 10))
+              .filter(idx => !isNaN(idx) && specs[idx] && normalizeAvailabilityStatus(specs[idx].availabilityStatus) === "Unverified");
+
+            // If all visible rows are already verified, force-refresh visible rows instead
+            const forceMode = targetIndices.length === 0;
+            if (forceMode) {
+              targetIndices = visibleCells
+                .map(c => parseInt(c.getAttribute('data-spec-index'), 10))
+                .filter(idx => !isNaN(idx) && specs[idx]);
+            }
+            if (targetIndices.length === 0) return;
+
+            checkVisibleBtn.disabled = true;
+            const origText = checkVisibleBtn.textContent;
+            checkVisibleBtn.textContent = `Checking (${targetIndices.length})...`;
+
+            await Promise.allSettled(targetIndices.map(async (idx) => {
+              try {
+                await fetchLiveSpecAvailability(specs[idx], forceMode);
+              } catch (e) {
+                console.warn(`Live availability check failed for spec index ${idx}:`, e);
+              } finally {
+                updateSpecAvailabilityRowDom(idx);
+              }
+            }));
+
+            if (dtInstance) dtInstance.draw(false);
+            const selInput = document.getElementById('selectedSpecIndex');
+            const curIdx = selInput ? parseInt(selInput.value, 10) : 0;
+            updateSpecDetails(isNaN(curIdx) ? 0 : curIdx, false);
+
+            checkVisibleBtn.disabled = false;
+            checkVisibleBtn.textContent = origText;
+          });
+        }
+
         function setTargetOsFilter(newOsValue) {
           currentOsFilter = newOsValue || "";
           if (modalOsSelect) {
-            // Ensure option exists if user clicked an OS badge not yet in the dropdown
             if (currentOsFilter && !Array.from(modalOsSelect.options).some(opt => opt.value === currentOsFilter)) {
               const dynOpt = document.createElement("option");
               dynOpt.value = currentOsFilter;
@@ -921,7 +1231,7 @@ function openSpecSelectionDialog(specs, options = {}) {
           refreshVisibleSpecImageCells();
           const selInput = document.getElementById('selectedSpecIndex');
           const curIdx = selInput ? parseInt(selInput.value, 10) : 0;
-          updateSpecDetails(isNaN(curIdx) ? 0 : curIdx);
+          updateSpecDetails(isNaN(curIdx) ? 0 : curIdx, false);
         }
 
         if (modalOsSelect) {
@@ -932,11 +1242,30 @@ function openSpecSelectionDialog(specs, options = {}) {
 
         const detailsContainerEl = document.getElementById("specDetailsContainer");
         if (detailsContainerEl) {
-          detailsContainerEl.addEventListener("click", (e) => {
+          detailsContainerEl.addEventListener("click", async (e) => {
             const badge = e.target.closest(".spec-os-quick-badge");
             if (badge) {
               const osVal = badge.getAttribute("data-os-type");
               if (osVal) setTargetOsFilter(osVal);
+              return;
+            }
+            const refreshBtn = e.target.closest("#btnRefreshSingleSpecAvail");
+            if (refreshBtn) {
+              const idx = parseInt(refreshBtn.getAttribute("data-spec-index"), 10);
+              if (!isNaN(idx) && specs[idx]) {
+                updateSpecDetails(idx, true);
+                try {
+                  await fetchLiveSpecAvailability(specs[idx], true);
+                  updateSpecAvailabilityRowDom(idx);
+                } catch (err) {
+                  console.warn("Failed to force-refresh spec availability:", err);
+                }
+                const selInput = document.getElementById('selectedSpecIndex');
+                const curIdx = selInput ? parseInt(selInput.value, 10) : idx;
+                if (curIdx === idx) {
+                  updateSpecDetails(idx, false);
+                }
+              }
             }
           });
         }
@@ -955,6 +1284,40 @@ function openSpecSelectionDialog(specs, options = {}) {
           });
         }
 
+        function refreshVisibleSpecAvailabilityCells() {
+          const cells = document.querySelectorAll('#specSelectionTable tbody .spec-avail-cell');
+          cells.forEach(cell => {
+            const idx = parseInt(cell.getAttribute('data-spec-index'), 10);
+            const spec = specs[idx];
+            if (!spec) return;
+            if (spec._checkingAvailability) {
+              return;
+            }
+            if (normalizeAvailabilityStatus(spec.availabilityStatus) !== "Unverified") {
+              cell.innerHTML = getSpecAvailabilityUiMeta(spec).badgeHtml;
+              return;
+            }
+            spec._checkingAvailability = true;
+            cell.innerHTML = `<span style="color:#adb5bd;white-space:nowrap;">Checking...</span>`;
+            const selInput = document.getElementById('selectedSpecIndex');
+            if (selInput && parseInt(selInput.value, 10) === idx) {
+              updateSpecDetails(idx, true);
+            }
+            fetchLiveSpecAvailability(spec, false)
+              .catch(err => {
+                console.warn(`Auto availability check failed for spec ${spec.id}:`, err);
+              })
+              .finally(() => {
+                spec._checkingAvailability = false;
+                updateSpecAvailabilityRowDom(idx);
+                const curSel = document.getElementById('selectedSpecIndex');
+                if (curSel && parseInt(curSel.value, 10) === idx) {
+                  updateSpecDetails(idx, false);
+                }
+              });
+          });
+        }
+
         $('#specSelectionTable tbody').on('click', 'tr', function () {
           const index = $(this).data('index');
           selectSpecRow(index);
@@ -970,13 +1333,36 @@ function openSpecSelectionDialog(specs, options = {}) {
           }
           const selInput = document.getElementById('selectedSpecIndex');
           if (selInput) selInput.value = index;
-          updateSpecDetails(index);
+          updateSpecDetails(index, false);
+
+          // Automatically check live availability if the user clicked an Unverified spec row
+          const spec = specs[index];
+          if (spec && normalizeAvailabilityStatus(spec.availabilityStatus) === "Unverified" && !spec._checkingAvailability) {
+            spec._checkingAvailability = true;
+            updateSpecDetails(index, true);
+            fetchLiveSpecAvailability(spec, false)
+              .then(() => {
+                updateSpecAvailabilityRowDom(index);
+              })
+              .catch(err => {
+                console.warn("Auto availability check failed:", err);
+              })
+              .finally(() => {
+                spec._checkingAvailability = false;
+                const curSel = document.getElementById('selectedSpecIndex');
+                if (curSel && parseInt(curSel.value, 10) === index) {
+                  updateSpecDetails(index, false);
+                }
+              });
+          }
         };
 
-        function updateSpecDetails(index) {
+        function updateSpecDetails(index, isChecking = false) {
           const spec = specs[index];
           if (!spec) return;
           let costPerHour = spec.costPerHour < 0 || !spec.costPerHour ? "unknown" : `$${spec.costPerHour}`;
+
+          const availabilityCardHTML = renderSpecAvailabilityDetailsCardHtml(spec, index, isChecking);
 
           const specInfoHTML = `
             <div style="margin:0; padding:0; text-align: left;">
@@ -984,6 +1370,7 @@ function openSpecSelectionDialog(specs, options = {}) {
               <div style="margin-bottom:3px; text-align: left;"><strong>Region:</strong> ${spec.regionName}</div>
               <div style="margin-bottom:3px; text-align: left;"><strong>Spec Name:</strong> ${spec.cspSpecName}</div>
               <div style="margin-bottom:3px; text-align: left;"><strong>Architecture:</strong> ${spec.architecture}</div>
+              ${availabilityCardHTML}
               <div style="margin-bottom:4px; text-align: left;"><strong>Available Images:</strong> <span id="specAvailableImagesSummary" data-spec-id="${esc(spec.id)}"><span style="color:#6c757d;">Checking compatible images...</span></span></div>
               <div style="margin-bottom:3px; text-align: left;"><strong>vCPU:</strong> ${spec.vCPU}</div>
               <div style="margin-bottom:3px; text-align: left;"><strong>Memory:</strong> ${spec.memoryGiB} GiB</div>
@@ -1035,7 +1422,7 @@ function openSpecSelectionDialog(specs, options = {}) {
           });
         }
 
-        $('#specSelectionTable').DataTable({
+        dtInstance = $('#specSelectionTable').DataTable({
           "paging": true,
           "searching": true,
           "ordering": true,
@@ -1048,6 +1435,7 @@ function openSpecSelectionDialog(specs, options = {}) {
           "columnDefs": [{ "targets": -1, "orderable": false }],
           "drawCallback": function () {
             refreshVisibleSpecImageCells();
+            refreshVisibleSpecAvailabilityCells();
           },
           "language": {
             "search": "Filtering Keyword:",
@@ -1058,7 +1446,7 @@ function openSpecSelectionDialog(specs, options = {}) {
           }
         });
 
-        updateSpecDetails(0);
+        updateSpecDetails(0, false);
       },
       showCancelButton: true,
       confirmButtonText: "Continue",
@@ -1267,6 +1655,8 @@ async function openImageSelectionDialog(selectedSpec, preselectedImageId = null)
     ? `<span style="color:#c0392b;font-weight:bold;"> | GPU: ${esc(selectedSpec.acceleratorModel)} ×${esc(String(selectedSpec.acceleratorCount || '?'))} (${esc(String(selectedSpec.acceleratorMemoryGB || '?'))}GB/ea)</span>`
     : '';
 
+  const specAvailMeta = getSpecAvailabilityUiMeta(selectedSpec);
+
   return new Promise((resolve) => {
     Swal.fire({
       title: "Select an Image from the Image Search List",
@@ -1276,6 +1666,7 @@ async function openImageSelectionDialog(selectedSpec, preselectedImageId = null)
           <div style="margin-bottom:8px;padding:6px 12px;background:#f0f4ff;border:1px solid #c5cae9;border-radius:5px;font-size:0.8rem;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
             <span style="font-weight:bold;color:#1565c0;">Selected Spec</span>
             <span style="font-family:monospace;color:#333;">${esc(selectedSpec.id || '')}</span>
+            ${specAvailMeta.badgeHtml}
             <span style="color:#555;">| ${esc((selectedSpec.providerName || '').toUpperCase())} ${esc(selectedSpec.regionName || '')}</span>
             <span style="color:#555;">| vCPU: ${esc(String(selectedSpec.vCPU || ''))} | Mem: ${esc(String(selectedSpec.memoryGiB || ''))} GiB | Arch: ${esc(selectedSpec.architecture || 'N/A')}</span>
             <span style="color:#555;">| ${esc(specCost)}</span>
@@ -1727,6 +2118,29 @@ function openNodeGroupConfigModal(selectedSpec, createInfraReqVm, imageSelectHTM
               }
             }
 
+            let availBadgeLine = '';
+            if (result.availability) {
+              const av = result.availability;
+              const avStatus = normalizeAvailabilityStatus(av.status || (av.available ? 'Available' : 'SoldOut'));
+              const availZonesList = Array.isArray(av.zones) ? av.zones.filter(z => z.available).map(z => z.zoneId) : [];
+              const unavailZonesList = Array.isArray(av.zones) ? av.zones.filter(z => !z.available).map(z => z.zoneId) : [];
+              selectedSpec.availabilityStatus = avStatus;
+              selectedSpec.availabilityReason = av.reason || '';
+              if (availZonesList.length > 0 || unavailZonesList.length > 0) {
+                selectedSpec.availableZones = availZonesList;
+                selectedSpec.unavailableZones = unavailZonesList;
+              }
+              if (av.queriedAt) selectedSpec.availabilityCheckedAt = av.queriedAt;
+              if (av.refreshAfter) selectedSpec.availabilityRefreshAfter = av.refreshAfter;
+
+              const avMeta = getSpecAvailabilityUiMeta(selectedSpec);
+              const refreshRel = formatAvailabilityRelativeTime(av.refreshAfter, true);
+              availBadgeLine = `<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">` +
+                `<span style="font-weight:600;color:#495057;">CSP Status:</span> ${avMeta.badgeHtml}` +
+                (refreshRel ? `<span style="font-size:0.7rem;color:#6c757d;">(Cache refreshes ${escapeHtml(refreshRel)})</span>` : '') +
+                `</div>`;
+            }
+
             if (result.isValid) {
               statusEl.textContent = '✓ Valid';
               statusEl.style.backgroundColor = '#28a745';
@@ -1741,10 +2155,13 @@ function openNodeGroupConfigModal(selectedSpec, createInfraReqVm, imageSelectHTM
               if (result.warnings && result.warnings.length > 0) {
                 html += '<br><span style="color:#856404;">⚠ ' + result.warnings.map(escapeHtml).join('<br>⚠ ') + '</span>';
               }
-              detailsEl.innerHTML = html + suggestionLine;
+              detailsEl.innerHTML = html + suggestionLine + availBadgeLine;
             } else {
-              statusEl.textContent = '✗ Risk Detected';
-              statusEl.style.backgroundColor = '#dc3545';
+              const avStatus = result.availability ? normalizeAvailabilityStatus(result.availability.status) : '';
+              statusEl.textContent = avStatus === 'QuotaExceeded'
+                ? '✗ Quota Exceeded'
+                : (avStatus === 'SoldOut' ? '✗ SoldOut' : '✗ Risk Detected');
+              statusEl.style.backgroundColor = avStatus === 'QuotaExceeded' ? '#d9480f' : '#dc3545';
               sectionEl.style.borderColor = '#dc3545';
               sectionEl.style.backgroundColor = '#f8d7da';
               
@@ -1756,7 +2173,7 @@ function openNodeGroupConfigModal(selectedSpec, createInfraReqVm, imageSelectHTM
               if (errors.length > 0) {
                 content += '<br><span style="color:#dc3545;">' + errors.map(escapeHtml).join('<br>') + '</span>';
               }
-              detailsEl.innerHTML = content + suggestionLine;
+              detailsEl.innerHTML = content + suggestionLine + availBadgeLine;
             }
           } catch (error) {
             if (mySeq !== reviewRequestSeq) return;
@@ -2459,6 +2876,81 @@ function updateNodeGroupReview() {
 
   // Synchronize map configuration pins and polygons with current review panel state
   renderMapFromConfig();
+
+  // Asynchronously resolve availability for any loaded/copied NodeGroup chips still in Unverified state
+  ensureNodeGroupChipsAvailability();
+}
+
+function renderNodeGroupAvailabilityBadgeHtml(nodeConf, spec) {
+  if (!spec || (!spec.id && !(nodeConf && nodeConf.specId))) {
+    return '';
+  }
+  if (spec._checkingAvailability) {
+    return `<span style="font-size: 0.72rem; color: #0d6efd; white-space: nowrap;">Checking...</span>`;
+  }
+  let effectiveSpec = spec;
+  if (
+    nodeConf &&
+    nodeConf.zone &&
+    Array.isArray(spec.unavailableZones) &&
+    spec.unavailableZones.includes(nodeConf.zone) &&
+    normalizeAvailabilityStatus(spec.availabilityStatus) === 'Available'
+  ) {
+    effectiveSpec = Object.assign({}, spec, {
+      availabilityStatus: 'SoldOut',
+      availabilityReason: `Pinned zone ${nodeConf.zone} is currently unavailable/SoldOut (${spec.availabilityReason || 'other zones remain available'})`
+    });
+  }
+  return `<span style="font-size: 0.72rem; font-weight: 600;">${getSpecAvailabilityUiMeta(effectiveSpec).badgeHtml}</span>`;
+}
+
+function ensureNodeGroupChipsAvailability() {
+  const pendingIndices = [];
+  nodeGroupRequestFromSpecList.forEach((nodeConf, index) => {
+    const spec = recommendedSpecList[index];
+    if (!spec) return;
+    if (!spec.id && nodeConf && nodeConf.specId) {
+      spec.id = nodeConf.specId;
+    }
+    if (
+      spec.id &&
+      normalizeAvailabilityStatus(spec.availabilityStatus) === 'Unverified' &&
+      !spec._checkingAvailability &&
+      !spec._chipAvailabilityChecked
+    ) {
+      spec._chipAvailabilityChecked = true;
+      spec._checkingAvailability = true;
+      const badgeEl = document.getElementById(`nodegroup-avail-badge-${index}`);
+      if (badgeEl) {
+        badgeEl.innerHTML = renderNodeGroupAvailabilityBadgeHtml(nodeConf, spec);
+      }
+      pendingIndices.push(index);
+    }
+  });
+
+  if (pendingIndices.length === 0) return;
+
+  const concurrency = Math.min(4, pendingIndices.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < pendingIndices.length) {
+      const idx = pendingIndices[cursor++];
+      const spec = recommendedSpecList[idx];
+      if (!spec) continue;
+      try {
+        await fetchSingleSpecAvailability(spec, false);
+      } finally {
+        spec._checkingAvailability = false;
+        const badgeEl = document.getElementById(`nodegroup-avail-badge-${idx}`);
+        if (badgeEl) {
+          badgeEl.innerHTML = renderNodeGroupAvailabilityBadgeHtml(nodeGroupRequestFromSpecList[idx], spec);
+        }
+      }
+    }
+  }
+  for (let w = 0; w < concurrency; w++) {
+    worker();
+  }
 }
 
 function createNodeGroupItem(nodeConf, spec, index) {
@@ -2481,6 +2973,7 @@ function createNodeGroupItem(nodeConf, spec, index) {
   const zoneBadge = nodeConf.zone 
     ? `<span class="badge mr-1" style="background-color: ${zoneColor}; color: ${zoneTextColor}; font-size: 0.7rem;">${nodeConf.zone}</span>`
     : '';
+  const availBadge = `<span id="nodegroup-avail-badge-${index}" class="ml-1">${renderNodeGroupAvailabilityBadgeHtml(nodeConf, spec)}</span>`;
   
   item.innerHTML = `
     <div class="d-flex align-items-start justify-content-between">
@@ -2494,6 +2987,7 @@ function createNodeGroupItem(nodeConf, spec, index) {
             ${spec?.regionName || 'Unknown Region'}
           </span>
           ${zoneBadge}
+          ${availBadge}
         </div>
         <div class="small text-muted" style="font-size: 0.7rem; line-height: 1.2;">
           <div style="margin-bottom: 2px;"><strong>Spec:</strong> ${spec?.cspSpecName || nodeConf.specId}</div>
@@ -3133,6 +3627,7 @@ async function findAlternativeNodeConfig(index) {
   const candidateRows = apiResp.candidates.map((c, i) => {
     const s    = c.spec;
     const d    = c.specDiff;
+    const availMeta = getSpecAvailabilityUiMeta(s);
     const imgName = c.primaryImage
       ? `<span title="${esc(c.primaryImage.osDistribution || '')}" style="color:#0066cc;font-size:0.75rem;">${esc((c.primaryImage.cspImageName || '').substring(0, 30))}${(c.primaryImage.cspImageName||'').length > 30 ? '…' : ''}</span>`
       : '<span style="color:#aaa;font-size:0.75rem;">none</span>';
@@ -3146,7 +3641,10 @@ async function findAlternativeNodeConfig(index) {
       <tr class="eq-cand-row" data-index="${i}">
         <td class="text-center eq-sel-indicator" style="width:32px;font-size:1rem;color:#999;">○</td>
         <td style="font-size:0.78rem;padding:4px 6px;">
-          <div style="font-family:monospace;">${esc(s.cspSpecName || s.id)}</div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <span style="font-family:monospace;">${esc(s.cspSpecName || s.id)}</span>
+            ${availMeta.badgeHtml}
+          </div>
           <div style="color:#555;font-size:0.72rem;">${esc((s.providerName || '').toUpperCase())} ${esc(s.regionName || '')}</div>
         </td>
         <td class="text-center" style="font-size:0.8rem;">${esc(String(s.vCPU ?? ''))}<br>${diffBadge(d.vCPUDiff)}</td>

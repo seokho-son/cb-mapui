@@ -941,7 +941,7 @@ async function loadTemplateToInfraConfig(namespace, templateId) {
 
     // Fetch spec details if specId is available
     if (sg.specId) {
-      const specUrl = `${tbApiBase()}/ns/system/resources/spec/${sg.specId}`;
+      const specUrl = `${tbApiBase()}/ns/system/resources/spec/${encodeURIComponent(sg.specId)}`;
       return axios.get(specUrl, { auth: { username, password } })
         .then(function(specRes) {
           const s = specRes.data;
@@ -954,21 +954,27 @@ async function loadTemplateToInfraConfig(namespace, templateId) {
             if (coords) { lon = coords.lon; lat = coords.lat; }
           }
           return {
-            id:                  sg.specId,
-            providerName:        prov,
-            regionName:          reg,
-            cspSpecName:         s.cspSpecName          || sg.specId,
-            vCPU:                s.vCPU                 ?? 'N/A',
-            memoryGiB:           s.memoryGiB            ?? 'N/A',
-            costPerHour:         s.costPerHour          || 0,
-            acceleratorType:     s.acceleratorType      || '',
-            acceleratorModel:    s.acceleratorModel     || '',
-            acceleratorCount:    s.acceleratorCount     || 0,
-            acceleratorMemoryGB: s.acceleratorMemoryGB  || '',
-            connectionName:      sg.connectionName      || '',
-            rootDiskType:        sg.rootDiskType        || 'default',
-            regionLatitude:      lat,
-            regionLongitude:     lon
+            id:                       sg.specId,
+            providerName:             prov,
+            regionName:               reg,
+            cspSpecName:              s.cspSpecName              || sg.specId,
+            vCPU:                     s.vCPU                     ?? 'N/A',
+            memoryGiB:                s.memoryGiB                ?? 'N/A',
+            costPerHour:              s.costPerHour              || 0,
+            acceleratorType:          s.acceleratorType          || '',
+            acceleratorModel:         s.acceleratorModel         || '',
+            acceleratorCount:         s.acceleratorCount         || 0,
+            acceleratorMemoryGB:      s.acceleratorMemoryGB      || '',
+            connectionName:           sg.connectionName          || '',
+            rootDiskType:             sg.rootDiskType            || 'default',
+            regionLatitude:           lat,
+            regionLongitude:          lon,
+            availabilityStatus:       s.availabilityStatus       || 'Unverified',
+            availabilityReason:       s.availabilityReason       || '',
+            availableZones:           Array.isArray(s.availableZones) ? s.availableZones : [],
+            unavailableZones:         Array.isArray(s.unavailableZones) ? s.unavailableZones : [],
+            availabilityCheckedAt:    s.availabilityCheckedAt    || null,
+            availabilityRefreshAfter: s.availabilityRefreshAfter || null
           };
         })
         .catch(function() {
@@ -991,7 +997,8 @@ async function loadTemplateToInfraConfig(namespace, templateId) {
             connectionName:      sg.connectionName || '',
             rootDiskType:        sg.rootDiskType   || 'default',
             regionLatitude:      coords ? coords.lat : '',
-            regionLongitude:     coords ? coords.lon : ''
+            regionLongitude:     coords ? coords.lon : '',
+            availabilityStatus:  'Unverified'
           };
         });
     } else {
@@ -1011,7 +1018,8 @@ async function loadTemplateToInfraConfig(namespace, templateId) {
         connectionName:      sg.connectionName || '',
         rootDiskType:        sg.rootDiskType   || 'default',
         regionLatitude:      coords ? coords.lat : '',
-        regionLongitude:     coords ? coords.lon : ''
+        regionLongitude:     coords ? coords.lon : '',
+        availabilityStatus:  'Unverified'
       });
     }
   });
@@ -1117,7 +1125,7 @@ async function loadTemplateToK8sConfig(namespace, templateId) {
     nodeGroupRequestFromSpecList.push(nodeConfig);
 
     if (cluster.specId) {
-      const specUrl = `${tbApiBase()}/ns/system/resources/spec/${cluster.specId}`;
+      const specUrl = `${tbApiBase()}/ns/system/resources/spec/${encodeURIComponent(cluster.specId)}`;
       return axios.get(specUrl, { auth: { username, password } })
         .then(function(specRes) {
           const s = specRes.data;
@@ -1130,21 +1138,27 @@ async function loadTemplateToK8sConfig(namespace, templateId) {
             if (coords) { lon = coords.lon; lat = coords.lat; }
           }
           return {
-            id:                  cluster.specId,
-            providerName:        prov,
-            regionName:          reg,
-            cspSpecName:         s.cspSpecName          || cluster.specId,
-            vCPU:                s.vCPU                 ?? 'N/A',
-            memoryGiB:           s.memoryGiB            ?? 'N/A',
-            costPerHour:         s.costPerHour          || 0,
-            acceleratorType:     s.acceleratorType      || '',
-            acceleratorModel:    s.acceleratorModel     || '',
-            acceleratorCount:    s.acceleratorCount     || 0,
-            acceleratorMemoryGB: s.acceleratorMemoryGB  || '',
-            connectionName:      cluster.connectionName || '',
-            rootDiskType:        cluster.rootDiskType   || 'default',
-            regionLatitude:      lat,
-            regionLongitude:     lon
+            id:                       cluster.specId,
+            providerName:             prov,
+            regionName:               reg,
+            cspSpecName:              s.cspSpecName              || cluster.specId,
+            vCPU:                     s.vCPU                     ?? 'N/A',
+            memoryGiB:                s.memoryGiB                ?? 'N/A',
+            costPerHour:              s.costPerHour              || 0,
+            acceleratorType:          s.acceleratorType          || '',
+            acceleratorModel:         s.acceleratorModel         || '',
+            acceleratorCount:         s.acceleratorCount         || 0,
+            acceleratorMemoryGB:      s.acceleratorMemoryGB      || '',
+            connectionName:           cluster.connectionName     || '',
+            rootDiskType:             cluster.rootDiskType       || 'default',
+            regionLatitude:           lat,
+            regionLongitude:          lon,
+            availabilityStatus:       s.availabilityStatus       || 'Unverified',
+            availabilityReason:       s.availabilityReason       || '',
+            availableZones:           Array.isArray(s.availableZones) ? s.availableZones : [],
+            unavailableZones:         Array.isArray(s.unavailableZones) ? s.unavailableZones : [],
+            availabilityCheckedAt:    s.availabilityCheckedAt    || null,
+            availabilityRefreshAfter: s.availabilityRefreshAfter || null
           };
         })
         .catch(function() {
@@ -1166,7 +1180,8 @@ async function loadTemplateToK8sConfig(namespace, templateId) {
             connectionName:      cluster.connectionName || '',
             rootDiskType:        cluster.rootDiskType   || 'default',
             regionLatitude:      coords ? coords.lat : '',
-            regionLongitude:     coords ? coords.lon : ''
+            regionLongitude:     coords ? coords.lon : '',
+            availabilityStatus:  'Unverified'
           };
         });
     } else {
@@ -1186,7 +1201,8 @@ async function loadTemplateToK8sConfig(namespace, templateId) {
         connectionName:      cluster.connectionName || '',
         rootDiskType:        cluster.rootDiskType   || 'default',
         regionLatitude:      coords ? coords.lat : '',
-        regionLongitude:     coords ? coords.lon : ''
+        regionLongitude:     coords ? coords.lon : '',
+        availabilityStatus:  'Unverified'
       });
     }
   });
