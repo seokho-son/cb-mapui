@@ -578,7 +578,7 @@ function showSingleNodeGroupDialog(clusters, hostname, port, username, password,
           </div>
           <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
             <strong>NodeGroup Configuration:</strong><br>
-            <small>Provider: ${spec.providerName}</small><br>
+            <small style="display:inline-flex;align-items:center;gap:4px;">Provider: ${window.renderCspWithIconHtml ? window.renderCspWithIconHtml(spec.providerName, { size: 14 }) : spec.providerName}</small><br>
             <small>Region: ${spec.regionName}</small><br>
             <small>Spec: ${spec.cspSpecName}</small><br>
             <small>Image: ${nodeGroup.imageId}</small>

@@ -849,7 +849,7 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
             <td style="border: 1px solid #ddd; padding: 8px; color: #666;">Cloud Providers</td>
             <td style="border: 1px solid #ddd; padding: 8px; color: #333;">
               ${Object.entries(resourceSummary.providerBreakdown).map(([provider, count]) =>
-                `<span style="margin-right: 10px;"><strong>${window.escapeHtml(provider)}:</strong> ${count}</span>`
+                `<span style="margin-right: 12px; display: inline-flex; align-items: center; gap: 4px;">${window.renderCspWithIconHtml ? window.renderCspWithIconHtml(provider, { size: 15, bold: true }) : '<strong>' + window.escapeHtml(provider) + '</strong>'}: ${count}</span>`
               ).join('')}
             </td>
           </tr>` : ''}
@@ -1005,8 +1005,8 @@ function reviewInfraConfiguration(createInfraReq, hostname, port, username, pass
               if (provider || region) {
                 locationInfo = `
                   <div style="margin: 8px 0; padding: 8px; background: #f0f8ff; border-radius: 4px; border: 1px solid #b3d9ff;">
-                    <div style="display: flex; gap: 12px; font-size: 0.8em; color: #228b22;">
-                      ${provider ? `<div>🏢 <strong>Provider:</strong> ${provider}</div>` : ''}
+                    <div style="display: flex; align-items: center; gap: 12px; font-size: 0.8em; color: #228b22;">
+                      ${provider ? `<div style="display:inline-flex;align-items:center;gap:4px;">🏢 <strong>Provider:</strong> ${window.renderCspWithIconHtml ? window.renderCspWithIconHtml(provider, { size: 14 }) : provider}</div>` : ''}
                       ${region ? `<div>📍 <strong>Region:</strong> ${region}</div>` : ''}
                     </div>
                   </div>
