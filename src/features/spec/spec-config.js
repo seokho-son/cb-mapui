@@ -987,6 +987,73 @@ async function fetchLiveSpecAvailability(spec, forceRefresh = false) {
 }
 
 /**
+ * Format a fractional GPU partition ratio (e.g. 0.125 -> "1/8", 0.1667 -> "1/6", 0.25 -> "1/4", 0.5 -> "1/2").
+ * Falls back to a trimmed decimal string (up to 3 decimal places) if not a clean unit fraction.
+ */
+function formatAcceleratorPartitionFraction(partitionSize) {
+  const num = Number(partitionSize);
+  if (!num || isNaN(num) || num <= 0 || num >= 1) return "";
+  const inv = Math.round(1 / num);
+  if (inv >= 2 && inv <= 64 && Math.abs(num - 1 / inv) < 0.006) {
+    return `1/${inv}`;
+  }
+  return String(Number(num.toFixed(3)));
+}
+
+/**
+ * Format GPU count string (e.g. "C:1 [1/8]" or "C:1" when withPrefix=true, or "1 [1/8]" when withPrefix=false).
+ */
+function formatAcceleratorCountDisplay(spec, withPrefix = true) {
+  if (!spec) return "None";
+  const hasAccel = (spec.acceleratorType && spec.acceleratorType !== "" && spec.acceleratorType !== "none") ||
+    (spec.acceleratorModel && spec.acceleratorModel !== "undefined" && spec.acceleratorModel !== "" && spec.acceleratorModel !== "None");
+  if (!hasAccel) return "None";
+  const countVal = (spec.acceleratorCount && Number(spec.acceleratorCount) > 0) ? Number(spec.acceleratorCount) : 1;
+  const prefix = withPrefix ? "C:" : "";
+  const partStr = formatAcceleratorPartitionFraction(spec.acceleratorPartitionSize);
+  if (partStr) {
+    return `${prefix}${countVal} [${partStr}]`;
+  }
+  return `${prefix}${countVal}`;
+}
+
+/**
+ * Format GPU VRAM (GB) value cleanly without ever returning "undefined".
+ */
+function formatAcceleratorVramDisplay(spec, withUnit = false) {
+  if (!spec) return "None";
+  const mem = Number(spec.acceleratorMemoryGB);
+  if (!mem || isNaN(mem) || mem <= 0) return "None";
+  const formatted = String(Number(mem.toFixed(2)));
+  return withUnit ? `${formatted} GB` : formatted;
+}
+
+/**
+ * Resolve the CSP logo image path (/img/csp-<platform>.png) for a given provider name.
+ */
+function getCspIconUrl(providerName) {
+  if (!providerName) return "/img/circle.png";
+  const raw = String(providerName).toLowerCase().trim();
+  const platform = (typeof resolveCloudPlatform === "function") ? resolveCloudPlatform(raw) : raw;
+  return `/img/csp-${platform || raw || "unknown"}.png`;
+}
+window.getCspIconUrl = getCspIconUrl;
+
+/**
+ * Render a CSP provider label preceded by its logo icon.
+ */
+function renderCspWithIconHtml(providerName, opts = {}) {
+  const size = opts.size || 16;
+  const gap = opts.gap || 5;
+  const bold = opts.bold || false;
+  const label = esc((providerName || "Unknown").toUpperCase());
+  const iconUrl = getCspIconUrl(providerName);
+  const textHtml = bold ? `<strong>${label}</strong>` : `<span>${label}</span>`;
+  return `<span style="display:inline-flex;align-items:center;gap:${gap}px;white-space:nowrap;"><img src="${iconUrl}" alt="" style="width:${size}px;height:${size}px;object-fit:contain;vertical-align:middle;" onerror="this.src='/img/circle.png';">${textHtml}</span>`;
+}
+window.renderCspWithIconHtml = renderCspWithIconHtml;
+
+/**
  * Display a modal to select a specification from the recommendation list.
  * @param {Array} specs - List of spec objects
  * @param {Object} [options] - Optional title, subTitle
@@ -1007,7 +1074,7 @@ function openSpecSelectionDialog(specs, options = {}) {
   return new Promise((resolve) => {
     Swal.fire({
       title: options.title || "Select a Spec from the Recommendation List",
-      width: 1280,
+      width: 'min(96vw, 1520px)',
       position: 'center',
       html: `
         <div class="compact-datatable">
@@ -1047,6 +1114,8 @@ function openSpecSelectionDialog(specs, options = {}) {
                   <th>Availability</th>
                   <th>Image</th>
                   <th>Accelerator</th>
+                  <th>Count</th>
+                  <th>VRAM(GB)</th>
                 </tr>
               </thead>
               <tbody>
@@ -1055,11 +1124,40 @@ function openSpecSelectionDialog(specs, options = {}) {
                     ? "unknown"
                     : `$${spec.costPerHour}`;
 
-                  let acceleratorInfo;
-                  if (spec.acceleratorModel && spec.acceleratorModel !== "undefined" && spec.acceleratorModel !== "") {
-                    acceleratorInfo = `<span style="color:red;font-weight:bold">${spec.acceleratorModel} (C:${spec.acceleratorCount} ${spec.acceleratorMemoryGB})</span>`;
-                  } else {
-                    acceleratorInfo = "None";
+                  const hasAccel = Boolean(
+                    (spec.acceleratorModel && spec.acceleratorModel !== "undefined" && spec.acceleratorModel !== "") ||
+                    (spec.acceleratorType && spec.acceleratorType !== "" && spec.acceleratorType !== "none")
+                  );
+                  let acceleratorModelHtml = "None";
+                  let acceleratorCountHtml = "None";
+                  let acceleratorVramHtml = "None";
+                  let countSortValue = 0;
+                  let vramSortValue = 0;
+
+                  if (hasAccel) {
+                    const modelLabel = (spec.acceleratorModel && spec.acceleratorModel !== "undefined")
+                      ? spec.acceleratorModel
+                      : (spec.acceleratorType || "GPU").toUpperCase();
+                    acceleratorModelHtml = `<span style="color:red;font-weight:bold">${esc(modelLabel)}</span>`;
+
+                    const countLabel = formatAcceleratorCountDisplay(spec, true);
+                    const rawCount = (spec.acceleratorCount && Number(spec.acceleratorCount) > 0) ? Number(spec.acceleratorCount) : 1;
+                    const partRatio = (spec.acceleratorPartitionSize && Number(spec.acceleratorPartitionSize) > 0)
+                      ? Number(spec.acceleratorPartitionSize)
+                      : 1;
+                    countSortValue = rawCount * partRatio;
+                    const partTitle = partRatio < 1
+                      ? ` title="Partitioned GPU: ${rawCount} partition (${Number(partRatio.toFixed(4))} of physical GPU)"`
+                      : "";
+                    acceleratorCountHtml = partTitle
+                      ? `<span${partTitle}>${esc(countLabel)}</span>`
+                      : esc(countLabel);
+
+                    const vramLabel = formatAcceleratorVramDisplay(spec, false);
+                    if (vramLabel !== "None") {
+                      vramSortValue = Number(spec.acceleratorMemoryGB) || 0;
+                      acceleratorVramHtml = esc(vramLabel);
+                    }
                   }
 
                   const availMeta = getSpecAvailabilityUiMeta(spec);
@@ -1067,23 +1165,25 @@ function openSpecSelectionDialog(specs, options = {}) {
                   return `
                     <tr id="spec-row-${index}" class="${index === 0 ? 'selected-spec' : ''}" data-index="${index}">
                       <td class="text-left">${index + 1}</td>
-                      <td class="text-left">${spec.providerName.toUpperCase()}</td>
+                      <td class="text-left" data-order="${esc(spec.providerName.toUpperCase())}">${renderCspWithIconHtml(spec.providerName, { size: 16 })}</td>
                       <td class="text-left">${spec.regionName}</td>
                       <td class="text-left">${spec.cspSpecName}</td>
                       <td>${spec.architecture}</td>
                       <td>${spec.vCPU}</td>
                       <td>${spec.memoryGiB}</td>
-                      <td>${costPerHour}</td>
+                      <td style="font-weight:bold;">${costPerHour}</td>
                       <td class="text-left spec-avail-td" id="spec-avail-td-${index}" data-order="${availMeta.sortOrder}" data-search="${esc(availMeta.searchToken)}"><span class="spec-avail-cell" data-spec-index="${index}" data-spec-id="${esc(spec.id)}">${availMeta.badgeHtml}</span></td>
                       <td class="text-left"><span class="spec-image-match-cell" data-spec-index="${index}" data-spec-id="${esc(spec.id)}"><span style="color:#adb5bd;">...</span></span></td>
-                      <td class="text-left">${acceleratorInfo}</td>
+                      <td class="text-left">${acceleratorModelHtml}</td>
+                      <td class="text-left" data-order="${countSortValue}">${acceleratorCountHtml}</td>
+                      <td class="text-left" data-order="${vramSortValue}">${acceleratorVramHtml}</td>
                     </tr>
                   `;
                 }).join('')}
               </tbody>
             </table>
           </div>
-          <div id="specDetailsContainer" style="margin-top:15px;padding:8px;border:1px solid #ddd;border-radius:5px;height:300px;overflow-y:auto;display:flex;flex-direction:column;">
+          <div id="specDetailsContainer" style="margin-top:15px;padding:8px;border:1px solid #ddd;border-radius:5px;height:350px;overflow-y:auto;display:flex;flex-direction:column;">
             <h5 style="font-size: 0.85rem;margin-bottom:5px;flex-shrink:0;">Selected Spec Details</h5>
             <div id="specDetailsContent" style="flex:1;overflow-y:auto;"></div>
           </div>
@@ -1363,10 +1463,14 @@ function openSpecSelectionDialog(specs, options = {}) {
           let costPerHour = spec.costPerHour < 0 || !spec.costPerHour ? "unknown" : `$${spec.costPerHour}`;
 
           const availabilityCardHTML = renderSpecAvailabilityDetailsCardHtml(spec, index, isChecking);
+          const partFraction = formatAcceleratorPartitionFraction(spec.acceleratorPartitionSize);
+          const partDetailStr = partFraction
+            ? ` <span style="color:#6c757d;">(Partition: ${partFraction} = ${Number(Number(spec.acceleratorPartitionSize).toFixed(4))} card)</span>`
+            : "";
 
           const specInfoHTML = `
             <div style="margin:0; padding:0; text-align: left;">
-              <div style="margin-bottom:3px; text-align: left;"><strong>CSP:</strong> ${spec.providerName.toUpperCase()}</div>
+              <div style="margin-bottom:3px; text-align: left;"><strong>CSP:</strong> ${renderCspWithIconHtml(spec.providerName, { size: 16 })}</div>
               <div style="margin-bottom:3px; text-align: left;"><strong>Region:</strong> ${spec.regionName}</div>
               <div style="margin-bottom:3px; text-align: left;"><strong>Spec Name:</strong> ${spec.cspSpecName}</div>
               <div style="margin-bottom:3px; text-align: left;"><strong>Architecture:</strong> ${spec.architecture}</div>
@@ -1377,9 +1481,9 @@ function openSpecSelectionDialog(specs, options = {}) {
               <div style="margin-bottom:3px; text-align: left;"><strong>Storage:</strong> ${spec.storageGiB} GiB</div>
               <div style="margin-bottom:3px; text-align: left;"><strong>Cost:</strong> <span style="color: ${costPerHour === 'unknown' ? 'orange' : 'green'};">${costPerHour}/hour</span></div>
               ${spec.acceleratorType === "gpu" ? `
-                <div style="margin-bottom:3px; text-align: left;"><strong>Accelerator:</strong> <span style="color: red; font-weight: bold;">✓ GPU (${spec.acceleratorModel})</span></div>
-                <div style="margin-bottom:3px; text-align: left;"><strong>GPU Count:</strong> ${spec.acceleratorCount}</div>
-                <div style="margin-bottom:3px; text-align: left;"><strong>GPU Memory:</strong> ${spec.acceleratorMemoryGB} GB</div>
+                <div style="margin-bottom:3px; text-align: left;"><strong>Accelerator:</strong> <span style="color: red; font-weight: bold;">✓ GPU (${esc(spec.acceleratorModel || 'GPU')})</span></div>
+                <div style="margin-bottom:3px; text-align: left;"><strong>Count:</strong> ${esc(formatAcceleratorCountDisplay(spec, true))}${partDetailStr}</div>
+                <div style="margin-bottom:3px; text-align: left;"><strong>VRAM(GB):</strong> ${esc(formatAcceleratorVramDisplay(spec, true))}</div>
               ` : `
                 <div style="margin-bottom:3px; text-align: left;"><strong>Accelerator:</strong> <span style="color: gray;">None</span></div>
               `}
@@ -1430,9 +1534,8 @@ function openSpecSelectionDialog(specs, options = {}) {
           "responsive": true,
           "scrollX": true,
           "pageLength": 10,
-          "lengthMenu": [5, 10, 25, 50],
+          "lengthMenu": [5, 10, 15, 25, 50],
           "order": [[0, 'asc']],
-          "columnDefs": [{ "targets": -1, "orderable": false }],
           "drawCallback": function () {
             refreshVisibleSpecImageCells();
             refreshVisibleSpecAvailabilityCells();
@@ -1652,7 +1755,7 @@ async function openImageSelectionDialog(selectedSpec, preselectedImageId = null)
     ? `$${parseFloat(selectedSpec.costPerHour).toFixed(5)}/h`
     : 'N/A';
   const specAccel = (selectedSpec.acceleratorType === 'gpu' && selectedSpec.acceleratorModel)
-    ? `<span style="color:#c0392b;font-weight:bold;"> | GPU: ${esc(selectedSpec.acceleratorModel)} ×${esc(String(selectedSpec.acceleratorCount || '?'))} (${esc(String(selectedSpec.acceleratorMemoryGB || '?'))}GB/ea)</span>`
+    ? `<span style="color:#c0392b;font-weight:bold;"> | GPU: ${esc(selectedSpec.acceleratorModel)} (${esc(formatAcceleratorCountDisplay(selectedSpec, true))}, VRAM: ${esc(formatAcceleratorVramDisplay(selectedSpec, true))})</span>`
     : '';
 
   const specAvailMeta = getSpecAvailabilityUiMeta(selectedSpec);
@@ -1667,7 +1770,7 @@ async function openImageSelectionDialog(selectedSpec, preselectedImageId = null)
             <span style="font-weight:bold;color:#1565c0;">Selected Spec</span>
             <span style="font-family:monospace;color:#333;">${esc(selectedSpec.id || '')}</span>
             ${specAvailMeta.badgeHtml}
-            <span style="color:#555;">| ${esc((selectedSpec.providerName || '').toUpperCase())} ${esc(selectedSpec.regionName || '')}</span>
+            <span style="color:#555;display:inline-flex;align-items:center;gap:5px;">| ${renderCspWithIconHtml(selectedSpec.providerName, { size: 15 })} ${esc(selectedSpec.regionName || '')}</span>
             <span style="color:#555;">| vCPU: ${esc(String(selectedSpec.vCPU || ''))} | Mem: ${esc(String(selectedSpec.memoryGiB || ''))} GiB | Arch: ${esc(selectedSpec.architecture || 'N/A')}</span>
             <span style="color:#555;">| ${esc(specCost)}</span>
             ${specAccel}
@@ -2554,7 +2657,10 @@ function buildSpecConfigPopupHtml(spec, nodeConf, options = {}) {
         <div class="popup-col">
           <div class="popup-field">
             <span class="popup-label">Provider</span>
-            <span class="popup-badge popup-badge-provider">${spec.providerName.toUpperCase()}</span>
+            <span class="popup-badge popup-badge-provider" style="display:inline-flex;align-items:center;gap:5px;">
+              <img src="${getCspIconUrl(spec.providerName)}" alt="${esc(spec.providerName || '')}" style="width:15px;height:15px;object-fit:contain;background:#fff;border-radius:3px;padding:1px;" onerror="this.src='/img/circle.png';">
+              <span>${esc((spec.providerName || 'Unknown').toUpperCase())}</span>
+            </span>
           </div>
         </div>
         <div class="popup-col">
@@ -2645,13 +2751,13 @@ function buildSpecConfigPopupHtml(spec, nodeConf, options = {}) {
           <div class="popup-col">
             <div class="popup-field">
               <span class="popup-label">Count</span>
-              <span class="popup-value popup-value-gpu">${spec.acceleratorCount || 'N/A'}</span>
+              <span class="popup-value popup-value-gpu">${formatAcceleratorCountDisplay(spec, true)}</span>
             </div>
           </div>
           <div class="popup-col">
             <div class="popup-field">
-              <span class="popup-label">GPU Memory</span>
-              <span class="popup-value">${spec.acceleratorMemoryGB ? spec.acceleratorMemoryGB + ' GB' : 'N/A'}</span>
+              <span class="popup-label">VRAM(GB)</span>
+              <span class="popup-value">${formatAcceleratorVramDisplay(spec, true)}</span>
             </div>
           </div>
         </div>
@@ -2953,12 +3059,40 @@ function ensureNodeGroupChipsAvailability() {
   }
 }
 
+function formatNodeGroupChipImageDisplay(rawImageId) {
+  if (!rawImageId) return "N/A";
+  const s = String(rawImageId).trim();
+  // Shorten full GCP Compute API image URLs (e.g. https://www.googleapis.com/.../projects/ubuntu-os-cloud/global/images/ubuntu-2204-...)
+  const gcpMatch = s.match(/\/projects\/([^/]+)\/global\/images\/([^/?#]+)$/i);
+  if (gcpMatch) {
+    return `${gcpMatch[2]} (${gcpMatch[1]})`;
+  }
+  const slashIdx = s.lastIndexOf("/images/");
+  if (slashIdx >= 0) {
+    return s.substring(slashIdx + 8);
+  }
+  return s;
+}
+
+function formatNodeGroupChipCostDisplay(costVal) {
+  if (costVal === undefined || costVal === null || costVal === "" || costVal === "N/A" || costVal === "unknown") {
+    return `<span style="color:#adb5bd;">N/A</span>`;
+  }
+  const num = Number(costVal);
+  if (isNaN(num) || num <= 0) {
+    return `<span style="color:#adb5bd;">N/A</span>`;
+  }
+  const clean = Number(num.toFixed(5));
+  return `<strong style="color:#212529;">$${clean}/h</strong>`;
+}
+
 function createNodeGroupItem(nodeConf, spec, index) {
   const item = document.createElement('div');
-  item.className = 'list-group-item p-2 mb-2 border rounded';
-  item.style.backgroundColor = '#f8f9fa';
+  item.className = 'list-group-item mb-2 border rounded';
   
   const providerColor = getProviderColor(spec?.providerName);
+  item.style.cssText = `background-color: #f8fafc; padding: 7px 9px; border-left: 3.5px solid ${providerColor} !important;`;
+
   // Lightening factors for hierarchical badge colors (provider > region > zone)
   const REGION_LIGHTEN_FACTOR = 0.4;  // 40% lighter for region
   const ZONE_LIGHTEN_FACTOR = 0.6;    // 60% lighter for zone
@@ -2969,43 +3103,82 @@ function createNodeGroupItem(nodeConf, spec, index) {
   const regionTextColor = getContrastTextColor(regionColor);
   const zoneTextColor = getContrastTextColor(zoneColor);
   
+  const ngName = nodeConf.name || `NodeGroup-${index + 1}`;
+  const ngSize = nodeConf.nodeGroupSize || 1;
+  const cspLabel = (window.cspIconMode || 'logo') === 'datacenter'
+    ? 'DC'
+    : (window.cspIconMode || 'logo') === 'cloud'
+      ? 'Cloud'
+      : (spec?.providerName || 'Unknown').toUpperCase();
+  const regionLabel = spec?.regionName || 'Unknown Region';
+  const specLabel = spec?.cspSpecName || nodeConf.specId || 'N/A';
+  const rawImageId = nodeConf.imageId || 'N/A';
+  const displayImageId = formatNodeGroupChipImageDisplay(rawImageId);
+  const memDisplay = (spec?.memoryGiB !== undefined && spec?.memoryGiB !== null && spec?.memoryGiB !== 'N/A')
+    ? `${Number(Number(spec.memoryGiB).toFixed(2))}GB`
+    : 'N/A';
+  const costDisplayHtml = formatNodeGroupChipCostDisplay(spec?.costPerHour);
+
   // Build zone badge HTML if zone is specified
   const zoneBadge = nodeConf.zone 
-    ? `<span class="badge mr-1" style="background-color: ${zoneColor}; color: ${zoneTextColor}; font-size: 0.7rem;">${nodeConf.zone}</span>`
+    ? `<span class="badge" style="background-color: ${zoneColor}; color: ${zoneTextColor}; font-size: 0.68rem; padding: 2px 5px; font-weight: 600;">${esc(nodeConf.zone)}</span>`
     : '';
-  const availBadge = `<span id="nodegroup-avail-badge-${index}" class="ml-1">${renderNodeGroupAvailabilityBadgeHtml(nodeConf, spec)}</span>`;
+  const availBadge = `<span id="nodegroup-avail-badge-${index}" style="margin-left: auto; line-height: 1;">${renderNodeGroupAvailabilityBadgeHtml(nodeConf, spec)}</span>`;
   
   item.innerHTML = `
-    <div class="d-flex align-items-start justify-content-between">
-      <div class="flex-grow-1" style="min-width: 0;">
-        <div class="d-flex align-items-center mb-1 flex-wrap">
-          <span class="badge mr-1" style="background-color: #343a40; color: white; font-size: 0.75rem;">💻 ${nodeConf.name || `NodeGroup-${index + 1}`} ⨉ ${nodeConf.nodeGroupSize}</span>
-          <span class="badge mr-1" style="background-color: ${providerColor}; color: ${providerTextColor}; font-size: 0.7rem;">
-            ${(window.cspIconMode || 'logo') === 'datacenter' ? 'DC' : (window.cspIconMode || 'logo') === 'cloud' ? 'Cloud' : (spec?.providerName || 'Unknown').toUpperCase()}
-          </span>
-          <span class="badge mr-1" style="background-color: ${regionColor}; color: ${regionTextColor}; font-size: 0.7rem;">
-            ${spec?.regionName || 'Unknown Region'}
-          </span>
-          ${zoneBadge}
-          ${availBadge}
-        </div>
-        <div class="small text-muted" style="font-size: 0.7rem; line-height: 1.2;">
-          <div style="margin-bottom: 2px;"><strong>Spec:</strong> ${spec?.cspSpecName || nodeConf.specId}</div>
-          <div style="margin-bottom: 2px;"><strong>Image:</strong> ${nodeConf.imageId}</div>
-          <div><strong>vCPU:</strong> ${spec?.vCPU || 'N/A'} | <strong>Memory:</strong> ${spec?.memoryGiB || 'N/A'}GB | <strong>Cost:</strong> $${spec?.costPerHour || 'N/A'}/h</div>
-          ${(spec?.acceleratorModel && spec.acceleratorModel !== '' && spec.acceleratorModel !== 'N/A') ? `<div style="margin-top: 2px;"><span style="color: #e74c3c; font-weight: bold;">⚡GPU: ${spec.acceleratorModel} (${spec.acceleratorCount || 'N/A'}, ${spec.acceleratorMemoryGB || 'N/A'}GB)</span></div>` : ''}
+    <div>
+      <!-- Row 1: NodeGroup Name + Size (Left) & Compact Action Buttons (Right) -->
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 4px;">
+        <span class="badge" title="${esc(ngName)} ⨉ ${ngSize}" style="background-color: #343a40; color: white; font-size: 0.73rem; padding: 3px 7px; display: inline-flex; align-items: center; gap: 4px; max-width: calc(100% - 76px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          <span style="overflow: hidden; text-overflow: ellipsis;">💻 ${esc(ngName)}</span>
+          <span style="background: rgba(255,255,255,0.2); padding: 0px 5px; border-radius: 3px; flex-shrink: 0;">⨉ ${ngSize}</span>
+        </span>
+        <div style="display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0;">
+          <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editNodeGroup(${index})" title="Edit NodeGroup" style="width: 22px; height: 22px; padding: 0; font-size: 0.65rem; line-height: 1; display: inline-flex; align-items: center; justify-content: center;">
+            ✏️
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-primary" onclick="findAlternativeNodeConfig(${index})" title="Find alternative config in another CSP/Region" aria-label="Find alternative node config in another CSP/Region" style="width: 22px; height: 22px; padding: 0; font-size: 0.65rem; line-height: 1; display: inline-flex; align-items: center; justify-content: center;">
+            🔄
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeNodeGroup(${index})" title="Remove NodeGroup" style="width: 22px; height: 22px; padding: 0; font-size: 0.65rem; line-height: 1; display: inline-flex; align-items: center; justify-content: center;">
+            🗑️
+          </button>
         </div>
       </div>
-      <div class="d-flex flex-column ml-2" style="gap: 2px;">
-        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editNodeGroup(${index})" title="Edit" style="width: 28px; height: 28px; padding: 2px; font-size: 0.7rem;">
-          ✏️
-        </button>
-        <button type="button" class="btn btn-sm btn-outline-primary" onclick="findAlternativeNodeConfig(${index})" title="Find alternative config in another CSP/Region" aria-label="Find alternative node config in another CSP/Region" style="width: 28px; height: 28px; padding: 2px; font-size: 0.7rem;">
-          🔄
-        </button>
-        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeNodeGroup(${index})" title="Remove" style="width: 28px; height: 28px; padding: 2px; font-size: 0.7rem;">
-          🗑️
-        </button>
+
+      <!-- Row 2: CSP Icon + Provider, Region, Zone & Availability -->
+      <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; padding-bottom: 4px; border-bottom: 1px dashed #e2e8f0;">
+        <span class="badge" style="background-color: ${providerColor}; color: ${providerTextColor}; font-size: 0.68rem; padding: 2px 6px; display: inline-flex; align-items: center; gap: 4px;">
+          <img src="${getCspIconUrl(spec?.providerName)}" alt="" style="width: 12px; height: 12px; object-fit: contain; background: #fff; border-radius: 2px; padding: 1px;" onerror="this.src='/img/circle.png';">
+          <span>${esc(cspLabel)}</span>
+        </span>
+        <span class="badge" style="background-color: ${regionColor}; color: ${regionTextColor}; font-size: 0.68rem; padding: 2px 6px; font-weight: 600;">
+          ${esc(regionLabel)}
+        </span>
+        ${zoneBadge}
+        ${availBadge}
+      </div>
+
+      <!-- Row 3~5: Spec, Image (single-line truncated with tooltip), and vCPU / Memory / Cost -->
+      <div class="small text-muted" style="font-size: 0.7rem; line-height: 1.35;">
+        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Spec: ${esc(specLabel)}">
+          <strong style="color: #495057;">Spec:</strong> <span style="color: #212529; font-weight: 600;">${esc(specLabel)}</span>
+        </div>
+        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Image: ${esc(rawImageId)}">
+          <strong style="color: #495057;">Image:</strong> <span>${esc(displayImageId)}</span>
+        </div>
+        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px;">
+          <strong style="color: #495057;">vCPU:</strong> ${esc(String(spec?.vCPU ?? 'N/A'))}
+          <span style="color: #cbd5e1; margin: 0 3px;">|</span>
+          <strong style="color: #495057;">Mem:</strong> ${esc(memDisplay)}
+          <span style="color: #cbd5e1; margin: 0 3px;">|</span>
+          <strong style="color: #495057;">Cost:</strong> ${costDisplayHtml}
+        </div>
+        ${(spec?.acceleratorModel && spec.acceleratorModel !== '' && spec.acceleratorModel !== 'N/A' && spec.acceleratorModel !== 'None') ? `
+        <div style="margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="GPU: ${esc(spec.acceleratorModel)} (${esc(formatAcceleratorCountDisplay(spec, true))}, VRAM: ${esc(formatAcceleratorVramDisplay(spec, true))})">
+          <span style="color: #dc3545; font-weight: bold;">⚡ GPU: ${esc(spec.acceleratorModel)}</span>
+          <span style="color: #495057;">(${esc(formatAcceleratorCountDisplay(spec, true))}, VRAM: ${esc(formatAcceleratorVramDisplay(spec, true))})</span>
+        </div>` : ''}
       </div>
     </div>
   `;
